@@ -237,7 +237,7 @@ function CumulativeLineChart({ points }: { points: RealtimeReportData["cumulativ
 
   return (
     <div className="rounded-2xl border border-border bg-background p-4">
-      <div className="mb-3 flex items-start justify-between gap-3">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-violet-500" />
@@ -328,7 +328,7 @@ function DailyBarChart({ points }: { points: RealtimeReportData["cumulativeTrend
 
   return (
     <div className="rounded-2xl border border-border bg-background p-4">
-      <div className="mb-3 flex items-start justify-between gap-3">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-violet-500" />
@@ -437,7 +437,7 @@ function UtmTrendChart({ trend }: { trend: RealtimeReportData["dailyUtmTrend"] }
 
   return (
     <div className="rounded-2xl border border-border bg-background p-4">
-      <div className="mb-3 flex items-start justify-between gap-3">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-violet-500" />
@@ -541,7 +541,7 @@ function UtmBreakdownSection({ data }: { data: RealtimeReportData }) {
 
   return (
     <section className="rounded-[24px] border border-border bg-background p-5">
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-violet-500" />
           <h3 className="text-sm font-semibold">유입 경로</h3>

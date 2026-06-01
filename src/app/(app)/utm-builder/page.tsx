@@ -443,15 +443,16 @@ function UTMRow({ link, onDelete, onShortUrlSaved, onEdit, onDuplicate }: {
   return (
     <motion.div layout className="border-b border-border last:border-0">
       <div onClick={() => setExpanded(!expanded)}
-        className="px-6 py-4 flex items-center gap-3 hover:bg-secondary/20 transition-colors cursor-pointer group">
-        <motion.div animate={{ rotate: expanded ? 90 : 0 }} transition={{ duration: 0.18 }}>
-          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        className="px-4 sm:px-6 py-4 flex flex-col gap-3 sm:flex-row sm:items-center hover:bg-secondary/20 transition-colors cursor-pointer group">
+        <div className="flex items-start gap-3 min-w-0 sm:flex-1">
+        <motion.div animate={{ rotate: expanded ? 90 : 0 }} transition={{ duration: 0.18 }} className="mt-0.5 shrink-0">
+          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
         </motion.div>
 
         <div className="flex-1 min-w-0 space-y-1.5">
-          <div className="flex items-baseline gap-2 min-w-0">
-            <p className={`text-sm truncate ${hasName ? "font-medium text-foreground shrink-0 max-w-[42%]" : "font-mono text-foreground min-w-0 flex-1"}`}>{rowTitle}</p>
-            {hasName && <p className="text-xs text-muted-foreground truncate font-mono min-w-0 flex-1">{link.url || link.fullUrl}</p>}
+          <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2 min-w-0">
+            <p className={`text-sm truncate ${hasName ? "font-medium text-foreground sm:shrink-0 sm:max-w-[42%]" : "font-mono text-foreground min-w-0 sm:flex-1"}`}>{rowTitle}</p>
+            {hasName && <p className="text-xs text-muted-foreground truncate font-mono min-w-0 sm:flex-1">{link.url || link.fullUrl}</p>}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-500 font-medium">{link.utmSource}</span>
@@ -464,8 +465,9 @@ function UTMRow({ link, onDelete, onShortUrlSaved, onEdit, onDuplicate }: {
             )}
           </div>
         </div>
+        </div>
 
-        <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+        <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
           onClick={(e) => e.stopPropagation()}>
           <CopyButton text={link.shortUrl || link.fullUrl} />
           <button onClick={() => onEdit(link)} title="수정"

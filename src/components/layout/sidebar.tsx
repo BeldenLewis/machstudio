@@ -69,6 +69,7 @@ export function Sidebar() {
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [fabHidden, setFabHidden] = useState(false);
 
   const [showNewWs, setShowNewWs] = useState(false);
   const [newWsName, setNewWsName] = useState("");
@@ -109,6 +110,24 @@ export function Sidebar() {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = prev; };
   }, [mobileOpen]);
+
+  // 모바일: 본문 스크롤 다운 시 floating 버튼 숨김(콘텐츠 가림 방지), 멈춤/업 시 표시
+  useEffect(() => {
+    const main = document.querySelector("main");
+    if (!main) return;
+    let lastY = main.scrollTop;
+    let idle: ReturnType<typeof setTimeout>;
+    const onScroll = () => {
+      const y = main.scrollTop;
+      if (y > lastY + 4 && y > 80) setFabHidden(true);
+      else if (y < lastY - 4) setFabHidden(false);
+      lastY = y;
+      clearTimeout(idle);
+      idle = setTimeout(() => setFabHidden(false), 700);
+    };
+    main.addEventListener("scroll", onScroll, { passive: true });
+    return () => { main.removeEventListener("scroll", onScroll); clearTimeout(idle); };
+  }, []);
 
   const displayName = userName || userEmail;
   const initial = displayName?.[0]?.toUpperCase() ?? "?";
@@ -566,7 +585,7 @@ export function Sidebar() {
     <button
       onClick={() => setMobileOpen(true)}
       aria-label="메뉴 열기"
-      className="lg:hidden fixed left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-6 py-3.5 rounded-full bg-violet-500 text-white text-sm font-semibold shadow-lg shadow-violet-500/40 active:scale-95 transition-transform"
+      className={`lg:hidden fixed left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-6 py-3.5 rounded-full bg-violet-500 text-white text-sm font-semibold shadow-lg shadow-violet-500/40 active:scale-95 transition-all duration-300 ${fabHidden ? "translate-y-4 opacity-0 pointer-events-none" : "translate-y-0 opacity-100"}`}
       style={{ bottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
     >
       <Menu className="w-4 h-4" /> 메뉴
