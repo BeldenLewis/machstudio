@@ -467,26 +467,27 @@ async function groupByTimeBucket(
 ): Promise<{ date: string; count: number }[]> {
   const trunc = granularity === "hour" ? "hour" : granularity === "week" ? "week" : "day";
   const w = where as { projectId?: string; sourceId?: string; createdAt?: { gte?: Date; lte?: Date } };
-  const rows = await prisma.$queryRaw<{ bucket: Date; count: bigint }[]>`
-    SELECT date_trunc(${trunc}::text, "createdAt" AT TIME ZONE 'Asia/Seoul') AS bucket,
+  // Prisma v7 회귀(#28963) 회피 + sourceId 파라미터화(기존 문자열 삽입은 인젝션 위험).
+  // trunc 은 고정 화이트리스트(hour/week/day)라 식별자처럼 직접 삽입해도 안전.
+  const conds: string[] = [`"projectId" = $1`];
+  const values: unknown[] = [w.projectId];
+  if (w.sourceId) { values.push(w.sourceId); conds.push(`"sourceId" = $${values.length}`); }
+  values.push(w.createdAt?.gte ?? new Date(0)); conds.push(`"createdAt" >= $${values.length}`);
+  values.push(w.createdAt?.lte ?? new Date()); conds.push(`"createdAt" <= $${values.length}`);
+  const rows = await prisma.$queryRawUnsafe<{ bucket: Date; count: bigint }[]>(`
+    SELECT date_trunc('${trunc}', "createdAt" AT TIME ZONE 'Asia/Seoul') AS bucket,
            COUNT(*)::bigint AS count
     FROM "CollectRecord"
-    WHERE "projectId" = ${w.projectId}
-      ${w.sourceId ? prismaSqlAnd(`"sourceId" = '${w.sourceId}'`) : prismaSqlEmpty()}
-      AND "createdAt" >= ${w.createdAt?.gte ?? new Date(0)}
-      AND "createdAt" <= ${w.createdAt?.lte ?? new Date()}
+    WHERE ${conds.join(" AND ")}
     GROUP BY bucket
     ORDER BY bucket ASC
-  `;
+  `, ...values);
   return rows.map((r) => ({
     date: formatBucket(r.bucket, granularity),
     count: Number(r.count),
   }));
 }
 
-import { Prisma } from "@/generated/prisma";
-function prismaSqlAnd(s: string) { return Prisma.sql`AND ${Prisma.raw(s)}`; }
-function prismaSqlEmpty() { return Prisma.empty; }
 
 function formatBucket(d: Date, g: "hour" | "day" | "week"): string {
   // date_trunc 결과는 UTC date. KST 라벨로 포맷.

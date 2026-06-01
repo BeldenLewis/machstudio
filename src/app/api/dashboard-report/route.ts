@@ -153,7 +153,11 @@ function buildWhere(params: {
   return where;
 }
 
-// Build a parameterized SQL WHERE fragment mirroring buildWhere.
+// Build a parameterized SQL WHERE clause ($1, $2, …) + value list.
+// NOTE: Prisma v7 regression (#28963) — nested Prisma.sql fragments inside
+// $queryRaw template literals are serialized as JSON instead of composed as SQL.
+// So we build a plain string + values and run it via $queryRawUnsafe.
+// Column names come only from getUtmColumns (fixed whitelist), never user input.
 function buildRawWhere(params: {
   workspaceId: string;
   projectId: string;
@@ -161,32 +165,22 @@ function buildRawWhere(params: {
   from?: Date;
   to?: Date;
   lt?: Date;
-}): Prisma.Sql {
+}): { clause: string; values: unknown[] } {
   const { workspaceId, projectId, filters, from, to, lt } = params;
   const utm = getUtmColumns(filters);
-  const conds: Prisma.Sql[] = [
-    Prisma.sql`"workspaceId" = ${workspaceId}`,
-    Prisma.sql`"projectId" = ${projectId}`,
-  ];
-  if (filters?.sourceId && filters.sourceId !== "all") {
-    conds.push(Prisma.sql`"sourceId" = ${filters.sourceId}`);
-  }
-  if (filters?.utmSource) {
-    if (utm.source === "firstUtmSource") conds.push(Prisma.sql`"firstUtmSource" = ${filters.utmSource}`);
-    else conds.push(Prisma.sql`"utmSource" = ${filters.utmSource}`);
-  }
-  if (filters?.utmMedium) {
-    if (utm.medium === "firstUtmMedium") conds.push(Prisma.sql`"firstUtmMedium" = ${filters.utmMedium}`);
-    else conds.push(Prisma.sql`"utmMedium" = ${filters.utmMedium}`);
-  }
-  if (filters?.utmCampaign) {
-    if (utm.campaign === "firstUtmCampaign") conds.push(Prisma.sql`"firstUtmCampaign" = ${filters.utmCampaign}`);
-    else conds.push(Prisma.sql`"utmCampaign" = ${filters.utmCampaign}`);
-  }
-  if (from) conds.push(Prisma.sql`"createdAt" >= ${from}`);
-  if (to) conds.push(Prisma.sql`"createdAt" <= ${to}`);
-  if (lt) conds.push(Prisma.sql`"createdAt" < ${lt}`);
-  return Prisma.join(conds, " AND ");
+  const conds: string[] = [];
+  const values: unknown[] = [];
+  const push = (col: string, val: unknown) => { values.push(val); conds.push(`${col} = $${values.length}`); };
+  push(`"workspaceId"`, workspaceId);
+  push(`"projectId"`, projectId);
+  if (filters?.sourceId && filters.sourceId !== "all") push(`"sourceId"`, filters.sourceId);
+  if (filters?.utmSource) push(`"${utm.source}"`, filters.utmSource);
+  if (filters?.utmMedium) push(`"${utm.medium}"`, filters.utmMedium);
+  if (filters?.utmCampaign) push(`"${utm.campaign}"`, filters.utmCampaign);
+  if (from) { values.push(from); conds.push(`"createdAt" >= $${values.length}`); }
+  if (to) { values.push(to); conds.push(`"createdAt" <= $${values.length}`); }
+  if (lt) { values.push(lt); conds.push(`"createdAt" < $${values.length}`); }
+  return { clause: conds.join(" AND "), values };
 }
 
 function normalizeKey(key: string) {
@@ -659,8 +653,8 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
   const rangeWhere = buildWhere({ ...baseParams, from, to });
   const rangeRawWhere = buildRawWhere({ ...baseParams, from, to });
   const utmCols = getUtmColumns(filters);
-  const utmSourceCol = utmCols.source === "firstUtmSource" ? Prisma.sql`"firstUtmSource"` : Prisma.sql`"utmSource"`;
-  const utmMediumCol = utmCols.medium === "firstUtmMedium" ? Prisma.sql`"firstUtmMedium"` : Prisma.sql`"utmMedium"`;
+  const utmSourceCol = utmCols.source === "firstUtmSource" ? "firstUtmSource" : "utmSource";
+  const utmMediumCol = utmCols.medium === "firstUtmMedium" ? "firstUtmMedium" : "utmMedium";
 
   const [yesterdayCount, todayCount, cumulativeCount, rangeCount, previousRangeCount, cumulativeBeforeRange, heatmapRecords, utmGroups, sourceFields, heatmapRows, cumulativeDailyRows, utmTrendRows] = await Promise.all([
     prisma.collectRecord.count({ where: buildWhere({ ...baseParams, from: yesterdayStart, lt: todayStart }) }),
@@ -698,36 +692,36 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
       },
     }),
     // Heatmap: KST day-of-week + hour aggregation in SQL.
-    prisma.$queryRaw<Array<{ dow: number; hour: number; count: number }>>`
+    prisma.$queryRawUnsafe<Array<{ dow: number; hour: number; count: number }>>(`
       SELECT
         (EXTRACT(DOW FROM ("createdAt" + INTERVAL '9 hours')))::int AS dow,
         (EXTRACT(HOUR FROM ("createdAt" + INTERVAL '9 hours')))::int AS hour,
         COUNT(*)::int AS count
       FROM "CollectRecord"
-      WHERE ${rangeRawWhere}
+      WHERE ${rangeRawWhere.clause}
       GROUP BY dow, hour
-    `,
+    `, ...rangeRawWhere.values),
     // Cumulative daily counts (KST).
-    prisma.$queryRaw<Array<{ day: string; count: number }>>`
+    prisma.$queryRawUnsafe<Array<{ day: string; count: number }>>(`
       SELECT
         TO_CHAR(DATE_TRUNC('day', "createdAt" + INTERVAL '9 hours'), 'YYYY-MM-DD') AS day,
         COUNT(*)::int AS count
       FROM "CollectRecord"
-      WHERE ${rangeRawWhere}
+      WHERE ${rangeRawWhere.clause}
       GROUP BY day
       ORDER BY day
-    `,
+    `, ...rangeRawWhere.values),
     // Daily UTM trend (source + medium pair, per KST day).
-    prisma.$queryRaw<Array<{ day: string; source: string | null; medium: string | null; count: number }>>`
+    prisma.$queryRawUnsafe<Array<{ day: string; source: string | null; medium: string | null; count: number }>>(`
       SELECT
         TO_CHAR(DATE_TRUNC('day', "createdAt" + INTERVAL '9 hours'), 'YYYY-MM-DD') AS day,
-        ${utmSourceCol} AS source,
-        ${utmMediumCol} AS medium,
+        "${utmSourceCol}" AS source,
+        "${utmMediumCol}" AS medium,
         COUNT(*)::int AS count
       FROM "CollectRecord"
-      WHERE ${rangeRawWhere}
+      WHERE ${rangeRawWhere.clause}
       GROUP BY day, source, medium
-    `,
+    `, ...rangeRawWhere.values),
   ]);
 
   const fieldAliasesBySource = buildFieldAliasLookup(sourceFields);
