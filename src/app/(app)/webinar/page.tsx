@@ -107,7 +107,7 @@ export default function WebinarPage() {
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold">웨비나</h1>
@@ -134,7 +134,7 @@ export default function WebinarPage() {
           >
             <h3 className="text-sm font-semibold mb-4">새 웨비나</h3>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">웨비나 이름 *</label>
                   <input
@@ -167,7 +167,7 @@ export default function WebinarPage() {
                   className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400"
                 />
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">사전등록 마감 *</label>
                   <input
@@ -294,7 +294,7 @@ export default function WebinarPage() {
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-2xl p-6 w-80 shadow-xl"
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-2xl p-6 w-80 max-w-[calc(100vw-2rem)] shadow-xl"
             >
               <h3 className="text-base font-semibold mb-2">웨비나 삭제</h3>
               <p className="text-sm text-muted-foreground mb-5">등록자, Q&A, 공지 등 모든 데이터도 함께 삭제돼요. 되돌릴 수 없어요.</p>

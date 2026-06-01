@@ -73,7 +73,7 @@ export default function ThemeTab({ webinar, onUpdate }: { webinar: Webinar; onUp
   ];
 
   return (
-    <div className="p-8 max-w-2xl space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-2xl space-y-6">
       {/* 색상 */}
       <section className="space-y-3">
         <h3 className="text-sm font-semibold">색상</h3>

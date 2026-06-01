@@ -853,7 +853,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       {/* 헤더 */}
       <div>
         <Link href="/collect" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-3">
@@ -890,7 +890,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
           const idleColor = isDanger ? "border-transparent text-red-500/70 hover:text-red-500" : "border-transparent text-muted-foreground hover:text-foreground";
           return (
           <button key={tabId} onClick={() => setTab(tabId)}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+            className={`flex shrink-0 items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap ${
               tab === tabId ? activeColor : idleColor
             }`}
           >
@@ -2049,7 +2049,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-2xl p-6 w-80 shadow-xl"
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-2xl p-6 w-80 max-w-[calc(100vw-2rem)] shadow-xl"
             >
               <h3 className="text-base font-semibold mb-2">레코드 삭제</h3>
               <p className="text-sm text-muted-foreground mb-5">선택한 <span className="font-medium text-foreground">{selectedIds.size.toLocaleString()}건</span>을 삭제할까요? 되돌릴 수 없어요.</p>
@@ -2084,7 +2084,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-2xl p-6 w-80 shadow-xl"
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-2xl p-6 w-80 max-w-[calc(100vw-2rem)] shadow-xl"
             >
               <h3 className="text-base font-semibold mb-2">API 키 재발급</h3>
               <p className="text-sm text-muted-foreground mb-5">기존 키로 설치된 스크립트는 <span className="font-medium text-foreground">즉시 동작을 멈춥니다</span>. 재발급 후 스크립트를 다시 설치해야 해요.</p>

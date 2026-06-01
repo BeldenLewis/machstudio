@@ -645,7 +645,7 @@ export default function AnalyticsPage() {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={spring}
-      className="space-y-5 p-8"
+      className="space-y-5 p-4 sm:p-6 lg:p-8"
     >
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -762,7 +762,7 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7">
         <MetricCard label="지출" value={formatKRW(totals?.cost)} sub={currentScopeLabel} currentRaw={totals?.cost} previousRaw={previousTotals?.cost ?? undefined} lowerIsBetter />
         <MetricCard label="CPM" value={formatKRW(totals?.cpm)} sub={`노출 ${formatNumber(totals?.impressions)}`} currentRaw={totals?.cpm} previousRaw={previousTotals?.cpm ?? undefined} lowerIsBetter />
         <MetricCard label="CPC" value={formatKRW(totals?.cpc)} sub={`클릭 ${formatNumber(totals?.clicks)}`} currentRaw={totals?.cpc} previousRaw={previousTotals?.cpc ?? undefined} lowerIsBetter />
@@ -1273,7 +1273,7 @@ export default function AnalyticsPage() {
               </div>
             </motion.section>
 
-            <div className="grid grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* ③ 캠페인 효율 산포도 */}
             <motion.section
               whileHover={{ borderColor: "rgba(14, 165, 233, 0.18)" }}

@@ -309,7 +309,7 @@ export default function RegistrationFormTab({ webinar, onUpdate }: { webinar: We
   };
 
   return (
-    <div className="p-8 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
+    <div className="p-4 sm:p-6 lg:p-8 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
       <div className="space-y-6 min-w-0">
       <div className="flex items-start justify-between gap-4">
         <div>

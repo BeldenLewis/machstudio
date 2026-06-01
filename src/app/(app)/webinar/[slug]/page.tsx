@@ -133,7 +133,7 @@ export default function WebinarDetailPage({ params }: { params: Promise<{ slug: 
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-8 pt-8 pb-0 space-y-4">
+      <div className="px-4 sm:px-6 lg:px-8 pt-6 lg:pt-8 pb-0 space-y-4">
         <Link
           href="/webinar"
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -193,7 +193,7 @@ export default function WebinarDetailPage({ params }: { params: Promise<{ slug: 
             <button
               key={tabId}
               onClick={() => activateTab(tabId)}
-              className={`flex items-center gap-1.5 px-3 py-2.5 text-sm border-b-2 transition-colors whitespace-nowrap ${
+              className={`flex shrink-0 items-center gap-1.5 px-3 py-2.5 text-sm border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === tabId
                   ? "border-violet-500 text-violet-500 font-medium"
                   : "border-transparent text-muted-foreground hover:text-foreground"

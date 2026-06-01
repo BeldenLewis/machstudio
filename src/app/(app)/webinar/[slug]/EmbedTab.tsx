@@ -1493,9 +1493,9 @@ export default function EmbedTab({ webinar }: { webinar: Webinar }) {
   const sectState = { current: bannerSection, onChange: setBannerSection };
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full lg:overflow-hidden">
       {/* ── 좌측: 코드 + 설정 패널 ── */}
-      <div className="flex-1 min-w-0 p-8 space-y-5 overflow-y-auto border-r border-border">
+      <div className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 space-y-5 overflow-y-auto lg:border-r border-border">
         <div>
           <h3 className="text-sm font-semibold mb-1">임베드 코드</h3>
           <p className="text-sm text-muted-foreground">아임웹 등 외부 사이트에 붙여넣어 사용하세요</p>
@@ -1641,14 +1641,14 @@ export default function EmbedTab({ webinar }: { webinar: Webinar }) {
       {/* ── 드래그 핸들 ── */}
       <div
         onMouseDown={handleDragStart}
-        className="w-3 shrink-0 flex items-center justify-center cursor-col-resize hover:bg-violet-500/10 transition-colors group"
+        className="hidden lg:flex w-3 shrink-0 items-center justify-center cursor-col-resize hover:bg-violet-500/10 transition-colors group"
         title="드래그해서 크기 조절"
       >
         <GripVertical className="w-3 h-5 text-muted-foreground/30 group-hover:text-violet-400 transition-colors" />
       </div>
 
       {/* ── 우측: 미리보기 패널 ── */}
-      <div className="shrink-0 flex flex-col" style={{ width: previewWidth }}>
+      <div className="hidden lg:flex shrink-0 flex-col" style={{ width: previewWidth }}>
         {/* 미리보기 헤더 */}
         <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
           <span className="text-xs font-medium text-muted-foreground">미리보기</span>

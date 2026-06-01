@@ -138,7 +138,7 @@ export default function CollectPage() {
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold">데이터 수집</h1>
@@ -389,7 +389,7 @@ export default function CollectPage() {
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-2xl p-6 w-80 shadow-xl"
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-2xl p-6 w-80 max-w-[calc(100vw-2rem)] shadow-xl"
             >
               <h3 className="text-base font-semibold mb-2">수집 소스 삭제</h3>
               <p className="text-sm text-muted-foreground mb-5">수집된 모든 데이터도 함께 삭제돼요. 되돌릴 수 없어요.</p>

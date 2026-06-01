@@ -57,15 +57,15 @@ export default function PageSetupTab({
   const ActiveIcon = activeMeta.icon;
 
   return (
-    <div className="grid h-full grid-cols-[230px_minmax(0,1fr)] overflow-hidden">
-      <aside className="border-r border-border bg-secondary/20 p-5">
+    <div className="flex flex-col lg:grid lg:h-full lg:grid-cols-[230px_minmax(0,1fr)] lg:overflow-hidden">
+      <aside className="border-b lg:border-r border-border bg-secondary/20 p-4 lg:p-5">
         <div className="mb-5">
           <h2 className="text-sm font-semibold">설정</h2>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
             외부 페이지와 운영 기본값을 정리합니다.
           </p>
         </div>
-        <nav className="space-y-1">
+        <nav className="flex gap-1 overflow-x-auto lg:flex-col lg:gap-0 lg:space-y-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {sections.map((item) => {
             const Icon = item.icon;
             const active = item.id === section;
@@ -76,7 +76,7 @@ export default function PageSetupTab({
                 type="button"
                 onClick={() => onSectionChange(item.id)}
                 whileTap={{ scale: 0.98 }}
-                className={`relative flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${
+                className={`relative flex w-auto lg:w-full shrink-0 items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm whitespace-nowrap transition-colors ${
                   active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -96,8 +96,8 @@ export default function PageSetupTab({
         </nav>
       </aside>
 
-      <div className="min-w-0 min-h-0 flex flex-col overflow-hidden">
-        <div className="shrink-0 border-b border-border px-8 py-5">
+      <div className="min-w-0 min-h-0 flex flex-col lg:overflow-hidden">
+        <div className="shrink-0 border-b border-border px-4 sm:px-6 lg:px-8 py-4 lg:py-5">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={section}
@@ -115,7 +115,7 @@ export default function PageSetupTab({
           </AnimatePresence>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="min-h-0 flex-1 lg:overflow-hidden">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={section}
@@ -126,22 +126,22 @@ export default function PageSetupTab({
               className="h-full"
             >
               {section === "general" && (
-                <div className="h-full overflow-auto">
+                <div className="lg:h-full overflow-auto">
                   <SettingsTab webinar={webinar} onUpdate={onUpdate} />
                 </div>
               )}
               {section === "form" && (
-                <div className="h-full overflow-auto">
+                <div className="lg:h-full overflow-auto">
                   <RegistrationFormTab webinar={webinar} onUpdate={onUpdate} />
                 </div>
               )}
               {section === "sessions" && (
-                <div className="h-full overflow-auto">
+                <div className="lg:h-full overflow-auto">
                   <SessionsTab webinarId={webinar.id} sessions={webinar.sessions} onUpdate={onUpdate} />
                 </div>
               )}
               {section === "theme" && (
-                <div className="h-full overflow-auto">
+                <div className="lg:h-full overflow-auto">
                   <ThemeTab webinar={webinar} onUpdate={onUpdate} />
                 </div>
               )}

@@ -993,7 +993,7 @@ function CreateDrawer({ open, onClose, presets, templates, onSaved, editingLink,
           <motion.aside
             initial={{ x: 36, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 36, opacity: 0 }}
             transition={drawerSpring}
-            className="fixed right-0 top-0 h-screen w-[480px] bg-background border-l border-border z-50 flex flex-col shadow-2xl">
+            className="fixed right-0 top-0 h-screen w-full sm:w-[480px] bg-background border-l border-border z-50 flex flex-col shadow-2xl">
 
             {/* 헤더 */}
             <div className="px-6 py-5 border-b border-border shrink-0 space-y-3">

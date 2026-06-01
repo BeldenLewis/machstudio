@@ -143,7 +143,7 @@ export default function DashboardClient() {
   }
 
   return (
-    <div className="space-y-4 p-8">
+    <div className="space-y-4 p-4 sm:p-6 lg:p-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold">실시간 보고서</h1>

@@ -273,7 +273,7 @@ export default function DashboardTab({
   const navigate = (target: DashboardNavTarget) => onNavigate?.(target);
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-sm font-semibold">운영 대시보드</h2>

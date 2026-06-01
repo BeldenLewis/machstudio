@@ -149,7 +149,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   }
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
         <header>
           <p className="text-xs text-muted-foreground">{dashboard.projectName} · 공유된 보드</p>
@@ -157,7 +157,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
           {dashboard.description && <p className="text-sm text-muted-foreground mt-1">{dashboard.description}</p>}
         </header>
 
-        <div className="grid grid-cols-12 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
           {dashboard.widgets.map((w) => {
             const data = widgetData[w.id] as Record<string, unknown> | undefined;
             return (

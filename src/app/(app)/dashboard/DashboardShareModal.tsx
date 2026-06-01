@@ -122,7 +122,7 @@ export function DashboardShareModal({ open, onClose, projectId, projectName }: P
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ type: "spring", stiffness: 320, damping: 28 }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl"
+            className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-xl"
           >
             <div className="mb-4 flex items-start justify-between">
               <div>

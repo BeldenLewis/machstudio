@@ -474,7 +474,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
   const inputClass = "w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400";
 
   return (
-    <div className="p-8 space-y-5">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5">
       <div>
         <div>
           <h2 className="text-sm font-semibold">등록자 관리</h2>

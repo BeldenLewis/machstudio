@@ -202,7 +202,7 @@ export default function AnalyticsSharePage({ params }: { params: Promise<{ token
   const totalCost = analytics.mediaSummary.reduce((s, m) => s + m.cost, 0) || 1;
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -215,7 +215,7 @@ export default function AnalyticsSharePage({ params }: { params: Promise<{ token
           </span>
         </header>
 
-        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <section className="grid grid-cols-2 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <KpiCard label="지출" value={formatKRW(analytics.totals.cost)} />
           <KpiCard label="클릭" value={formatNumber(analytics.totals.clicks)} sub={`CTR ${formatPct(analytics.totals.ctr)}`} />
           <KpiCard label="전환" value={formatNumber(analytics.totals.conversions)} sub={`CVR ${formatPct(analytics.totals.cvr)}`} />

@@ -57,7 +57,7 @@ export default function QATab({ webinarId }: { webinarId: string }) {
   ];
 
   return (
-    <div className="p-8 space-y-4">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-4">
       <div className="relative flex items-center gap-1">
         {filters.map(({ value, label }) => {
           const active = filter === value;

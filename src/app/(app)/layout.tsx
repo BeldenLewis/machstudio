@@ -6,7 +6,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <WorkspaceProvider>
       <div className="flex h-screen bg-muted">
         <Sidebar />
-        <main className="flex-1 ml-64 my-2 mr-2 overflow-y-auto bg-background rounded-2xl shadow-sm">
+        <main className="flex-1 overflow-y-auto bg-background rounded-2xl shadow-sm mt-16 mb-2 mx-2 pb-24 lg:pb-0 lg:mt-2 lg:mr-2 lg:ml-64">
           {children}
         </main>
       </div>

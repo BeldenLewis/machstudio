@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, BarChart3, LogOut,
-  ChevronDown, Plus, FolderOpen, Check, Loader2, Settings2, Settings, Database, Video, Link2, Pencil, ShieldCheck,
+  ChevronDown, Plus, FolderOpen, Check, Loader2, Settings2, Settings, Database, Video, Link2, Pencil, ShieldCheck, Menu,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useWorkspace } from "@/contexts/workspace";
@@ -68,6 +68,7 @@ export function Sidebar() {
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const [showNewWs, setShowNewWs] = useState(false);
   const [newWsName, setNewWsName] = useState("");
@@ -97,6 +98,17 @@ export function Sidebar() {
       if (d.isSuperAdmin === true) setDbSuperAdmin(true);
     }).catch(() => {});
   }, [supabase.auth]);
+
+  // 모바일: 라우트 이동 시 드로어 자동 닫기
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
+
+  // 모바일: 드로어 열렸을 때 배경 스크롤 잠금
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [mobileOpen]);
 
   const displayName = userName || userEmail;
   const initial = displayName?.[0]?.toUpperCase() ?? "?";
@@ -183,7 +195,44 @@ export function Sidebar() {
 
   return (
     <>
-    <aside className="flex flex-col w-60 bg-background rounded-2xl shadow-md fixed left-2 top-2 bottom-2 z-30">
+    {/* 모바일 상단바 — lg 미만에서만 표시 */}
+    <header className="lg:hidden fixed top-0 inset-x-0 h-14 z-30 flex items-center justify-between gap-2 px-3 bg-background/90 backdrop-blur-md border-b border-border/60">
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="flex items-center gap-2 min-w-0 p-1.5 rounded-xl hover:bg-secondary active:scale-95 transition"
+      >
+        <div className="w-7 h-7 rounded-lg bg-violet-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+          {workspace?.name?.[0]?.toUpperCase() ?? "W"}
+        </div>
+        <div className="min-w-0 text-left">
+          <p className="text-sm font-semibold truncate leading-tight">{workspace?.name ?? "mach"}</p>
+          {currentProject?.name && <p className="text-[10px] text-muted-foreground truncate leading-tight">{currentProject.name}</p>}
+        </div>
+      </button>
+      <button
+        onClick={() => setMobileOpen(true)}
+        aria-label="메뉴 열기"
+        className="w-8 h-8 rounded-full bg-violet-500/15 flex items-center justify-center text-violet-500 text-xs font-bold shrink-0 active:scale-95 transition"
+      >
+        {initial}
+      </button>
+    </header>
+
+    {/* 모바일 드로어 backdrop */}
+    <AnimatePresence>
+      {mobileOpen && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          onClick={() => setMobileOpen(false)}
+          className="lg:hidden fixed inset-0 bg-black/40 z-40"
+        />
+      )}
+    </AnimatePresence>
+
+    <aside className={`flex flex-col bg-background shadow-2xl transition-transform duration-300 ease-out z-50 fixed inset-x-0 bottom-0 max-h-[85vh] rounded-t-3xl lg:inset-x-auto lg:left-2 lg:top-2 lg:bottom-2 lg:w-60 lg:max-h-none lg:rounded-2xl lg:shadow-md lg:z-30 lg:translate-y-0 ${mobileOpen ? "translate-y-0" : "translate-y-full"}`}>
+      {/* 모바일 시트 핸들 */}
+      <div className="lg:hidden flex justify-center pt-2.5 pb-1 shrink-0"><div className="h-1 w-9 rounded-full bg-border" /></div>
       {/* 워크스페이스 switcher */}
       <div className="px-3 pt-4 pb-2">
         <div className="relative">
@@ -512,6 +561,16 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
+
+    {/* 모바일 floating 메뉴 버튼 — 콘텐츠 위에 떠 있음 (lg 미만) */}
+    <button
+      onClick={() => setMobileOpen(true)}
+      aria-label="메뉴 열기"
+      className="lg:hidden fixed left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-6 py-3.5 rounded-full bg-violet-500 text-white text-sm font-semibold shadow-lg shadow-violet-500/40 active:scale-95 transition-transform"
+      style={{ bottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
+    >
+      <Menu className="w-4 h-4" /> 메뉴
+    </button>
 
     <WorkspaceSettingsModal open={wsSettingsOpen} onClose={() => setWsSettingsOpen(false)} />
     <ProfileSettingsModal open={profileSettingsOpen} onClose={() => setProfileSettingsOpen(false)} />

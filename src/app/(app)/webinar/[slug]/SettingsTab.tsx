@@ -79,7 +79,7 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
   };
 
   return (
-    <div className="p-8 max-w-2xl space-y-8">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-2xl space-y-8">
       {/* 기본 정보 */}
       <section className="space-y-4">
         <h3 className="text-sm font-semibold">기본 정보</h3>
@@ -108,7 +108,7 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
       {/* 일정 */}
       <section className="space-y-4">
         <h3 className="text-sm font-semibold">일정</h3>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">사전등록 마감</label>
             <input
