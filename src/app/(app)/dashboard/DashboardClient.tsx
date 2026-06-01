@@ -144,7 +144,7 @@ export default function DashboardClient() {
 
   return (
     <div className="space-y-4 p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold">실시간 보고서</h1>
           <p className="mt-1 text-sm text-muted-foreground">
