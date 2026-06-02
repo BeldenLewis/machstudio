@@ -43,6 +43,9 @@ scripts/seed-test-reg.mjs
 # claude code
 .claude
 
+# codex artifacts (tool scratch)
+.codex-artifacts/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
