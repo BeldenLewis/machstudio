@@ -332,6 +332,32 @@ function matchesCandidate(value: string, candidate: string) {
   return value === candidate || value.includes(candidate) || candidate.includes(value);
 }
 
+// composition / email / dedup 계산에 쓰이는 후보 키 전체.
+// 이 후보들과 매칭되는 필드만 DB에서 추출하면 data JSON 전체를 안 받아도 됨(egress 절감).
+const COMPOSITION_EMAIL_CANDIDATES: readonly string[] = [
+  ...VISITOR_DIMENSIONS.flatMap((d) => d.candidates),
+  ...EMAIL_FIELD_CANDIDATES,
+];
+
+// 소스 fieldMappings 에서 후보(키 또는 라벨)와 매칭되는 실제 data 키 목록을 산출한다.
+// pickValue 의 매칭 규칙(normalizeKey + 양방향 부분일치)을 그대로 재현 → 결과 동일성 보존.
+function resolveCompositionKeys(
+  sources: Array<{ id: string; fieldMappings: Array<{ key: string; label: string }> }>,
+): string[] {
+  const normCandidates = COMPOSITION_EMAIL_CANDIDATES.map(normalizeKey).filter((c) => c.length > 1);
+  const keys = new Set<string>();
+  for (const src of sources) {
+    for (const fm of src.fieldMappings) {
+      const nk = normalizeKey(fm.key);
+      const nl = normalizeKey(fm.label);
+      if (normCandidates.some((c) => matchesCandidate(nk, c) || (nl ? matchesCandidate(nl, c) : false))) {
+        keys.add(fm.key);
+      }
+    }
+  }
+  return [...keys];
+}
+
 function pickValue(data: Prisma.JsonValue, candidates: readonly string[], fieldAliases: FieldAlias[] = []) {
   if (!data || typeof data !== "object" || Array.isArray(data)) return [];
   const record = data as Record<string, unknown>;
@@ -668,21 +694,38 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
   const utmSourceCol = utmCols.source === "firstUtmSource" ? "firstUtmSource" : "utmSource";
   const utmMediumCol = utmCols.medium === "firstUtmMedium" ? "firstUtmMedium" : "utmMedium";
 
-  const [yesterdayCount, todayCount, cumulativeCount, rangeCount, previousRangeCount, cumulativeBeforeRange, heatmapRecords, utmGroups, sourceFields, heatmapRows, cumulativeDailyRows, utmTrendRows] = await Promise.all([
+  // composition/email/dedup 에 필요한 필드만 추출하기 위해 소스 필드 정의를 먼저 조회
+  const sourceFields = await prisma.collectSource.findMany({
+    where: {
+      workspaceId,
+      projectId,
+      ...(filters?.sourceId && filters.sourceId !== "all" ? { id: filters.sourceId } : {}),
+    },
+    select: { id: true, fieldMappings: { select: { key: true, label: true } } },
+  });
+  const compositionKeys = resolveCompositionKeys(sourceFields);
+
+  const [yesterdayCount, todayCount, cumulativeCount, rangeCount, previousRangeCount, cumulativeBeforeRange, heatmapRecords, utmGroups, heatmapRows, cumulativeDailyRows, utmTrendRows] = await Promise.all([
     prisma.collectRecord.count({ where: buildWhere({ ...baseParams, from: yesterdayStart, lt: todayStart }) }),
     prisma.collectRecord.count({ where: buildWhere({ ...baseParams, from: todayStart, to: now }) }),
     prisma.collectRecord.count({ where: buildWhere(baseParams) }),
     prisma.collectRecord.count({ where: rangeWhere }),
     prisma.collectRecord.count({ where: buildWhere({ ...baseParams, from: previousFrom, lt: from }) }),
     prisma.collectRecord.count({ where: buildWhere({ ...baseParams, lt: from }) }),
-    // NOTE: in-memory fetch retained for composition / emailDomainTop / dedup
-    // (requires JSON parsing with source-specific field aliases). Capped at 50k.
-    prisma.collectRecord.findMany({
-      where: rangeWhere,
-      select: { sourceId: true, createdAt: true, data: true, utmSource: true, utmMedium: true, firstUtmSource: true, firstUtmMedium: true },
-      orderBy: { createdAt: "asc" },
-      take: 50000,
-    }),
+    // composition / emailDomainTop / dedup 용 — data JSON 전체 대신 집계에 필요한 필드만 추출(egress 절감).
+    // 매칭되는 필드가 없으면 빈 배열. jsonb_build_object 로 부분 data 객체를 재구성 → 기존 메모리 로직 그대로 동작.
+    (() => {
+      if (compositionKeys.length === 0) {
+        return Promise.resolve([] as Array<{ sourceId: string; data: Prisma.JsonValue }>);
+      }
+      const base = rangeRawWhere.values.length;
+      // pg 파라미터 타입 모호성 회피: jsonb_build_object 키와 data-> 키 모두 ::text 캐스팅
+      const pairs = compositionKeys.map((_, i) => `$${base + i + 1}::text, data->($${base + i + 1}::text)`).join(", ");
+      return prisma.$queryRawUnsafe<Array<{ sourceId: string; data: Prisma.JsonValue }>>(
+        `SELECT "sourceId", jsonb_build_object(${pairs}) AS data FROM "CollectRecord" WHERE ${rangeRawWhere.clause} LIMIT 50000`,
+        ...rangeRawWhere.values, ...compositionKeys,
+      );
+    })(),
     (prisma.collectRecord.groupBy as unknown as (args: {
       by: string[];
       where: Prisma.CollectRecordWhereInput;
@@ -691,17 +734,6 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
       by: [getUtmColumns(filters).source, getUtmColumns(filters).medium, getUtmColumns(filters).campaign],
       where: rangeWhere,
       _count: { _all: true },
-    }),
-    prisma.collectSource.findMany({
-      where: {
-        workspaceId,
-        projectId,
-        ...(filters?.sourceId && filters.sourceId !== "all" ? { id: filters.sourceId } : {}),
-      },
-      select: {
-        id: true,
-        fieldMappings: { select: { key: true, label: true } },
-      },
     }),
     // Heatmap: KST day-of-week + hour aggregation in SQL.
     prisma.$queryRawUnsafe<Array<{ dow: number; hour: number; count: number }>>(`
