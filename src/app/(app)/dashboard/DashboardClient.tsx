@@ -9,7 +9,7 @@ import DateRangePicker, { DateRange } from "./DateRangePicker";
 import RealtimeReport, { type RealtimeReportData } from "./RealtimeReport";
 import { DashboardShareModal } from "./DashboardShareModal";
 
-const AUTO_REFRESH_MS = 30_000;
+const AUTO_REFRESH_MS = 180_000; // 3분 (egress 절감 — 과거 30초였음)
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
 interface DashboardFilters {
@@ -110,8 +110,17 @@ export default function DashboardClient() {
   }, [fetchReport, refreshTick]);
 
   useEffect(() => {
-    const id = setInterval(() => setRefreshTick((tick) => tick + 1), AUTO_REFRESH_MS);
-    return () => clearInterval(id);
+    // egress 절감: 탭이 보일 때만 자동 새로고침, 백그라운드(숨김)면 중단.
+    const id = setInterval(() => {
+      if (!document.hidden) setRefreshTick((tick) => tick + 1);
+    }, AUTO_REFRESH_MS);
+    // 탭으로 돌아오면 1회 즉시 갱신
+    const onVisible = () => { if (!document.hidden) setRefreshTick((tick) => tick + 1); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   const updateFilter = <Key extends keyof DashboardFilters>(key: Key, value: DashboardFilters[Key] | "") => {

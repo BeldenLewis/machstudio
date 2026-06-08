@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma";
+import type { RealtimeReportData } from "@/app/(app)/dashboard/RealtimeReport";
+
+// 결과 캐싱 (egress 절감): 동일 조건 조회를 짧게 캐시해 반복 DB 트래픽 제거.
+// 서버리스 인스턴스 단위 캐시 — 같은 인스턴스에 도달하는 반복/동시 조회에 효과.
+const REPORT_CACHE = new Map<string, { at: number; data: RealtimeReportData }>();
+const REPORT_CACHE_TTL_MS = 60_000;
 
 export interface ReportFilters {
   sourceId?: string | null;
@@ -641,6 +647,12 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
   const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId } });
   if (!project) return { error: "프로젝트 없음" as const };
 
+  const cacheKey = JSON.stringify({ workspaceId, projectId, filters, from: options.from, to: options.to });
+  const cachedHit = REPORT_CACHE.get(cacheKey);
+  if (cachedHit && Date.now() - cachedHit.at < REPORT_CACHE_TTL_MS) {
+    return { data: cachedHit.data };
+  }
+
   const now = new Date();
   const to = parseDate(options.to, now);
   const from = parseDate(options.from, new Date(to.getTime() - 7 * DAY_MS));
@@ -842,32 +854,32 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
     }
   }
 
-  return {
-    data: {
-      generatedAt: now.toISOString(),
-      project: { id: project.id, name: project.name },
-      performance: {
-        yesterdayCount,
-        todayCount,
-        cumulativeCount,
-        rangeCount,
-        previousRangeCount,
-        rangeChange,
-      },
-      composition,
-      emailDomainTop,
-      emailDomainTotal,
-      dedup,
-      anomaly,
-      cumulativeTrend,
-      dailyUtmTrend: buildDailyUtmTrendFromRows(utmTrendRows, from, to),
-      utmTop,
-      utmBySource,
-      utmByMedium,
-      utmBySourceMedium,
-      heatmap: buildHeatmapFromRows(heatmapRows),
+  const payload: RealtimeReportData = {
+    generatedAt: now.toISOString(),
+    project: { id: project.id, name: project.name },
+    performance: {
+      yesterdayCount,
+      todayCount,
+      cumulativeCount,
+      rangeCount,
+      previousRangeCount,
+      rangeChange,
     },
+    composition,
+    emailDomainTop,
+    emailDomainTotal,
+    dedup,
+    anomaly,
+    cumulativeTrend,
+    dailyUtmTrend: buildDailyUtmTrendFromRows(utmTrendRows, from, to),
+    utmTop,
+    utmBySource,
+    utmByMedium,
+    utmBySourceMedium,
+    heatmap: buildHeatmapFromRows(heatmapRows),
   };
+  REPORT_CACHE.set(cacheKey, { at: Date.now(), data: payload });
+  return { data: payload };
 }
 
 export async function POST(request: Request) {
