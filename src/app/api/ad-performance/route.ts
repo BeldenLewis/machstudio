@@ -4,6 +4,7 @@ import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { logActivity } from "@/lib/activity";
+import { classifyResultBucket } from "@/lib/ad-parse";
 
 const MAX_IMPORT_ROWS = 20_000;
 const CREATE_CHUNK_SIZE = 1_000;
@@ -506,32 +507,41 @@ export async function POST(request: Request) {
       for (let i = 0; i < sanitizedRows.length; i += CREATE_CHUNK_SIZE) {
         const chunk = sanitizedRows.slice(i, i + CREATE_CHUNK_SIZE);
         await tx.adPerformanceRecord.createMany({
-          data: chunk.map((row) => ({
-            id: crypto.randomUUID(),
-            batchId: createdBatch.id,
-            workspaceId,
-            projectId,
-            sourceType,
-            campaignName: row.campaignName,
-            adGroupName: row.adGroupName?.trim() || null,
-            reportDate: toDate(row.reportDate),
-            reportStart: toDate(row.reportStart) ?? batchStart,
-            reportEnd: toDate(row.reportEnd) ?? batchEnd,
-            status: row.status?.trim() || null,
-            currency: row.currency?.trim() || null,
-            cost: toFiniteNumber(row.cost),
-            impressions: toInt(row.impressions),
-            reach: toInt(row.reach),
-            clicks: toInt(row.clicks),
-            cpm: toFiniteNumber(row.cpm),
-            cpc: toFiniteNumber(row.cpc),
-            ctr: toFiniteNumber(row.ctr),
-            conversions: toFiniteNumber(row.conversions),
-            costPerConversion: toFiniteNumber(row.costPerConversion),
-            conversionRate: toFiniteNumber(row.conversionRate),
-            resultType: row.resultType?.trim() || null,
-            raw: row.raw ?? {},
-          })),
+          data: chunk.map((row) => {
+            const reachVal = toInt(row.reach);
+            const conversionsVal = toFiniteNumber(row.conversions);
+            // 서버에서 결과유형 분류 재계산(클라이언트 값 비신뢰).
+            const bucket = classifyResultBucket(row.resultType ?? null, reachVal, conversionsVal);
+            const isReach = bucket === "reach";
+            return {
+              id: crypto.randomUUID(),
+              batchId: createdBatch.id,
+              workspaceId,
+              projectId,
+              sourceType,
+              campaignName: row.campaignName,
+              adGroupName: row.adGroupName?.trim() || null,
+              reportDate: toDate(row.reportDate),
+              reportStart: toDate(row.reportStart) ?? batchStart,
+              reportEnd: toDate(row.reportEnd) ?? batchEnd,
+              status: row.status?.trim() || null,
+              currency: row.currency?.trim() || null,
+              cost: toFiniteNumber(row.cost),
+              impressions: toInt(row.impressions),
+              reach: reachVal,
+              clicks: toInt(row.clicks),
+              cpm: toFiniteNumber(row.cpm),
+              cpc: toFiniteNumber(row.cpc),
+              ctr: toFiniteNumber(row.ctr),
+              // 도달성 결과는 전환 건수가 아니므로 전환 지표에선 0/null (도달 인원은 reach 에 보존)
+              conversions: isReach ? 0 : conversionsVal,
+              costPerConversion: isReach ? null : toFiniteNumber(row.costPerConversion),
+              conversionRate: isReach ? null : toFiniteNumber(row.conversionRate),
+              resultType: row.resultType?.trim() || null,
+              resultBucket: bucket,
+              raw: row.raw ?? {},
+            };
+          }),
         });
       }
 

@@ -49,6 +49,7 @@ interface AnalyticsData {
     cpc: number;
     cpm: number;
     costPerConversion: number;
+    reach: number;
   };
   mediaSummary: MediaRow[];
   campaignSummary: CampaignRow[];
@@ -215,10 +216,11 @@ export default function AnalyticsSharePage({ params }: { params: Promise<{ token
           </span>
         </header>
 
-        <section className="grid grid-cols-2 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <section className="grid grid-cols-2 gap-3 md:grid-cols-2 xl:grid-cols-5">
           <KpiCard label="지출" value={formatKRW(analytics.totals.cost)} />
           <KpiCard label="클릭" value={formatNumber(analytics.totals.clicks)} sub={`CTR ${formatPct(analytics.totals.ctr)}`} />
           <KpiCard label="전환" value={formatNumber(analytics.totals.conversions)} sub={`CVR ${formatPct(analytics.totals.cvr)}`} />
+          <KpiCard label="도달" value={formatNumber(analytics.totals.reach)} sub="누적 도달(중복 포함)" />
           <KpiCard label="결과당 비용" value={formatKRW(analytics.totals.costPerConversion)} />
         </section>
 

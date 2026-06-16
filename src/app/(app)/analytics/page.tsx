@@ -762,12 +762,13 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-8">
         <MetricCard label="지출" value={formatKRW(totals?.cost)} sub={currentScopeLabel} currentRaw={totals?.cost} previousRaw={previousTotals?.cost ?? undefined} lowerIsBetter />
         <MetricCard label="CPM" value={formatKRW(totals?.cpm)} sub={`노출 ${formatNumber(totals?.impressions)}`} currentRaw={totals?.cpm} previousRaw={previousTotals?.cpm ?? undefined} lowerIsBetter />
         <MetricCard label="CPC" value={formatKRW(totals?.cpc)} sub={`클릭 ${formatNumber(totals?.clicks)}`} currentRaw={totals?.cpc} previousRaw={previousTotals?.cpc ?? undefined} lowerIsBetter />
         <MetricCard label="CTR" value={formatPct(totals?.ctr)} currentRaw={totals?.ctr} previousRaw={previousTotals?.ctr ?? undefined} />
         <MetricCard label="CVR" value={formatPct(totals?.cvr)} sub={`결과 ${formatNumber(totals?.conversions)}`} currentRaw={totals?.cvr} previousRaw={previousTotals?.cvr ?? undefined} />
+        <MetricCard label="도달" value={formatNumber(totals?.reach)} sub="누적 도달(중복 포함)" currentRaw={totals?.reach} />
         <MetricCard label="전환수" value={formatNumber(totals?.conversions)} currentRaw={totals?.conversions} previousRaw={previousTotals?.conversions ?? undefined} />
         <MetricCard label="결과당 비용" value={formatKRW(totals?.costPerConversion)} currentRaw={totals?.costPerConversion} previousRaw={previousTotals?.costPerConversion ?? undefined} lowerIsBetter />
       </div>

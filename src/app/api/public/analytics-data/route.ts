@@ -142,12 +142,15 @@ export async function POST(request: Request) {
     }),
   ]);
 
-  const totals = withDerivedMetrics({
-    cost: totalsAgg._sum.cost ?? 0,
-    impressions: totalsAgg._sum.impressions ?? 0,
-    clicks: totalsAgg._sum.clicks ?? 0,
-    conversions: totalsAgg._sum.conversions ?? 0,
-  });
+  const totals = {
+    ...withDerivedMetrics({
+      cost: totalsAgg._sum.cost ?? 0,
+      impressions: totalsAgg._sum.impressions ?? 0,
+      clicks: totalsAgg._sum.clicks ?? 0,
+      conversions: totalsAgg._sum.conversions ?? 0,
+    }),
+    reach: totalsAgg._sum.reach ?? 0,
+  };
 
   const mediaSummary = mediaGroups
     .map((row) => withDerivedMetrics({ sourceType: row.sourceType, ...sumToBase(row._sum) }))

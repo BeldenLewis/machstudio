@@ -43,6 +43,7 @@ export interface NormalizedAdRow {
   costPerConversion?: number | null;
   conversionRate?: number | null;
   resultType?: string | null;
+  resultBucket?: string | null;
   raw: Record<string, string>;
 }
 
@@ -103,6 +104,25 @@ export const FIELD_ALIASES: Record<AdColumnKey, string[]> = {
   currency: ["통화 코드", "통화", "Currency", "Currency code"],
   resultType: ["결과 유형", "Result type"],
 };
+
+// 결과 유형 → 버킷 분류.
+// 도달(Reach) 캠페인의 "결과"는 도달 인원이라 전환 건수와 단위가 달라, 전환 집계에서 분리한다.
+// resultType 텍스트('도달'/'reach') 또는 (결과값 == 도달값) 지문으로 식별.
+export type ResultBucket = "reach" | "conversion";
+export function classifyResultBucket(
+  resultType: string | null | undefined,
+  reach: number | null | undefined,
+  conversions: number | null | undefined,
+): ResultBucket {
+  const rt = (resultType ?? "").toLowerCase();
+  if (/도달|reach/.test(rt)) return "reach";
+  // 결과 유형이 비어 있어도 결과값이 도달값과 정확히 일치하면 도달성으로 간주(보강).
+  // 소규모 우연 일치(reach==conversions==3 등)로 전환을 오분류하지 않도록 도달이 충분히 클 때만.
+  if (rt === "" && typeof reach === "number" && reach >= 1000 && typeof conversions === "number" && conversions === reach) {
+    return "reach";
+  }
+  return "conversion";
+}
 
 function toText(value: unknown) {
   return String(value ?? "").trim();
@@ -281,6 +301,12 @@ export function parseMappedRows(analysis: SheetAnalysis): ParsedPreview {
     const campaignName = cellText(row, analysis.mapping, "campaignName");
     if (!campaignName || campaignName === "전체") return null;
 
+    const reach = cellNumber(row, analysis.mapping, "reach");
+    const conversionsRaw = cellNumber(row, analysis.mapping, "conversions");
+    const resultType = cellText(row, analysis.mapping, "resultType") || null;
+    const resultBucket = classifyResultBucket(resultType, reach, conversionsRaw);
+    const isReach = resultBucket === "reach";
+
     return {
       sourceType: analysis.sourceType,
       campaignName,
@@ -293,14 +319,16 @@ export function parseMappedRows(analysis: SheetAnalysis): ParsedPreview {
       cost: cellNumber(row, analysis.mapping, "cost"),
       cpm: cellNumber(row, analysis.mapping, "cpm"),
       impressions: cellNumber(row, analysis.mapping, "impressions"),
-      reach: cellNumber(row, analysis.mapping, "reach"),
+      reach,
       clicks: cellNumber(row, analysis.mapping, "clicks"),
       cpc: cellNumber(row, analysis.mapping, "cpc"),
       ctr: cellNumber(row, analysis.mapping, "ctr"),
-      conversions: cellNumber(row, analysis.mapping, "conversions"),
-      costPerConversion: cellNumber(row, analysis.mapping, "costPerConversion"),
-      conversionRate: cellNumber(row, analysis.mapping, "conversionRate"),
-      resultType: cellText(row, analysis.mapping, "resultType") || null,
+      // 도달성 결과는 전환 건수가 아니므로 전환 지표에선 0 처리(도달 인원은 reach 에 보존됨)
+      conversions: isReach ? 0 : conversionsRaw,
+      costPerConversion: isReach ? null : cellNumber(row, analysis.mapping, "costPerConversion"),
+      conversionRate: isReach ? null : cellNumber(row, analysis.mapping, "conversionRate"),
+      resultType,
+      resultBucket,
       raw: rawObject(analysis.headers, row),
     };
   }).filter(Boolean) as NormalizedAdRow[];
