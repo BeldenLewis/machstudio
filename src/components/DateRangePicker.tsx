@@ -7,13 +7,15 @@ import { kstDateString } from "@/lib/datetime";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
+export const ALL_TIME_LABEL = "전체 기간";
+
 export interface DateRange {
   from: Date;
   to: Date;
   label: string;
 }
 
-function presets(): DateRange[] {
+function presets(allowAllTime: boolean): DateRange[] {
   const now = new Date();
   const startOfTodayKST = () => {
     const ks = kstDateString(now);
@@ -21,7 +23,7 @@ function presets(): DateRange[] {
   };
   const today = startOfTodayKST();
   const endOfToday = new Date(today.getTime() + 86400_000 - 1);
-  return [
+  const list: DateRange[] = [
     { from: today, to: endOfToday, label: "오늘" },
     { from: new Date(today.getTime() - 86400_000), to: new Date(today.getTime() - 1), label: "어제" },
     { from: new Date(today.getTime() - 7 * 86400_000), to: endOfToday, label: "최근 7일" },
@@ -29,14 +31,21 @@ function presets(): DateRange[] {
     { from: new Date(today.getTime() - 90 * 86400_000), to: endOfToday, label: "최근 90일" },
     { from: new Date(today.getTime() - 365 * 86400_000), to: endOfToday, label: "최근 365일" },
   ];
+  if (allowAllTime) {
+    // 전체 기간: epoch(1970) ~ 오늘 끝 → 서버에서 사실상 전체 범위로 조회
+    list.push({ from: new Date(0), to: endOfToday, label: ALL_TIME_LABEL });
+  }
+  return list;
 }
 
 interface Props {
   value: DateRange;
   onChange: (range: DateRange) => void;
+  /** "전체 기간" 프리셋 노출 여부 (기본 false) */
+  allowAllTime?: boolean;
 }
 
-export default function DateRangePicker({ value, onChange }: Props) {
+export default function DateRangePicker({ value, onChange, allowAllTime = false }: Props) {
   const [open, setOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState(kstDateString(value.from));
   const [customTo, setCustomTo] = useState(kstDateString(value.to));
@@ -81,7 +90,7 @@ export default function DateRangePicker({ value, onChange }: Props) {
           className="absolute right-0 mt-2 w-72 rounded-2xl border border-border bg-card shadow-xl z-20 p-3 space-y-2 origin-top-right"
         >
           <div className="space-y-1">
-            {presets().map((p) => (
+            {presets(allowAllTime).map((p) => (
               <motion.button
                 whileHover={{ x: 2 }}
                 whileTap={{ scale: 0.98 }}

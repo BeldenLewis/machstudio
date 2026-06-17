@@ -8,14 +8,12 @@ import {
   ArrowUp,
   ArrowUpDown,
   BarChart3,
-  Calendar,
   Database,
   Download,
   FileSpreadsheet,
   LayoutGrid,
   List,
   Loader2,
-  History,
   RefreshCw,
   Share2,
   Trash2,
@@ -25,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { AnalyticsShareModal } from "./AnalyticsShareModal";
+import DateRangePicker, { type DateRange, ALL_TIME_LABEL } from "@/components/DateRangePicker";
 import { toast } from "sonner";
 import {
   Area,
@@ -241,6 +240,13 @@ function todayInputValue(offsetDays = 0) {
   return `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, "0")}-${String(kst.getUTCDate()).padStart(2, "0")}`;
 }
 
+function defaultRange(): DateRange {
+  const today = new Date(todayInputValue(0) + "T00:00:00+09:00");
+  const endOfToday = new Date(today.getTime() + 86_400_000 - 1);
+  const from = new Date(today.getTime() - 30 * 86_400_000);
+  return { from, to: endOfToday, label: "최근 30일" };
+}
+
 function formatNumber(value: number | null | undefined) {
   return Math.round(value ?? 0).toLocaleString("ko-KR");
 }
@@ -325,9 +331,7 @@ export default function AnalyticsPage() {
   const [data, setData] = useState<PerformanceResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [rangeDays, setRangeDays] = useState("30");
-  const [customDateFrom, setCustomDateFrom] = useState(() => todayInputValue(-30));
-  const [customDateTo, setCustomDateTo] = useState(() => todayInputValue(0));
+  const [range, setRange] = useState<DateRange>(() => defaultRange());
   const [sourceFilter, setSourceFilter] = useState("ALL");
   const [selectedCampaignName, setSelectedCampaignName] = useState<string | null>(null);
   const [selectedAdGroupName, setSelectedAdGroupName] = useState<string | null>(null);
@@ -370,8 +374,8 @@ export default function AnalyticsPage() {
     setDetailPage(1);
   };
 
-  const changeRangeDays = (nextRange: string) => {
-    setRangeDays(nextRange);
+  const handleRangeChange = (next: DateRange) => {
+    setRange(next);
     setDetailPeriod(null);
     setDetailPage(1);
   };
@@ -418,23 +422,10 @@ export default function AnalyticsPage() {
         detailPageSize: String(DETAIL_PAGE_SIZE),
       });
 
-      let fromDate: string | null = null;
-      let toDate: string | null = null;
-
-      if (rangeDays === "custom") {
-        if (customDateFrom) {
-          fromDate = customDateFrom;
-          params.set("from", `${customDateFrom}T00:00:00+09:00`);
-        }
-        if (customDateTo) {
-          toDate = customDateTo;
-          params.set("to", `${customDateTo}T23:59:59+09:00`);
-        }
-      } else if (rangeDays !== "all") {
-        fromDate = todayInputValue(-Number(rangeDays));
-        toDate = todayInputValue(0);
-        params.set("from", `${fromDate}T00:00:00+09:00`);
-        params.set("to", `${toDate}T23:59:59+09:00`);
+      const isAllTime = range.label === ALL_TIME_LABEL;
+      if (!isAllTime) {
+        params.set("from", range.from.toISOString());
+        params.set("to", range.to.toISOString());
       }
 
       if (selectedCampaignName) params.set("campaignName", selectedCampaignName);
@@ -448,16 +439,16 @@ export default function AnalyticsPage() {
       hasLoadedRef.current = true;
 
       // Fetch previous period for comparison (② and ⑭)
-      if (rangeDays !== "all" && rangeDays !== "custom" && fromDate && toDate) {
-        const nDays = Number(rangeDays);
-        const prevFrom = todayInputValue(-nDays * 2);
-        const prevTo = todayInputValue(-nDays);
+      if (!isAllTime) {
+        const spanMs = range.to.getTime() - range.from.getTime();
+        const prevTo = new Date(range.from.getTime() - 1);
+        const prevFrom = new Date(prevTo.getTime() - spanMs);
         const prevParams = new URLSearchParams({
           workspaceId: workspace.id,
           projectId: currentProject.id,
           sourceType: sourceFilter,
-          from: `${prevFrom}T00:00:00+09:00`,
-          to: `${prevTo}T23:59:59+09:00`,
+          from: prevFrom.toISOString(),
+          to: prevTo.toISOString(),
           detailGroupBy: "campaign",
           detailDateGranularity: "day",
           detailPage: "1",
@@ -491,9 +482,7 @@ export default function AnalyticsPage() {
   }, [
     workspace,
     currentProject,
-    rangeDays,
-    customDateFrom,
-    customDateTo,
+    range,
     sourceFilter,
     selectedCampaignName,
     selectedAdGroupName,
@@ -682,43 +671,7 @@ export default function AnalyticsPage() {
               </motion.button>
             ))}
           </div>
-          <div className="flex items-center gap-2">
-            <select
-              value={rangeDays}
-              onChange={(event) => changeRangeDays(event.target.value)}
-              className="h-10 rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-violet-400"
-            >
-              <option value="7">최근 7일</option>
-              <option value="30">최근 30일</option>
-              <option value="90">최근 90일</option>
-              <option value="365">최근 365일</option>
-              <option value="all">전체 기간</option>
-              <option value="custom">직접 입력</option>
-            </select>
-            {rangeDays === "custom" && (
-              <motion.div
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={spring}
-                className="flex items-center gap-1.5"
-              >
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <input
-                  type="date"
-                  value={customDateFrom}
-                  onChange={(e) => setCustomDateFrom(e.target.value)}
-                  className="h-10 rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-violet-400"
-                />
-                <span className="text-xs text-muted-foreground">~</span>
-                <input
-                  type="date"
-                  value={customDateTo}
-                  onChange={(e) => setCustomDateTo(e.target.value)}
-                  className="h-10 rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-violet-400"
-                />
-              </motion.div>
-            )}
-          </div>
+          <DateRangePicker value={range} onChange={handleRangeChange} allowAllTime />
           <motion.button
             onClick={fetchData}
             whileHover={{ y: -1 }}
@@ -728,16 +681,6 @@ export default function AnalyticsPage() {
             aria-label="새로고침"
           >
             <RefreshCw className={`h-4 w-4 ${loading || refreshing ? "animate-spin" : ""}`} />
-          </motion.button>
-          <motion.button
-            onClick={() => setHistoryOpen(true)}
-            whileHover={{ y: -1 }}
-            whileTap={{ scale: 0.97 }}
-            transition={spring}
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-border px-3 text-sm transition-colors hover:bg-secondary"
-          >
-            <History className="h-4 w-4" />
-            소스 이력
           </motion.button>
           <motion.button
             onClick={() => setShareOpen(true)}
@@ -750,14 +693,14 @@ export default function AnalyticsPage() {
             공유
           </motion.button>
           <motion.button
-            onClick={() => setUploadOpen(true)}
+            onClick={() => setHistoryOpen(true)}
             whileHover={{ y: -1 }}
             whileTap={{ scale: 0.97 }}
             transition={spring}
             className="inline-flex h-10 items-center gap-2 rounded-xl bg-violet-500 px-4 text-sm font-medium text-white transition-colors hover:bg-violet-600"
           >
-            <Upload className="h-4 w-4" />
-            소스 추가
+            <Database className="h-4 w-4" />
+            소스 관리
           </motion.button>
         </div>
       </div>
@@ -1706,6 +1649,7 @@ export default function AnalyticsPage() {
             onClose={() => setUploadOpen(false)}
             onImported={() => {
               setUploadOpen(false);
+              setHistoryOpen(true);
               void fetchData();
             }}
           />
@@ -1718,6 +1662,7 @@ export default function AnalyticsPage() {
             batches={data.batches}
             onClose={() => setHistoryOpen(false)}
             onDelete={(id) => deleteBatchRequest(id, fetchData)}
+            onAddSource={() => { setHistoryOpen(false); setUploadOpen(true); }}
           />
         )}
       </AnimatePresence>
@@ -1921,10 +1866,12 @@ function ImportHistoryPanel({
   batches,
   onClose,
   onDelete,
+  onAddSource,
 }: {
   batches: PerformanceResponse["batches"];
   onClose: () => void;
   onDelete: (id: string) => Promise<void>;
+  onAddSource: () => void;
 }) {
   const [localBatches, setLocalBatches] = useState(batches);
   const [deleteBatchId, setDeleteBatchId] = useState<string | null>(null);
@@ -1964,18 +1911,30 @@ function ImportHistoryPanel({
       >
         <div className="flex items-start justify-between gap-4 border-b border-border p-6">
           <div>
-            <h2 className="text-lg font-semibold">소스 이력</h2>
-            <p className="mt-1 text-sm text-muted-foreground">업로드한 파일과 저장된 row를 관리합니다.</p>
+            <h2 className="text-lg font-semibold">소스 관리</h2>
+            <p className="mt-1 text-sm text-muted-foreground">소스를 추가하거나 기존 소스를 관리합니다.</p>
           </div>
-          <motion.button
-            onClick={onClose}
-            whileHover={{ rotate: 4, scale: 1.04 }}
-            whileTap={{ scale: 0.94 }}
-            transition={spring}
-            className="rounded-xl p-2 text-muted-foreground hover:bg-secondary"
-          >
-            <X className="h-4 w-4" />
-          </motion.button>
+          <div className="flex items-center gap-2 shrink-0">
+            <motion.button
+              onClick={onAddSource}
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.95 }}
+              transition={spring}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-violet-500 px-3 py-2 text-sm font-medium text-white hover:bg-violet-600 transition-colors"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              소스 추가
+            </motion.button>
+            <motion.button
+              onClick={onClose}
+              whileHover={{ rotate: 4, scale: 1.04 }}
+              whileTap={{ scale: 0.94 }}
+              transition={spring}
+              className="rounded-xl p-2 text-muted-foreground hover:bg-secondary"
+            >
+              <X className="h-4 w-4" />
+            </motion.button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">

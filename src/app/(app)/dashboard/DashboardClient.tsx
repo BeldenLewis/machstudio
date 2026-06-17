@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Filter, LayoutDashboard, Loader2, RefreshCw, Share2, X } from "lucide-react";
 import { useWorkspace } from "@/contexts/workspace";
 import { kstDateString } from "@/lib/datetime";
-import DateRangePicker, { DateRange } from "./DateRangePicker";
+import DateRangePicker, { DateRange } from "@/components/DateRangePicker";
 import RealtimeReport, { type RealtimeReportData } from "./RealtimeReport";
 import { DashboardShareModal } from "./DashboardShareModal";
 
