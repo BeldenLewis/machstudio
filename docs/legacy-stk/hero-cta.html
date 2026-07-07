@@ -1,0 +1,337 @@
+<!--
+  아카이브: STK 웨비나 상세페이지 히어로 CTA (아임웹 코드 위젯에 부착됐던 원본)
+  참조용 — mach studio에서 실행되지 않음. 인사이트 요약은 README.md 참고.
+-->
+<style>
+  @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+
+  .custom-cta-wrapper {
+    --hero-accent: #FF4713;
+    --hero-accent-hover: #ff6a3d;
+    --hero-accent-glow: rgba(255,71,19,0.35);
+
+    width: 100%;
+    display: flex;
+    justify-content: flex-start !important;
+  }
+
+  .custom-cta-wrapper,
+  .custom-cta-wrapper * {
+    box-sizing: border-box;
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif !important;
+  }
+
+  .custom-cta-inner {
+    width: 100%;
+    max-width: 1280px;
+    box-sizing: border-box;
+    padding-left: 30px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: flex-start !important;
+    margin: 0 !important;
+  }
+
+  .custom-cta-wrapper .custom-cta-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+
+    width: auto !important;
+    min-width: auto !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: auto !important;
+    flex: 0 0 auto !important;
+
+    padding: 16px 32px !important;
+    border-radius: 10px !important;
+    border: 0;
+    box-sizing: border-box !important;
+
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
+    letter-spacing: -0.1px;
+
+    color: #fff !important;
+    -webkit-text-fill-color: #fff !important;
+    text-decoration: none !important;
+    white-space: nowrap !important;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .custom-cta-wrapper .custom-cta-btn:hover {
+    transform: translateY(-1px);
+    text-decoration: none !important;
+  }
+
+  .custom-cta-wrapper .custom-cta-btn--primary {
+    background: var(--hero-accent) !important;
+    border: 1px solid var(--hero-accent) !important;
+    box-shadow: 0 2px 12px var(--hero-accent-glow);
+  }
+
+  .custom-cta-wrapper .custom-cta-btn--primary:hover {
+    background: var(--hero-accent-hover) !important;
+    border-color: var(--hero-accent-hover) !important;
+    box-shadow: 0 4px 20px rgba(255,71,19,0.45);
+  }
+
+  .custom-cta-wrapper .custom-cta-btn--secondary {
+    background: rgba(255,255,255,0.08) !important;
+    border: 1px solid rgba(255,255,255,0.16) !important;
+    color: #fff !important;
+    -webkit-text-fill-color: #fff !important;
+  }
+
+  .custom-cta-wrapper .custom-cta-btn--secondary:hover {
+    background: rgba(255,255,255,0.14) !important;
+    border-color: rgba(255,255,255,0.26) !important;
+  }
+
+  .custom-cta-wrapper .custom-cta-icon {
+    width: 15px !important;
+    height: 15px !important;
+    flex: 0 0 15px !important;
+    display: block !important;
+  }
+
+  @media (max-width: 768px) {
+    .custom-cta-inner {
+      padding-left: 0;
+      padding-right: 0;
+      gap: 8px;
+    }
+
+    .custom-cta-wrapper .custom-cta-btn {
+      width: auto !important;
+      flex: 0 0 auto !important;
+      padding: 14px 20px !important;
+      font-size: 14px !important;
+      border-radius: 9px !important;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .custom-cta-wrapper .custom-cta-btn {
+      padding: 13px 16px !important;
+      font-size: 13px !important;
+    }
+  }
+</style>
+
+<div class="custom-cta-wrapper">
+  <div class="custom-cta-inner">
+
+    <!-- 신청 / 시청 버튼 -->
+    <a href="javascript:void(0);"
+       id="hero-webinar-main-cta"
+       class="custom-cta-btn custom-cta-btn--primary"
+       aria-label="웨비나 신청하기"
+       style="display:inline-flex;">
+      <svg class="custom-cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      <span id="hero-webinar-main-cta-label">웨비나 신청하기</span>
+    </a>
+
+    <!-- 종료 후 만족도 조사 버튼 -->
+    <a href="#"
+       id="hero-webinar-survey-cta"
+       class="custom-cta-btn custom-cta-btn--secondary"
+       target="_blank"
+       rel="noopener noreferrer"
+       aria-label="만족도 조사하기"
+       style="display:none;">
+      <svg class="custom-cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 11l3 3L22 4"/>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      </svg>
+      <span>만족도 조사하기</span>
+    </a>
+
+    <!-- 종료 후 전시 개요 버튼 -->
+    <a href="https://smarttechkorea.com/Exhibition"
+       id="hero-webinar-exhibition-cta"
+       class="custom-cta-btn custom-cta-btn--secondary"
+       target="_blank"
+       rel="noopener noreferrer"
+       aria-label="전시 개요 바로가기"
+       style="display:none;">
+      <svg class="custom-cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+        <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"/>
+      </svg>
+      <span>전시 개요 바로가기</span>
+    </a>
+
+    <!-- 종료 후 STK 사전등록 버튼 -->
+    <a href="https://smarttechkorea.com/Pre-registration"
+       id="hero-webinar-register-cta"
+       class="custom-cta-btn custom-cta-btn--primary"
+       target="_blank"
+       rel="noopener noreferrer"
+       aria-label="STK 사전등록 바로가기"
+       style="display:none;">
+      <svg class="custom-cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12h14"/>
+        <path d="M12 5l7 7-7 7"/>
+      </svg>
+      <span>STK 사전등록 바로가기</span>
+    </a>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  if (window.__STK_HERO_CTA_INIT__) return;
+  window.__STK_HERO_CTA_INIT__ = true;
+
+  var CONFIG = {
+    webinarStartAt: '2026-05-21T14:00:00+09:00',
+    webinarEndAt: '2026-05-21T16:10:00+09:00',
+    watchUrl: 'https://smarttechkorea.com/webinarlive',
+    surveyUrl: '#',
+    preRegistrationUrl: 'https://smarttechkorea.com/Pre-registration',
+    exhibitionUrl: 'https://smarttechkorea.com/Exhibition',
+    modalCode: 'm20260512d31d22bc4d26c',
+    menuCode: 'm2025112624a84e0b90633'
+  };
+
+  var mainCta = document.getElementById('hero-webinar-main-cta');
+  var mainCtaLabel = document.getElementById('hero-webinar-main-cta-label');
+  var surveyCta = document.getElementById('hero-webinar-survey-cta');
+  var exhibitionCta = document.getElementById('hero-webinar-exhibition-cta');
+  var registerCta = document.getElementById('hero-webinar-register-cta');
+
+  if (!mainCta || !mainCtaLabel || !surveyCta || !exhibitionCta || !registerCta) return;
+
+  function buildFallbackState() {
+    var now = new Date();
+    var start = new Date(CONFIG.webinarStartAt);
+    var end = new Date(CONFIG.webinarEndAt);
+    var watchOpenAt = new Date(start.getTime() - 60 * 60 * 1000);
+    var mode = 'apply';
+
+    if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+      if (now >= end) mode = 'end';
+      else if (now >= start) mode = 'live';
+      else if (now >= watchOpenAt) mode = 'watch';
+    }
+
+    return {
+      mode: mode,
+      startAt: CONFIG.webinarStartAt,
+      endAt: CONFIG.webinarEndAt,
+      watchUrl: CONFIG.watchUrl,
+      surveyUrl: CONFIG.surveyUrl,
+      preRegistrationUrl: CONFIG.preRegistrationUrl,
+      exhibitionUrl: CONFIG.exhibitionUrl,
+      modalCode: CONFIG.modalCode,
+      menuCode: CONFIG.menuCode
+    };
+  }
+
+  function openWebinarModal(state, e) {
+    e.preventDefault();
+
+    if (window.SITE && typeof window.SITE.openModalMenu === 'function' && state.modalCode && state.menuCode) {
+      window.SITE.openModalMenu(state.modalCode, state.menuCode);
+      return;
+    }
+
+    window.location.href = 'https://smarttechkorea.com/webinar';
+  }
+
+  function showMainCtaOnly() {
+    mainCta.style.display = 'inline-flex';
+    surveyCta.style.display = 'none';
+    exhibitionCta.style.display = 'none';
+    registerCta.style.display = 'none';
+  }
+
+  function showEndCtas() {
+    mainCta.style.display = 'none';
+    surveyCta.style.display = 'inline-flex';
+    exhibitionCta.style.display = 'inline-flex';
+    registerCta.style.display = 'inline-flex';
+  }
+
+  function applyHeroState(state) {
+    state = state || buildFallbackState();
+
+    if (state.mode === 'apply') {
+      showMainCtaOnly();
+
+      mainCtaLabel.textContent = '웨비나 신청하기';
+      mainCta.setAttribute('aria-label', '웨비나 신청하기');
+      mainCta.setAttribute('href', 'javascript:void(0);');
+      mainCta.removeAttribute('target');
+      mainCta.removeAttribute('rel');
+
+      mainCta.onclick = function(e) {
+        openWebinarModal(state, e);
+      };
+
+      return;
+    }
+
+    if (state.mode === 'watch' || state.mode === 'live') {
+      showMainCtaOnly();
+
+      mainCtaLabel.textContent = '웨비나 시청하기';
+      mainCta.setAttribute('aria-label', '웨비나 시청하기');
+      mainCta.setAttribute('href', state.watchUrl || CONFIG.watchUrl);
+      mainCta.setAttribute('target', '_blank');
+      mainCta.setAttribute('rel', 'noopener noreferrer');
+
+      mainCta.onclick = null;
+
+      return;
+    }
+
+    if (state.mode === 'end') {
+      showEndCtas();
+
+      surveyCta.setAttribute('href', state.surveyUrl || CONFIG.surveyUrl || '#');
+      surveyCta.setAttribute('target', '_blank');
+      surveyCta.setAttribute('rel', 'noopener noreferrer');
+
+      exhibitionCta.setAttribute('href', state.exhibitionUrl || CONFIG.exhibitionUrl);
+      exhibitionCta.setAttribute('target', '_blank');
+      exhibitionCta.setAttribute('rel', 'noopener noreferrer');
+
+      registerCta.setAttribute('href', state.preRegistrationUrl || CONFIG.preRegistrationUrl);
+      registerCta.setAttribute('target', '_blank');
+      registerCta.setAttribute('rel', 'noopener noreferrer');
+
+      return;
+    }
+
+    showMainCtaOnly();
+  }
+
+  window.addEventListener('stk:webinar-state-change', function(e) {
+    applyHeroState(e.detail);
+  });
+
+  if (window.STK_WEBINAR_STATE) {
+    applyHeroState(window.STK_WEBINAR_STATE);
+  } else {
+    applyHeroState(buildFallbackState());
+  }
+
+  setInterval(function(){
+    if (!window.STK_WEBINAR_STATE) {
+      applyHeroState(buildFallbackState());
+    }
+  }, 60 * 1000);
+})();
+</script>

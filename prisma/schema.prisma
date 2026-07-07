@@ -54,6 +54,7 @@ model Workspace {
   scheduledReports     ScheduledReport[]
   apiTokens            ApiToken[]
   webinars             Webinar[]
+  webinarEmbedSites    WebinarEmbedSite[]
   adPerformanceImports AdPerformanceImportBatch[]
   adPerformanceRecords AdPerformanceRecord[]
 }
@@ -130,6 +131,7 @@ model Project {
   dashboards           Dashboard[]
   projectMembers       ProjectMember[]
   webinars             Webinar[]
+  webinarEmbedSites    WebinarEmbedSite[]
   adPerformanceImports AdPerformanceImportBatch[]
   adPerformanceRecords AdPerformanceRecord[]
 }
@@ -494,17 +496,22 @@ model Webinar {
   signupDeadline DateTime
   theme          Json // { accentColor, bgColor, surfaceColor, textColor, font, borderRadius, bgEffect }
   config         Json // { youtubeId, calendarUrl, surveyUrl, etc. }
+  statusOverride String? // 수동 상태 오버라이드: "registration" | "live" | "ended" | null(일정 기반 자동)
+  components     Json? // 임베드 컴포넌트 설정 { heroButton, banner, formWidget, allowLiveRegistration, entryOpenBeforeMinutes, endedMode }
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  workspace     Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project       Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  sessions      WebinarSession[]
-  registrations WebinarRegistration[]
-  questions     WebinarQA[]
-  announcements WebinarAnnouncement[]
-  popups        WebinarPopup[]
-  tallyPushes   WebinarTallyPush[]
+  workspace          Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project            Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sessions           WebinarSession[]
+  registrations      WebinarRegistration[]
+  questions          WebinarQA[]
+  announcements      WebinarAnnouncement[]
+  popups             WebinarPopup[]
+  tallyPushes        WebinarTallyPush[]
+  embedSites         WebinarEmbedSite[]
+  attendanceSegments WebinarAttendanceSegment[]
+  visitStats         WebinarVisitStat[]
 
   @@index([projectId, createdAt(sort: Desc)])
   @@index([workspaceId])
@@ -547,11 +554,34 @@ model WebinarRegistration {
   isActive       Boolean   @default(false)
   submittedAt    DateTime  @default(now())
 
-  webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+  // UTM 어트리뷰션 (CollectRecord와 동일 구성 — attribution-core 공용화 대비)
+  utmSource        String?
+  utmMedium        String?
+  utmCampaign      String?
+  utmTerm          String?
+  utmContent       String?
+  utmId            String?
+  firstUtmSource   String?
+  firstUtmMedium   String?
+  firstUtmCampaign String?
+  firstUtmTerm     String?
+  firstUtmContent  String?
+  firstUtmId       String?
+  firstReferrer    String?
+  firstSeenAt      DateTime?
+  journey          Json?
+  referrer         String?
+  userAgent        String?
+  registeredStatus String? // 등록 시점의 웨비나 상태 (registration/live 등)
+
+  webinar            Webinar                    @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+  attendanceSegments WebinarAttendanceSegment[]
 
   @@index([webinarId, submittedAt(sort: Desc)])
   @@index([webinarId, phone])
   @@index([webinarId, email])
+  @@index([webinarId, utmSource])
+  @@index([webinarId, utmMedium])
 }
 
 model WebinarQA {
@@ -575,13 +605,15 @@ model WebinarQA {
 }
 
 model WebinarAnnouncement {
-  id        String   @id @default(cuid())
-  webinarId String
-  type      String   @default("info")
-  message   String
-  isActive  Boolean  @default(false)
-  sentBy    String?
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  webinarId   String
+  type        String   @default("info")
+  message     String
+  buttonLabel String? // 공지 CTA 버튼 (선택)
+  buttonUrl   String?
+  isActive    Boolean  @default(false)
+  sentBy      String?
+  createdAt   DateTime @default(now())
 
   webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
 
@@ -615,6 +647,64 @@ model WebinarPopup {
   webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
 
   @@index([webinarId, isActive])
+}
+
+// 아임웹 등 외부 사이트 단위 부착 지점 — 로더 /w/{id} 가 이 레코드로 해석된다.
+// 전시 전환 시 activeWebinarId 만 교체하면 코드 재부착 없이 다음 웨비나가 노출된다.
+model WebinarEmbedSite {
+  id                 String    @id @default(cuid())
+  workspaceId        String
+  projectId          String
+  name               String
+  siteUrl            String?
+  livePageUrl        String? // 아임웹 라이브 전용 페이지 URL (배너/버튼의 입장 목적지)
+  allowedOrigins     String[]  @default([]) // register CORS 검증용. 빈 배열 = 전체 허용
+  bannerPagePatterns String[]  @default([]) // 배너 제외/포함 경로 글로브
+  activeWebinarId    String? // 현재 노출 웨비나
+  lastSeenAt         DateTime? // 로더 seen 비콘이 갱신 — 어드민 "연결됨" 배지
+  lastSeenOrigin     String?
+  isActive           Boolean   @default(true)
+  deletedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  activeWebinar Webinar?  @relation(fields: [activeWebinarId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([activeWebinarId])
+}
+
+// 시청 구간 — heartbeat 가 열린 구간(endedAt)을 연장하고, 90초 무갱신 시 다음 ping 이 새 구간을 만든다.
+// 시청 곡선("몇 분 지점에 몇 명")의 원천. 시청자당 보통 1~3행.
+model WebinarAttendanceSegment {
+  id             String   @id @default(cuid())
+  webinarId      String
+  registrationId String
+  startedAt      DateTime
+  endedAt        DateTime
+
+  webinar      Webinar             @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+  registration WebinarRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([webinarId, startedAt])
+  @@index([registrationId, endedAt(sort: Desc)])
+}
+
+// 부착 페이지 방문 일별 집계 (seen 비콘이 upsert) — 퍼널의 "방문" 단계.
+// utmSource/Medium 은 NULL 대신 "" 를 쓴다 (Postgres unique 의 NULL distinct 회피).
+model WebinarVisitStat {
+  id        String   @id @default(cuid())
+  webinarId String
+  date      DateTime // KST 자정 기준 일자
+  utmSource String   @default("")
+  utmMedium String   @default("")
+  visits    Int      @default(0)
+
+  webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+
+  @@unique([webinarId, date, utmSource, utmMedium])
 }
 
 model WebinarTallyPush {

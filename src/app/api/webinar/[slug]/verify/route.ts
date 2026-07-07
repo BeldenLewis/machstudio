@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { rateLimit } from "@/lib/ratelimit";
+import { rateLimit, rateLimitPeek } from "@/lib/ratelimit";
+
+// found=false 전용 한도 — 미스만 기록해 5분에 5회 넘는 실패 조회를 차단 (명단 enumeration 방지).
+// 성공 조회는 미스 버킷에 기록하지 않으므로 정상 참가자의 오타 1~2회는 영향 없음.
+const MISS_LIMIT = { limit: 5, windowMs: 300_000 };
 
 function normalizePhone(value: unknown) {
   const text = String(value ?? "").replace(/[^0-9]/g, "");
@@ -34,6 +38,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     );
   }
 
+  // 미스 한도 초과 상태면 조회 자체를 막는다 (found 여부 노출 차단)
+  if (rateLimitPeek(`verify-miss:${slug}:${ip}`, MISS_LIMIT).blocked) {
+    return NextResponse.json(
+      { error: "확인 실패가 반복됐어요. 잠시 후 다시 시도해주세요." },
+      { status: 429, headers: { "Retry-After": "300", "Access-Control-Allow-Origin": "*" } },
+    );
+  }
+
   const webinar = await prisma.webinar.findUnique({ where: { slug }, select: { id: true } });
   if (!webinar) return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404 });
 
@@ -63,6 +75,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     where,
     select: { id: true, name: true },
   });
+
+  // 미스만 기록 — 다음 요청부터 peek 이 차단 판정에 사용
+  if (!registration) {
+    rateLimit(`verify-miss:${slug}:${ip}`, MISS_LIMIT);
+  }
 
   return NextResponse.json(
     { found: !!registration, registration: registration ?? null },

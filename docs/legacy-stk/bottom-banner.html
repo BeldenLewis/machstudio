@@ -1,0 +1,1557 @@
+<!--
+  아카이브: STK 웨비나 랜딩페이지 하단 고정 배너 (아임웹 부착 원본)
+  참조용 — mach studio에서 실행되지 않음. Supabase publishable key는 [REDACTED] 처리.
+  - 키컬러: #FF4713
+  - 하단 고정 배너 + 카운트다운 + 캘린더(ICS) + 입장 인증 모달 + 아임웹 폼 캡처(XHR/fetch 후킹)
+-->
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800;900&display=swap');
+
+#ch-plugin,
+#channel-io-plugin,
+.ch-plugin,
+#ch-plugin-entry {
+  display: none !important;
+}
+
+/* =========================
+   STK Webinar Banner
+========================= */
+
+.pcl-webinar-fixed-banner,
+.pcl-webinar-fixed-banner *,
+.pcl-webinar-fixed-banner *::before,
+.pcl-webinar-fixed-banner *::after,
+.pcl-verify-overlay,
+.pcl-verify-overlay *,
+.pcl-verify-overlay *::before,
+.pcl-verify-overlay *::after {
+  box-sizing: border-box;
+}
+
+.pcl-webinar-fixed-banner {
+  --pcl-accent: #FF4713;
+  --pcl-accent-hover: #ff6a3d;
+  --pcl-accent-text: #ff8a66;
+  --pcl-accent-dim: rgba(255,71,19,0.14);
+  --pcl-accent-line: rgba(255,71,19,0.55);
+  --pcl-accent-border: rgba(255,71,19,0.24);
+  --pcl-accent-glow: rgba(255,71,19,0.28);
+
+  position: fixed !important;
+  left: 50% !important;
+  bottom: calc(28px + env(safe-area-inset-bottom)) !important;
+  transform: translate3d(-50%, 0, 0) !important;
+  width: 720px;
+  max-width: calc(100vw - 48px);
+  padding: 0;
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(24,24,28,0.88), rgba(14,14,18,0.82));
+  border: 1px solid var(--pcl-accent-border);
+  color: #fff;
+  font-family: 'Pretendard','Apple SD Gothic Neo',sans-serif;
+  box-shadow:
+    0 18px 54px rgba(0,0,0,0.42),
+    0 0 0 1px rgba(255,71,19,0.08) inset;
+  backdrop-filter: blur(24px) saturate(1.45);
+  -webkit-backdrop-filter: blur(24px) saturate(1.45);
+  z-index: 999900 !important;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  will-change: transform;
+}
+
+.pcl-webinar-fixed-banner::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--pcl-accent-line), transparent);
+  pointer-events: none;
+}
+
+.pcl-webinar-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 15px 15px 15px 22px;
+}
+
+.pcl-webinar-text-area {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.pcl-webinar-text {
+  margin: 0;
+  color: rgba(255,255,255,0.94);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.42;
+  letter-spacing: -0.25px;
+  white-space: nowrap;
+  word-break: keep-all;
+}
+
+.pcl-text-highlight {
+  color: var(--pcl-accent);
+  font-weight: 900;
+}
+
+.pcl-webinar-countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #ffb84d;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.05px;
+}
+
+.pcl-countdown-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pcl-accent);
+  flex: 0 0 auto;
+  animation: pcl-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes pcl-pulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.38; transform: scale(0.78); }
+}
+
+.pcl-webinar-ctas {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.pcl-webinar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  border: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.15px;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.pcl-webinar-btn--primary {
+  background: var(--pcl-accent);
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  box-shadow: 0 6px 20px var(--pcl-accent-glow);
+  animation: pcl-nudge 3.2s ease-in-out infinite;
+}
+
+@keyframes pcl-nudge {
+  0%, 62%, 100% { transform: translateY(0); }
+  72% { transform: translateY(-4px); }
+  82% { transform: translateY(0); }
+  90% { transform: translateY(-2px); }
+}
+
+.pcl-webinar-btn--primary:hover {
+  background: var(--pcl-accent-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 26px rgba(255,71,19,0.36);
+  animation: none;
+}
+
+.pcl-webinar-btn--secondary {
+  background: rgba(255,255,255,0.075);
+  color: rgba(255,255,255,0.9) !important;
+  -webkit-text-fill-color: rgba(255,255,255,0.9) !important;
+  border: 1px solid rgba(255,255,255,0.14);
+}
+
+.pcl-webinar-btn--secondary:hover {
+  background: rgba(255,255,255,0.13);
+  transform: translateY(-2px);
+}
+
+.pcl-btn-icon {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: 0 0 auto;
+}
+
+.pcl-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 7px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  background: rgba(34,197,94,0.14);
+  border: 1px solid rgba(34,197,94,0.30);
+  color: #4ade80;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+}
+
+.pcl-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: pcl-pulse 1.4s ease-in-out infinite;
+}
+
+/* PC에서 캘린더 버튼 숨김 */
+@media(min-width:1025px) {
+  #pcl-btn-calendar {
+    display: none !important;
+  }
+}
+
+/* =========================
+   Verification Modal
+========================= */
+
+.pcl-verify-overlay {
+  --pcl-accent: #FF4713;
+  --pcl-accent-hover: #ff6a3d;
+  --pcl-accent-dim: rgba(255,71,19,0.14);
+
+  display: none;
+  position: fixed !important;
+  inset: 0;
+  z-index: 1000002 !important;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: rgba(0,0,0,0.68);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  font-family: 'Pretendard','Apple SD Gothic Neo',sans-serif;
+}
+
+.pcl-verify-overlay.pcl-active {
+  display: flex;
+}
+
+.pcl-verify-modal {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  padding: 32px 28px 28px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255,71,19,0.10), transparent 34%),
+    #1a1a1f;
+  border: 1px solid rgba(255,255,255,0.11);
+  color: #fff;
+  box-shadow: 0 28px 70px rgba(0,0,0,0.55);
+  overflow: hidden;
+}
+
+.pcl-verify-modal::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 18%;
+  right: 18%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--pcl-accent), transparent);
+}
+
+.pcl-verify-close {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.58);
+  font-family: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pcl-verify-close:hover {
+  background: rgba(255,255,255,0.13);
+  color: #fff;
+}
+
+.pcl-verify-title {
+  margin: 0 34px 7px 0;
+  font-size: 21px;
+  font-weight: 900;
+  line-height: 1.35;
+  letter-spacing: -0.45px;
+}
+
+.pcl-verify-desc {
+  margin: 0 0 22px;
+  color: rgba(255,255,255,0.62);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.58;
+  letter-spacing: -0.1px;
+  word-break: keep-all;
+}
+
+.pcl-verify-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+}
+
+.pcl-verify-tab {
+  flex: 1;
+  padding: 10px 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255,255,255,0.50);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pcl-verify-tab.pcl-tab-active {
+  background: rgba(255,255,255,0.13);
+  color: #fff;
+}
+
+.pcl-verify-input {
+  width: 100%;
+  height: 47px;
+  padding: 13px 15px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.13);
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.pcl-verify-input::placeholder {
+  color: rgba(255,255,255,0.32);
+}
+
+.pcl-verify-input:focus {
+  border-color: rgba(255,71,19,0.85);
+  background: rgba(255,255,255,0.08);
+}
+
+.pcl-verify-submit {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 12px;
+  padding: 13px 0;
+  border: none;
+  border-radius: 10px;
+  background: var(--pcl-accent);
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.pcl-verify-submit:hover {
+  background: var(--pcl-accent-hover);
+  transform: translateY(-1px);
+}
+
+.pcl-verify-submit:disabled {
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.32);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.pcl-verify-msg {
+  display: none;
+  margin-top: 14px;
+  padding: 13px 15px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+.pcl-verify-msg.pcl-msg-success {
+  display: block;
+  background: rgba(34,197,94,0.10);
+  border: 1px solid rgba(34,197,94,0.25);
+  color: #4ade80;
+}
+
+.pcl-verify-msg.pcl-msg-error {
+  display: block;
+  background: rgba(239,68,68,0.10);
+  border: 1px solid rgba(239,68,68,0.25);
+  color: #f87171;
+}
+
+.pcl-verify-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 11px;
+  padding: 11px 20px;
+  border-radius: 9px;
+  background: var(--pcl-accent);
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 900;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.pcl-verify-link:hover {
+  background: var(--pcl-accent-hover);
+  transform: translateY(-1px);
+}
+
+/* =========================
+   아임웹 모달 z-index 보정
+========================= */
+
+#cocoaModal,
+.modal-scroll-control {
+  z-index: 1000000 !important;
+}
+
+#cocoaModal .modal-dialog,
+#cocoaModal .modal-content,
+.modal-dialog,
+.modal-content {
+  position: relative;
+  z-index: 1000001 !important;
+}
+
+.modal-backdrop {
+  z-index: 999999 !important;
+}
+
+/* =========================
+   Tablet / Mobile
+========================= */
+
+@media(max-width:1024px) {
+  .pcl-webinar-fixed-banner {
+    bottom: calc(20px + env(safe-area-inset-bottom)) !important;
+    width: calc(100vw - 48px);
+  }
+
+  .pcl-webinar-text {
+    white-space: normal;
+    font-size: 14px;
+  }
+}
+
+@media(max-width:600px) {
+  .pcl-webinar-fixed-banner {
+    left: 12px !important;
+    right: 12px !important;
+    bottom: calc(12px + env(safe-area-inset-bottom)) !important;
+    width: auto !important;
+    max-width: none !important;
+    transform: translate3d(0, 0, 0) !important;
+    border-radius: 16px;
+  }
+
+  .pcl-webinar-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 13px;
+    padding: 16px 16px 15px;
+  }
+
+  .pcl-webinar-text-area {
+    width: 100%;
+    gap: 5px;
+  }
+
+  .pcl-webinar-text {
+    font-size: 14px;
+    line-height: 1.48;
+    letter-spacing: -0.2px;
+    white-space: normal;
+  }
+
+  .pcl-webinar-countdown {
+    font-size: 11px;
+  }
+
+  .pcl-webinar-ctas {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1.25fr;
+    gap: 8px;
+  }
+
+  .pcl-webinar-btn {
+    width: 100%;
+    min-height: 46px;
+    padding: 13px 10px;
+    border-radius: 11px;
+    font-size: 13px;
+  }
+
+  .pcl-live-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+
+  .pcl-verify-overlay {
+    padding: 18px;
+  }
+
+  .pcl-verify-modal {
+    padding: 26px 18px 22px;
+    border-radius: 16px;
+  }
+
+  .pcl-verify-title {
+    font-size: 18px;
+  }
+
+  .pcl-verify-desc {
+    font-size: 12.5px;
+  }
+
+  .pcl-verify-input {
+    height: 48px;
+    font-size: 16px;
+  }
+
+  .pcl-verify-submit {
+    min-height: 49px;
+    font-size: 15px;
+  }
+}
+</style>
+
+<!-- 하단 고정 배너 -->
+<div id="pcl-webinar-fixed-banner" class="pcl-webinar-fixed-banner" style="display:none;" aria-hidden="true">
+  <div class="pcl-webinar-inner">
+    <div class="pcl-webinar-text-area">
+      <p class="pcl-webinar-text">
+        <span id="pcl-text-default">
+          <span class="pcl-text-highlight">STK Webinar</span> 지금 사전등록하세요.
+        </span>
+        <span id="pcl-text-live" style="display:none;">
+          <span class="pcl-live-badge"><span class="pcl-live-dot"></span>LIVE</span>
+          <span class="pcl-text-highlight">STK 웨비나</span>가 지금 진행 중입니다!
+        </span>
+      </p>
+      <div id="pcl-webinar-countdown" class="pcl-webinar-countdown">
+        <span class="pcl-countdown-dot"></span>
+        사전등록 마감까지 계산 중...
+      </div>
+    </div>
+    <div class="pcl-webinar-ctas">
+      <a id="pcl-btn-calendar" class="pcl-webinar-btn pcl-webinar-btn--secondary" href="javascript:void(0);">
+        <svg class="pcl-btn-icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span id="pcl-calendar-label">캘린더 추가</span>
+      </a>
+      <a id="pcl-btn-webinar" class="pcl-webinar-btn pcl-webinar-btn--primary" href="javascript:void(0);">
+        웨비나 사전등록
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- 본인 확인 모달 -->
+<div id="pcl-verify-overlay" class="pcl-verify-overlay">
+  <div class="pcl-verify-modal">
+    <button class="pcl-verify-close" id="pcl-verify-close">×</button>
+    <div class="pcl-verify-title" id="pcl-verify-title">웨비나 입장 확인</div>
+    <p class="pcl-verify-desc" id="pcl-verify-desc">사전 등록 시 입력하신 연락처 또는 이메일을 입력해주세요.</p>
+    <div class="pcl-verify-tabs">
+      <button class="pcl-verify-tab pcl-tab-active" data-tab="phone" id="pcl-tab-phone">연락처</button>
+      <button class="pcl-verify-tab" data-tab="email" id="pcl-tab-email">이메일</button>
+    </div>
+    <div id="pcl-verify-phone-field">
+      <input type="tel" class="pcl-verify-input" id="pcl-verify-phone" placeholder="01012345678 (숫자만)" maxlength="11">
+    </div>
+    <div id="pcl-verify-email-field" style="display:none;">
+      <input type="email" class="pcl-verify-input" id="pcl-verify-email" placeholder="example@email.com">
+    </div>
+    <button class="pcl-verify-submit" id="pcl-verify-submit">확인하기</button>
+    <div class="pcl-verify-msg" id="pcl-verify-msg"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  if (window.__STK_WEBINAR_BANNER_INIT__) return;
+  window.__STK_WEBINAR_BANNER_INIT__ = true;
+
+  /* ============================================================
+     CONFIG
+     아래 값만 STK 실제 페이지/모달/일정에 맞춰 수정하면 됩니다.
+  ============================================================ */
+
+  var SUPABASE_URL      = 'https://furyyufghxoenqwnffqz.supabase.co';
+  var SUPABASE_ANON_KEY = '[REDACTED]';
+  var TABLE_NAME        = 'webinar';
+
+  /* 이 코드를 특정 경로에서만 보이게 하려면 배열에 경로 추가.
+     예: ['/webinar', '/stk-webinar']
+     빈 배열이면 코드가 삽입된 모든 페이지에서 표시됩니다. */
+  var ENABLE_ONLY_PATHS = ['/webinar'];
+
+  /* 라이브/관리자 페이지에서는 하단 배너가 뜨지 않도록 제외 */
+  var EXCLUDE_PATHS = [
+    '/webinar/live',
+    '/webinarlive',
+    '/webinar/admin',
+    '/webinar-admin'
+  ];
+
+  /* STK 웨비나 일정 */
+  var WEBINAR_TITLE     = 'STK Webinar';
+  var WEBINAR_SUMMARY   = '[STK] Webinar';
+  var WEBINAR_DESC      = 'Smart Tech Korea Webinar';
+  var WEBINAR_LOCATION  = 'Online';
+
+  /* STK 웨비나 일정: 2026-05-21 14:00 시작 / 16:10 종료 / 13:00부터 입장 모드 */
+  var LIVE_MODE_START   = new Date('2026-05-21T13:00:00+09:00').getTime();
+  var END_MODE_START    = new Date('2026-05-21T16:10:00+09:00').getTime();
+  var SIGNUP_DEADLINE   = new Date('2026-05-21T12:59:00+09:00').getTime();
+
+  /* 라이브페이지 / 등록페이지 / 만족도 조사 */
+  var REGISTRATION_FALLBACK_URL = '/webinar';
+  var LIVE_PAGE_URL_KO          = 'https://smarttechkorea.com/webinarlive';
+  var LIVE_PAGE_URL_EN          = 'https://smarttechkorea.com/webinarlive';
+  var SURVEY_LINK               = 'https://tally.so/r/xXR5AJ';
+
+  /* PC 구글 캘린더 링크. 일정 확정 후 dates/text 수정 권장 */
+  var CALENDAR_URL_PC = 'https://calendar.google.com/calendar/u/0/r/eventedit?dates=20260521T140000/20260521T161000&ctz=Asia%2FSeoul&text=%5BSTK%5D+Webinar&location=Online';
+
+  /* 아임웹 등록 모달 ID
+     STK 실제 모달 ID로 교체해야 모달이 바로 열립니다.
+     모달 ID를 모르면 fallback URL로 이동합니다. */
+  var STK_MODAL_IDS_KO = {
+    group: 'm20260512d31d22bc4d26c',
+    menu:  'm2025112624a84e0b90633'
+  };
+
+  var STK_MODAL_IDS_EN = {
+    group: 'TODO_STK_EN_MODAL_GROUP_ID',
+    menu:  'TODO_STK_EN_MODAL_MENU_ID'
+  };
+
+  /* 영문 페이지 도메인이 별도로 있으면 키워드 입력 */
+  var EN_HOST_KEYWORDS = [
+    'TODO_EN_DOMAIN.com'
+  ];
+
+  /* STK 신청 폼 selector
+     2026-05-20 콘솔 확인 결과 기준으로 반영했습니다.
+     STK 모달 폼 input name이 다르면 아래 selector를 반드시 교체해야 신청자 저장이 됩니다. */
+  var FIELDS_KO = {
+    name:         'input[name="input_b9e7eaa02a134"]',
+    phone1:       'input[name="phonenumber1_c0e43728ca6e4"]',
+    phone2:       'input[name="phonenumber2_c0e43728ca6e4"]',
+    phone3:       'input[name="phonenumber3_c0e43728ca6e4"]',
+    email:        'input[name="email_Q630bL092G"]',
+    company:      'input[name="input_a78f47bc1aa18"]',
+    department:   'input[name="input_wC2IUKi718"]',
+    job_title:    'input[name="input_L4475wT44S"]',
+    industry:     'input[name="checkbox_S1I2Wqb7A6[]"]',
+    industry_etc: 'input[name="checkbox_etc_S1I2Wqb7A6"]',
+    question:     'textarea[name="textarea_P4457F1418"]',
+    marketing:    'input[name="radio_k5U25156C5"]'
+  };
+
+  var FIELDS_EN = {
+    name:         'TODO_EN_NAME_SELECTOR',
+    phone1:       'TODO_EN_PHONE1_SELECTOR',
+    phone2:       'TODO_EN_PHONE2_SELECTOR',
+    phone3:       'TODO_EN_PHONE3_SELECTOR',
+    email:        'TODO_EN_EMAIL_SELECTOR',
+    company:      'TODO_EN_COMPANY_SELECTOR',
+    department:   'TODO_EN_DEPARTMENT_SELECTOR',
+    job_title:    'TODO_EN_JOB_TITLE_SELECTOR',
+    industry:     'TODO_EN_INDUSTRY_SELECTOR',
+    industry_etc: 'TODO_EN_INDUSTRY_ETC_SELECTOR',
+    question:     'TODO_EN_QUESTION_SELECTOR',
+    marketing:    'TODO_EN_MARKETING_SELECTOR'
+  };
+
+  var DEBUG = true;
+
+  /* ============================================================
+     INIT
+  ============================================================ */
+
+  var path = window.location.pathname.toLowerCase().replace(/\/+$/, '') || '/';
+
+  if (ENABLE_ONLY_PATHS.length && !ENABLE_ONLY_PATHS.some(function(p){ return path.indexOf(p) > -1; })) return;
+  if (EXCLUDE_PATHS.some(function(p){ return path === p || path.indexOf(p) > -1; })) return;
+
+  var HOST = window.location.hostname.toLowerCase();
+  var IS_EN_PAGE = EN_HOST_KEYWORDS.some(function(keyword){
+    return keyword && !keyword.includes('TODO') && HOST.includes(keyword.toLowerCase());
+  });
+
+  var MODAL_IDS = IS_EN_PAGE ? STK_MODAL_IDS_EN : STK_MODAL_IDS_KO;
+  var LIVE_PAGE_URL = IS_EN_PAGE ? LIVE_PAGE_URL_EN : LIVE_PAGE_URL_KO;
+  var FIELDS = IS_EN_PAGE ? FIELDS_EN : FIELDS_KO;
+
+  var TEXT = IS_EN_PAGE ? {
+    defaultHtml: '<span class="pcl-text-highlight">STK Webinar</span> registration is now open.',
+    liveHtml: '<span class="pcl-live-badge"><span class="pcl-live-dot"></span>LIVE</span><span class="pcl-text-highlight">STK Webinar</span> is live now!',
+    endHtml: '<span class="pcl-live-badge" style="background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.3);color:#a5b4fc;"><span class="pcl-live-dot" style="background:#6366f1;animation:none;"></span>ENDED</span><span class="pcl-text-highlight">STK Webinar</span> has ended. Thank you! 🎉',
+    calendar: 'Add to Calendar',
+    register: 'Register Now',
+    enter: 'Join Webinar',
+    registerNow: 'Register Now',
+    survey: 'Take Survey',
+    countdownLoading: 'Calculating deadline...',
+    countdownPrefix: 'Registration closes in D-',
+    countdownClosed: 'Registration has closed.',
+    liveStatus: 'Live now',
+    endStatus: 'The webinar has ended.',
+    verifyTitle: 'Webinar Entry Verification',
+    verifyDesc: 'Please enter the phone number or email you used for registration.',
+    phoneTab: 'Phone',
+    emailTab: 'Email',
+    submit: 'Verify',
+    verifying: 'Verifying...',
+    invalidPhone: 'Please enter a valid phone number.',
+    invalidEmail: 'Please enter a valid email address.',
+    notFound: 'No registration record found.<br>Please try another method.',
+    error: 'A temporary error occurred. Please try again later.',
+    welcomeSuffix: ', welcome! 🎉',
+    enterLink: '▶ Join Webinar'
+  } : {
+    defaultHtml: '<span class="pcl-text-highlight">STK Webinar</span> 지금 사전등록하세요.',
+    liveHtml: '<span class="pcl-live-badge"><span class="pcl-live-dot"></span>LIVE</span><span class="pcl-text-highlight">STK 웨비나</span>가 지금 진행 중입니다!',
+    endHtml: '<span class="pcl-live-badge" style="background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.3);color:#a5b4fc;"><span class="pcl-live-dot" style="background:#6366f1;animation:none;"></span>종료</span><span class="pcl-text-highlight">STK 웨비나</span>가 종료되었습니다. 감사합니다! 🎉',
+    calendar: '캘린더 추가',
+    register: '웨비나 사전등록',
+    enter: '웨비나 입장하기',
+    registerNow: '사전등록하기',
+    survey: '만족도 조사 참여하기',
+    countdownLoading: '사전등록 마감까지 계산 중...',
+    countdownPrefix: '사전등록 마감까지 D-',
+    countdownClosed: '사전등록이 마감되었습니다.',
+    liveStatus: '지금 라이브 진행 중',
+    endStatus: '웨비나가 종료되었습니다',
+    verifyTitle: '웨비나 입장 확인',
+    verifyDesc: '사전 등록 시 입력하신 연락처 또는 이메일을 입력해주세요.',
+    phoneTab: '연락처',
+    emailTab: '이메일',
+    submit: '확인하기',
+    verifying: '확인 중...',
+    invalidPhone: '올바른 연락처를 입력해주세요.',
+    invalidEmail: '올바른 이메일을 입력해주세요.',
+    notFound: '신청 내역을 찾을 수 없습니다.<br>다른 방법(연락처/이메일)으로도 시도해보세요.',
+    error: '일시적 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+    welcomeSuffix: '님, 환영합니다! 🎉',
+    enterLink: '▶ 웨비나 입장하기'
+  };
+
+  function log() {
+    if (DEBUG) console.log.apply(console, ['[STK WEBINAR]'].concat(Array.prototype.slice.call(arguments)));
+  }
+
+  function nowKSTString() {
+    return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().replace('Z','+09:00');
+  }
+
+  var banner       = document.getElementById('pcl-webinar-fixed-banner');
+  var btnCalendar  = document.getElementById('pcl-btn-calendar');
+  var btnWebinar   = document.getElementById('pcl-btn-webinar');
+  var textDefault  = document.getElementById('pcl-text-default');
+  var textLive     = document.getElementById('pcl-text-live');
+  var countdownEl  = document.getElementById('pcl-webinar-countdown');
+  var overlay      = document.getElementById('pcl-verify-overlay');
+
+  if (banner && banner.parentElement !== document.body) document.body.appendChild(banner);
+  if (overlay && overlay.parentElement !== document.body) document.body.appendChild(overlay);
+
+  var verifyClose  = document.getElementById('pcl-verify-close');
+  var verifySubmit = document.getElementById('pcl-verify-submit');
+  var verifyMsg    = document.getElementById('pcl-verify-msg');
+  var phoneInput   = document.getElementById('pcl-verify-phone');
+  var emailInput   = document.getElementById('pcl-verify-email');
+  var phoneField   = document.getElementById('pcl-verify-phone-field');
+  var emailField   = document.getElementById('pcl-verify-email-field');
+  var tabs         = document.querySelectorAll('.pcl-verify-tab');
+  var currentTab   = 'phone';
+  var isLiveMode   = false;
+  var isEndMode    = false;
+  var countdownTimer = null;
+  var dataSent = false;
+
+  if (textDefault) textDefault.innerHTML = TEXT.defaultHtml;
+  if (btnWebinar) btnWebinar.textContent = TEXT.register;
+
+  var calendarLabel = document.getElementById('pcl-calendar-label');
+  if (calendarLabel) calendarLabel.textContent = TEXT.calendar;
+
+  var verifyTitle = document.getElementById('pcl-verify-title');
+  var verifyDesc  = document.getElementById('pcl-verify-desc');
+  var tabPhone    = document.getElementById('pcl-tab-phone');
+  var tabEmail    = document.getElementById('pcl-tab-email');
+
+  if (verifyTitle) verifyTitle.textContent = TEXT.verifyTitle;
+  if (verifyDesc) verifyDesc.textContent = TEXT.verifyDesc;
+  if (tabPhone) tabPhone.textContent = TEXT.phoneTab;
+  if (tabEmail) tabEmail.textContent = TEXT.emailTab;
+  if (verifySubmit) verifySubmit.textContent = TEXT.submit;
+
+  if (countdownEl) countdownEl.innerHTML = '<span class="pcl-countdown-dot"></span>' + TEXT.countdownLoading;
+
+  if (banner) {
+    banner.style.display = 'block';
+    banner.setAttribute('aria-hidden','false');
+  }
+
+  function openRegistrationModal() {
+    if (MODAL_IDS.group && MODAL_IDS.menu && !MODAL_IDS.group.includes('TODO') && !MODAL_IDS.menu.includes('TODO')) {
+      try {
+        if (window.SITE && typeof SITE.openModalMenu === 'function') {
+          SITE.openModalMenu(MODAL_IDS.group, MODAL_IDS.menu);
+          return;
+        }
+      } catch(e) {
+        console.warn('[STK WEBINAR] 모달 열기 실패:', e);
+      }
+    }
+
+    console.warn('[STK WEBINAR] 모달 ID가 설정되지 않아 등록 페이지로 이동합니다.', MODAL_IDS);
+    window.location.href = REGISTRATION_FALLBACK_URL;
+  }
+
+  function checkLiveMode() {
+    var now = Date.now();
+
+    if (now >= END_MODE_START && !isEndMode) {
+      if (!isLiveMode) activateLiveMode();
+      activateEndMode();
+    } else if (now >= LIVE_MODE_START && !isLiveMode) {
+      activateLiveMode();
+    }
+  }
+
+  function activateLiveMode() {
+    isLiveMode = true;
+
+    if (textDefault) textDefault.style.display = 'none';
+
+    if (textLive) {
+      textLive.style.display = 'inline-flex';
+      textLive.innerHTML = TEXT.liveHtml;
+    }
+
+    if (btnCalendar) btnCalendar.style.display = 'none';
+
+    if (btnWebinar) {
+      btnWebinar.innerHTML =
+        '<svg class="pcl-btn-icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> ' + TEXT.enter;
+    }
+
+    var ctasWrap = document.querySelector('.pcl-webinar-ctas');
+
+    if (ctasWrap && !document.getElementById('pcl-btn-register')) {
+      var regBtn = document.createElement('a');
+      regBtn.id = 'pcl-btn-register';
+      regBtn.href = 'javascript:void(0);';
+      regBtn.className = 'pcl-webinar-btn pcl-webinar-btn--secondary';
+      regBtn.textContent = TEXT.registerNow;
+      regBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        openRegistrationModal();
+      });
+
+      ctasWrap.insertBefore(regBtn, btnWebinar);
+    }
+
+    if (countdownEl) {
+      countdownEl.innerHTML = '<span class="pcl-countdown-dot" style="background:#22c55e;animation:pcl-pulse 1.5s ease-in-out infinite;"></span> ' + TEXT.liveStatus;
+      countdownEl.style.color = '#4ade80';
+    }
+  }
+
+  function activateEndMode() {
+    isEndMode = true;
+
+    if (textLive) textLive.innerHTML = TEXT.endHtml;
+
+    if (countdownEl) {
+      countdownEl.innerHTML = '<span class="pcl-countdown-dot" style="background:#6366f1;animation:none;"></span> ' + TEXT.endStatus;
+      countdownEl.style.color = '#a5b4fc';
+    }
+
+    var ctasWrap = document.querySelector('.pcl-webinar-ctas');
+
+    if (ctasWrap) {
+      ctasWrap.innerHTML =
+        '<a href="' + SURVEY_LINK + '" target="_blank" class="pcl-webinar-btn pcl-webinar-btn--primary">' +
+        '<svg class="pcl-btn-icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+        TEXT.survey + '</a>';
+    }
+  }
+
+  checkLiveMode();
+  setInterval(checkLiveMode, 60000);
+
+  var ICS_CONTENT = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Smart Tech Korea//STK Webinar//KR',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VTIMEZONE',
+    'TZID:Asia/Seoul',
+    'BEGIN:STANDARD',
+    'DTSTART:19700101T000000',
+    'TZOFFSETFROM:+0900',
+    'TZOFFSETTO:+0900',
+    'TZNAME:KST',
+    'END:STANDARD',
+    'END:VTIMEZONE',
+    'BEGIN:VEVENT',
+    'UID:stk-webinar-20260521@smarttechkorea.com',
+    'DTSTAMP:20260521T050000Z',
+    'DTSTART;TZID=Asia/Seoul:20260521T140000',
+    'DTEND;TZID=Asia/Seoul:20260521T161000',
+    'SUMMARY:' + WEBINAR_SUMMARY,
+    'DESCRIPTION:' + WEBINAR_DESC,
+    'LOCATION:' + WEBINAR_LOCATION,
+    'BEGIN:VALARM',
+    'TRIGGER:-PT60M',
+    'ACTION:DISPLAY',
+    'DESCRIPTION:' + WEBINAR_TITLE + ' 1시간 전입니다!',
+    'END:VALARM',
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].join('\r\n');
+
+  if (btnCalendar) {
+    btnCalendar.addEventListener('click', function(e) {
+      e.preventDefault();
+      if (isLiveMode) return;
+
+      if (window.innerWidth > 1024) {
+        window.open(CALENDAR_URL_PC, '_blank');
+      } else {
+        try {
+          var blob = new Blob([ICS_CONTENT], { type:'text/calendar;charset=utf-8' });
+          var url  = URL.createObjectURL(blob);
+          var a    = document.createElement('a');
+          a.href = url;
+          a.download = 'STK_Webinar.ics';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } catch(err) {
+          window.open(CALENDAR_URL_PC, '_blank');
+        }
+      }
+    });
+  }
+
+  if (btnWebinar) {
+    btnWebinar.addEventListener('click', function(e) {
+      e.preventDefault();
+      if (isEndMode) return;
+      if (isLiveMode) openVerifyModal();
+      else openRegistrationModal();
+    });
+  }
+
+  function openVerifyModal() {
+    if (!overlay) return;
+    overlay.classList.add('pcl-active');
+    resetVerifyModal();
+
+    setTimeout(function() {
+      if (currentTab === 'phone' && phoneInput) phoneInput.focus();
+      if (currentTab === 'email' && emailInput) emailInput.focus();
+    }, 100);
+  }
+
+  function closeVerifyModal() {
+    if (!overlay) return;
+    overlay.classList.remove('pcl-active');
+    resetVerifyModal();
+  }
+
+  function resetVerifyModal() {
+    if (phoneInput) phoneInput.value = '';
+    if (emailInput) emailInput.value = '';
+
+    if (verifyMsg) {
+      verifyMsg.className = 'pcl-verify-msg';
+      verifyMsg.innerHTML = '';
+    }
+
+    if (verifySubmit) {
+      verifySubmit.style.display = 'block';
+      verifySubmit.disabled = false;
+      verifySubmit.textContent = TEXT.submit;
+    }
+  }
+
+  if (verifyClose) verifyClose.addEventListener('click', closeVerifyModal);
+
+  if (overlay) {
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) closeVerifyModal();
+    });
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && overlay && overlay.classList.contains('pcl-active')) {
+      closeVerifyModal();
+    }
+  });
+
+  tabs.forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      currentTab = this.dataset.tab;
+
+      tabs.forEach(function(t) {
+        t.classList.remove('pcl-tab-active');
+      });
+
+      this.classList.add('pcl-tab-active');
+
+      if (phoneField) phoneField.style.display = currentTab === 'phone' ? 'block' : 'none';
+      if (emailField) emailField.style.display = currentTab === 'phone' ? 'none' : 'block';
+
+      if (currentTab === 'phone' && phoneInput) phoneInput.focus();
+      if (currentTab === 'email' && emailInput) emailInput.focus();
+
+      if (verifyMsg) {
+        verifyMsg.className = 'pcl-verify-msg';
+        verifyMsg.innerHTML = '';
+      }
+
+      if (verifySubmit) {
+        verifySubmit.style.display = 'block';
+        verifySubmit.disabled = false;
+        verifySubmit.textContent = TEXT.submit;
+      }
+    });
+  });
+
+  [phoneInput, emailInput].forEach(function(el) {
+    if (!el) return;
+    el.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        verifySubmit.click();
+      }
+    });
+  });
+
+  if (verifySubmit) {
+    verifySubmit.addEventListener('click', async function() {
+      if (verifySubmit.disabled) return;
+
+      var searchValue = '';
+      var searchColumn = '';
+
+      if (currentTab === 'phone') {
+        searchValue = phoneInput.value.replace(/[^0-9]/g, '');
+        searchColumn = 'phone';
+
+        if (!searchValue || searchValue.length < 10) {
+          showVerifyMsg('error', TEXT.invalidPhone);
+          return;
+        }
+      } else {
+        searchValue = emailInput.value.trim();
+        searchColumn = 'email';
+
+        if (!searchValue || !searchValue.includes('@')) {
+          showVerifyMsg('error', TEXT.invalidEmail);
+          return;
+        }
+      }
+
+      verifySubmit.disabled = true;
+      verifySubmit.textContent = TEXT.verifying;
+
+      if (verifyMsg) {
+        verifyMsg.className = 'pcl-verify-msg';
+        verifyMsg.innerHTML = '';
+      }
+
+      try {
+        var res = await fetch(SUPABASE_URL + '/rest/v1/rpc/verify_webinar_registration', {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            search_type: searchColumn,
+            search_value: searchValue
+          })
+        });
+
+        var data = await res.json();
+
+        if (data && data.found) {
+          var name = data.name || (IS_EN_PAGE ? 'Participant' : '참가자');
+
+          try {
+            localStorage.setItem('stk_webinar_auth','1');
+            localStorage.setItem('stk_auth_type', searchColumn);
+            localStorage.setItem('stk_auth_val', searchValue);
+
+            sessionStorage.setItem('stk_webinar_auth','1');
+            sessionStorage.setItem('stk_auth_type', searchColumn);
+            sessionStorage.setItem('stk_auth_val', searchValue);
+          } catch(e2) {}
+
+          showVerifyMsg(
+            'success',
+            '<strong>' + name + '</strong>' + TEXT.welcomeSuffix + '<br>' +
+            (IS_EN_PAGE ? 'Please click the button below to join the webinar.' : '아래 버튼을 눌러 웨비나에 입장해주세요.') + '<br>' +
+            '<a href="' + LIVE_PAGE_URL + '" class="pcl-verify-link">' + TEXT.enterLink + '</a>'
+          );
+
+          verifySubmit.style.display = 'none';
+        } else {
+          showVerifyMsg('error', TEXT.notFound);
+          verifySubmit.disabled = false;
+          verifySubmit.textContent = TEXT.submit;
+        }
+      } catch(err) {
+        showVerifyMsg('error', TEXT.error);
+        verifySubmit.disabled = false;
+        verifySubmit.textContent = TEXT.submit;
+      }
+    });
+  }
+
+  function showVerifyMsg(type, html) {
+    if (!verifyMsg) return;
+    verifyMsg.className = 'pcl-verify-msg pcl-msg-' + type;
+    verifyMsg.innerHTML = html;
+  }
+
+  function updateCountdown() {
+    if (!countdownEl || isLiveMode) return;
+
+    var diff = SIGNUP_DEADLINE - Date.now();
+
+    if (diff <= 0) {
+      countdownEl.innerHTML = '<span class="pcl-countdown-dot" style="background:#ff6b6b;"></span> ' + TEXT.countdownClosed;
+      if (countdownTimer) clearInterval(countdownTimer);
+      return;
+    }
+
+    var days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    countdownEl.innerHTML = '<span class="pcl-countdown-dot"></span> ' + TEXT.countdownPrefix + days;
+  }
+
+  updateCountdown();
+  countdownTimer = setInterval(updateCountdown, 60000);
+
+  function getActiveCocoaModal() {
+    var targetSelector = FIELDS && FIELDS.name ? FIELDS.name : 'input[name="input_107e42a3c0bd1"]';
+
+    var candidates = Array.prototype.slice.call(
+      document.querySelectorAll('#cocoaModal, .modal, [id*="cocoa"], [class*="modal"], .modal-scroll-control')
+    ).filter(function(m) {
+      try {
+        return !!m.querySelector(targetSelector);
+      } catch(e) {
+        return false;
+      }
+    });
+
+    if (!candidates.length) {
+      return document.getElementById('cocoaModal');
+    }
+
+    var withValue = candidates.find(function(m) {
+      var input = m.querySelector(targetSelector);
+      return input && String(input.value || '').trim();
+    });
+
+    if (withValue) return withValue;
+
+    var visible = candidates.find(function(m) {
+      return !!(m.offsetWidth || m.offsetHeight || m.getClientRects().length);
+    });
+
+    if (visible) return visible;
+
+    return candidates[candidates.length - 1];
+  }
+
+  function getCheckboxLabelText(cb) {
+    var label = cb.closest('label');
+    if (label) return label.textContent.trim();
+
+    var parent = cb.parentElement;
+    if (parent) return parent.textContent.trim();
+
+    return '';
+  }
+
+  function collectFormData() {
+    var modal = getActiveCocoaModal();
+
+    if (!modal) {
+      log('활성 모달 없음');
+      return null;
+    }
+
+    var q = function(sel) {
+      if (!sel || sel.includes('TODO')) return null;
+      try { return modal.querySelector(sel); }
+      catch(e) { return null; }
+    };
+
+    var qAll = function(sel) {
+      if (!sel || sel.includes('TODO')) return [];
+      try { return modal.querySelectorAll(sel); }
+      catch(e) { return []; }
+    };
+
+    var allCheckboxes = Array.prototype.slice.call(
+      modal.querySelectorAll('input[type="checkbox"]')
+    );
+
+    var privacyCb =
+      allCheckboxes.find(function(cb) {
+        var text = getCheckboxLabelText(cb);
+        return text.indexOf('개인정보') > -1 || text.toLowerCase().indexOf('privacy') > -1;
+      }) ||
+      allCheckboxes.find(function(cb) {
+        return !cb.name || cb.name === '';
+      });
+
+    var p1 = q(FIELDS.phone1);
+    var p2 = q(FIELDS.phone2);
+    var p3 = q(FIELDS.phone3);
+
+    var phone = [p1, p2, p3]
+      .filter(Boolean)
+      .map(function(el) {
+        return String(el.value || '').replace(/[^0-9]/g, '');
+      })
+      .filter(Boolean)
+      .join('');
+
+    var industries = [];
+
+    Array.prototype.forEach.call(qAll(FIELDS.industry), function(cb) {
+      if (!cb.checked) return;
+
+      if (cb.value === 'etc') {
+        var etcInput = q(FIELDS.industry_etc);
+        var etcValue = etcInput ? etcInput.value.trim() : '';
+
+        if (etcValue) {
+          industries.push((IS_EN_PAGE ? 'Other: ' : '기타: ') + etcValue);
+        } else {
+          industries.push(IS_EN_PAGE ? 'Other' : '기타');
+        }
+
+        return;
+      }
+
+      var label = cb.closest('label') || cb.parentElement;
+      var text = cb.value || (label ? label.textContent.trim() : '');
+      if (text) industries.push(text.trim());
+    });
+
+    var marketingEl = q(FIELDS.marketing);
+    var marketingAgreed = false;
+    if (marketingEl) {
+      var marketingType = String(marketingEl.getAttribute('type') || '').toLowerCase();
+      marketingAgreed = (marketingType === 'checkbox' || marketingType === 'radio') ? !!marketingEl.checked : false;
+    }
+
+    var data = {
+      agree_privacy:     privacyCb ? privacyCb.checked : true,
+      agree_marketing:   marketingAgreed,
+
+      name:       (q(FIELDS.name)       || {}).value || '',
+      phone:      phone,
+      email:      (q(FIELDS.email)      || {}).value || '',
+      company:    (q(FIELDS.company)    || {}).value || '',
+      department: (q(FIELDS.department) || {}).value || '',
+      job_title:  (q(FIELDS.job_title)  || {}).value || '',
+      industry:   industries.join(', '),
+      question:   (q(FIELDS.question)   || {}).value || ''
+    };
+
+    data.name       = String(data.name).trim();
+    data.email      = String(data.email).trim();
+    data.company    = String(data.company).trim();
+    data.department = String(data.department).trim();
+    data.job_title  = String(data.job_title).trim();
+    data.question   = String(data.question).trim();
+
+    log('수집 결과:', data);
+    return data;
+  }
+
+  function isValidFormData(formData) {
+    if (!formData) return false;
+    if (!formData.name) return false;
+    if (!formData.phone && !formData.email) return false;
+    if (!formData.agree_privacy) return false;
+    return true;
+  }
+
+  function makeSubmissionKey(formData) {
+    return [
+      String(formData.name || '').trim().toLowerCase(),
+      String(formData.phone || '').replace(/[^0-9]/g, ''),
+      String(formData.email || '').trim().toLowerCase(),
+      String(formData.company || '').trim().toLowerCase()
+    ].join('|');
+  }
+
+  function isDuplicateSubmission(formData) {
+    try {
+      var key = makeSubmissionKey(formData);
+      var saved = JSON.parse(sessionStorage.getItem('stk_last_submit') || '{}');
+      var now = Date.now();
+
+      if (saved.key === key && now - saved.time < 60000) {
+        return true;
+      }
+
+      sessionStorage.setItem('stk_last_submit', JSON.stringify({
+        key: key,
+        time: now
+      }));
+
+      return false;
+    } catch(e) {
+      return false;
+    }
+  }
+
+  function buildPayload(formData) {
+    var memo = formData.question ? ('사전 질문: ' + formData.question) : null;
+
+    return {
+      submitted_at:      nowKSTString(),
+      agree_marketing:   !!formData.agree_marketing,
+
+      name:       formData.name,
+      phone:      formData.phone,
+      email:      formData.email,
+      company:    formData.company,
+      department: formData.department,
+      job_title:  formData.job_title,
+      industry:   formData.industry,
+      memo:       memo
+    };
+  }
+
+  async function postPayload(payload) {
+    return fetch(SUPABASE_URL + '/rest/v1/' + TABLE_NAME, {
+      method:'POST',
+      keepalive: true,
+      headers:{
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async function sendToSupabase(formData) {
+    if (!isValidFormData(formData)) {
+      log('유효 데이터 부족, 전송 건너뜀', formData);
+      return;
+    }
+
+    var payload = buildPayload(formData);
+    log('전송 payload:', payload);
+
+    try {
+      var res = await postPayload(payload);
+
+      if (res.ok) {
+        log('✅ Supabase 전송 성공');
+        return;
+      }
+
+      var errorText = await res.text();
+
+      if (res.status === 409 || errorText.indexOf('duplicate key') > -1 || errorText.indexOf('ux_webinar') > -1) {
+        log('⚠️ 중복 신청으로 판단되어 추가 저장하지 않음', res.status, errorText);
+        return;
+      }
+
+      log('❌ Supabase 전송 실패', res.status, errorText);
+    } catch(err) {
+      log('❌ Supabase 전송 오류:', err);
+    }
+  }
+
+  function onSubmitDetected(source) {
+    if (dataSent) return;
+
+    var formData = collectFormData();
+
+    if (!isValidFormData(formData)) {
+      log('제출 감지됨 but 유효 데이터 부족:', source, formData);
+      return;
+    }
+
+    if (isDuplicateSubmission(formData)) {
+      log('중복 제출 감지, 전송 건너뜀:', source, formData);
+      return;
+    }
+
+    dataSent = true;
+    log('제출 감지:', source);
+
+    sendToSupabase(formData).finally(function() {
+      setTimeout(function() {
+        dataSent = false;
+      }, 10000);
+    });
+  }
+
+  function isFormRequest(url) {
+    return typeof url === 'string' && url.includes('/ajax/form_add.cm');
+  }
+
+  var origOpen = XMLHttpRequest.prototype.open;
+  var origSend = XMLHttpRequest.prototype.send;
+
+  XMLHttpRequest.prototype.open = function(method, url) {
+    this._stk_method = method;
+    this._stk_url = url;
+    return origOpen.apply(this, arguments);
+  };
+
+  XMLHttpRequest.prototype.send = function() {
+    if (String(this._stk_method).toUpperCase() === 'POST' && isFormRequest(this._stk_url)) {
+      onSubmitDetected('XHR: ' + this._stk_url);
+    }
+
+    return origSend.apply(this, arguments);
+  };
+
+  var origFetch = window.fetch;
+
+  window.fetch = function(url, options) {
+    var requestUrl = typeof url === 'string' ? url : (url && url.url ? url.url : '');
+
+    if (options && String(options.method).toUpperCase() === 'POST' && isFormRequest(requestUrl)) {
+      onSubmitDetected('fetch: ' + requestUrl);
+    }
+
+    return origFetch.apply(this, arguments);
+  };
+
+  function hookSubmitButtons() {
+    var modal = getActiveCocoaModal();
+    if (!modal) return;
+
+    modal.querySelectorAll('form').forEach(function(form) {
+      if (form._stkSubmitHooked) return;
+      form._stkSubmitHooked = true;
+
+      form.addEventListener('submit', function() {
+        onSubmitDetected('form submit fallback');
+      }, true);
+    });
+  }
+
+  new MutationObserver(function() {
+    setTimeout(hookSubmitButtons, 200);
+    setTimeout(hookSubmitButtons, 600);
+    setTimeout(hookSubmitButtons, 1200);
+  }).observe(document.body, {
+    attributes: true,
+    childList: true,
+    subtree: true,
+    attributeFilter: ['class','style']
+  });
+
+  window.STK_WEBINAR_DEBUG = {
+    collectFormData: collectFormData,
+    sendToSupabase: sendToSupabase,
+    hookSubmitButtons: hookSubmitButtons,
+    openRegistrationModal: openRegistrationModal,
+    getActiveCocoaModal: getActiveCocoaModal,
+    config: {
+      path: path,
+      host: HOST,
+      isEnglish: IS_EN_PAGE,
+      modalIds: MODAL_IDS,
+      livePage: LIVE_PAGE_URL,
+      supabase: SUPABASE_URL
+    }
+  };
+
+  log('STK 웨비나 하단 배너 코드 로드 완료', {
+    path: path,
+    host: HOST,
+    isEnglish: IS_EN_PAGE,
+    modalIds: MODAL_IDS
+  });
+
+})();
+</script>

@@ -1,47 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/ratelimit";
+import { resolveWebinarStatus } from "@/lib/webinar-status";
+import { normalizeRegistrationForm } from "@/lib/webinar-config";
+import { parseUtmEnvelope } from "@/lib/webinar-attribution";
 
-interface RegistrationField {
-  key: string;
-  label: string;
-  type?: string;
-  required?: boolean;
-  enabled?: boolean;
-  system?: boolean;
-}
-
-const defaultFields: RegistrationField[] = [
-  { key: "name", label: "이름", required: true, enabled: true, system: true },
-  { key: "phone", label: "연락처", required: false, enabled: true, system: true },
-  { key: "email", label: "이메일", required: false, enabled: true, system: true },
-  { key: "company", label: "회사명", required: false, enabled: true, system: true },
-  { key: "department", label: "부서", required: false, enabled: true, system: true },
-  { key: "jobTitle", label: "직함", required: false, enabled: true, system: true },
-  { key: "industry", label: "업종", required: false, enabled: true, system: true },
-];
-
-function getRegistrationFields(config: unknown): RegistrationField[] {
-  const raw = config as { registrationForm?: { fields?: RegistrationField[] } } | null;
-  const savedFields = Array.isArray(raw?.registrationForm?.fields) ? raw.registrationForm.fields : [];
-  const merged = defaultFields.map((field) => ({
-    ...field,
-    ...savedFields.find((item) => item?.key === field.key),
-    key: field.key,
-    system: true,
-  }));
-  const customFields = savedFields
-    .filter((item) => item && !defaultFields.some((field) => field.key === item.key))
-    .map((item) => ({
-      ...item,
-      key: String(item.key),
-      label: String(item.label ?? item.key),
-      enabled: item.enabled !== false,
-      required: Boolean(item.required),
-      system: false,
-    }));
-  return [...merged, ...customFields].filter((field) => field.enabled !== false);
-}
+const CORS_HEADERS = { "Access-Control-Allow-Origin": "*" };
 
 function clean(value: unknown) {
   const text = String(value ?? "").trim();
@@ -69,16 +33,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "요청이 너무 잦아요. 잠시 후 다시 시도해주세요." },
-      { status: 429, headers: { "Retry-After": Math.ceil(rl.retryAfterMs / 1000).toString() } },
+      { status: 429, headers: { ...CORS_HEADERS, "Retry-After": Math.ceil(rl.retryAfterMs / 1000).toString() } },
     );
   }
 
   const webinar = await prisma.webinar.findUnique({ where: { slug } });
-  if (!webinar) return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404 });
+  if (!webinar) return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404, headers: CORS_HEADERS });
 
-  const now = new Date();
-  if (now > new Date(webinar.signupDeadline)) {
-    return NextResponse.json({ error: "사전등록이 마감됐어요" }, { status: 400 });
+  // 상태 머신 단일 판정 — signupDeadline 직접 비교 제거.
+  // registration 이면 허용, live 중에는 components.allowLiveRegistration(미설정 시 기존 마감 규칙) 을 따른다.
+  const statusInfo = resolveWebinarStatus(webinar);
+  if (!statusInfo.canRegister) {
+    return NextResponse.json({ error: "사전등록이 마감됐어요" }, { status: 400, headers: CORS_HEADERS });
   }
 
   const body = await request.json();
@@ -89,36 +55,60 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (honeypot && String(honeypot).trim() !== "") {
     return NextResponse.json(
       { registration: { id: "skipped", name: "", email: null, phone: null } },
-      { status: 201, headers: { "Access-Control-Allow-Origin": "*" } },
+      { status: 201, headers: CORS_HEADERS },
     );
   }
   const { name, phone, email, company, department, jobTitle, industry, agreeMarketing, agreePrivacy, memo, customFields } = body;
   const normalizedPhone = normalizePhone(phone);
   const normalizedEmail = normalizeEmail(email);
-  const fields = getRegistrationFields(webinar.config);
+  const fields = normalizeRegistrationForm(webinar.config).fields;
   const customAnswers = typeof customFields === "object" && customFields !== null ? customFields as Record<string, unknown> : {};
 
   for (const field of fields) {
     if (!field.required) continue;
     const value = field.system ? body[field.key] : customAnswers[field.key];
     if (field.type === "checkbox") {
-      if (!value) return NextResponse.json({ error: `${field.label} 항목에 동의해주세요` }, { status: 400 });
+      if (!value) return NextResponse.json({ error: `${field.label} 항목에 동의해주세요` }, { status: 400, headers: CORS_HEADERS });
     } else if (String(value ?? "").trim() === "") {
-      return NextResponse.json({ error: `${field.label} 항목을 입력해주세요` }, { status: 400 });
+      return NextResponse.json({ error: `${field.label} 항목을 입력해주세요` }, { status: 400, headers: CORS_HEADERS });
     }
   }
 
   if (!name?.trim()) {
-    return NextResponse.json({ error: "이름을 입력해주세요" }, { status: 400 });
+    return NextResponse.json({ error: "이름을 입력해주세요" }, { status: 400, headers: CORS_HEADERS });
   }
   if (!normalizedPhone && !normalizedEmail) {
-    return NextResponse.json({ error: "입장 확인을 위해 연락처 또는 이메일 중 하나를 입력해주세요" }, { status: 400 });
+    return NextResponse.json({ error: "입장 확인을 위해 연락처 또는 이메일 중 하나를 입력해주세요" }, { status: 400, headers: CORS_HEADERS });
   }
 
   const memoPayload = {
     ...(memo?.trim() ? { memo: memo.trim() } : {}),
     ...(Object.keys(customAnswers).length ? { customFields: customAnswers } : {}),
   };
+
+  // UTM 어트리뷰션 봉투 (_utm) — 로더/폼 위젯이 동봉. 없으면 전부 null 로 두고 기존 동작 유지.
+  const utm = parseUtmEnvelope(body?._utm);
+  const utmData = utm
+    ? {
+        utmSource: utm.utmSource,
+        utmMedium: utm.utmMedium,
+        utmCampaign: utm.utmCampaign,
+        utmTerm: utm.utmTerm,
+        utmContent: utm.utmContent,
+        utmId: utm.utmId,
+        firstUtmSource: utm.firstUtmSource,
+        firstUtmMedium: utm.firstUtmMedium,
+        firstUtmCampaign: utm.firstUtmCampaign,
+        firstUtmTerm: utm.firstUtmTerm,
+        firstUtmContent: utm.firstUtmContent,
+        firstUtmId: utm.firstUtmId,
+        firstReferrer: utm.firstReferrer,
+        firstSeenAt: utm.firstSeenAt,
+        journey: (utm.journey ?? null) as never,
+        referrer: utm.referrer,
+      }
+    : {};
+  const userAgent = request.headers.get("user-agent")?.slice(0, 500) ?? null;
 
   const duplicate = await prisma.webinarRegistration.findFirst({
     where: {
@@ -145,6 +135,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         agreeMarketing: Boolean(agreeMarketing),
         agreePrivacy: Boolean(agreePrivacy ?? true),
         memo: Object.keys(memoPayload).length ? JSON.stringify(memoPayload, null, 2) : duplicate.memo,
+        // 재등록 시 기존 어트리뷰션은 보존 — 비어 있을 때만 채운다
+        ...(utm && !duplicate.utmSource && !duplicate.firstUtmSource ? utmData : {}),
       },
     });
 
@@ -152,7 +144,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       alreadyRegistered: true,
       registration: { id: registration.id, name: registration.name, email: registration.email, phone: registration.phone },
     }, {
-      headers: { "Access-Control-Allow-Origin": "*" },
+      headers: CORS_HEADERS,
     });
   }
 
@@ -169,12 +161,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       agreeMarketing: Boolean(agreeMarketing),
       agreePrivacy: Boolean(agreePrivacy ?? true),
       memo: Object.keys(memoPayload).length ? JSON.stringify(memoPayload, null, 2) : null,
+      ...utmData,
+      userAgent,
+      registeredStatus: statusInfo.status,
     },
   });
 
   return NextResponse.json({ registration: { id: registration.id, name: registration.name, email: registration.email, phone: registration.phone } }, {
     status: 201,
-    headers: { "Access-Control-Allow-Origin": "*" },
+    headers: CORS_HEADERS,
   });
 }
 

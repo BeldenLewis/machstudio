@@ -189,13 +189,14 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       body: JSON.stringify({ registrationId, event: "enter" }),
     });
 
+    // 60초 ± 10초 jitter — 동시 입장한 시청자들의 heartbeat 가 같은 초에 몰리지 않게 분산
     pingRef.current = setInterval(() => {
       fetch(`/api/webinar/${slug}/ping`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ registrationId, event: "ping" }),
       });
-    }, 60000);
+    }, 50_000 + Math.floor(Math.random() * 20_000));
 
     const handleLeave = () => {
       if (!registrationId) return;

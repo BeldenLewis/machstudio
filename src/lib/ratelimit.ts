@@ -36,6 +36,17 @@ export function rateLimit(key: string, opts: { limit: number; windowMs: number }
   return memoryRateLimit(key, opts);
 }
 
+// 기록 없이 현재 차단 여부만 확인 (메모리 전용).
+// "실패했을 때만 기록"하는 카운터(예: verify 미스)를 조회 전에 선차단할 때 사용.
+export function rateLimitPeek(key: string, opts: { limit: number; windowMs: number }): { blocked: boolean } {
+  const b = buckets.get(key);
+  if (!b) return { blocked: false };
+  const cutoff = Date.now() - opts.windowMs;
+  let recent = 0;
+  for (let i = b.hits.length - 1; i >= 0 && b.hits[i] >= cutoff; i--) recent++;
+  return { blocked: recent >= opts.limit };
+}
+
 // Redis 비동기 인터페이스 — 새 코드에서 사용 권장
 export async function rateLimitAsync(
   key: string,
