@@ -13,7 +13,7 @@ interface Announcement {
   createdAt: string;
 }
 
-export default function AnnouncementsTab({ webinarId }: { webinarId: string }) {
+export default function AnnouncementsTab({ webinarId, embedded = false }: { webinarId: string; embedded?: boolean }) {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -78,7 +78,7 @@ export default function AnnouncementsTab({ webinarId }: { webinarId: string }) {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-4">
+    <div className={embedded ? "space-y-4" : "p-4 sm:p-6 lg:p-8 space-y-4"}>
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">라이브 중 참여자에게 공지를 표시해요</p>
         <button

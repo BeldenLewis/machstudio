@@ -15,6 +15,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       emojiText: true, emojiAnimation: true,
       layout: true, width: true, autoClose: true,
       showOnce: true, doNotShowAfterSubmit: true,
+      updatedAt: true, // 열림 기억 키 — 재ON 시 다시 푸시된다
     },
   });
 

@@ -19,7 +19,7 @@ interface QAItem {
   createdAt: string;
 }
 
-export default function QATab({ webinarId }: { webinarId: string }) {
+export default function QATab({ webinarId, embedded = false }: { webinarId: string; embedded?: boolean }) {
   const [questions, setQuestions] = useState<QAItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<QAStatus | "all">("pending");
@@ -57,7 +57,7 @@ export default function QATab({ webinarId }: { webinarId: string }) {
   ];
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-4">
+    <div className={embedded ? "space-y-4" : "p-4 sm:p-6 lg:p-8 space-y-4"}>
       <div className="relative flex items-center gap-1">
         {filters.map(({ value, label }) => {
           const active = filter === value;

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { use } from "react";
 import { Loader2, Send, CheckCircle2 } from "lucide-react";
+import LivePushLayer from "../LivePushLayer";
 
 interface WebinarSession {
   id: string;
@@ -419,6 +420,9 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       className="min-h-screen"
       style={{ backgroundColor: bg, color: text, fontFamily: `${font}, sans-serif` }}
     >
+      {/* 팝업·Tally 푸시 — 운영 콘솔에서 ON 한 항목이 시청 중 화면에 뜬다 */}
+      <LivePushLayer slug={slug} active={view === "live" && !!registrationId} registrationId={registrationId} accentColor={accent} />
+
       {/* 공지 배너 */}
       {announcements.length > 0 && (
         <div

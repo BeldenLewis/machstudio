@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { resolveWebinarStatus } from "@/lib/webinar-status";
 
 function pct(part: number, total: number) {
   if (!total) return 0;
@@ -15,7 +16,7 @@ function minutesBetween(start: Date | null, end: Date) {
 async function authorize(webinarId: string, userId: string) {
   const webinar = await prisma.webinar.findUnique({
     where: { id: webinarId },
-    select: { id: true, workspaceId: true, liveStartAt: true, liveEndAt: true, name: true },
+    select: { id: true, workspaceId: true, liveStartAt: true, liveEndAt: true, signupDeadline: true, statusOverride: true, components: true, name: true },
   });
   if (!webinar) return { webinar: null, membership: null };
 
@@ -130,7 +131,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const stay30 = stayValues.filter((value) => value >= 30).length;
   const stay60 = stayValues.filter((value) => value >= 60).length;
 
+  const statusInfo = resolveWebinarStatus(webinar);
+
   return NextResponse.json({
+    // 운영 콘솔 상태 바 — 오버라이드 여부 포함 (자동 복귀 버튼 표시 판단)
+    status: statusInfo.status,
+    isOverridden: statusInfo.isOverridden,
     summary: {
       totalRegistered,
       attended,

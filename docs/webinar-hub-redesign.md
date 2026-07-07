@@ -158,8 +158,8 @@ youtubeId·등록자 수 은닉. 캐시 **`s-maxage=60, swr=300`**(수동 오버
 
 **Phase 3 — 어드민 IA 재편** (하위 단계로 분할 진행 — 어드민이 로그인 벽이라 API/DB 검증 위주):
 - **3a ✅ 완료(2026-07-07 배포)**: 프로젝트 간 복제. POST /api/webinars `cloneFromId`(같은 워크스페이스 모든 프로젝트에서 theme·components·config.registrationForm·세션 구조 복사, 일정·slug·등록자 제외), GET include 에 project.name. 목록 생성 폼에 "복제 원본" 드롭다운(워크스페이스 전체, 프로젝트명·웨비나명). 검증: 실제 Prisma 클라이언트로 크로스프로젝트 복제 10개 항목 대조(theme/registrationForm/components/세션 복사 + youtubeId·surveyUrl·일정 미복사 + 타깃 프로젝트 생성) 전부 통과.
-- **3b (예정)**: 라이브 콘솔(운영 탭) — statusOverride 바(PATCH), KPI·접속자·Q&A·공지·팝업/Tally 푸시 통합, 적응형 폴링.
-- **3c (예정)**: 탭 4개 최종 재편(만들기/배포/운영/분석), 상태 연동 기본 진입 탭.
+- **3b ✅ 완료(2026-07-07 배포)**: 운영 콘솔. ① 팝업·Tally 푸시 어드민 CRUD(`/api/webinars/[id]/{popups,tally-pushes}` + `/[id]`) — ON 1개 유지 트랜잭션, Tally formId 자동 추출. ② **라이브 페이지 팝업/Tally 렌더링 신설**(`LivePushLayer.tsx` — mach 라이브 페이지는 이 모델들을 아예 소비하지 않고 있었음): 15초 폴링, 닫음/열림 기억은 `id+updatedAt` 키(재ON 시 재노출), Tally hiddenFields 에 registrationId. ③ `LiveConsoleTab`: 상태 바(자동|등록 중|라이브|종료 → PATCH statusOverride, 종료는 confirm), KPI 6개, 준비 체크리스트(입장자 0명 준비 단계만), 공지/Q&A(embedded 프롭으로 기존 탭 재사용)/팝업/Tally/접속자 접이식 섹션, 적응형 폴링(라이브 15초/평시 90초+숨김 가드). ④ [id] PATCH 에 statusOverride(값 검증)+components, dashboard 응답에 status/isOverridden.
+- **3c ✅ 완료(2026-07-07 배포)**: 탭 4개 재편 — 만들기(=PageSetupTab)/배포/운영(OperateTab: 라이브 콘솔|등록자 서브내비)/분석. 상태 연동 기본 진입(종료→분석, 라이브 또는 등록자有→운영, 준비→만들기). 내비게이션 타깃 `create-{section}`/`operate-registrants`. DashboardTab 은 탭에서 제거(파일은 Phase 5 삭제 예정). 검증: ON 1개 규칙·공개 소비 계약(updatedAt 포함)·statusOverride 저장·캐스케이드 E2E 8항목 + 어드민/라이브 페이지 컴파일. **주의: 어드민 화면 시각 확인은 로그인 필요로 미완 — 사용자 확인 대기.**
 
 **Phase 4 — 분석**: analytics·attendance-curve 엔드포인트, 퍼널·UTM 분해·시청 곡선 화면, CSV 커스텀 필드+UTM 확장. 검증: 백필된 과거 웨비나 곡선 표시, CSV 컬럼 대조.
 

@@ -17,6 +17,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       integrationType: true, embedCode: true,
       tallyFormId: true, tallyEmojiText: true, tallyEmojiAnimation: true, tallyLayout: true,
       tallyWidth: true, tallyAutoClose: true, dismissible: true,
+      updatedAt: true, // 닫음 기억 키 — 수정/재ON 시 updatedAt 이 바뀌어 다시 노출된다
     },
   });
 

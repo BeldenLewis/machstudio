@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, type ElementType } from "react";
+import { useState, useEffect, useCallback, useRef, type ElementType } from "react";
 import { use } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -11,26 +11,22 @@ import {
   Check,
   Copy,
   ExternalLink,
-  HelpCircle,
   Loader2,
-  Megaphone,
   Settings2,
-  Users,
   Video,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
-import RegistrantsTab from "./RegistrantsTab";
-import DashboardTab from "./DashboardTab";
 import PageSetupTab from "./PageSetupTab";
 import AnalyticsTab from "./AnalyticsTab";
-import QATab from "./QATab";
-import AnnouncementsTab from "./AnnouncementsTab";
 import DeployTab from "./DeployTab";
+import OperateTab, { type OperateSection } from "./OperateTab";
+import { resolveWebinarStatus } from "@/lib/webinar-status";
 
 type SettingsSection = "general" | "form" | "sessions" | "theme" | "embed";
-type Tab = "dashboard" | "registrations" | "qa" | "announcements" | "analytics" | "deploy" | "settings";
-type NavigationTarget = Tab | `settings-${SettingsSection}`;
+// 새 IA: 만들기(create=설정) / 배포(deploy) / 운영(operate=콘솔+등록자) / 분석(analytics)
+type Tab = "create" | "deploy" | "operate" | "analytics";
+type NavigationTarget = Tab | `create-${SettingsSection}` | "operate-registrants";
 
 interface WebinarSession {
   id: string;
@@ -50,6 +46,7 @@ interface Webinar {
   liveStartAt: string;
   liveEndAt: string;
   signupDeadline: string;
+  statusOverride?: string | null;
   theme: Record<string, string>;
   config: Record<string, unknown>;
   sessions: WebinarSession[];
@@ -57,22 +54,21 @@ interface Webinar {
 }
 
 const tabs: { id: Tab; label: string; icon: ElementType }[] = [
-  { id: "dashboard", label: "대시보드", icon: BarChart3 },
-  { id: "registrations", label: "등록 관리", icon: Users },
-  { id: "qa", label: "Q&A", icon: HelpCircle },
-  { id: "announcements", label: "공지/푸시", icon: Megaphone },
-  { id: "analytics", label: "분석", icon: Activity },
+  { id: "create", label: "만들기", icon: Settings2 },
   { id: "deploy", label: "배포", icon: Cable },
-  { id: "settings", label: "설정", icon: Settings2 },
+  { id: "operate", label: "운영", icon: Activity },
+  { id: "analytics", label: "분석", icon: BarChart3 },
 ];
 
 export default function WebinarDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug: id } = use(params);
   const [webinar, setWebinar] = useState<Webinar | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>("dashboard");
+  const [activeTab, setActiveTab] = useState<Tab>("operate");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
+  const [operateSection, setOperateSection] = useState<OperateSection>("console");
   const [copied, setCopied] = useState(false);
+  const defaultTabApplied = useRef(false);
 
   const fetchWebinar = useCallback(async () => {
     setIsLoading(true);
@@ -81,6 +77,15 @@ export default function WebinarDetailPage({ params }: { params: Promise<{ slug: 
       if (!res.ok) { toast.error("웨비나를 불러오지 못했어요"); return; }
       const data = await res.json();
       setWebinar(data.webinar);
+
+      // 상태 연동 기본 진입 탭 (최초 1회): 종료→분석, 라이브/등록자 有→운영, 준비 단계→만들기
+      if (!defaultTabApplied.current && data.webinar) {
+        defaultTabApplied.current = true;
+        const status = resolveWebinarStatus(data.webinar).status;
+        if (status === "ended") setActiveTab("analytics");
+        else if (status === "live" || data.webinar._count.registrations > 0) setActiveTab("operate");
+        else setActiveTab("create");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -92,10 +97,15 @@ export default function WebinarDetailPage({ params }: { params: Promise<{ slug: 
     setActiveTab(tab);
   };
 
-  const handleNavigate = (target: NavigationTarget) => {
-    if (target.startsWith("settings-")) {
-      setSettingsSection(target.replace("settings-", "") as SettingsSection);
-      setActiveTab("settings");
+  const handleNavigate = (target: NavigationTarget | string) => {
+    if (target.startsWith("create-")) {
+      setSettingsSection(target.replace("create-", "") as SettingsSection);
+      setActiveTab("create");
+      return;
+    }
+    if (target === "operate-registrants") {
+      setOperateSection("registrants");
+      setActiveTab("operate");
       return;
     }
 
@@ -204,14 +214,9 @@ export default function WebinarDetailPage({ params }: { params: Promise<{ slug: 
             >
               <Icon className="w-3.5 h-3.5" />
               {label}
-              {tabId === "registrations" && webinar._count.registrations > 0 && (
+              {tabId === "operate" && webinar._count.registrations > 0 && (
                 <span className="ml-1 text-[10px] bg-violet-500/10 text-violet-500 px-1.5 py-0.5 rounded-full font-medium">
                   {webinar._count.registrations}
-                </span>
-              )}
-              {tabId === "qa" && webinar._count.questions > 0 && (
-                <span className="ml-1 text-[10px] bg-violet-500/10 text-violet-500 px-1.5 py-0.5 rounded-full font-medium">
-                  {webinar._count.questions}
                 </span>
               )}
             </button>
@@ -219,7 +224,7 @@ export default function WebinarDetailPage({ params }: { params: Promise<{ slug: 
         </div>
       </div>
 
-      <div className={`flex-1 ${activeTab === "settings" ? "overflow-hidden" : "overflow-auto"}`}>
+      <div className={`flex-1 ${activeTab === "create" ? "overflow-hidden" : "overflow-auto"}`}>
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -229,13 +234,7 @@ export default function WebinarDetailPage({ params }: { params: Promise<{ slug: 
             transition={{ duration: 0.15 }}
             className="h-full"
           >
-            {activeTab === "dashboard" && <DashboardTab webinarId={id} webinar={webinar} onNavigate={handleNavigate} />}
-            {activeTab === "registrations" && <RegistrantsTab webinarId={id} />}
-            {activeTab === "qa" && <QATab webinarId={id} />}
-            {activeTab === "announcements" && <AnnouncementsTab webinarId={id} />}
-            {activeTab === "analytics" && <AnalyticsTab webinarId={id} />}
-            {activeTab === "deploy" && <DeployTab webinarId={id} />}
-            {activeTab === "settings" && (
+            {activeTab === "create" && (
               <PageSetupTab
                 webinar={webinar}
                 onUpdate={fetchWebinar}
@@ -243,6 +242,17 @@ export default function WebinarDetailPage({ params }: { params: Promise<{ slug: 
                 onSectionChange={setSettingsSection}
               />
             )}
+            {activeTab === "deploy" && <DeployTab webinarId={id} />}
+            {activeTab === "operate" && (
+              <OperateTab
+                webinarId={id}
+                webinar={webinar}
+                onNavigate={handleNavigate}
+                section={operateSection}
+                onSectionChange={setOperateSection}
+              />
+            )}
+            {activeTab === "analytics" && <AnalyticsTab webinarId={id} />}
           </motion.div>
         </AnimatePresence>
       </div>
