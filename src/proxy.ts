@@ -10,6 +10,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/auth/callback") ||
     pathname.startsWith("/api/collect") ||
     pathname.startsWith("/api/webinar/") ||
+    pathname.startsWith("/api/webinar-embed/") || // 임베드 공개 설정/비콘 (webinar-embed-sites 어드민 CRUD는 제외)
+    pathname.startsWith("/w/") || // 웨비나 로더 (외부 사이트 부착)
     pathname === "/webinar/sample" ||
     pathname.match(/^\/webinar\/[^/]+\/live/) ||
     pathname.startsWith("/api/public") ||

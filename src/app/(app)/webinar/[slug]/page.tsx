@@ -7,6 +7,7 @@ import {
   Activity,
   ArrowLeft,
   BarChart3,
+  Cable,
   Check,
   Copy,
   ExternalLink,
@@ -25,9 +26,10 @@ import PageSetupTab from "./PageSetupTab";
 import AnalyticsTab from "./AnalyticsTab";
 import QATab from "./QATab";
 import AnnouncementsTab from "./AnnouncementsTab";
+import DeployTab from "./DeployTab";
 
 type SettingsSection = "general" | "form" | "sessions" | "theme" | "embed";
-type Tab = "dashboard" | "registrations" | "qa" | "announcements" | "analytics" | "settings";
+type Tab = "dashboard" | "registrations" | "qa" | "announcements" | "analytics" | "deploy" | "settings";
 type NavigationTarget = Tab | `settings-${SettingsSection}`;
 
 interface WebinarSession {
@@ -60,6 +62,7 @@ const tabs: { id: Tab; label: string; icon: ElementType }[] = [
   { id: "qa", label: "Q&A", icon: HelpCircle },
   { id: "announcements", label: "공지/푸시", icon: Megaphone },
   { id: "analytics", label: "분석", icon: Activity },
+  { id: "deploy", label: "배포", icon: Cable },
   { id: "settings", label: "설정", icon: Settings2 },
 ];
 
@@ -231,6 +234,7 @@ export default function WebinarDetailPage({ params }: { params: Promise<{ slug: 
             {activeTab === "qa" && <QATab webinarId={id} />}
             {activeTab === "announcements" && <AnnouncementsTab webinarId={id} />}
             {activeTab === "analytics" && <AnalyticsTab webinarId={id} />}
+            {activeTab === "deploy" && <DeployTab webinarId={id} />}
             {activeTab === "settings" && (
               <PageSetupTab
                 webinar={webinar}
