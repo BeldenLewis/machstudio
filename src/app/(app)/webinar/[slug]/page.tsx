@@ -23,7 +23,7 @@ import DeployTab from "./DeployTab";
 import OperateTab, { type OperateSection } from "./OperateTab";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
 
-type SettingsSection = "general" | "form" | "sessions" | "theme" | "embed";
+type SettingsSection = "general" | "form" | "sessions" | "theme";
 // 새 IA: 만들기(create=설정) / 배포(deploy) / 운영(operate=콘솔+등록자) / 분석(analytics)
 type Tab = "create" | "deploy" | "operate" | "analytics";
 type NavigationTarget = Tab | `create-${SettingsSection}` | "operate-registrants";

@@ -168,7 +168,10 @@ youtubeId·등록자 수 은닉. 캐시 **`s-maxage=60, swr=300`**(수동 오버
 - CSV export 확장: UTM 6컬럼 + 등록폼 커스텀 필드(정의 순서, memo.customFields 파싱) + 사전질문.
 - 검증: 실제 데이터 E2E 11항목(퍼널 카운트, google/naver 채널 분해, 등록률·입장률, **곡선 피크=4[중복 세그먼트 흡수]**, KST 라벨) 전부 통과. timestamp 는 UTC 벽시각 저장이라 ISO→`::timestamp` 캐스팅으로 일관.
 
-**Phase 5 — 정리**: info 축소(youtubeId·_count 은닉), EmbedTab 레거시 섹션·DashboardTab 삭제. Popup·TallyPush는 유지 확정으로 정리 대상에서 제외(운영 콘솔 편입은 Phase 3).
+**Phase 5 — 정리** ✅ 완료(2026-07-07 배포): DashboardTab.tsx 삭제(참조 0, 442줄), EmbedTab.tsx 삭제(1710줄, DeployTab이 대체) + PageSetupTab 임베드 섹션 제거, 공개 `/api/webinar/[slug]/info`에서 `_count`(등록자 수) 제거(공개 노출 차단). **설계 수정: youtubeId 은닉은 취소** — 라이브 페이지가 config.youtubeId 로 실제 영상을 재생하므로 유지(설계의 loader/config 분리 가정이 라이브 영상 소비를 간과했음). Popup·TallyPush 모델은 유지 확정(운영 콘솔 편입 완료). 총 ~2150줄 제거. 검증: tsc, 라이브 200·어드민 307 컴파일, 잔존 import 0.
+
+## 개편 완료 요약 (Phase 1~5)
+비개발자 운영자가 mach studio에서 웨비나 키트를 설정→아임웹에 코드 1회 부착→이후 문구·일정·상태·노출 웨비나 전환을 허브에서만. 프로젝트 간 복제로 전시별 베리에이션이 클릭 한 번. 등록·시청·Q&A·팝업/설문이 전부 mach로 유입되고, 퍼널·UTM 채널 분해·시청 곡선으로 분석. 팝업/Tally 푸시는 레거시(STK)에만 있던 걸 정식 기능화. 남은 후속(선택): 등록자 CSV 가져오기(과거 이관용), 분석 공유 링크 — 설계 §10 신규 기능 후보.
 
 구현 시 참고(minor): 로더 클래스 `mw-` 스코핑·`z-index:999900`, 폼 위젯은 명시적 스타일 전량 지정, ICS는 EmbedTab 코드 이식, cuid 백필은 `scripts/migrate-*.mjs` 관례, Next.js 16 문서(`node_modules/next/dist/docs/`) 선확인.
 

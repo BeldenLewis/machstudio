@@ -16,7 +16,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       theme: true,
       config: true,
       sessions: { orderBy: { number: "asc" } },
-      _count: { select: { registrations: true } },
+      // _count(등록자 수)는 공개 엔드포인트라 제거 — 라이브 페이지가 사용하지 않음
     },
   });
 

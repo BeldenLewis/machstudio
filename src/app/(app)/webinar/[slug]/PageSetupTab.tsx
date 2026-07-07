@@ -2,12 +2,11 @@
 
 import { type ElementType } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Code2, FileText, ListChecks, Palette, SlidersHorizontal } from "lucide-react";
+import { FileText, ListChecks, Palette, SlidersHorizontal } from "lucide-react";
 import SettingsTab from "./SettingsTab";
 import RegistrationFormTab from "./RegistrationFormTab";
 import SessionsTab from "./SessionsTab";
 import ThemeTab from "./ThemeTab";
-import EmbedTab from "./EmbedTab";
 
 interface WebinarSession {
   id: string;
@@ -32,14 +31,13 @@ interface Webinar {
   sessions: WebinarSession[];
 }
 
-type PageSetupSection = "general" | "form" | "sessions" | "theme" | "embed";
+type PageSetupSection = "general" | "form" | "sessions" | "theme";
 
 const sections: { id: PageSetupSection; label: string; desc: string; icon: ElementType }[] = [
   { id: "general", label: "기본 설정", desc: "일정, 영상, 링크 등 웨비나의 기본 정보를 관리합니다.", icon: SlidersHorizontal },
   { id: "form", label: "등록폼", desc: "사전등록에서 수집할 항목과 동의 문구를 설정합니다.", icon: FileText },
   { id: "sessions", label: "세션", desc: "라이브 페이지에 표시될 아젠다와 시간표를 정리합니다.", icon: ListChecks },
   { id: "theme", label: "테마", desc: "외부 페이지의 색상, 폰트, 화면 톤을 맞춥니다.", icon: Palette },
-  { id: "embed", label: "임베드", desc: "배너와 라이브 페이지 코드를 확인하고 실제처럼 미리 봅니다.", icon: Code2 },
 ];
 
 export default function PageSetupTab({
@@ -145,7 +143,6 @@ export default function PageSetupTab({
                   <ThemeTab webinar={webinar} onUpdate={onUpdate} />
                 </div>
               )}
-              {section === "embed" && <EmbedTab webinar={webinar} />}
             </motion.div>
           </AnimatePresence>
         </div>

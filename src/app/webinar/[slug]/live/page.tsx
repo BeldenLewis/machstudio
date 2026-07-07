@@ -25,7 +25,6 @@ interface WebinarInfo {
   theme: Record<string, string>;
   config: Record<string, unknown>;
   sessions: WebinarSession[];
-  _count: { registrations: number };
 }
 
 interface Announcement {
