@@ -2,6 +2,24 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
+import { normalizeRegistrationForm } from "@/lib/webinar-config";
+
+// memo 는 JSON 문자열({ memo, customFields }) 또는 평문일 수 있다 (register 라우트 참조)
+function parseMemo(memo: string | null): { note: string; customFields: Record<string, unknown> } {
+  if (!memo) return { note: "", customFields: {} };
+  try {
+    const parsed = JSON.parse(memo);
+    if (parsed && typeof parsed === "object") {
+      return {
+        note: typeof parsed.memo === "string" ? parsed.memo : "",
+        customFields: parsed.customFields && typeof parsed.customFields === "object" ? parsed.customFields : {},
+      };
+    }
+  } catch {
+    /* 평문 memo */
+  }
+  return { note: memo, customFields: {} };
+}
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
@@ -22,20 +40,43 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     orderBy: { submittedAt: "desc" },
   });
 
-  const headers = ["이름", "연락처", "이메일", "회사", "부서", "직함", "업종", "마케팅동의", "체류시간(분)", "등록일", "입장일"];
-  const rows = registrations.map((r) => [
-    r.name,
-    r.phone ?? "",
-    r.email ?? "",
-    r.company ?? "",
-    r.department ?? "",
-    r.jobTitle ?? "",
-    r.industry ?? "",
-    r.agreeMarketing ? "Y" : "N",
-    String(r.stayMinutes),
-    new Date(r.submittedAt).toLocaleString("ko-KR"),
-    r.enteredAt ? new Date(r.enteredAt).toLocaleString("ko-KR") : "",
-  ]);
+  // 커스텀 필드 컬럼 — 등록폼 정의 순서(시스템 필드 제외) 그대로 헤더에 편입
+  const customFieldDefs = normalizeRegistrationForm(webinar.config, { includeDisabled: true }).fields
+    .filter((f) => !f.system);
+
+  const headers = [
+    "이름", "연락처", "이메일", "회사", "부서", "직함", "업종", "마케팅동의", "체류시간(분)", "등록일", "입장일",
+    ...customFieldDefs.map((f) => f.label),
+    "사전질문",
+    "UTM소스", "UTM매체", "UTM캠페인", "최초UTM소스", "최초UTM매체", "유입경로(referrer)",
+  ];
+  const rows = registrations.map((r) => {
+    const { note, customFields } = parseMemo(r.memo);
+    return [
+      r.name,
+      r.phone ?? "",
+      r.email ?? "",
+      r.company ?? "",
+      r.department ?? "",
+      r.jobTitle ?? "",
+      r.industry ?? "",
+      r.agreeMarketing ? "Y" : "N",
+      String(r.stayMinutes),
+      new Date(r.submittedAt).toLocaleString("ko-KR"),
+      r.enteredAt ? new Date(r.enteredAt).toLocaleString("ko-KR") : "",
+      ...customFieldDefs.map((f) => {
+        const value = customFields[f.key];
+        return value == null ? "" : String(value);
+      }),
+      note,
+      r.utmSource ?? "",
+      r.utmMedium ?? "",
+      r.utmCampaign ?? "",
+      r.firstUtmSource ?? "",
+      r.firstUtmMedium ?? "",
+      r.referrer ?? "",
+    ];
+  });
 
   const csv = [headers, ...rows]
     .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))

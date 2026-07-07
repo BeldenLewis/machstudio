@@ -161,7 +161,12 @@ youtubeId·등록자 수 은닉. 캐시 **`s-maxage=60, swr=300`**(수동 오버
 - **3b ✅ 완료(2026-07-07 배포)**: 운영 콘솔. ① 팝업·Tally 푸시 어드민 CRUD(`/api/webinars/[id]/{popups,tally-pushes}` + `/[id]`) — ON 1개 유지 트랜잭션, Tally formId 자동 추출. ② **라이브 페이지 팝업/Tally 렌더링 신설**(`LivePushLayer.tsx` — mach 라이브 페이지는 이 모델들을 아예 소비하지 않고 있었음): 15초 폴링, 닫음/열림 기억은 `id+updatedAt` 키(재ON 시 재노출), Tally hiddenFields 에 registrationId. ③ `LiveConsoleTab`: 상태 바(자동|등록 중|라이브|종료 → PATCH statusOverride, 종료는 confirm), KPI 6개, 준비 체크리스트(입장자 0명 준비 단계만), 공지/Q&A(embedded 프롭으로 기존 탭 재사용)/팝업/Tally/접속자 접이식 섹션, 적응형 폴링(라이브 15초/평시 90초+숨김 가드). ④ [id] PATCH 에 statusOverride(값 검증)+components, dashboard 응답에 status/isOverridden.
 - **3c ✅ 완료(2026-07-07 배포)**: 탭 4개 재편 — 만들기(=PageSetupTab)/배포/운영(OperateTab: 라이브 콘솔|등록자 서브내비)/분석. 상태 연동 기본 진입(종료→분석, 라이브 또는 등록자有→운영, 준비→만들기). 내비게이션 타깃 `create-{section}`/`operate-registrants`. DashboardTab 은 탭에서 제거(파일은 Phase 5 삭제 예정). 검증: ON 1개 규칙·공개 소비 계약(updatedAt 포함)·statusOverride 저장·캐스케이드 E2E 8항목 + 어드민/라이브 페이지 컴파일. **주의: 어드민 화면 시각 확인은 로그인 필요로 미완 — 사용자 확인 대기.**
 
-**Phase 4 — 분석**: analytics·attendance-curve 엔드포인트, 퍼널·UTM 분해·시청 곡선 화면, CSV 커스텀 필드+UTM 확장. 검증: 백필된 과거 웨비나 곡선 표시, CSV 컬럼 대조.
+**Phase 4 — 분석** ✅ 완료(2026-07-07 배포):
+- `/api/webinars/[id]/analytics`(수동 새로고침, 폴링 없음): 퍼널(방문→등록→입장→30/60분), UTM 소스·매체별 분해(방문/등록/등록률/입장률 — VisitStat + Registration UTM 병합), 등록 추이(KST 일별 $queryRawUnsafe).
+- `/api/webinars/[id]/analytics/attendance-curve`(private max-age=60): WebinarAttendanceSegment 를 generate_series 버킷별 `COUNT(DISTINCT registrationId)` — **DISTINCT 로 세그먼트 중복(탭 2개) 흡수**(Phase 1 인지 이슈 해소), 포인트 ≤48 자동 버킷, KST 라벨.
+- AnalyticsTab 개편: 퍼널(방문 데이터 있으면 방문 단계 추가), UTM 분해 테이블, 시청 곡선 인라인 SVG area(피크·평균 — Recharts 없이 경량), 등록 추이 막대, CSV 버튼.
+- CSV export 확장: UTM 6컬럼 + 등록폼 커스텀 필드(정의 순서, memo.customFields 파싱) + 사전질문.
+- 검증: 실제 데이터 E2E 11항목(퍼널 카운트, google/naver 채널 분해, 등록률·입장률, **곡선 피크=4[중복 세그먼트 흡수]**, KST 라벨) 전부 통과. timestamp 는 UTC 벽시각 저장이라 ISO→`::timestamp` 캐스팅으로 일관.
 
 **Phase 5 — 정리**: info 축소(youtubeId·_count 은닉), EmbedTab 레거시 섹션·DashboardTab 삭제. Popup·TallyPush는 유지 확정으로 정리 대상에서 제외(운영 콘솔 편입은 Phase 3).
 
