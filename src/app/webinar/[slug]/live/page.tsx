@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { use } from "react";
 import { Loader2, Send, CheckCircle2 } from "lucide-react";
 import LivePushLayer from "../LivePushLayer";
+import LiveContentStk from "../LiveContentStk";
 
 interface WebinarSession {
   id: string;
@@ -432,6 +433,22 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         </div>
       )}
 
+      {view === "live" && registrationId ? (
+        <LiveContentStk
+          webinar={webinar}
+          accent={accent}
+          qa={{
+            sessions: webinar.sessions,
+            question,
+            setQuestion,
+            selectedSession,
+            setSelectedSession,
+            onSend: handleSendQA,
+            isSending: isSendingQA,
+            sent: qaSent,
+          }}
+        />
+      ) : (
       <div className="max-w-4xl mx-auto px-4 py-12">
         {/* 헤더 */}
         <div className="text-center mb-10">
@@ -604,75 +621,6 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           </div>
         )}
 
-        {view === "live" && registrationId && (
-          <div className="space-y-6">
-            {/* 유튜브 영상 */}
-            {webinar.config?.youtubeId ? (
-              <div
-                className="relative overflow-hidden"
-                style={{ borderRadius: radius, paddingTop: "56.25%" }}
-              >
-                <iframe
-                  className="absolute inset-0 w-full h-full"
-                  src={`https://www.youtube.com/embed/${webinar.config.youtubeId}?autoplay=1&rel=0`}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              </div>
-            ) : (
-              <div
-                className="flex items-center justify-center h-40 text-center"
-                style={{ backgroundColor: surface, borderRadius: radius }}
-              >
-                <p className="opacity-40 text-sm">라이브 영상이 연결되지 않았어요</p>
-              </div>
-            )}
-
-            {/* Q&A 입력 */}
-            <div style={{ backgroundColor: surface, borderRadius: radius }} className="p-5">
-              <h3 className="font-semibold mb-3 text-sm">질문하기</h3>
-              {webinar.sessions.length > 1 && (
-                <div className="flex flex-wrap gap-2 mb-3">
-                  <span className="text-xs opacity-50 py-1">세션:</span>
-                  {webinar.sessions.map((s) => (
-                    <button
-                      key={s.number}
-                      onClick={() => setSelectedSession(selectedSession === s.number ? null : s.number)}
-                      className="text-xs px-2.5 py-1 transition-colors"
-                      style={{
-                        borderRadius: `calc(${radius} * 0.5)`,
-                        backgroundColor: selectedSession === s.number ? accent : "rgba(255,255,255,0.08)",
-                        color: text,
-                      }}
-                    >
-                      세션 {s.number}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="flex gap-2">
-                <textarea
-                  rows={2}
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  placeholder="질문을 입력하세요..."
-                  className="flex-1 px-3 py-2.5 text-sm bg-transparent resize-none focus:outline-none"
-                  style={{ border: "1px solid rgba(255,255,255,0.1)", borderRadius: `calc(${radius} * 0.6)`, color: text }}
-                />
-                <button
-                  onClick={handleSendQA}
-                  disabled={!question.trim() || isSendingQA}
-                  className="px-4 py-2 text-white transition-opacity disabled:opacity-40 self-end"
-                  style={{ backgroundColor: qaSent ? "#22c55e" : accent, borderRadius: `calc(${radius} * 0.6)` }}
-                >
-                  {qaSent ? <CheckCircle2 className="w-4 h-4" /> : <Send className="w-4 h-4" />}
-                </button>
-              </div>
-              {qaSent && <p className="text-xs mt-2" style={{ color: "#22c55e" }}>질문이 전달됐어요!</p>}
-            </div>
-          </div>
-        )}
-
         {/* 뷰: 종료 */}
         {view === "ended" && (
           <div
@@ -695,6 +643,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
