@@ -12,6 +12,8 @@ interface Session {
   number: number;
   title: string;
   speaker: string | null;
+  speakerPhotoUrl?: string | null;
+  description?: string | null;
   startTime: string;
   endTime: string;
 }
@@ -123,7 +125,9 @@ function buildCss(accent: string) {
 .stk-live .ag-sess-title { font-size:15px; font-weight:750; line-height:1.42; color:var(--text); letter-spacing:-0.03em; word-break:keep-all; margin:0; }
 .stk-live .ag-sess-time { font-size:12.5px; font-weight:600; color:var(--sub); white-space:nowrap; text-align:right; padding-top:3px; }
 .stk-live .ag-sess-body { display:flex; gap:20px; padding:22px 24px; align-items:center; }
-.stk-live .ag-avatar { flex-shrink:0; width:52px; height:52px; border-radius:50%; background:var(--key-dim); border:1px solid var(--key-border); display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:800; color:var(--key); }
+.stk-live .ag-avatar { flex-shrink:0; width:56px; height:56px; border-radius:50%; overflow:hidden; background:var(--key-dim); border:1px solid var(--key-border); display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:800; color:var(--key); }
+.stk-live .ag-avatar img { width:100%; height:100%; object-fit:cover; object-position:top center; }
+.stk-live .ag-speaker-desc { font-size:14px; line-height:1.66; color:var(--muted); margin-top:6px; word-break:keep-all; }
 .stk-live .ag-speaker-name { font-size:15px; font-weight:750; color:var(--text); letter-spacing:-0.02em; }
 .stk-live .ag-footer { text-align:center; padding-top:32px; font-size:13px; color:var(--sub); }
 @media (max-width:720px) {
@@ -290,10 +294,21 @@ export default function LiveContentStk({
                   <h3 className="ag-sess-title">{s.title}</h3>
                   <span className="ag-sess-time">{s.startTime} – {s.endTime}</span>
                 </div>
-                {s.speaker && (
+                {(s.speaker || s.description) && (
                   <div className="ag-sess-body">
-                    <div className="ag-avatar">{s.speaker.trim().charAt(0)}</div>
-                    <div className="ag-speaker-name">{s.speaker}</div>
+                    {s.speaker && (
+                      <div className="ag-avatar">
+                        {s.speakerPhotoUrl ? (
+                          <img src={s.speakerPhotoUrl} alt={s.speaker} />
+                        ) : (
+                          s.speaker.trim().charAt(0)
+                        )}
+                      </div>
+                    )}
+                    <div>
+                      {s.description && <div className="ag-speaker-desc">{s.description}</div>}
+                      {s.speaker && <div className="ag-speaker-name">{s.speaker}</div>}
+                    </div>
                   </div>
                 )}
               </div>

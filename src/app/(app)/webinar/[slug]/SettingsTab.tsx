@@ -22,6 +22,10 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
   const router = useRouter();
   const toLocal = (iso: string) => new Date(iso).toISOString().slice(0, 16);
 
+  const livePage = (webinar.config?.livePage ?? {}) as Record<string, unknown>;
+  const cta = (livePage.cta ?? {}) as Record<string, unknown>;
+  const ctaButtons = Array.isArray(cta.buttons) ? (cta.buttons as { label?: string; url?: string; style?: string }[]) : [];
+
   const [form, setForm] = useState({
     name: webinar.name,
     description: webinar.description ?? "",
@@ -31,11 +35,46 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
     youtubeId: (webinar.config?.youtubeId as string) ?? "",
     calendarUrl: (webinar.config?.calendarUrl as string) ?? "",
     surveyUrl: (webinar.config?.surveyUrl as string) ?? "",
+    // 라이브 페이지 (config.livePage)
+    lpContact: (livePage.infoContact as string) ?? "",
+    lpNotice: (livePage.notice as string) ?? "",
+    ctaEyebrow: (cta.eyebrow as string) ?? "",
+    ctaTitle: (cta.title as string) ?? "",
+    ctaDescription: (cta.description as string) ?? "",
+    ctaBenefits: Array.isArray(cta.benefits) ? (cta.benefits as string[]).join("\n") : "",
+    ctaPrimaryLabel: ctaButtons[0]?.label ?? "",
+    ctaPrimaryUrl: ctaButtons[0]?.url ?? "",
+    ctaSecondaryLabel: ctaButtons[1]?.label ?? "",
+    ctaSecondaryUrl: ctaButtons[1]?.url ?? "",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
+
+  // config.livePage 조립 — 빈 값은 넣지 않아 라이브 페이지에서 해당 요소가 자동으로 숨겨진다
+  const buildLivePage = () => {
+    const buttons: { label: string; url: string; style: "white" | "ghost" }[] = [];
+    if (form.ctaPrimaryLabel.trim() && form.ctaPrimaryUrl.trim()) {
+      buttons.push({ label: form.ctaPrimaryLabel.trim(), url: form.ctaPrimaryUrl.trim(), style: "white" });
+    }
+    if (form.ctaSecondaryLabel.trim() && form.ctaSecondaryUrl.trim()) {
+      buttons.push({ label: form.ctaSecondaryLabel.trim(), url: form.ctaSecondaryUrl.trim(), style: "ghost" });
+    }
+    const benefits = form.ctaBenefits.split("\n").map((s) => s.trim()).filter(Boolean);
+    const cta: Record<string, unknown> = {};
+    if (form.ctaEyebrow.trim()) cta.eyebrow = form.ctaEyebrow.trim();
+    if (form.ctaTitle.trim()) cta.title = form.ctaTitle.trim();
+    if (form.ctaDescription.trim()) cta.description = form.ctaDescription.trim();
+    if (benefits.length) cta.benefits = benefits;
+    if (buttons.length) cta.buttons = buttons;
+
+    const livePage: Record<string, unknown> = {};
+    if (form.lpContact.trim()) livePage.infoContact = form.lpContact.trim();
+    if (form.lpNotice.trim()) livePage.notice = form.lpNotice.trim();
+    if (Object.keys(cta).length) livePage.cta = cta;
+    return livePage;
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -54,6 +93,7 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
             youtubeId: form.youtubeId.trim() || null,
             calendarUrl: form.calendarUrl.trim() || null,
             surveyUrl: form.surveyUrl.trim() || null,
+            livePage: buildLivePage(),
           },
         }),
       });
@@ -172,6 +212,68 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
               onChange={(e) => setForm((f) => ({ ...f, surveyUrl: e.target.value }))}
               className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
             />
+          </div>
+        </div>
+      </section>
+
+      {/* 라이브 페이지 (config.livePage) */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold">라이브 페이지</h3>
+          <p className="mt-1 text-xs text-muted-foreground">시청 화면의 정보·안내 문구와 하단 CTA 카드예요. 비워두면 해당 요소는 표시되지 않아요.</p>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">문의처 (정보 카드)</label>
+            <input
+              type="text"
+              placeholder="예: STK 운영사무국"
+              value={form.lpContact}
+              onChange={(e) => setForm((f) => ({ ...f, lpContact: e.target.value }))}
+              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">안내 문구 (하단 노티스)</label>
+            <textarea
+              rows={2}
+              placeholder="비워두면 기본 안내 문구가 표시돼요."
+              value={form.lpNotice}
+              onChange={(e) => setForm((f) => ({ ...f, lpNotice: e.target.value }))}
+              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm resize-none focus:outline-none focus:border-violet-400 transition-colors"
+            />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3">
+          <p className="text-xs font-medium text-muted-foreground">CTA 카드 (전시 사전등록 등 유도)</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input type="text" placeholder="상단 라벨 (예: STK 2026 Pre-Registration)" value={form.ctaEyebrow}
+              onChange={(e) => setForm((f) => ({ ...f, ctaEyebrow: e.target.value }))}
+              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
+            <input type="text" placeholder="제목" value={form.ctaTitle}
+              onChange={(e) => setForm((f) => ({ ...f, ctaTitle: e.target.value }))}
+              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
+          </div>
+          <textarea rows={2} placeholder="설명" value={form.ctaDescription}
+            onChange={(e) => setForm((f) => ({ ...f, ctaDescription: e.target.value }))}
+            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm resize-none focus:outline-none focus:border-violet-400 transition-colors" />
+          <textarea rows={3} placeholder="혜택 목록 — 한 줄에 하나씩" value={form.ctaBenefits}
+            onChange={(e) => setForm((f) => ({ ...f, ctaBenefits: e.target.value }))}
+            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm resize-none focus:outline-none focus:border-violet-400 transition-colors" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input type="text" placeholder="메인 버튼 라벨" value={form.ctaPrimaryLabel}
+              onChange={(e) => setForm((f) => ({ ...f, ctaPrimaryLabel: e.target.value }))}
+              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
+            <input type="url" placeholder="메인 버튼 URL" value={form.ctaPrimaryUrl}
+              onChange={(e) => setForm((f) => ({ ...f, ctaPrimaryUrl: e.target.value }))}
+              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
+            <input type="text" placeholder="보조 버튼 라벨" value={form.ctaSecondaryLabel}
+              onChange={(e) => setForm((f) => ({ ...f, ctaSecondaryLabel: e.target.value }))}
+              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
+            <input type="url" placeholder="보조 버튼 URL" value={form.ctaSecondaryUrl}
+              onChange={(e) => setForm((f) => ({ ...f, ctaSecondaryUrl: e.target.value }))}
+              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
           </div>
         </div>
       </section>

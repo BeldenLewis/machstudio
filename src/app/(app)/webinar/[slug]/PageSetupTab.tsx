@@ -13,6 +13,7 @@ interface WebinarSession {
   number: number;
   title: string;
   speaker: string | null;
+  speakerPhotoUrl: string | null;
   description: string | null;
   startTime: string;
   endTime: string;

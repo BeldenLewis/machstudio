@@ -519,14 +519,15 @@ model Webinar {
 }
 
 model WebinarSession {
-  id          String  @id @default(cuid())
-  webinarId   String
-  number      Int
-  title       String
-  speaker     String?
-  description String?
-  startTime   String
-  endTime     String
+  id              String  @id @default(cuid())
+  webinarId       String
+  number          Int
+  title           String
+  speaker         String?
+  speakerPhotoUrl String?
+  description     String?
+  startTime       String
+  endTime         String
 
   webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
 

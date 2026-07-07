@@ -54,6 +54,7 @@ export async function PATCH(
       ...(number !== undefined && { number }),
       ...(title !== undefined && { title }),
       ...(body.speaker !== undefined && { speaker: String(body.speaker).trim() || null }),
+      ...(body.speakerPhotoUrl !== undefined && { speakerPhotoUrl: String(body.speakerPhotoUrl).trim() || null }),
       ...(body.description !== undefined && { description: String(body.description).trim() || null }),
       ...(startTime !== undefined && { startTime }),
       ...(endTime !== undefined && { endTime }),

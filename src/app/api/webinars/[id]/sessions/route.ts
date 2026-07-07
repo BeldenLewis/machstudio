@@ -62,6 +62,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       number,
       title,
       speaker: String(body.speaker ?? "").trim() || null,
+      speakerPhotoUrl: String(body.speakerPhotoUrl ?? "").trim() || null,
       description: String(body.description ?? "").trim() || null,
       startTime,
       endTime,

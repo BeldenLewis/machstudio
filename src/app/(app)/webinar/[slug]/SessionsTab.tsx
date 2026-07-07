@@ -12,6 +12,7 @@ interface WebinarSession {
   number: number;
   title: string;
   speaker: string | null;
+  speakerPhotoUrl: string | null;
   description: string | null;
   startTime: string;
   endTime: string;
@@ -21,6 +22,7 @@ interface SessionForm {
   number: string;
   title: string;
   speaker: string;
+  speakerPhotoUrl: string;
   description: string;
   startTime: string;
   endTime: string;
@@ -30,6 +32,7 @@ const emptyForm: SessionForm = {
   number: "",
   title: "",
   speaker: "",
+  speakerPhotoUrl: "",
   description: "",
   startTime: "",
   endTime: "",
@@ -40,6 +43,7 @@ function toForm(session: WebinarSession): SessionForm {
     number: String(session.number),
     title: session.title,
     speaker: session.speaker ?? "",
+    speakerPhotoUrl: session.speakerPhotoUrl ?? "",
     description: session.description ?? "",
     startTime: session.startTime,
     endTime: session.endTime,
@@ -113,6 +117,16 @@ function SessionFormFields({
           className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
         />
       </div>
+      <div className="col-span-12">
+        <label className="text-xs text-muted-foreground mb-1 block">연사 사진 URL (선택)</label>
+        <input
+          type="url"
+          value={form.speakerPhotoUrl}
+          onChange={(e) => setForm((f) => ({ ...f, speakerPhotoUrl: e.target.value }))}
+          placeholder="https://... (라이브 페이지 아젠다에 원형 사진으로 표시돼요)"
+          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
+        />
+      </div>
     </div>
   );
 }
@@ -146,6 +160,7 @@ export default function SessionsTab({
     number: Number(form.number),
     title: form.title.trim(),
     speaker: form.speaker.trim() || null,
+    speakerPhotoUrl: form.speakerPhotoUrl.trim() || null,
     description: form.description.trim() || null,
     startTime: form.startTime,
     endTime: form.endTime,
