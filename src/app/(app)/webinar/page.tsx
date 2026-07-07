@@ -17,13 +17,16 @@ interface Webinar {
   signupDeadline: string;
   createdAt: string;
   _count: { registrations: number };
+  project?: { id: string; name: string } | null;
 }
 
 export default function WebinarPage() {
   const { workspace, currentProject, isLoading: wsLoading } = useWorkspace();
   const [webinars, setWebinars] = useState<Webinar[]>([]);
+  const [cloneSources, setCloneSources] = useState<Webinar[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [cloneFromId, setCloneFromId] = useState("");
   const [form, setForm] = useState({
     name: "",
     slug: "",
@@ -47,7 +50,20 @@ export default function WebinarPage() {
     }
   }, [workspace, currentProject]);
 
+  // 복제 원본 후보 — 워크스페이스 내 모든 프로젝트의 웨비나 (projectId 미지정)
+  const fetchCloneSources = useCallback(async () => {
+    if (!workspace) return;
+    try {
+      const res = await fetch(`/api/webinars?workspaceId=${workspace.id}`);
+      const data = await res.json();
+      setCloneSources(data.webinars ?? []);
+    } catch {
+      /* 복제는 선택 기능이라 실패해도 생성은 가능 */
+    }
+  }, [workspace]);
+
   useEffect(() => { fetchWebinars(); }, [fetchWebinars]);
+  useEffect(() => { if (showCreate) void fetchCloneSources(); }, [showCreate, fetchCloneSources]);
 
   const autoSlug = (name: string) =>
     name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 50);
@@ -68,12 +84,14 @@ export default function WebinarPage() {
           liveStartAt: form.liveStartAt,
           liveEndAt: form.liveEndAt,
           signupDeadline: form.signupDeadline,
+          ...(cloneFromId ? { cloneFromId } : {}),
         }),
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error ?? "생성 실패"); return; }
-      toast.success(`'${data.webinar.name}' 웨비나가 생성됐어요`);
+      toast.success(cloneFromId ? `'${data.webinar.name}' 웨비나가 복제 생성됐어요` : `'${data.webinar.name}' 웨비나가 생성됐어요`);
       setForm({ name: "", slug: "", description: "", liveStartAt: "", liveEndAt: "", signupDeadline: "" });
+      setCloneFromId("");
       setShowCreate(false);
       fetchWebinars();
     } finally {
@@ -134,6 +152,28 @@ export default function WebinarPage() {
           >
             <h3 className="text-sm font-semibold mb-4">새 웨비나</h3>
             <div className="space-y-3">
+              {cloneSources.length > 0 && (
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">복제 원본 (선택)</label>
+                  <select
+                    value={cloneFromId}
+                    onChange={(e) => setCloneFromId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400"
+                  >
+                    <option value="">빈 웨비나로 시작</option>
+                    {cloneSources.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {(w.project?.name ? `${w.project.name} · ` : "") + w.name}
+                      </option>
+                    ))}
+                  </select>
+                  {cloneFromId && (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      테마·등록폼·세션 구성·컴포넌트 설정을 복사해요. 일정·등록자·주소(슬러그)는 새로 지정합니다.
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">웨비나 이름 *</label>
@@ -206,7 +246,7 @@ export default function WebinarPage() {
                   {isCreating ? "생성 중..." : "생성"}
                 </motion.button>
                 <button
-                  onClick={() => { setShowCreate(false); setForm({ name: "", slug: "", description: "", liveStartAt: "", liveEndAt: "", signupDeadline: "" }); }}
+                  onClick={() => { setShowCreate(false); setCloneFromId(""); setForm({ name: "", slug: "", description: "", liveStartAt: "", liveEndAt: "", signupDeadline: "" }); }}
                   className="px-4 py-2 rounded-xl border border-border text-sm hover:bg-secondary transition-colors"
                 >
                   취소

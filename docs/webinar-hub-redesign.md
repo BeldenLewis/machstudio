@@ -156,7 +156,10 @@ youtubeId·등록자 수 은닉. 캐시 **`s-maxage=60, swr=300`**(수동 오버
 **Phase 2 — 로더+배포 탭** ✅ 완료(2026-07-07 배포): `attribution-core.ts`(collect utmCore 추출·바이트 일치), `webinar-loader-script.ts`(히어로·배너·폼 위젯·live iframe·상태머신·카운트다운·ICS·seen 비콘·mw- 스코프), `/w/[id]` 서빙, `/api/webinar-embed/[siteId]/{config,seen}`, `webinar-embed-sites` CRUD, `embed-status`, DeployTab(사이트 연결·노출 웨비나 전환·livePageUrl·스니펫·마운트 마커·연결 배지 10초 폴링). proxy.ts 공개 경로(`/w/`, `/api/webinar-embed/`) 추가. 크로스오리진 E2E(:8080→:3000): 렌더·폼 제출+UTM 저장·seen(방문집계+연결감지)·상태 3단 전환·live iframe+postMessage·collect 무회귀 전부 통과.
 리뷰 반영(nice 8 / mustFix 0): ① 폼 입력값 재렌더 보존(data-mw-key 스냅샷/복원) ② updatedKey(webinar.updatedAt)로 어드민 수정 실시간 반영 ③ 캐시히트 시 serverNow 오프셋 복원 ④ allowLiveRegistration 미설정 시 null→클라 deadline 실시간 비교(fetch 시점 boolean 고정 제거) ⑤ mach-resize `ev.source` 검증 ⑥ activeWebinar 전환 시 iframe slug 재렌더(data-mw-slug) ⑦ POST embed-sites projectId 워크스페이스 소속 검증 ⑧ IIFE 가드 사이트 단위+경고 ⑨ seen 비콘 스토리지 차단 내성. 미반영(경미): buildUtmEnvelope send-time referrer 폴백 비대칭(info, collect와 무해한 차이).
 
-**Phase 3 — 어드민 IA 재편**: 탭 4개, 생성 위저드(cloneFromId), 라이브 콘솔(statusOverride 바), 적응형 폴링. 검증: 리허설 웨비나 실부하(동시 접속) 테스트, 오버라이드→부착물 반영 ≤2분 확인. 탭 상태는 useState 기반이라 딥링크 파손 없음.
+**Phase 3 — 어드민 IA 재편** (하위 단계로 분할 진행 — 어드민이 로그인 벽이라 API/DB 검증 위주):
+- **3a ✅ 완료(2026-07-07 배포)**: 프로젝트 간 복제. POST /api/webinars `cloneFromId`(같은 워크스페이스 모든 프로젝트에서 theme·components·config.registrationForm·세션 구조 복사, 일정·slug·등록자 제외), GET include 에 project.name. 목록 생성 폼에 "복제 원본" 드롭다운(워크스페이스 전체, 프로젝트명·웨비나명). 검증: 실제 Prisma 클라이언트로 크로스프로젝트 복제 10개 항목 대조(theme/registrationForm/components/세션 복사 + youtubeId·surveyUrl·일정 미복사 + 타깃 프로젝트 생성) 전부 통과.
+- **3b (예정)**: 라이브 콘솔(운영 탭) — statusOverride 바(PATCH), KPI·접속자·Q&A·공지·팝업/Tally 푸시 통합, 적응형 폴링.
+- **3c (예정)**: 탭 4개 최종 재편(만들기/배포/운영/분석), 상태 연동 기본 진입 탭.
 
 **Phase 4 — 분석**: analytics·attendance-curve 엔드포인트, 퍼널·UTM 분해·시청 곡선 화면, CSV 커스텀 필드+UTM 확장. 검증: 백필된 과거 웨비나 곡선 표시, CSV 컬럼 대조.
 
