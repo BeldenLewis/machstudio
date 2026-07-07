@@ -26,6 +26,7 @@ interface EmbedSite {
   name: string;
   siteUrl: string | null;
   livePageUrl: string | null;
+  bannerPagePatterns: string[];
   lastSeenAt: string | null;
   lastSeenOrigin: string | null;
   isActive: boolean;
@@ -123,6 +124,7 @@ export default function DeployTab({ webinarId }: { webinarId: string }) {
   const [markersOpen, setMarkersOpen] = useState(true);
   const [guideOpen, setGuideOpen] = useState(false);
   const [liveUrlDrafts, setLiveUrlDrafts] = useState<Record<string, string>>({});
+  const [bannerDrafts, setBannerDrafts] = useState<Record<string, string>>({});
   const hasLoadedRef = useRef(false);
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -351,6 +353,69 @@ export default function DeployTab({ webinarId }: { webinarId: string }) {
                     </motion.button>
                   </div>
                 </div>
+
+                {/* 하단 배너 표시 범위 — 스니펫이 전 페이지에서 로드되므로 배너 노출 경로를 제한 */}
+                {(() => {
+                  const patterns = site.bannerPagePatterns ?? [];
+                  const specific = patterns.length > 0;
+                  const draft = bannerDrafts[site.id] ?? patterns.join(", ");
+                  return (
+                    <div className="mt-3 space-y-1.5">
+                      <p className="text-[11px] font-medium text-muted-foreground">하단 배너 표시 범위</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <select
+                          value={specific ? "specific" : "all"}
+                          onChange={(e) => {
+                            if (e.target.value === "all") {
+                              setBannerDrafts((prev) => ({ ...prev, [site.id]: "" }));
+                              void patchSite(site.id, { bannerPagePatterns: [] }, "모든 페이지에 배너를 표시해요");
+                            } else {
+                              const next = draft.trim() || "/webinar";
+                              setBannerDrafts((prev) => ({ ...prev, [site.id]: next }));
+                              void patchSite(
+                                site.id,
+                                { bannerPagePatterns: next.split(",").map((s) => s.trim()).filter(Boolean) },
+                                "지정한 페이지에서만 배너를 표시해요",
+                              );
+                            }
+                          }}
+                          className="rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none transition-colors focus:border-violet-400"
+                        >
+                          <option value="all">모든 페이지</option>
+                          <option value="specific">특정 페이지에서만</option>
+                        </select>
+                        {specific && (
+                          <div className="flex min-w-0 flex-1 items-center gap-2">
+                            <input
+                              value={draft}
+                              onChange={(e) => setBannerDrafts((prev) => ({ ...prev, [site.id]: e.target.value }))}
+                              placeholder="/webinar"
+                              className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none transition-colors focus:border-violet-400"
+                            />
+                            <motion.button
+                              whileTap={{ scale: 0.96 }}
+                              onClick={() =>
+                                void patchSite(
+                                  site.id,
+                                  { bannerPagePatterns: draft.split(",").map((s) => s.trim()).filter(Boolean) },
+                                  "배너 표시 페이지를 저장했어요",
+                                )
+                              }
+                              className="shrink-0 rounded-xl border border-border px-3 py-2 text-xs transition-colors hover:bg-secondary"
+                            >
+                              저장
+                            </motion.button>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-[10px] leading-relaxed text-muted-foreground">
+                        {specific
+                          ? "쉼표로 여러 경로 지정 가능. 끝에 * 를 붙이면 하위 경로 포함 (예: /webinar 는 사전등록 페이지, /webinar* 는 그 하위까지)."
+                          : "지금은 스니펫이 부착된 모든 페이지에 배너가 떠요. 사전등록 페이지에서만 띄우려면 '특정 페이지에서만'을 선택하세요."}
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
