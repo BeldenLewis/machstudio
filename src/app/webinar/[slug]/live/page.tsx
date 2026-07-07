@@ -5,6 +5,7 @@ import { use } from "react";
 import { Loader2, Send, CheckCircle2 } from "lucide-react";
 import LivePushLayer from "../LivePushLayer";
 import LiveContentStk from "../LiveContentStk";
+import { formatKst } from "@/lib/datetime";
 
 interface WebinarSession {
   id: string;
@@ -463,10 +464,9 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           <h1 className="text-2xl md:text-3xl font-bold mb-2">{webinar.name}</h1>
           {webinar.description && <p className="opacity-60 text-sm">{webinar.description}</p>}
           <p className="opacity-50 text-xs mt-2">
-            {new Date(webinar.liveStartAt).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" })}{" "}
-            {new Date(webinar.liveStartAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+            {formatKst(webinar.liveStartAt, { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}
             {" ~ "}
-            {new Date(webinar.liveEndAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+            {formatKst(webinar.liveEndAt, { hour: "2-digit", minute: "2-digit" })}
           </p>
         </div>
 

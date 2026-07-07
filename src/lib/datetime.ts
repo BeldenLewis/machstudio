@@ -39,3 +39,24 @@ export function kstDateString(input: Date | string | number = new Date()): strin
 export function kstYear(input: Date | string | number): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: KST, year: "numeric" }).format(toDate(input));
 }
+
+// <input type="datetime-local"> 값 ↔ 저장(UTC ISO) 변환.
+// 입력칸은 항상 KST 벽시각으로 다룬다 (목록·상세·라이브 표시와 동일 기준).
+// 저장 UTC ISO → datetime-local 값("YYYY-MM-DDTHH:mm", KST)
+export function kstDateTimeLocalInput(input: Date | string | number): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: KST,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(toDate(input));
+  const g = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  // en-CA 가 자정을 "24"로 줄 수 있어 보정
+  const hour = g("hour") === "24" ? "00" : g("hour");
+  return `${g("year")}-${g("month")}-${g("day")}T${hour}:${g("minute")}`;
+}
+
+// datetime-local 값(KST 벽시각) → 저장용 UTC ISO
+export function kstDateTimeLocalToIso(local: string): string {
+  if (!local) return "";
+  return new Date(`${local}:00+09:00`).toISOString();
+}

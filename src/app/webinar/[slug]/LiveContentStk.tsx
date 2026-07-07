@@ -6,6 +6,7 @@
 
 import { useMemo } from "react";
 import { CheckCircle2, Send } from "lucide-react";
+import { formatKst } from "@/lib/datetime";
 
 interface Session {
   id: string;
@@ -160,9 +161,7 @@ export default function LiveContentStk({
   const cta = live.cta;
   const hasCta = !!(cta && (cta.title || (cta.buttons && cta.buttons.length)));
 
-  const start = new Date(webinar.liveStartAt);
-  const end = new Date(webinar.liveEndAt);
-  const dateStr = `${start.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" })} · ${start.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} – ${end.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`;
+  const dateStr = `${formatKst(webinar.liveStartAt, { year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" })} · ${formatKst(webinar.liveStartAt, { hour: "2-digit", minute: "2-digit" })} – ${formatKst(webinar.liveEndAt, { hour: "2-digit", minute: "2-digit" })}`;
 
   const infoRows: { label: string; value: string }[] = [
     { label: "일시", value: dateStr },

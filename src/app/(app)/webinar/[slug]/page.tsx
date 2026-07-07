@@ -22,6 +22,7 @@ import AnalyticsTab from "./AnalyticsTab";
 import DeployTab from "./DeployTab";
 import OperateTab, { type OperateSection } from "./OperateTab";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
+import { formatKst } from "@/lib/datetime";
 
 type SettingsSection = "general" | "form" | "sessions" | "theme";
 // 새 IA: 만들기(create=설정) / 배포(deploy) / 운영(operate=콘솔+등록자) / 분석(analytics)
@@ -170,9 +171,9 @@ export default function WebinarDetailPage({ params }: { params: Promise<{ slug: 
                 {isEnded && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">종료</span>}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {start.toLocaleDateString("ko-KR")} {start.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+                {formatKst(webinar.liveStartAt, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
                 {" ~ "}
-                {end.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+                {formatKst(webinar.liveEndAt, { hour: "2-digit", minute: "2-digit" })}
                 {" · "}
                 등록자 {webinar._count.registrations.toLocaleString()}명
               </p>

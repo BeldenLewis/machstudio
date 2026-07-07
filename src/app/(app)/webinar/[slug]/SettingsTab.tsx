@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -20,7 +21,8 @@ interface Webinar {
 
 export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; onUpdate: () => void }) {
   const router = useRouter();
-  const toLocal = (iso: string) => new Date(iso).toISOString().slice(0, 16);
+  // datetime-local 은 KST 벽시각으로 다룬다 (목록·상세 표시와 동일 기준)
+  const toLocal = (iso: string) => kstDateTimeLocalInput(iso);
 
   const livePage = (webinar.config?.livePage ?? {}) as Record<string, unknown>;
   const cta = (livePage.cta ?? {}) as Record<string, unknown>;
@@ -85,9 +87,9 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
         body: JSON.stringify({
           name: form.name.trim(),
           description: form.description.trim() || null,
-          liveStartAt: form.liveStartAt,
-          liveEndAt: form.liveEndAt,
-          signupDeadline: form.signupDeadline,
+          liveStartAt: kstDateTimeLocalToIso(form.liveStartAt),
+          liveEndAt: kstDateTimeLocalToIso(form.liveEndAt),
+          signupDeadline: kstDateTimeLocalToIso(form.signupDeadline),
           config: {
             ...(webinar.config ?? {}),
             youtubeId: form.youtubeId.trim() || null,

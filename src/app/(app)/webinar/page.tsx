@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Video, Loader2, ChevronRight, Calendar, Users, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspace } from "@/contexts/workspace";
+import { kstDateTimeLocalToIso, formatKst } from "@/lib/datetime";
 import Link from "next/link";
 
 interface Webinar {
@@ -81,9 +82,9 @@ export default function WebinarPage() {
           name: form.name.trim(),
           slug: form.slug || autoSlug(form.name.trim()),
           description: form.description.trim() || null,
-          liveStartAt: form.liveStartAt,
-          liveEndAt: form.liveEndAt,
-          signupDeadline: form.signupDeadline,
+          liveStartAt: kstDateTimeLocalToIso(form.liveStartAt),
+          liveEndAt: kstDateTimeLocalToIso(form.liveEndAt),
+          signupDeadline: kstDateTimeLocalToIso(form.signupDeadline),
           ...(cloneFromId ? { cloneFromId } : {}),
         }),
       });
@@ -300,7 +301,7 @@ export default function WebinarPage() {
                   <div className="flex items-center gap-3 mt-1 flex-wrap">
                     <span className="text-xs text-muted-foreground flex items-center gap-1">
                       <Calendar className="w-3 h-3" />
-                      {start.toLocaleDateString("ko-KR")} {start.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+                      {formatKst(webinar.liveStartAt, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
                     </span>
                     <span className="text-xs text-muted-foreground flex items-center gap-1">
                       <Users className="w-3 h-3" />
