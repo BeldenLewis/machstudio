@@ -96,7 +96,7 @@ function normalizeRegistrationForm(config: Record<string, unknown>): Registratio
     fields: [...merged, ...customFields].filter((field) => field.enabled !== false),
     privacyText: raw?.privacyText ?? "[필수] 개인정보 수집 및 이용에 동의합니다",
     marketingText: raw?.marketingText ?? "[선택] 마케팅 정보 수신에 동의합니다",
-    submitLabel: raw?.submitLabel ?? "사전 등록 완료",
+    submitLabel: raw?.submitLabel ?? "사전 등록하기",
   };
 }
 
@@ -117,7 +117,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   // 등록 폼 상태
   const [form, setForm] = useState({
     name: "", phone: "", email: "", company: "", department: "",
-    jobTitle: "", industry: "", agreeMarketing: false, agreePrivacy: true,
+    jobTitle: "", industry: "", agreeMarketing: false, agreePrivacy: false,
   });
   const [customFields, setCustomFields] = useState<Record<string, string | boolean>>({});
   const [isRegistering, setIsRegistering] = useState(false);
@@ -529,9 +529,12 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               </div>
             ) : (
               <>
-                <h2 className="text-lg font-semibold mb-5">사전 등록</h2>
+                <h2 className="text-lg font-semibold mb-1">사전 등록</h2>
+                <p className="text-xs opacity-50 mb-5">
+                  등록 마감 {formatKst(webinar.signupDeadline, { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </p>
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {visibleFields.map(renderRegistrationField)}
                   </div>
 

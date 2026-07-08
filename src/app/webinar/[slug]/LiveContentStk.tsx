@@ -79,6 +79,7 @@ function buildCss(accent: string) {
 .stk-live .live-desc { max-width:720px; margin:20px auto 0; color:var(--muted); font-size:clamp(15px,1.7vw,18px); line-height:1.72; word-break:keep-all; }
 .stk-live .live-layout { display:flex; flex-direction:column; gap:20px; }
 .stk-live .live-bottom { display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:stretch; }
+.stk-live .live-bottom.no-cta { grid-template-columns:1fr; }
 .stk-live .player-card { border-radius:var(--radius-lg); overflow:hidden; border:1px solid var(--line-md); background:var(--card); }
 .stk-live .player-top { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px 22px; border-bottom:1px solid var(--line); background:rgba(255,255,255,0.02); }
 .stk-live .player-meta strong { display:block; font-size:14px; font-weight:700; color:var(--text); }
@@ -210,7 +211,7 @@ export default function LiveContentStk({
           </div>
 
           {/* INFO + CTA */}
-          <div className="live-bottom">
+          <div className={`live-bottom${hasCta ? "" : " no-cta"}`}>
             <div className="info-card">
               <div className="info-card-title">Webinar Info</div>
               <div className="info-rows">

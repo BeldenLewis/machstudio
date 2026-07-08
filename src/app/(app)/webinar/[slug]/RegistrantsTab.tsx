@@ -840,7 +840,24 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
       ) : registrations.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Users className="w-10 h-10 text-muted-foreground/20 mb-3" />
-          <p className="text-sm text-muted-foreground">등록자가 없어요</p>
+          <p className="text-sm font-medium">아직 등록자가 없어요</p>
+          <p className="mt-1 max-w-xs text-xs leading-relaxed text-muted-foreground">
+            배포 탭에서 아임웹에 사전등록 폼을 붙이면 등록자가 이곳으로 자동으로 모여요. 직접 추가하거나 CSV로 불러올 수도 있어요.
+          </p>
+          <div className="mt-4 flex items-center gap-2">
+            <button
+              onClick={() => { setShowManual(true); setShowBulk(false); }}
+              className="rounded-xl bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600"
+            >
+              직접 추가
+            </button>
+            <button
+              onClick={() => { setShowBulk(true); setShowManual(false); }}
+              className="rounded-xl border border-border px-3.5 py-2 text-xs font-medium transition-colors hover:bg-secondary"
+            >
+              CSV 불러오기
+            </button>
+          </div>
         </div>
       ) : (
         <>

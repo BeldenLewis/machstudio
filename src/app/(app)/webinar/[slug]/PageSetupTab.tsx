@@ -59,7 +59,7 @@ export default function PageSetupTab({
     <div className="flex flex-col lg:grid lg:h-full lg:grid-cols-[230px_minmax(0,1fr)] lg:overflow-hidden">
       <aside className="border-b lg:border-r border-border bg-secondary/20 p-4 lg:p-5">
         <div className="mb-5">
-          <h2 className="text-sm font-semibold">설정</h2>
+          <h2 className="text-sm font-semibold">만들기</h2>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
             외부 페이지와 운영 기본값을 정리합니다.
           </p>

@@ -71,7 +71,7 @@ function normalizeRegistrationForm(config: Record<string, unknown>): Registratio
     fields: [...merged, ...customFields],
     privacyText: raw?.privacyText ?? "[필수] 개인정보 수집 및 이용에 동의합니다",
     marketingText: raw?.marketingText ?? "[선택] 마케팅 정보 수신에 동의합니다",
-    submitLabel: raw?.submitLabel ?? "사전 등록 완료",
+    submitLabel: raw?.submitLabel ?? "사전 등록하기",
   };
 }
 

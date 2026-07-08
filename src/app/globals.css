@@ -205,3 +205,16 @@
 .mach-toaster [data-sonner-toast] {
   pointer-events: auto;
 }
+
+/* 동작 줄이기(OS prefers-reduced-motion) 존중 — CSS 애니메이션·트랜지션 무력화.
+   framer-motion(JS 구동) 은 MotionProvider 의 MotionConfig reducedMotion="user" 가 담당. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

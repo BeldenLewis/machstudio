@@ -398,7 +398,14 @@ export default function LiveConsoleTab({
 
   const setOverride = async (value: WebinarStatus | null) => {
     if (switching) return;
-    if (value === "ended" && !confirm("웨비나를 '종료' 상태로 전환할까요?\n아임웹의 버튼·배너가 즉시 종료 모드로 바뀌어요.")) return;
+    // 공개 아임웹 사이트를 즉시 바꾸는 고영향 전환(라이브 시작·종료)은 오조작 방지를 위해 확인
+    const confirmMsg =
+      value === "live"
+        ? "웨비나를 '라이브' 상태로 전환할까요?\n아임웹의 버튼·배너가 즉시 라이브 모드로 바뀌고, 등록자에게 시청 화면이 열려요."
+        : value === "ended"
+          ? "웨비나를 '종료' 상태로 전환할까요?\n아임웹의 버튼·배너가 즉시 종료 모드로 바뀌어요."
+          : null;
+    if (confirmMsg && !confirm(confirmMsg)) return;
     setSwitching(true);
     try {
       const res = await fetch(`/api/webinars/${webinarId}`, {
@@ -485,7 +492,7 @@ export default function LiveConsoleTab({
       {summary && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <Kpi label="사전 등록" value={summary.totalRegistered.toLocaleString()} />
-          <Kpi label="입장" value={summary.attended.toLocaleString()} sub={`입장율 ${summary.attendRate}%`} />
+          <Kpi label="입장" value={summary.attended.toLocaleString()} sub={`입장률 ${summary.attendRate}%`} />
           <Kpi label="현재 시청" value={summary.activeViewers.toLocaleString()} sub="최근 90초" />
           <Kpi label="페이지 유지" value={summary.presenceViewers.toLocaleString()} sub="최근 5분" />
           <Kpi label="대기 질문" value={summary.pendingQuestions.toLocaleString()} />

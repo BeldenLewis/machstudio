@@ -479,7 +479,7 @@ ${ATTRIBUTION_CORE_JS}
     hp.style.cssText = "position:absolute;left:-9999px;top:-9999px;height:1px;width:1px;opacity:0;";
     formEl.appendChild(hp);
 
-    var submitBtn = el("button", "mw-btn mw-btn-primary mw-submit", form.submitLabel || "사전 등록 완료");
+    var submitBtn = el("button", "mw-btn mw-btn-primary mw-submit", form.submitLabel || "사전 등록하기");
     submitBtn.type = "submit";
     formEl.appendChild(submitBtn);
 
@@ -532,7 +532,7 @@ ${ATTRIBUTION_CORE_JS}
         if (!result.ok) {
           showMsg("error", (result.data && result.data.error) || "등록에 실패했어요. 잠시 후 다시 시도해주세요.");
           submitBtn.disabled = false;
-          submitBtn.textContent = form.submitLabel || "사전 등록 완료";
+          submitBtn.textContent = form.submitLabel || "사전 등록하기";
           return;
         }
         var c = (CFG.components || {});
@@ -547,7 +547,7 @@ ${ATTRIBUTION_CORE_JS}
       }).catch(function() {
         showMsg("error", "네트워크 오류가 발생했어요. 잠시 후 다시 시도해주세요.");
         submitBtn.disabled = false;
-        submitBtn.textContent = form.submitLabel || "사전 등록 완료";
+        submitBtn.textContent = form.submitLabel || "사전 등록하기";
       });
     });
 

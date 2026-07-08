@@ -82,6 +82,13 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
     success: "bg-green-500/10 text-green-600 dark:text-green-400",
     error: "bg-red-500/10 text-red-500",
   };
+  // 비개발자 대상 — 영문 enum 대신 한글 라벨로 노출
+  const typeLabels: Record<string, string> = {
+    info: "안내",
+    warning: "주의",
+    success: "완료",
+    error: "긴급",
+  };
 
   return (
     <div className={embedded ? "space-y-4" : "p-4 sm:p-6 lg:p-8 space-y-4"}>
@@ -112,7 +119,7 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
                     form.type === t ? typeColors[t] + " ring-1 ring-current" : "bg-secondary text-muted-foreground"
                   }`}
                 >
-                  {t}
+                  {typeLabels[t] ?? t}
                 </button>
               ))}
             </div>
@@ -164,10 +171,10 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${typeColors[ann.type] ?? "bg-secondary text-muted-foreground"}`}>
-                    {ann.type}
+                    {typeLabels[ann.type] ?? ann.type}
                   </span>
                   {ann.isActive && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-500 font-medium">표시 중</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-500 font-medium">표시 중</span>
                   )}
                 </div>
                 <p className="text-sm">{ann.message}</p>

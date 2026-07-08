@@ -86,6 +86,6 @@ export function normalizeRegistrationForm(
     fields: opts?.includeDisabled ? fields : fields.filter((field) => field.enabled !== false),
     privacyText: typeof raw?.privacyText === "string" ? raw.privacyText : "[필수] 개인정보 수집 및 이용에 동의합니다",
     marketingText: typeof raw?.marketingText === "string" ? raw.marketingText : "[선택] 마케팅 정보 수신에 동의합니다",
-    submitLabel: typeof raw?.submitLabel === "string" ? raw.submitLabel : "사전 등록 완료",
+    submitLabel: typeof raw?.submitLabel === "string" ? raw.submitLabel : "사전 등록하기",
   };
 }
