@@ -739,20 +739,21 @@ ${ATTRIBUTION_CORE_JS}
       if (canRegisterNow(status)) {
         var rBtn = el("button", "mw-btn mw-btn-secondary", "사전등록");
         rBtn.type = "button";
-        rBtn.addEventListener("click", goRegister);
+        rBtn.addEventListener("click", openFormModal);
         ctas.appendChild(rBtn);
       }
       var goBtn = el("a", "mw-btn mw-btn-primary", "웨비나 입장하기");
       goBtn.href = livePageUrl();
       ctas.appendChild(goBtn);
     } else if (canRegisterNow(status)) {
+      // 등록 중(입장 오픈 전): 사전등록을 강조하고, 입장하기는 비활성 + 오픈 카운트다운으로 안내
       title.textContent = texts.registration || ((CFG.name || "웨비나") + " 사전등록이 진행 중입니다.");
-      if (bc.showCountdown !== false) {
+      var startTxt = fmtKstDateTime(CFG.liveStartAt);
+      if (startTxt) {
         var sub = el("div", "mw-banner-sub");
-        sub.id = "mw-banner-countdown";
+        sub.textContent = "\\ud83d\\udcc5 " + startTxt + " 라이브";
         textArea.appendChild(title);
         textArea.appendChild(sub);
-        updateCountdownInto(sub);
       }
       if (bc.showCalendarButton !== false) {
         var calBtn = el("button", "mw-btn mw-btn-secondary", "캘린더 추가");
@@ -760,9 +761,13 @@ ${ATTRIBUTION_CORE_JS}
         calBtn.addEventListener("click", openCalendar);
         ctas.appendChild(calBtn);
       }
+      // 입장하기 — 아직 오픈 전이라 비활성. 라벨에 오픈까지 남은 시간 표시(카운트다운 틱으로 갱신)
+      var entryWait = el("span", "mw-btn mw-btn-disabled", entryCountdownText());
+      entryWait.id = "mw-banner-entry";
+      ctas.appendChild(entryWait);
       var regBtn = el("button", "mw-btn mw-btn-primary", "웨비나 사전등록");
       regBtn.type = "button";
-      regBtn.addEventListener("click", goRegister);
+      regBtn.addEventListener("click", openFormModal);
       ctas.appendChild(regBtn);
     } else {
       title.textContent = texts.upcoming || ((CFG.name || "웨비나") + "가 곧 시작됩니다.");
@@ -790,6 +795,29 @@ ${ATTRIBUTION_CORE_JS}
     if (diff <= 0) { node.textContent = "사전등록이 마감되었습니다."; return; }
     var days = Math.floor(diff / (24 * 60 * 60 * 1000));
     node.textContent = days > 0 ? ("사전등록 마감까지 D-" + days) : "오늘 사전등록이 마감돼요!";
+  }
+
+  // KST 절대 시각 포맷 (예: "7월 7일 오후 7:44")
+  function fmtKstDateTime(iso) {
+    try {
+      var d = new Date(iso);
+      if (isNaN(d.getTime())) return "";
+      return new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(d);
+    } catch (e) { return ""; }
+  }
+  // 입장 오픈(entryOpenAt, 없으면 liveStartAt)까지 남은 시간 라벨 — 비활성 입장 버튼에 사용
+  function entryCountdownText() {
+    var t = parseMs(CFG && CFG.entryOpenAt);
+    if (t === null) t = parseMs(CFG && CFG.liveStartAt);
+    if (t === null) return "입장 준비 중";
+    var diff = t - serverNowMs();
+    if (diff <= 0) return "곧 입장 오픈";
+    var days = Math.floor(diff / (24 * 60 * 60 * 1000));
+    if (days >= 1) return "입장 D-" + days;
+    var hours = Math.floor(diff / (60 * 60 * 1000));
+    if (hours >= 1) return "입장 " + hours + "시간 후";
+    var mins = Math.max(1, Math.floor(diff / (60 * 1000)));
+    return "입장 " + mins + "분 후";
   }
 
   /* ── 렌더 오케스트레이션 ── */
@@ -852,6 +880,8 @@ ${ATTRIBUTION_CORE_JS}
   countdownTimer = setInterval(function() {
     var node = document.getElementById("mw-banner-countdown");
     if (node) updateCountdownInto(node);
+    var entryNode = document.getElementById("mw-banner-entry");
+    if (entryNode) entryNode.textContent = entryCountdownText();
   }, 60 * 1000);
 
   /* ── 부트 ── */
