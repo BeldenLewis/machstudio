@@ -63,11 +63,14 @@ interface QAProps {
 const DEFAULT_NOTICE =
   "※ 영상이 보이지 않을 경우 새로고침 후 다시 접속해주세요. 일부 브라우저 환경에서는 자동 재생이 제한될 수 있으며, 이 경우 플레이어의 재생 버튼을 직접 눌러주세요.";
 
-function buildCss(accent: string) {
+function buildCss(accent: string, text: string, surface: string) {
+  // 팔레트를 테마 textColor/surfaceColor 에서 파생 — 밝은 배경 테마에서도 텍스트·경계선이 보이게.
+  // muted/sub/line 은 text 를 투명도로 섞어 라이트·다크 어디서든 대비가 유지된다.
   return `
 .stk-live { --key: ${accent}; --key-dim: color-mix(in srgb, ${accent} 12%, transparent); --key-border: color-mix(in srgb, ${accent} 36%, transparent);
-  --text:#f0f0f2; --muted:#9a9aa6; --sub:#5e5e6e; --card:rgba(18,18,22,0.88); --card-2:rgba(26,26,32,0.72);
-  --line:rgba(255,255,255,0.08); --line-md:rgba(255,255,255,0.13); --radius-sm:12px; --radius:20px; --radius-lg:28px;
+  --text:${text}; --muted:color-mix(in srgb, ${text} 62%, transparent); --sub:color-mix(in srgb, ${text} 42%, transparent);
+  --card:${surface}; --card-2:color-mix(in srgb, ${surface} 85%, transparent);
+  --line:color-mix(in srgb, ${text} 10%, transparent); --line-md:color-mix(in srgb, ${text} 17%, transparent); --radius-sm:12px; --radius:20px; --radius-lg:28px;
   width:100%; color:var(--text); -webkit-font-smoothing:antialiased; }
 .stk-live * { box-sizing:border-box; }
 .stk-live .live-inner { max-width:1280px; margin:0 auto; padding:56px 24px 96px; }
@@ -75,7 +78,7 @@ function buildCss(accent: string) {
 .stk-live .live-badge { display:inline-flex; align-items:center; gap:8px; padding:8px 16px 8px 12px; border:1px solid var(--key-border); border-radius:999px; background:var(--key-dim); font-size:12px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:24px; }
 .stk-live .live-dot { width:7px; height:7px; border-radius:50%; background:var(--key); animation:stkPulse 2s ease-in-out infinite; flex-shrink:0; }
 @keyframes stkPulse { 0%,100%{ box-shadow:0 0 0 0 var(--key-border); } 60%{ box-shadow:0 0 0 9px transparent; } }
-.stk-live .live-title { font-size:clamp(30px,4.2vw,52px); line-height:1.12; font-weight:900; letter-spacing:-0.045em; word-break:keep-all; color:#fff; margin:0; }
+.stk-live .live-title { font-size:clamp(30px,4.2vw,52px); line-height:1.12; font-weight:900; letter-spacing:-0.045em; word-break:keep-all; color:var(--text); margin:0; }
 .stk-live .live-desc { max-width:720px; margin:20px auto 0; color:var(--muted); font-size:clamp(15px,1.7vw,18px); line-height:1.72; word-break:keep-all; }
 .stk-live .live-layout { display:flex; flex-direction:column; gap:20px; }
 .stk-live .live-bottom { display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:stretch; }
@@ -150,15 +153,22 @@ function buildCss(accent: string) {
 export default function LiveContentStk({
   webinar,
   accent,
+  text,
+  surface,
   youtubeId: youtubeIdProp,
   qa,
 }: {
   webinar: WebinarForLive;
   accent: string;
+  text?: string;
+  surface?: string;
   youtubeId?: string | null;
   qa: QAProps;
 }) {
-  const css = useMemo(() => buildCss(accent || "#FE5816"), [accent]);
+  const css = useMemo(
+    () => buildCss(accent || "#FE5816", text || "#f0f0f2", surface || "#121216"),
+    [accent, text, surface],
+  );
   const config = (webinar.config ?? {}) as Record<string, unknown>;
   // youtubeId 는 verify 통과 후 prop 으로 전달됨 (config 에는 더 이상 공개 노출 안 함)
   const youtubeId = youtubeIdProp || (typeof config.youtubeId === "string" ? config.youtubeId : "");

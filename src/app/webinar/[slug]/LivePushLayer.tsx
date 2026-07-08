@@ -110,18 +110,23 @@ export default function LivePushLayer({
         fetch(`/api/webinar/${slug}/tally-pushes`),
       ]);
 
+      // 한 번에 하나만 — 팝업 모달(z-70)과 Tally 오버레이가 겹치지 않게 팝업에 우선권을 준다.
+      // 팝업이 떠 있으면 단독 Tally 자동 오픈을 보류하고, 팝업이 사라진 다음 주기에 연다.
+      let popupShown = false;
       if (popupRes.ok) {
         const data = await popupRes.json();
         const activePopup: LivePopup | undefined = (data.popups ?? [])[0];
         if (activePopup) {
           const key = `mach_popup_${activePopup.id}_${activePopup.updatedAt}`;
-          setPopup(activePopup.dismissible !== false && sessionGet(key) ? null : activePopup);
+          const willShow = !(activePopup.dismissible !== false && sessionGet(key));
+          setPopup(willShow ? activePopup : null);
+          popupShown = willShow;
         } else {
           setPopup(null);
         }
       }
 
-      if (tallyRes.ok) {
+      if (tallyRes.ok && !popupShown) {
         const data = await tallyRes.json();
         const push: LiveTallyPush | undefined = (data.tallyPushes ?? [])[0];
         if (push) {

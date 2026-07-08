@@ -50,7 +50,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
       }}
       className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs transition-colors hover:bg-secondary"
     >
-      {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
+      {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
       {label ?? "복사"}
     </motion.button>
   );
@@ -83,11 +83,11 @@ function ConnectionBadge({ lastSeenAt }: { lastSeenAt: string | null }) {
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] ${
         fresh
-          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+          ? "border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400"
           : "border-border bg-secondary/50 text-muted-foreground"
       }`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${fresh ? "animate-pulse bg-emerald-500" : "bg-muted-foreground/40"}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${fresh ? "animate-pulse bg-green-500" : "bg-muted-foreground/40"}`} />
       {fresh ? "연결됨" : "마지막 확인"} · {ageText}
     </span>
   );
@@ -309,7 +309,7 @@ export default function DeployTab({ webinarId }: { webinarId: string }) {
                         <ExternalLink className="h-3.5 w-3.5" />
                       </a>
                     )}
-                    <button onClick={() => deleteSite(site)} className="rounded-lg border border-border p-1.5 text-muted-foreground transition-colors hover:bg-rose-500/10 hover:text-rose-500" aria-label="삭제">
+                    <button onClick={() => deleteSite(site)} className="rounded-lg border border-border p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500" aria-label="삭제">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>

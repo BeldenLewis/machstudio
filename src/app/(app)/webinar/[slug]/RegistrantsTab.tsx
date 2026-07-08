@@ -255,11 +255,13 @@ function SortHeader({
 }) {
   const active = activeKey === sortKey;
   const Icon = active ? (dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  const stateLabel = active ? (dir === "asc" ? "오름차순 정렬됨" : "내림차순 정렬됨") : "정렬 안 됨";
 
   return (
     <button
       type="button"
       onClick={() => onSort(sortKey)}
+      aria-label={`${label}, ${stateLabel}. 눌러서 정렬`}
       className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${active ? "text-violet-500" : ""}`}
       title={`${label} ${active && dir === "asc" ? "오름차순" : "내림차순"} 정렬`}
     >

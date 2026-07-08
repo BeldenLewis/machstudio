@@ -31,6 +31,13 @@ const navItems = [
 function Dropdown({
   open, onClose, children,
 }: { open: boolean; onClose: () => void; children: React.ReactNode }) {
+  // Escape 로 닫기 — 키보드 사용자가 드롭다운에서 빠져나올 수 있게
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   return (
     <AnimatePresence>
       {open && (

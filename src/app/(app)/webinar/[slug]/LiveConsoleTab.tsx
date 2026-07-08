@@ -4,7 +4,7 @@
 // 상태 수동 전환 / KPI / 공지·Q&A·팝업·Tally 발행 / 접속자.
 // 폴링은 상태 적응형: 라이브 15초, 평시 90초 (+ 탭 숨김 가드) — egress 배려.
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Activity,
@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import QATab from "./QATab";
 import AnnouncementsTab from "./AnnouncementsTab";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { WEBINAR_STATUS_META } from "@/lib/webinar-status";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -83,12 +84,8 @@ interface WebinarForConsole {
   _count: { registrations: number };
 }
 
-const STATUS_META: Record<WebinarStatus, { label: string; tone: string }> = {
-  upcoming: { label: "시작 대기", tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
-  registration: { label: "등록 중", tone: "bg-green-500/10 text-green-600 dark:text-green-400" },
-  live: { label: "LIVE", tone: "bg-red-500/10 text-red-500" },
-  ended: { label: "종료", tone: "bg-secondary text-muted-foreground" },
-};
+// 상태 라벨·톤은 lib/webinar-status 의 WEBINAR_STATUS_META 단일 정의 사용
+const STATUS_META = WEBINAR_STATUS_META;
 
 function Section({
   title,
@@ -104,9 +101,15 @@ function Section({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const panelId = useId();
   return (
     <section className="rounded-2xl border border-border bg-card">
-      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between gap-3 p-4 text-left sm:px-5">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="flex w-full items-center justify-between gap-3 p-4 text-left sm:px-5"
+      >
         <span className="flex items-center gap-2 text-sm font-semibold">
           <Icon className="h-4 w-4 text-violet-500" /> {title} {badge}
         </span>
@@ -115,6 +118,7 @@ function Section({
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
+            id={panelId}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
@@ -250,7 +254,7 @@ function PopupPanel({ webinarId }: { webinarId: string }) {
                 <button onClick={() => toggle(popup)} className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${popup.isActive ? "border-border text-muted-foreground hover:bg-secondary" : "border-violet-500/40 text-violet-500 hover:bg-violet-500/10"}`}>
                   {popup.isActive ? "OFF" : "ON"}
                 </button>
-                <button onClick={() => remove(popup)} className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-rose-500/10 hover:text-rose-500">삭제</button>
+                <button onClick={() => remove(popup)} className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500">삭제</button>
               </div>
             </div>
           ))}
@@ -348,7 +352,7 @@ function TallyPanel({ webinarId }: { webinarId: string }) {
                 <button onClick={() => toggle(push)} className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${push.isActive ? "border-border text-muted-foreground hover:bg-secondary" : "border-violet-500/40 text-violet-500 hover:bg-violet-500/10"}`}>
                   {push.isActive ? "OFF" : "ON"}
                 </button>
-                <button onClick={() => remove(push)} className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-rose-500/10 hover:text-rose-500">삭제</button>
+                <button onClick={() => remove(push)} className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500">삭제</button>
               </div>
             </div>
           ))}
@@ -492,9 +496,9 @@ export default function LiveConsoleTab({
         </p>
       </section>
 
-      {/* KPI */}
+      {/* KPI — 폴링으로 갱신되므로 스크린리더에 변경을 알림 */}
       {summary && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" aria-live="polite">
           <Kpi label="사전 등록" value={summary.totalRegistered.toLocaleString()} />
           <Kpi label="입장" value={summary.attended.toLocaleString()} sub={`입장률 ${summary.attendRate}%`} />
           <Kpi label="현재 시청" value={summary.activeViewers.toLocaleString()} sub="최근 90초" />
@@ -545,6 +549,11 @@ export default function LiveConsoleTab({
       >
         <QATab webinarId={webinarId} embedded />
       </Section>
+
+      {/* 푸시 두 종류의 관계·우선순위를 한 줄로 안내 (개념 중첩 해소) */}
+      <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
+        시청 화면에 띄우는 푸시는 <b className="font-semibold text-foreground">팝업</b>(안내·바로가기·설문 유도 카드)과 <b className="font-semibold text-foreground">Tally 설문</b>(설문 창 즉시 열기) 두 가지예요. 겹치지 않게 <b className="font-semibold text-foreground">한 번에 하나만</b> 표시되고, 팝업이 우선합니다.
+      </p>
 
       <Section title="팝업 푸시" icon={MessageSquarePlus}>
         <PopupPanel webinarId={webinarId} />

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useWorkspace } from "@/contexts/workspace";
 import { kstDateTimeLocalToIso, formatKst } from "@/lib/datetime";
 import { InlineError } from "@/components/ui/inline-error";
+import { resolveWebinarStatus, WEBINAR_STATUS_META } from "@/lib/webinar-status";
 import Link from "next/link";
 
 interface Webinar {
@@ -17,6 +18,8 @@ interface Webinar {
   liveStartAt: string;
   liveEndAt: string;
   signupDeadline: string;
+  statusOverride?: string | null;
+  components?: unknown;
   createdAt: string;
   _count: { registrations: number };
   project?: { id: string; name: string } | null;
@@ -281,13 +284,11 @@ export default function WebinarPage() {
       ) : (
         <div className="space-y-2">
           {webinars.map((webinar) => {
-            const now = new Date();
-            const start = new Date(webinar.liveStartAt);
-            const end = new Date(webinar.liveEndAt);
-            const deadline = new Date(webinar.signupDeadline);
-            const isLive = now >= start && now <= end;
-            const isEnded = now > end;
-            const isRegistrationOpen = now <= deadline;
+            // 상태 머신 기준(statusOverride 반영) — 허브·운영 콘솔과 동일 라벨
+            const status = resolveWebinarStatus(webinar).status;
+            const meta = WEBINAR_STATUS_META[status];
+            const isLive = status === "live";
+            const isEnded = status === "ended";
 
             return (
               <div key={webinar.id} className="group flex items-center gap-4 p-4 rounded-2xl border border-border bg-background hover:border-violet-400/30 transition-colors">
@@ -299,10 +300,7 @@ export default function WebinarPage() {
                 <Link href={`/webinar/${webinar.id}`} className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium truncate">{webinar.name}</span>
-                    {isLive && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-500 font-medium shrink-0">LIVE</span>}
-                    {isEnded && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground shrink-0">종료</span>}
-                    {!isLive && !isEnded && isRegistrationOpen && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 shrink-0">등록 중</span>}
-                    {!isLive && !isEnded && !isRegistrationOpen && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">등록 마감</span>}
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${meta.tone}`}>{meta.label}</span>
                   </div>
                   {webinar.description && (
                     <p className="text-xs text-muted-foreground truncate mt-0.5">{webinar.description}</p>

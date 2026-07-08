@@ -447,6 +447,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         <LiveContentStk
           webinar={webinar}
           accent={accent}
+          text={text}
+          surface={surface}
           youtubeId={videoId}
           qa={{
             sessions: webinar.sessions,

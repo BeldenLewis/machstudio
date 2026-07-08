@@ -14,6 +14,14 @@ export type WebinarStatus = "upcoming" | "registration" | "live" | "ended";
 export const WEBINAR_STATUS_OVERRIDES = ["registration", "live", "ended"] as const;
 export type WebinarStatusOverride = (typeof WEBINAR_STATUS_OVERRIDES)[number];
 
+// 상태별 표시 라벨·톤(배지 클래스) — 단일 정의. 허브 헤더·목록·운영 콘솔이 동일 라벨을 쓴다.
+export const WEBINAR_STATUS_META: Record<WebinarStatus, { label: string; tone: string }> = {
+  upcoming: { label: "시작 대기", tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
+  registration: { label: "등록 중", tone: "bg-green-500/10 text-green-600 dark:text-green-400" },
+  live: { label: "LIVE", tone: "bg-red-500/10 text-red-500" },
+  ended: { label: "종료", tone: "bg-secondary text-muted-foreground" },
+};
+
 // 입장 오픈: 시작 N분 전부터 CTA가 "입장하기"로 전환 (레거시 STK watch 모드 — 13:00 오픈/14:00 시작)
 export const DEFAULT_ENTRY_OPEN_BEFORE_MINUTES = 60;
 

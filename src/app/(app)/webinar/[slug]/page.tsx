@@ -21,7 +21,7 @@ import PageSetupTab from "./PageSetupTab";
 import AnalyticsTab from "./AnalyticsTab";
 import DeployTab from "./DeployTab";
 import OperateTab, { type OperateSection } from "./OperateTab";
-import { resolveWebinarStatus } from "@/lib/webinar-status";
+import { resolveWebinarStatus, WEBINAR_STATUS_META } from "@/lib/webinar-status";
 import { formatKst } from "@/lib/datetime";
 import { InlineError } from "@/components/ui/inline-error";
 
@@ -202,11 +202,11 @@ function WebinarDetail({ id }: { id: string }) {
     );
   }
 
-  const now = new Date();
-  const start = new Date(webinar.liveStartAt);
-  const end = new Date(webinar.liveEndAt);
-  const isLive = now >= start && now <= end;
-  const isEnded = now > end;
+  // 상태 머신 기준 — statusOverride(수동 전환) 반영. 헤더 배지/아이콘 색이 운영 콘솔과 일치.
+  const status = resolveWebinarStatus(webinar).status;
+  const isLive = status === "live";
+  const isEnded = status === "ended";
+  const statusMeta = WEBINAR_STATUS_META[status];
 
   return (
     <div className="flex flex-col h-full">
@@ -237,8 +237,9 @@ function WebinarDetail({ id }: { id: string }) {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-semibold">{webinar.name}</h1>
-                {isLive && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-500 font-medium">LIVE</span>}
-                {isEnded && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">종료</span>}
+                {(isLive || isEnded) && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${statusMeta.tone}`}>{statusMeta.label}</span>
+                )}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {formatKst(webinar.liveStartAt, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}

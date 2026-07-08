@@ -218,3 +218,17 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* 키보드 포커스 링 — 다수 버튼/링크가 focus:outline-none 만 두고 대체 표시가 없어
+   키보드 사용자가 현재 위치를 잃는다. focus-visible(키보드 탐색)에만 링을 부여해
+   마우스 클릭 시엔 나타나지 않게 한다. 입력요소는 기존 border 색 변화로 표시하므로 제외. */
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+[tabindex="0"]:focus-visible,
+summary:focus-visible {
+  outline: 2px solid rgb(139 92 246 / 0.65);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
