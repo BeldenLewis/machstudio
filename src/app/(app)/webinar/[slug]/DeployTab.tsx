@@ -223,12 +223,8 @@ export default function DeployTab({ webinarId }: { webinarId: string }) {
   }
 
   return (
-    <div className="max-w-3xl space-y-6">
-      {/* 탭 목적 한 줄 안내 — '배포'가 '아임웹에 코드 붙여 공개'임을 비개발자에게 명시 */}
-      <p className="text-sm text-muted-foreground">
-        아임웹 페이지에 코드를 한 번 붙여 웨비나를 공개하는 곳이에요. 붙이고 나면 등록·시청 데이터가 이곳으로 모여요.
-      </p>
-
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="max-w-3xl space-y-6">
       {/* ① 사이트 연결 */}
       <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -486,6 +482,7 @@ export default function DeployTab({ webinarId }: { webinarId: string }) {
           )}
         </AnimatePresence>
       </section>
+      </div>
     </div>
   );
 }

@@ -12,7 +12,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
   const membership = await prisma.workspaceMember.findUnique({
     where: { userId_workspaceId: { userId: user.id, workspaceId: id } },
-    include: { workspace: { include: { projects: { orderBy: { createdAt: "asc" } } } } },
+    include: { workspace: { include: { projects: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } } } } },
   });
 
   if (!membership) return NextResponse.json({ error: "권한 없음" }, { status: 403 });

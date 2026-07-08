@@ -6,10 +6,11 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, BarChart3, LogOut,
-  ChevronDown, Plus, FolderOpen, Check, Loader2, Settings2, Settings, Database, Video, Link2, Pencil, ShieldCheck, Menu,
+  ChevronDown, Plus, FolderOpen, Check, Loader2, Settings2, Settings, Database, Video, Link2, Pencil, Trash2, ShieldCheck, Menu,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useWorkspace } from "@/contexts/workspace";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
 import { WorkspaceSettingsModal } from "@/components/workspace/workspace-settings-modal";
 import { ProfileSettingsModal } from "@/components/user/profile-settings-modal";
@@ -61,6 +62,7 @@ function Dropdown({
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const confirm = useConfirm();
   const supabase = useMemo(() => createClient(), []);
   const {
     workspace, workspaces, projects, currentProject,
@@ -216,6 +218,33 @@ export function Sidebar() {
       toast.error(`프로젝트 이름 변경 실패: ${err instanceof Error ? err.message : "다시 시도해주세요"}`);
     } finally {
       setIsRenamingProject(false);
+    }
+  };
+
+  const handleDeleteProject = async (project: { id: string; name: string }) => {
+    const ok = await confirm({
+      title: "프로젝트를 삭제할까요?",
+      description: `"${project.name}" 프로젝트와 그 안의 웨비나·수집 데이터가 목록에서 사라져요.`,
+      confirmLabel: "삭제",
+      tone: "danger",
+    });
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/projects/${project.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "프로젝트를 삭제하지 못했어요");
+        return;
+      }
+      // 현재 프로젝트를 지웠으면 남은 프로젝트로 전환 (마지막 프로젝트는 서버가 삭제를 막음)
+      if (currentProject?.id === project.id) {
+        const next = projects.find((p) => p.id !== project.id);
+        if (next) setCurrentProject(next);
+      }
+      await refreshProjects();
+      toast.success("프로젝트가 삭제됐어요");
+    } catch (err) {
+      toast.error(`프로젝트 삭제 실패: ${err instanceof Error ? err.message : "다시 시도해주세요"}`);
     }
   };
 
@@ -411,11 +440,20 @@ export function Sidebar() {
                         <button
                           type="button"
                           onClick={() => startRenameProject(project)}
-                          className="mr-1 rounded-lg p-1.5 text-muted-foreground opacity-0 transition-all hover:bg-background hover:text-foreground group-hover:opacity-100 focus:opacity-100"
+                          className="rounded-lg p-1.5 text-muted-foreground opacity-0 transition-all hover:bg-background hover:text-foreground group-hover:opacity-100 focus:opacity-100"
                           aria-label={`${project.name} 이름 변경`}
                           title="프로젝트 이름 변경"
                         >
                           <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteProject(project)}
+                          className="mr-1 rounded-lg p-1.5 text-muted-foreground opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100 focus:opacity-100"
+                          aria-label={`${project.name} 삭제`}
+                          title="프로젝트 삭제"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     )}

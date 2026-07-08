@@ -12,7 +12,7 @@ export async function GET() {
   const [memberships, dbUser] = await Promise.all([
     prisma.workspaceMember.findMany({
       where: { userId: user.id, workspace: { deletedAt: null } },
-      include: { workspace: { include: { projects: { orderBy: { createdAt: "asc" } } } } },
+      include: { workspace: { include: { projects: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } } } } },
       orderBy: { joinedAt: "asc" },
     }),
     prisma.user.findUnique({ where: { id: user.id }, select: { isSuperAdmin: true } }),

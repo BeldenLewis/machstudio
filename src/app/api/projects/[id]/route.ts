@@ -61,3 +61,34 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   return NextResponse.json({ project: updated });
 }
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "인증 필요" }, { status: 401 });
+
+  const { id } = await params;
+  const { project, canManage } = await authorizeProject(id, user.id);
+  if (!project) return NextResponse.json({ error: "프로젝트 없음" }, { status: 404 });
+  if (!canManage) return NextResponse.json({ error: "프로젝트 관리 권한 없음" }, { status: 403 });
+
+  // 워크스페이스에 프로젝트가 하나뿐이면 삭제 불가 — 빈 워크스페이스(막다른 상태) 방지
+  const remaining = await prisma.project.count({
+    where: { workspaceId: project.workspaceId, deletedAt: null },
+  });
+  if (remaining <= 1) {
+    return NextResponse.json({ error: "마지막 프로젝트는 삭제할 수 없어요" }, { status: 400 });
+  }
+
+  // 소프트 삭제 — 하위 데이터는 보존하되 목록에서 감춘다(deletedAt 필터). 복구 가능.
+  await prisma.project.update({ where: { id }, data: { deletedAt: new Date() } });
+
+  await logActivity({
+    workspaceId: project.workspaceId,
+    userId: user.id,
+    action: "project.deleted",
+    meta: { projectId: id, name: project.name },
+  });
+
+  return NextResponse.json({ ok: true });
+}
