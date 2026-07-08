@@ -291,6 +291,8 @@ ${ATTRIBUTION_CORE_JS}
       ".mw-live-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; animation: mw-pulse 1.5s ease-in-out infinite; }",
       ".mw-live-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; margin-right: 6px; border-radius: 6px; background: rgba(34,197,94,0.16); border: 1px solid rgba(34,197,94,0.32); color: #4ade80 !important; -webkit-text-fill-color: #4ade80 !important; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; }",
       "@keyframes mw-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }",
+      ".mw-reg-dot { width: 7px; height: 7px; border-radius: 50%; background: #fbbf24; animation: mw-pulse 1.5s ease-in-out infinite; }",
+      ".mw-reg-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; margin-right: 6px; border-radius: 6px; background: rgba(251,191,36,0.16); border: 1px solid rgba(251,191,36,0.32); color: #fbbf24 !important; -webkit-text-fill-color: #fbbf24 !important; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; }",
       ".mw-modal-overlay { position: fixed; inset: 0; z-index: 999950; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.62); }",
       ".mw-modal-card { position: relative; width: 100%; max-width: 480px; max-height: 86vh; overflow-y: auto; border-radius: 16px; }",
       ".mw-modal-close { position: absolute; top: 14px; right: 14px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(120,120,128,0.3); border-radius: 8px; background: #fff; color: #666; font-size: 17px; line-height: 1; cursor: pointer; z-index: 2; }",
@@ -746,8 +748,14 @@ ${ATTRIBUTION_CORE_JS}
       goBtn.href = livePageUrl();
       ctas.appendChild(goBtn);
     } else if (canRegisterNow(status)) {
-      // 등록 중(입장 오픈 전): 사전등록을 강조하고, 입장하기는 비활성 + 오픈 카운트다운으로 안내
-      title.textContent = texts.registration || ((CFG.name || "웨비나") + " 사전등록이 진행 중입니다.");
+      // 등록 중: 사전등록만 강조(입장 버튼은 오픈 전이므로 노출하지 않음). 앰버 펄스 배지로 "접수 중" 표시.
+      var regBadge = el("span", "mw-reg-badge");
+      regBadge.appendChild(el("span", "mw-reg-dot"));
+      regBadge.appendChild(document.createTextNode("사전등록"));
+      title.appendChild(regBadge);
+      title.appendChild(document.createTextNode(
+        texts.registration || ((CFG.name || "웨비나") + " 사전등록이 진행 중입니다.")
+      ));
       var startTxt = fmtKstDateTime(CFG.liveStartAt);
       if (startTxt) {
         var sub = el("div", "mw-banner-sub");
@@ -761,10 +769,6 @@ ${ATTRIBUTION_CORE_JS}
         calBtn.addEventListener("click", openCalendar);
         ctas.appendChild(calBtn);
       }
-      // 입장하기 — 아직 오픈 전이라 비활성. 라벨에 오픈까지 남은 시간 표시(카운트다운 틱으로 갱신)
-      var entryWait = el("span", "mw-btn mw-btn-disabled", entryCountdownText());
-      entryWait.id = "mw-banner-entry";
-      ctas.appendChild(entryWait);
       var regBtn = el("button", "mw-btn mw-btn-primary", "웨비나 사전등록");
       regBtn.type = "button";
       regBtn.addEventListener("click", openFormModal);
@@ -804,20 +808,6 @@ ${ATTRIBUTION_CORE_JS}
       if (isNaN(d.getTime())) return "";
       return new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(d);
     } catch (e) { return ""; }
-  }
-  // 입장 오픈(entryOpenAt, 없으면 liveStartAt)까지 남은 시간 라벨 — 비활성 입장 버튼에 사용
-  function entryCountdownText() {
-    var t = parseMs(CFG && CFG.entryOpenAt);
-    if (t === null) t = parseMs(CFG && CFG.liveStartAt);
-    if (t === null) return "입장 준비 중";
-    var diff = t - serverNowMs();
-    if (diff <= 0) return "곧 입장 오픈";
-    var days = Math.floor(diff / (24 * 60 * 60 * 1000));
-    if (days >= 1) return "입장 D-" + days;
-    var hours = Math.floor(diff / (60 * 60 * 1000));
-    if (hours >= 1) return "입장 " + hours + "시간 후";
-    var mins = Math.max(1, Math.floor(diff / (60 * 1000)));
-    return "입장 " + mins + "분 후";
   }
 
   /* ── 렌더 오케스트레이션 ── */
@@ -880,8 +870,6 @@ ${ATTRIBUTION_CORE_JS}
   countdownTimer = setInterval(function() {
     var node = document.getElementById("mw-banner-countdown");
     if (node) updateCountdownInto(node);
-    var entryNode = document.getElementById("mw-banner-entry");
-    if (entryNode) entryNode.textContent = entryCountdownText();
   }, 60 * 1000);
 
   /* ── 부트 ── */

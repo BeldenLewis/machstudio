@@ -29,6 +29,7 @@ interface Webinar {
   signupDeadline: string;
   theme: Record<string, string>;
   config: Record<string, unknown>;
+  components?: Record<string, unknown> | null;
   sessions: WebinarSession[];
 }
 

@@ -56,6 +56,7 @@ interface Webinar {
   statusOverride?: string | null;
   theme: Record<string, string>;
   config: Record<string, unknown>;
+  components?: Record<string, unknown> | null;
   sessions: WebinarSession[];
   project?: { id: string; name: string } | null;
   workspace?: { id: string; name: string } | null;

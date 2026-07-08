@@ -17,6 +17,7 @@ interface Webinar {
   liveEndAt: string;
   signupDeadline: string;
   config: Record<string, unknown>;
+  components?: Record<string, unknown> | null;
 }
 
 export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; onUpdate: () => void }) {
@@ -26,6 +27,7 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
 
   const livePage = (webinar.config?.livePage ?? {}) as Record<string, unknown>;
   const cta = (livePage.cta ?? {}) as Record<string, unknown>;
+  const components = (webinar.components ?? {}) as Record<string, unknown>;
   const ctaButtons = Array.isArray(cta.buttons) ? (cta.buttons as { label?: string; url?: string; style?: string }[]) : [];
 
   const [form, setForm] = useState({
@@ -34,6 +36,8 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
     liveStartAt: toLocal(webinar.liveStartAt),
     liveEndAt: toLocal(webinar.liveEndAt),
     signupDeadline: toLocal(webinar.signupDeadline),
+    // 라이브 시작 후 사전등록 마감 여부 (components.allowLiveRegistration === false 일 때 체크됨)
+    closeRegOnLive: components.allowLiveRegistration === false,
     youtubeId: (webinar.config?.youtubeId as string) ?? "",
     calendarUrl: (webinar.config?.calendarUrl as string) ?? "",
     surveyUrl: (webinar.config?.surveyUrl as string) ?? "",
@@ -96,6 +100,11 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
             calendarUrl: form.calendarUrl.trim() || null,
             surveyUrl: form.surveyUrl.trim() || null,
             livePage: buildLivePage(),
+          },
+          // 체크 시 라이브 중 사전등록 마감(false), 해제 시 기본값(null=마감일 규칙)
+          components: {
+            ...(webinar.components ?? {}),
+            allowLiveRegistration: form.closeRegOnLive ? false : null,
           },
         }),
       });
@@ -179,6 +188,21 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
             />
           </div>
         </div>
+        <label className="flex items-start gap-2.5 cursor-pointer pt-1">
+          <input
+            type="checkbox"
+            checked={form.closeRegOnLive}
+            onChange={(e) => setForm((f) => ({ ...f, closeRegOnLive: e.target.checked }))}
+            className="mt-0.5"
+            style={{ accentColor: "#8b5cf6" }}
+          />
+          <span className="text-xs text-muted-foreground leading-relaxed">
+            라이브 시작 후에는 사전등록 받지 않기
+            <span className="block text-[11px] text-muted-foreground/70 mt-0.5">
+              체크하면 라이브 중 하단 배너·히어로의 사전등록 버튼이 비활성화돼요. (해제 시 마감일까지 계속 접수)
+            </span>
+          </span>
+        </label>
       </section>
 
       {/* 연동 설정 */}
