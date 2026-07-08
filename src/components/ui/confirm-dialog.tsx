@@ -58,6 +58,9 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
+        // 캡처 단계에서 전파 차단 — 확인창이 부모 모달(예: 등록자 상세)의 document Escape
+        // 핸들러까지 함께 닫는 이중 닫힘을 막는다. 확인창만 취소된다.
+        e.stopImmediatePropagation();
         close(false);
         return;
       }
@@ -78,8 +81,9 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
         }
       }
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    // 캡처 단계 등록 — 부모 모달의 버블 단계 리스너보다 먼저 실행되어 Escape 를 가로챈다
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
   }, [options, close]);
 
   return (

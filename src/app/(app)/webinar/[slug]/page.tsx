@@ -94,7 +94,7 @@ function WebinarDetail({ id }: { id: string }) {
 
   const [webinar, setWebinar] = useState<Webinar | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<"notfound" | "error" | null>(null);
+  const [loadError, setLoadError] = useState<"notfound" | "forbidden" | "error" | null>(null);
   const [copied, setCopied] = useState(false);
 
   // ── 위치는 URL 이 단일 소스: ?tab=&sec= 에서 파생 (새로고침·뒤로가기·딥링크·공유 복원) ──
@@ -138,6 +138,8 @@ function WebinarDetail({ id }: { id: string }) {
     try {
       const res = await fetch(`/api/webinars/${id}`);
       if (res.status === 404) { setLoadError("notfound"); return; }
+      // 401/403 은 재시도해도 조건이 불변 — 재시도 버튼 없는 안내로 분기
+      if (res.status === 401 || res.status === 403) { setLoadError("forbidden"); return; }
       if (!res.ok) { setLoadError("error"); return; }
       const data = await res.json();
       setWebinar(data.webinar);
@@ -188,6 +190,16 @@ function WebinarDetail({ id }: { id: string }) {
     return (
       <div className="p-8">
         <InlineError message="웨비나를 불러오지 못했어요" onRetry={() => void fetchWebinar()} />
+      </div>
+    );
+  }
+
+  if (loadError === "forbidden") {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-center">
+        <Video className="w-10 h-10 text-muted-foreground/30 mb-3" />
+        <p className="text-sm text-muted-foreground">이 웨비나에 접근할 권한이 없어요</p>
+        <Link href="/webinar" className="text-xs text-violet-500 mt-2 hover:underline">목록으로</Link>
       </div>
     );
   }

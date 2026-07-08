@@ -119,7 +119,7 @@ function buildCss(accent: string, text: string, surface: string) {
 .stk-live .qa-textarea { flex:1; min-height:52px; padding:12px 14px; border-radius:var(--radius-sm); border:1px solid var(--line-md); background:rgba(255,255,255,0.04); color:var(--text); font-size:14px; resize:none; outline:none; }
 .stk-live .qa-send { flex-shrink:0; width:52px; border-radius:var(--radius-sm); border:none; background:var(--key); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .stk-live .qa-send:disabled { opacity:0.4; cursor:not-allowed; }
-.stk-live .live-notice { margin-top:20px; padding:16px 20px; border:1px solid var(--key-border); border-radius:var(--radius-sm); background:var(--key-dim); color:rgba(255,255,255,0.65); font-size:13px; line-height:1.7; }
+.stk-live .live-notice { margin-top:20px; padding:16px 20px; border:1px solid var(--key-border); border-radius:var(--radius-sm); background:var(--key-dim); color:var(--muted); font-size:13px; line-height:1.7; }
 .stk-live .ag-wrap { margin-top:72px; padding-top:72px; border-top:1px solid var(--line); }
 .stk-live .ag-head { text-align:center; margin-bottom:44px; }
 .stk-live .ag-kicker { display:inline-flex; align-items:center; margin-bottom:16px; padding:8px 16px; border-radius:999px; border:1px solid var(--key-border); background:var(--key-dim); font-size:12px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; }
