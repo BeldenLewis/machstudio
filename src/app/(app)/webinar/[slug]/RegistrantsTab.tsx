@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { formatKst } from "@/lib/datetime";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -228,12 +229,13 @@ function parseBulkText(text: string): RegistrationDraft[] {
 
 function formatDate(value: string | null) {
   if (!value) return "-";
-  return new Date(value).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  // KST 고정 — 관리자 브라우저 타임존과 무관하게 일관된 표시
+  return formatKst(value, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
 function formatDateShort(value: string | null) {
   if (!value) return "-";
-  return new Date(value).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" });
+  return formatKst(value, { month: "2-digit", day: "2-digit" });
 }
 
 function SortHeader({
@@ -888,11 +890,11 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                       <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{formatDateShort(r.submittedAt)}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         {r.isActive ? (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400">접속 중</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400">시청 중</span>
                         ) : r.enteredAt ? (
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">시청함</span>
                         ) : (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">미접속</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">미시청</span>
                         )}
                       </td>
                       <td className="px-4 py-3">

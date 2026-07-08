@@ -57,6 +57,7 @@ interface QAProps {
   onSend: () => void;
   isSending: boolean;
   sent: boolean;
+  error?: string;
 }
 
 const DEFAULT_NOTICE =
@@ -148,15 +149,18 @@ function buildCss(accent: string) {
 export default function LiveContentStk({
   webinar,
   accent,
+  youtubeId: youtubeIdProp,
   qa,
 }: {
   webinar: WebinarForLive;
   accent: string;
+  youtubeId?: string | null;
   qa: QAProps;
 }) {
   const css = useMemo(() => buildCss(accent || "#FE5816"), [accent]);
   const config = (webinar.config ?? {}) as Record<string, unknown>;
-  const youtubeId = typeof config.youtubeId === "string" ? config.youtubeId : "";
+  // youtubeId 는 verify 통과 후 prop 으로 전달됨 (config 에는 더 이상 공개 노출 안 함)
+  const youtubeId = youtubeIdProp || (typeof config.youtubeId === "string" ? config.youtubeId : "");
   const live = (config.livePage ?? {}) as LivePageConfig;
   const cta = live.cta;
   const hasCta = !!(cta && (cta.title || (cta.buttons && cta.buttons.length)));
@@ -273,6 +277,7 @@ export default function LiveContentStk({
               </button>
             </div>
             {qa.sent && <p style={{ color: "#22c55e", fontSize: 12, marginTop: 8 }}>질문이 전달됐어요!</p>}
+            {qa.error && <p style={{ color: "#f87171", fontSize: 12, marginTop: 8 }}>{qa.error}</p>}
           </div>
         </div>
 

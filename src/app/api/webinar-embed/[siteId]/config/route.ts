@@ -79,10 +79,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ siteId:
           config: true,
           components: true,
           updatedAt: true,
-          sessions: {
-            select: { number: true, title: true, speaker: true, startTime: true, endTime: true },
-            orderBy: { number: "asc" },
-          },
+          // sessions 는 로더가 렌더하지 않음(아젠다는 라이브 페이지 iframe 담당) — 미전송으로 페이로드 절감
         },
       },
     },
@@ -127,7 +124,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ siteId:
       marketingText: registrationForm.marketingText,
       submitLabel: registrationForm.submitLabel,
     },
-    sessions: webinar.sessions,
     links: {
       livePageUrl: site.livePageUrl ?? null,
       surveyUrl: typeof config.surveyUrl === "string" ? config.surveyUrl : null,

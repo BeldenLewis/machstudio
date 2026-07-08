@@ -107,6 +107,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [view, setView] = useState<PageView>("signup");
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [registrationId, setRegistrationId] = useState<string | null>(null);
+  // youtubeId 는 /info 로 공개하지 않고 verify 통과 시에만 받아 영상 게이팅
+  const [videoId, setVideoId] = useState<string | null>(null);
   const [authMethod, setAuthMethod] = useState<AuthMethod>("phone");
   const [authValue, setAuthValue] = useState("");
   const [verifyError, setVerifyError] = useState("");
@@ -120,12 +122,14 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [customFields, setCustomFields] = useState<Record<string, string | boolean>>({});
   const [isRegistering, setIsRegistering] = useState(false);
   const [registered, setRegistered] = useState(false);
+  const [formError, setFormError] = useState("");
 
   // Q&A 상태
   const [question, setQuestion] = useState("");
   const [selectedSession, setSelectedSession] = useState<number | null>(null);
   const [isSendingQA, setIsSendingQA] = useState(false);
   const [qaSent, setQaSent] = useState(false);
+  const [qaError, setQaError] = useState("");
 
   const pingRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -149,13 +153,13 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       const data = await res.json();
       setWebinar(data.webinar);
 
-      const now = new Date();
-      const start = new Date(data.webinar.liveStartAt);
-      const end = new Date(data.webinar.liveEndAt);
+      // 서버 상태머신 판정 사용 — statusOverride(운영 콘솔 수동 전환)·입장오픈 윈도 반영
+      const status: string = data.status;
+      const entryOpen: boolean = data.entryOpen;
       const requestedView = new URLSearchParams(window.location.search).get("view");
-      if (requestedView === "signup" && now <= end) setView("signup");
-      else if (now >= start && now <= end) setView("live");
-      else if (now > end) setView("ended");
+      if (requestedView === "signup" && status !== "ended") setView("signup");
+      else if (status === "ended") setView("ended");
+      else if (status === "live" || entryOpen) setView("live");
       else setView("signup");
     } finally {
       setIsLoading(false);
@@ -213,8 +217,9 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   }, [view, registrationId, slug]);
 
   const handleRegister = async () => {
+    setFormError("");
     if (!form.agreePrivacy) {
-      alert(registrationForm.privacyText || "개인정보 수집 및 이용 동의가 필요합니다.");
+      setFormError(registrationForm.privacyText || "개인정보 수집 및 이용 동의가 필요합니다.");
       return;
     }
 
@@ -225,7 +230,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         : customFields[field.key];
       const isEmpty = field.type === "checkbox" ? !value : !String(value ?? "").trim();
       if (isEmpty) {
-        alert(`${field.label} 항목을 입력해주세요.`);
+        setFormError(`${field.label} 항목을 입력해주세요.`);
         return;
       }
     }
@@ -239,10 +244,11 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error ?? "등록에 실패했어요. 다시 시도해주세요.");
+        setFormError(data.error ?? "등록에 실패했어요. 다시 시도해주세요.");
         return;
       }
       setRegistrationId(data.registration.id);
+      if (typeof data.youtubeId === "string") setVideoId(data.youtubeId);
       setRegistered(true);
 
       // 라이브 중이면 바로 이동
@@ -288,6 +294,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       };
 
       setRegistrationId(registration.id);
+      if (typeof data.youtubeId === "string") setVideoId(data.youtubeId);
       setForm((prev) => ({
         ...prev,
         name: registration.name ?? prev.name,
@@ -306,6 +313,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
   const handleSendQA = async () => {
     if (!question.trim()) return;
+    setQaError("");
     setIsSendingQA(true);
     try {
       const res = await fetch(`/api/webinar/${slug}/qa`, {
@@ -319,7 +327,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         }),
       });
       if (!res.ok) {
-        alert("질문 전송에 실패했어요.");
+        const data = await res.json().catch(() => ({}));
+        setQaError(data.error ?? "질문 전송에 실패했어요. 잠시 후 다시 시도해주세요.");
         return;
       }
       setQuestion("");
@@ -438,6 +447,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         <LiveContentStk
           webinar={webinar}
           accent={accent}
+          youtubeId={videoId}
           qa={{
             sessions: webinar.sessions,
             question,
@@ -447,6 +457,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             onSend: handleSendQA,
             isSending: isSendingQA,
             sent: qaSent,
+            error: qaError,
           }}
         />
       ) : (
@@ -545,6 +556,10 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
                       <span className="text-xs opacity-60">{registrationForm.marketingText}</span>
                     </label>
                   </div>
+
+                  {formError && (
+                    <p className="text-xs text-red-400 pt-1" role="alert">{formError}</p>
+                  )}
 
                   <button
                     onClick={handleRegister}

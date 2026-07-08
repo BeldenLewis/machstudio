@@ -67,7 +67,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ sit
     select: { activeWebinarId: true },
   });
 
-  if (site?.activeWebinarId) {
+  // 방문 집계는 webinar 컴포넌트가 실제로 렌더된 페이지에서만 (로더가 visit:true 전송).
+  // 배너만 뜨는 일반 페이지의 연결 비콘은 lastSeenAt 만 갱신하고 방문으로 세지 않는다.
+  if (site?.activeWebinarId && body?.visit === true) {
     const utmSource = cleanUtm(body?.utmSource);
     const utmMedium = cleanUtm(body?.utmMedium);
     await prisma.webinarVisitStat.upsert({

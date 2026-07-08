@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, MessageSquare, Check, X, Clock } from "lucide-react";
 import { toast } from "sonner";
+import { formatKst } from "@/lib/datetime";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -115,7 +116,7 @@ export default function QATab({ webinarId, embedded = false }: { webinarId: stri
                       <span className="text-xs px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">세션 {q.sessionNumber}</span>
                     )}
                     <span className="text-xs text-muted-foreground">
-                      {new Date(q.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+                      {formatKst(q.createdAt, { hour: "2-digit", minute: "2-digit" })}
                     </span>
                   </div>
                 </div>

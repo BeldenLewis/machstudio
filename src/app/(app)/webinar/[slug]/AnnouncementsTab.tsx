@@ -59,7 +59,13 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
       body: JSON.stringify({ isActive: !ann.isActive }),
     });
     if (!res.ok) { toast.error("상태 변경 실패"); return; }
-    setAnnouncements((prev) => prev.map((a) => a.id === ann.id ? { ...a, isActive: !ann.isActive } : a));
+    const nextActive = !ann.isActive;
+    // 서버가 단일 활성(라디오)로 강제 — 하나를 켜면 나머지는 꺼진 것으로 로컬 상태도 맞춘다
+    setAnnouncements((prev) =>
+      prev.map((a) =>
+        a.id === ann.id ? { ...a, isActive: nextActive } : nextActive ? { ...a, isActive: false } : a,
+      ),
+    );
     toast.success(ann.isActive ? "공지가 비활성화됐어요" : "공지가 라이브에 표시돼요");
   };
 
@@ -80,7 +86,7 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
   return (
     <div className={embedded ? "space-y-4" : "p-4 sm:p-6 lg:p-8 space-y-4"}>
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">라이브 중 참여자에게 공지를 표시해요</p>
+        <p className="text-sm text-muted-foreground">라이브 중 참여자에게 공지를 표시해요 · 한 번에 하나만 노출돼요</p>
         <button
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-500 text-white text-xs font-medium hover:bg-violet-600 transition-colors"

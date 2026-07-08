@@ -148,6 +148,8 @@ export default function SessionsTab({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<SessionForm>(emptyForm);
   const [isSaving, setIsSaving] = useState(false);
+  // 삭제는 2단계 인라인 확인 — 실수 삭제 방지(네이티브 confirm 대신 조용한 확인 버튼)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const sortedSessions = [...sessions].sort((a, b) => a.number - b.number);
 
@@ -228,6 +230,7 @@ export default function SessionsTab({
   };
 
   const handleDelete = async (sessionId: string) => {
+    setConfirmDeleteId(null);
     const res = await fetch(`/api/webinars/${webinarId}/sessions/${sessionId}`, { method: "DELETE" });
     if (!res.ok) { toast.error("세션 삭제 실패"); return; }
     toast.success("세션이 삭제됐어요");
@@ -366,16 +369,41 @@ export default function SessionsTab({
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                     </motion.button>
-                    <motion.button
-                      whileHover={{ y: -1 }}
-                      whileTap={{ scale: 0.92 }}
-                      transition={spring}
-                      onClick={() => handleDelete(session.id)}
-                      className="p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-500 text-muted-foreground transition-colors"
-                      title="삭제"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </motion.button>
+                    {confirmDeleteId === session.id ? (
+                      <>
+                        <motion.button
+                          whileHover={{ y: -1 }}
+                          whileTap={{ scale: 0.92 }}
+                          transition={spring}
+                          onClick={() => handleDelete(session.id)}
+                          className="px-2 py-1 rounded-lg bg-red-500 text-white text-xs font-medium"
+                          title="삭제 확인"
+                        >
+                          삭제
+                        </motion.button>
+                        <motion.button
+                          whileHover={{ y: -1 }}
+                          whileTap={{ scale: 0.92 }}
+                          transition={spring}
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground transition-colors"
+                          title="취소"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </motion.button>
+                      </>
+                    ) : (
+                      <motion.button
+                        whileHover={{ y: -1 }}
+                        whileTap={{ scale: 0.92 }}
+                        transition={spring}
+                        onClick={() => setConfirmDeleteId(session.id)}
+                        className="p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-500 text-muted-foreground transition-colors"
+                        title="삭제"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </motion.button>
+                    )}
                   </div>
                 </div>
               )}

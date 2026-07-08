@@ -20,7 +20,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   });
 
   return NextResponse.json({ tallyPushes }, {
-    headers: { "Access-Control-Allow-Origin": "*" },
+    headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "public, s-maxage=15, stale-while-revalidate=30" },
   });
 }
 

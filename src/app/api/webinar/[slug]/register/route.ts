@@ -109,6 +109,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       }
     : {};
   const userAgent = request.headers.get("user-agent")?.slice(0, 500) ?? null;
+  // 등록 완료자에게 영상 ID 전달 (공개 /info 에서는 제거됨 — 라이브 페이지 signup→live 경로용)
+  const videoId = typeof (webinar.config as Record<string, unknown>)?.youtubeId === "string"
+    ? (webinar.config as Record<string, unknown>).youtubeId
+    : undefined;
 
   const duplicate = await prisma.webinarRegistration.findFirst({
     where: {
@@ -133,7 +137,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         jobTitle: clean(jobTitle),
         industry: clean(industry),
         agreeMarketing: Boolean(agreeMarketing),
-        agreePrivacy: Boolean(agreePrivacy ?? true),
+        // 재등록 시 기존 동의를 다운그레이드하지 않음 — 명시적으로 동의한 경우에만 갱신
+        ...(agreePrivacy === true ? { agreePrivacy: true } : {}),
         memo: Object.keys(memoPayload).length ? JSON.stringify(memoPayload, null, 2) : duplicate.memo,
         // 재등록 시 기존 어트리뷰션은 보존 — 비어 있을 때만 채운다
         ...(utm && !duplicate.utmSource && !duplicate.firstUtmSource ? utmData : {}),
@@ -143,6 +148,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     return NextResponse.json({
       alreadyRegistered: true,
       registration: { id: registration.id, name: registration.name, email: registration.email, phone: registration.phone },
+      ...(videoId ? { youtubeId: videoId } : {}),
     }, {
       headers: CORS_HEADERS,
     });
@@ -167,7 +173,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     },
   });
 
-  return NextResponse.json({ registration: { id: registration.id, name: registration.name, email: registration.email, phone: registration.phone } }, {
+  return NextResponse.json({ registration: { id: registration.id, name: registration.name, email: registration.email, phone: registration.phone }, ...(videoId ? { youtubeId: videoId } : {}) }, {
     status: 201,
     headers: CORS_HEADERS,
   });

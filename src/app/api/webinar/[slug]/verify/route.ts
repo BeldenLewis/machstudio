@@ -46,7 +46,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     );
   }
 
-  const webinar = await prisma.webinar.findUnique({ where: { slug }, select: { id: true } });
+  const webinar = await prisma.webinar.findUnique({ where: { slug }, select: { id: true, config: true } });
   if (!webinar) return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404 });
 
   const body = await request.json();
@@ -81,8 +81,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     rateLimit(`verify-miss:${slug}:${ip}`, MISS_LIMIT);
   }
 
+  // 인증 통과자에게만 영상 ID 전달 (공개 /info 에서는 제거됨)
+  const youtubeId = registration && webinar.config && typeof (webinar.config as Record<string, unknown>).youtubeId === "string"
+    ? (webinar.config as Record<string, unknown>).youtubeId
+    : undefined;
+
   return NextResponse.json(
-    { found: !!registration, registration: registration ?? null },
+    { found: !!registration, registration: registration ?? null, ...(youtubeId ? { youtubeId } : {}) },
     { headers: { "Access-Control-Allow-Origin": "*" } }
   );
 }

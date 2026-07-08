@@ -48,6 +48,10 @@ export async function POST(request: Request) {
   });
   if (!membership) return NextResponse.json({ error: "접근 권한 없음" }, { status: 403 });
 
+  // projectId 가 이 워크스페이스 소속인지 검증 — 교차 테넌트 FK·프로젝트 유출 방지
+  const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true } });
+  if (!project) return NextResponse.json({ error: "프로젝트를 찾을 수 없어요" }, { status: 400 });
+
   const existing = await prisma.webinar.findUnique({ where: { slug } });
   if (existing) return NextResponse.json({ error: "이미 사용 중인 슬러그예요" }, { status: 409 });
 

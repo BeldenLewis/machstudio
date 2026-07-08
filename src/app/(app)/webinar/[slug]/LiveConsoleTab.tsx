@@ -543,11 +543,11 @@ export default function LiveConsoleTab({
         <TallyPanel webinarId={webinarId} />
       </Section>
 
-      <Section title="접속자" icon={Activity} badge={viewers.length ? (
+      <Section title="시청자" icon={Activity} badge={viewers.length ? (
         <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">{viewers.length}</span>
       ) : undefined}>
         {viewers.length === 0 ? (
-          <p className="text-xs text-muted-foreground">현재 접속 중인 시청자가 없어요.</p>
+          <p className="text-xs text-muted-foreground">현재 시청 중인 참여자가 없어요.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">

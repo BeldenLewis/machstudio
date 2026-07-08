@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/ratelimit";
+import { resolveWebinarStatus } from "@/lib/webinar-status";
 
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -8,10 +9,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const webinar = await prisma.webinar.findUnique({ where: { slug }, select: { id: true } });
   if (!webinar) return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404 });
 
+  // 공개 GET — 답변된 질문만, 질문자 이름(PII)은 제외
   const questions = await prisma.webinarQA.findMany({
     where: { webinarId: webinar.id, status: "answered" },
     orderBy: { createdAt: "asc" },
-    select: { id: true, question: true, name: true, status: true, createdAt: true },
+    select: { id: true, question: true, sessionNumber: true, status: true, createdAt: true },
   });
 
   return NextResponse.json({ questions }, {
@@ -37,9 +39,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const webinar = await prisma.webinar.findUnique({ where: { slug } });
   if (!webinar) return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404 });
 
-  const now = new Date();
-  const isLive = now >= new Date(webinar.liveStartAt) && now <= new Date(webinar.liveEndAt);
-  if (!isLive) {
+  // 라이브 여부는 상태머신으로 판정 — statusOverride(운영 콘솔 수동 전환) 반영
+  if (resolveWebinarStatus(webinar).status !== "live") {
     return NextResponse.json({ error: "라이브 중에만 질문을 남길 수 있어요" }, { status: 400 });
   }
 

@@ -13,7 +13,6 @@ interface Theme {
   textColor: string;
   font: string;
   borderRadius?: string;
-  bgEffect?: string;
 }
 
 interface Webinar {
@@ -22,12 +21,6 @@ interface Webinar {
 }
 
 const FONTS = ["Pretendard", "Noto Sans KR", "Inter", "Roboto", "Spoqa Han Sans Neo"];
-const BG_EFFECTS = [
-  { value: "none", label: "없음" },
-  { value: "gradient", label: "그라디언트" },
-  { value: "particles", label: "파티클" },
-  { value: "glass", label: "글라스모피즘" },
-];
 const RADIUS_OPTIONS = [
   { value: "0px", label: "각진" },
   { value: "8px", label: "약간" },
@@ -43,7 +36,6 @@ export default function ThemeTab({ webinar, onUpdate }: { webinar: Webinar; onUp
     textColor: "#ffffff",
     font: "Pretendard",
     borderRadius: "16px",
-    bgEffect: "none",
     ...(webinar.theme as Partial<Theme>),
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -161,29 +153,6 @@ export default function ThemeTab({ webinar, onUpdate }: { webinar: Webinar; onUp
                     onClick={() => setTheme((t) => ({ ...t, borderRadius: value }))}
                     className={`px-3 py-2 rounded-xl border text-sm transition-colors ${
                       theme.borderRadius === value
-                        ? "border-violet-500 bg-violet-500/10 text-violet-500"
-                        : "border-border hover:bg-secondary text-muted-foreground"
-                    }`}
-                  >
-                    {label}
-                  </motion.button>
-                ))}
-              </div>
-            </section>
-
-            {/* 배경 효과 */}
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold">배경 효과</h3>
-              <div className="flex flex-wrap gap-2">
-                {BG_EFFECTS.map(({ value, label }) => (
-                  <motion.button
-                    whileHover={{ y: -1 }}
-                    whileTap={{ scale: 0.96 }}
-                    transition={spring}
-                    key={value}
-                    onClick={() => setTheme((t) => ({ ...t, bgEffect: value }))}
-                    className={`px-3 py-2 rounded-xl border text-sm transition-colors ${
-                      theme.bgEffect === value
                         ? "border-violet-500 bg-violet-500/10 text-violet-500"
                         : "border-border hover:bg-secondary text-muted-foreground"
                     }`}

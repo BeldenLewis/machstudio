@@ -185,17 +185,26 @@ ${ATTRIBUTION_CORE_JS}
     fetchConfig(false);
   }
 
-  /* ── seen 비콘 (세션당 1회): 연결 감지 + 방문 집계 ── */
+  /* ── seen 비콘: 연결 감지(어느 페이지든 1회) + 방문 집계(웨비나 컴포넌트가 있는 페이지 1회) ──
+   * 배너는 사이트 전역에 붙을 수 있어, 배너만 뜨는 일반 페이지를 "방문"으로 세면 퍼널 상단이 부풀려진다.
+   * 따라서 mount 마커(hero/form/live)가 있는 페이지에서만 visit=true 로 집계한다. dedup 키를 분리해
+   * 배너 페이지 → 웨비나 페이지로 이동해도 방문이 1회 정확히 기록되게 한다. */
   function sendSeen() {
     try {
-      var key = "mw_seen_" + SITE_ID;
-      // 스토리지 접근 실패가 비콘 전송을 막지 않도록 dedup 가드는 best-effort 로 분리
-      var already = false;
-      try { already = !!sessionStorage.getItem(key); } catch (e) {}
-      if (already) return;
-      try { sessionStorage.setItem(key, "1"); } catch (e) {}
       var last = storageGet(UTM_LAST_KEY) || emptyUtm();
-      var payload = JSON.stringify({ utmSource: last.utmSource || "", utmMedium: last.utmMedium || "" });
+      var hasMount = !!document.querySelector("[data-mach-webinar-mount]");
+      var seenKey = "mw_seen_" + SITE_ID;
+      var visitKey = "mw_visit_" + SITE_ID;
+      // 스토리지 접근 실패가 비콘 전송을 막지 않도록 dedup 가드는 best-effort 로 분리
+      var seenDone = false, visitDone = false;
+      try { seenDone = !!sessionStorage.getItem(seenKey); } catch (e) {}
+      try { visitDone = !!sessionStorage.getItem(visitKey); } catch (e) {}
+      var needSeen = !seenDone;
+      var needVisit = hasMount && !visitDone;
+      if (!needSeen && !needVisit) return;
+      if (needSeen) { try { sessionStorage.setItem(seenKey, "1"); } catch (e) {} }
+      if (needVisit) { try { sessionStorage.setItem(visitKey, "1"); } catch (e) {} }
+      var payload = JSON.stringify({ utmSource: last.utmSource || "", utmMedium: last.utmMedium || "", visit: needVisit });
       // 순수 문자열 = text/plain simple request — sendBeacon 은 CORS preflight 를 못 하므로
       // application/json Blob 을 쓰면 크로스오리진에서 차단된다 (서버는 text 바디도 JSON 파싱함)
       if (navigator.sendBeacon) {

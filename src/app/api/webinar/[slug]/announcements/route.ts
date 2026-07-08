@@ -14,7 +14,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   });
 
   return NextResponse.json({ announcements }, {
-    headers: { "Access-Control-Allow-Origin": "*" },
+    // 동시 시청자 15초 폴링 — CDN 캐시로 오리진/DB 부하 흡수 (신규 공지 최대 ~15초 지연 허용)
+    headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "public, s-maxage=15, stale-while-revalidate=30" },
   });
 }
 
