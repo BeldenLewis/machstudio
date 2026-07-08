@@ -25,6 +25,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatKst } from "@/lib/datetime";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { InlineError } from "@/components/ui/inline-error";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -268,9 +270,11 @@ function SortHeader({
 }
 
 export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
+  const confirm = useConfirm();
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [search, setSearch] = useState("");
@@ -285,10 +289,13 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
   const [isSaving, setIsSaving] = useState(false);
   const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null);
   const [detailDraft, setDetailDraft] = useState<RegistrationDetailDraft | null>(null);
+  // 일괄등록 실패 행 — 개수만이 아니라 원인·행 번호를 모달에 남겨 수정 가능하게
+  const [bulkErrors, setBulkErrors] = useState<{ index?: number; message: string }[]>([]);
   const modalOpen = showManual || showBulk || Boolean(selectedRegistration);
 
   const fetchRegistrations = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(false);
     try {
       const params = new URLSearchParams({
         page: String(page),
@@ -298,13 +305,20 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
       });
       if (search) params.set("q", search);
       const res = await fetch(`/api/webinars/${webinarId}/registrations?${params}`);
+      if (!res.ok) { setLoadError(true); return; }
       const data = await res.json();
       setRegistrations(data.registrations ?? []);
       setTotal(data.total ?? 0);
+    } catch {
+      // 로드 실패를 '등록자 없음'으로 위장하지 않음 — 재시도 경로 제공
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
   }, [webinarId, page, pageSize, search, sortBy, sortDir]);
+
+  // 일괄등록 모달을 닫으면 실패 행 목록 초기화 — 다음에 열 때 깨끗하게
+  useEffect(() => { if (!showBulk) setBulkErrors([]); }, [showBulk]);
 
   useEffect(() => { void Promise.resolve().then(fetchRegistrations); }, [fetchRegistrations]);
 
@@ -385,30 +399,38 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
     }
 
     setIsSaving(true);
+    setBulkErrors([]);
     try {
       const res = await fetch(`/api/webinars/${webinarId}/registrations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ registrations: parsedBulk, duplicateMode }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok && !data.created && !data.updated && !data.skipped) {
         toast.error(data.error ?? data.errors?.[0]?.message ?? "일괄등록 실패");
+        if (Array.isArray(data.errors)) setBulkErrors(data.errors);
         return;
       }
       toast.success(`일괄등록 완료 · 신규 ${data.created}명, 갱신 ${data.updated}명, 제외 ${data.skipped}명`);
-      if (data.errors?.length) toast.error(`오류 ${data.errors.length}건은 제외됐어요`);
-      setBulkText("");
-      setShowBulk(false);
       setPage(1);
       await fetchRegistrations();
+      if (Array.isArray(data.errors) && data.errors.length) {
+        // 실패 행은 모달에 남겨 원인 확인 후 수정·재등록할 수 있게 (모달 유지)
+        setBulkErrors(data.errors);
+      } else {
+        setBulkText("");
+        setShowBulk(false);
+      }
+    } catch {
+      toast.error("일괄등록에 실패했어요. 잠시 후 다시 시도해주세요.");
     } finally {
       setIsSaving(false);
     }
   };
 
   const deleteRegistration = async (registration: Registration) => {
-    if (!confirm(`"${registration.name}" 등록자를 삭제할까요?`)) return;
+    if (!(await confirm({ title: "등록자를 삭제할까요?", description: `"${registration.name}"`, confirmLabel: "삭제", tone: "danger" }))) return;
 
     const res = await fetch(`/api/webinars/${webinarId}/registrations/${registration.id}`, { method: "DELETE" });
     if (!res.ok) {
@@ -717,6 +739,27 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                 </div>
               )}
 
+              {bulkErrors.length > 0 && (
+                <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-3">
+                  <p className="mb-2 text-xs font-medium text-red-500">
+                    제외된 행 {bulkErrors.length}건 — 원인을 확인하고 수정해 다시 등록하세요
+                  </p>
+                  <div className="max-h-40 space-y-1 overflow-y-auto">
+                    {bulkErrors.slice(0, 50).map((e, i) => (
+                      <div key={i} className="flex gap-2 text-xs">
+                        {typeof e.index === "number" && (
+                          <span className="shrink-0 font-mono text-muted-foreground">{e.index + 1}행</span>
+                        )}
+                        <span className="text-muted-foreground">{e.message}</span>
+                      </div>
+                    ))}
+                    {bulkErrors.length > 50 && (
+                      <p className="text-[11px] text-muted-foreground">… 외 {bulkErrors.length - 50}건</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="flex justify-end border-t border-border pt-4">
                 <motion.button
                   whileHover={{ y: -1 }}
@@ -837,6 +880,8 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
         <div className="flex items-center justify-center h-40">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
+      ) : loadError ? (
+        <InlineError message="등록자를 불러오지 못했어요" onRetry={() => void fetchRegistrations()} />
       ) : registrations.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Users className="w-10 h-10 text-muted-foreground/20 mb-3" />

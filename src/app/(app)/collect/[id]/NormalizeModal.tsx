@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, Check, Sparkles, AlertTriangle } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
 import ModalShell from "./ModalShell";
 
@@ -30,6 +31,7 @@ const OPS: { id: Op; label: string; desc: string }[] = [
 ];
 
 export default function NormalizeModal({ sourceId, fieldMappings, onClose, onApplied }: Props) {
+  const confirm = useConfirm();
   const [selectedOps, setSelectedOps] = useState<Set<Op>>(new Set());
   const [analyzing, setAnalyzing] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -63,7 +65,7 @@ export default function NormalizeModal({ sourceId, fieldMappings, onClose, onApp
 
   const handleApply = async () => {
     if (!preview || preview.changedRows === 0) return;
-    if (!confirm(`${preview.changedRows}건의 레코드를 수정합니다. 진행할까요?`)) return;
+    if (!(await confirm({ title: "레코드를 수정할까요?", description: `${preview.changedRows}건의 레코드를 수정해요.`, confirmLabel: "수정" }))) return;
     setApplying(true);
     try {
       const res = await fetch(`/api/collect-sources/${sourceId}/records/normalize`, {

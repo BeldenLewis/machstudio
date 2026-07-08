@@ -6,6 +6,7 @@ import { Loader2, Search, Trash2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { formatKstDateTime } from "@/lib/datetime";
 import ModalShell from "./ModalShell";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -13,6 +14,7 @@ interface SampleRecord { id: string; createdAt: string; data: Record<string, unk
 interface Props { sourceId: string; onClose: () => void; onChanged: () => void }
 
 export default function GdprModal({ sourceId, onClose, onChanged }: Props) {
+  const confirm = useConfirm();
   const [search, setSearch] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<{ matched: number; sample: SampleRecord[] } | null>(null);
@@ -37,7 +39,7 @@ export default function GdprModal({ sourceId, onClose, onChanged }: Props) {
 
   const handleDelete = async () => {
     if (!result || result.matched === 0) return;
-    if (!confirm(`정말로 ${result.matched}건을 영구 삭제할까요? 되돌릴 수 없어요.`)) return;
+    if (!(await confirm({ title: "영구 삭제할까요?", description: `${result.matched}건을 영구 삭제해요. 되돌릴 수 없어요.`, confirmLabel: "삭제", tone: "danger" }))) return;
     setDeleting(true);
     try {
       const res = await fetch(`/api/collect-sources/${sourceId}/gdpr`, {

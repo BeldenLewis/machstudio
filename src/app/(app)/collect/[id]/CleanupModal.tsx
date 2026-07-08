@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Sparkles, Loader2, Check, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import ModalShell from "./ModalShell";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -28,6 +29,7 @@ interface CleanupModalProps {
 }
 
 export default function CleanupModal({ sourceId, fieldMappings, onClose, onCleaned }: CleanupModalProps) {
+  const confirm = useConfirm();
   const [keyField, setKeyField] = useState(fieldMappings[0]?.key ?? "");
   const [keep, setKeep] = useState<"latest" | "oldest">("latest");
   const [preview, setPreview] = useState<PreviewResult | null>(null);
@@ -54,7 +56,7 @@ export default function CleanupModal({ sourceId, fieldMappings, onClose, onClean
 
   const handleRun = async () => {
     if (!preview || preview.toDelete === 0) return;
-    if (!confirm(`정말 ${preview.toDelete}건을 삭제할까요? 되돌릴 수 없어요.`)) return;
+    if (!(await confirm({ title: "삭제할까요?", description: `${preview.toDelete}건을 삭제해요. 되돌릴 수 없어요.`, confirmLabel: "삭제", tone: "danger" }))) return;
     setRunning(true);
     try {
       const res = await fetch(`/api/collect-sources/${sourceId}/records/cleanup`, {

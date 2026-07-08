@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Loader2, Check, Edit2, Save, Trash2 } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
 import { formatKstDateTime } from "@/lib/datetime";
 import ModalShell from "./ModalShell";
@@ -44,6 +45,7 @@ interface Props {
 }
 
 export default function RecordDetailModal({ sourceId, recordId, fieldMappings, onClose, onChanged }: Props) {
+  const confirm = useConfirm();
   const [record, setRecord] = useState<CollectRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -102,7 +104,7 @@ export default function RecordDetailModal({ sourceId, recordId, fieldMappings, o
   };
 
   const handleDelete = async () => {
-    if (!confirm("이 레코드를 삭제할까요? 되돌릴 수 없어요.")) return;
+    if (!(await confirm({ title: "레코드를 삭제할까요?", description: "되돌릴 수 없어요.", confirmLabel: "삭제", tone: "danger" }))) return;
     const res = await fetch(`/api/collect-sources/${sourceId}/records/${recordId}`, { method: "DELETE" });
     if (!res.ok) { toast.error("삭제 실패"); return; }
     toast.success("삭제됐어요");

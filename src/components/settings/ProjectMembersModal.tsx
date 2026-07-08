@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X, Loader2, Users, Trash2, Plus } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
@@ -28,6 +29,7 @@ interface Props {
 }
 
 export default function ProjectMembersModal({ projectId, projectName, workspaceId, onClose }: Props) {
+  const confirm = useConfirm();
   const [members, setMembers] = useState<Member[]>([]);
   const [wsMembers, setWsMembers] = useState<WsMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,7 +72,7 @@ export default function ProjectMembersModal({ projectId, projectName, workspaceI
   };
 
   const handleRemove = async (m: Member) => {
-    if (!confirm(`"${m.user.name ?? m.user.email}" 의 프로젝트 권한을 제거할까요? (워크스페이스 권한은 유지됩니다)`)) return;
+    if (!(await confirm({ title: "프로젝트 권한을 제거할까요?", description: `"${m.user.name ?? m.user.email}" · 워크스페이스 권한은 유지돼요.`, confirmLabel: "제거", tone: "danger" }))) return;
     const res = await fetch(`/api/projects/${projectId}/members?userId=${m.userId}`, { method: "DELETE" });
     if (!res.ok) { toast.error("제거 실패"); return; }
     fetchData();

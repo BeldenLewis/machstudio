@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspace } from "@/contexts/workspace";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -114,6 +115,7 @@ const MOUNT_MARKERS = [
 ] as const;
 
 export default function DeployTab({ webinarId }: { webinarId: string }) {
+  const confirm = useConfirm();
   const { workspace, currentProject } = useWorkspace();
   const [sites, setSites] = useState<EmbedSite[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -202,7 +204,7 @@ export default function DeployTab({ webinarId }: { webinarId: string }) {
   };
 
   const deleteSite = async (site: EmbedSite) => {
-    if (!confirm(`"${site.name}" 사이트 연결을 삭제할까요?\n부착된 스크립트는 더 이상 아무것도 표시하지 않아요.`)) return;
+    if (!(await confirm({ title: "사이트 연결을 삭제할까요?", description: `"${site.name}"\n부착된 스크립트는 더 이상 아무것도 표시하지 않아요.`, confirmLabel: "삭제", tone: "danger" }))) return;
     const res = await fetch(`/api/webinar-embed-sites/${site.id}`, { method: "DELETE" });
     if (res.ok) {
       toast.success("삭제했어요");

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, type ElementType } from "react";
+import { useState, useEffect, useCallback, useMemo, Suspense, type ElementType } from "react";
 import { use } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity,
@@ -15,7 +16,6 @@ import {
   Settings2,
   Video,
 } from "lucide-react";
-import { toast } from "sonner";
 import Link from "next/link";
 import PageSetupTab from "./PageSetupTab";
 import AnalyticsTab from "./AnalyticsTab";
@@ -23,11 +23,16 @@ import DeployTab from "./DeployTab";
 import OperateTab, { type OperateSection } from "./OperateTab";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
 import { formatKst } from "@/lib/datetime";
+import { InlineError } from "@/components/ui/inline-error";
 
 type SettingsSection = "general" | "form" | "sessions" | "theme";
 // 새 IA: 만들기(create=설정) / 배포(deploy) / 운영(operate=콘솔+등록자) / 분석(analytics)
 type Tab = "create" | "deploy" | "operate" | "analytics";
 type NavigationTarget = Tab | `create-${SettingsSection}` | "operate-registrants";
+
+const TAB_IDS: Tab[] = ["create", "deploy", "operate", "analytics"];
+const CREATE_SECTIONS: SettingsSection[] = ["general", "form", "sessions", "theme"];
+const OPERATE_SECTIONS: OperateSection[] = ["console", "registrants"];
 
 interface WebinarSession {
   id: string;
@@ -52,6 +57,8 @@ interface Webinar {
   theme: Record<string, string>;
   config: Record<string, unknown>;
   sessions: WebinarSession[];
+  project?: { id: string; name: string } | null;
+  workspace?: { id: string; name: string } | null;
   _count: { registrations: number; questions: number };
 }
 
@@ -62,32 +69,81 @@ const tabs: { id: Tab; label: string; icon: ElementType }[] = [
   { id: "analytics", label: "분석", icon: BarChart3 },
 ];
 
+function HubLoader() {
+  return (
+    <div className="flex items-center justify-center h-64">
+      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
+
 export default function WebinarDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug: id } = use(params);
+  // useSearchParams 는 Suspense 경계가 필요 — 허브 본문을 감싼다
+  return (
+    <Suspense fallback={<HubLoader />}>
+      <WebinarDetail id={id} />
+    </Suspense>
+  );
+}
+
+function WebinarDetail({ id }: { id: string }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [webinar, setWebinar] = useState<Webinar | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>("operate");
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
-  const [operateSection, setOperateSection] = useState<OperateSection>("console");
+  const [loadError, setLoadError] = useState<"notfound" | "error" | null>(null);
   const [copied, setCopied] = useState(false);
-  const defaultTabApplied = useRef(false);
+
+  // ── 위치는 URL 이 단일 소스: ?tab=&sec= 에서 파생 (새로고침·뒤로가기·딥링크·공유 복원) ──
+  const tabParam = searchParams.get("tab");
+  const secParam = searchParams.get("sec");
+
+  const computedDefaultTab = useMemo<Tab | null>(() => {
+    if (!webinar) return null;
+    // 상태 연동 기본 진입: 종료→분석, 라이브/등록자 有→운영, 준비 단계→만들기
+    const status = resolveWebinarStatus(webinar).status;
+    if (status === "ended") return "analytics";
+    if (status === "live" || webinar._count.registrations > 0) return "operate";
+    return "create";
+  }, [webinar]);
+
+  const activeTab: Tab = TAB_IDS.includes(tabParam as Tab) ? (tabParam as Tab) : (computedDefaultTab ?? "operate");
+  const settingsSection: SettingsSection = CREATE_SECTIONS.includes(secParam as SettingsSection)
+    ? (secParam as SettingsSection)
+    : "general";
+  const operateSection: OperateSection = OPERATE_SECTIONS.includes(secParam as OperateSection)
+    ? (secParam as OperateSection)
+    : "console";
+
+  const navigate = useCallback(
+    (tab: Tab, sec?: SettingsSection | OperateSection, opts?: { replace?: boolean }) => {
+      const sp = new URLSearchParams(searchParams.toString());
+      sp.set("tab", tab);
+      if (sec) sp.set("sec", sec);
+      else sp.delete("sec");
+      const url = `${pathname}?${sp.toString()}`;
+      // 탭 전환은 push(뒤로가기로 이전 탭 복귀), 서브섹션은 replace(히스토리 소음 방지)
+      if (opts?.replace) router.replace(url, { scroll: false });
+      else router.push(url, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
 
   const fetchWebinar = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const res = await fetch(`/api/webinars/${id}`);
-      if (!res.ok) { toast.error("웨비나를 불러오지 못했어요"); return; }
+      if (res.status === 404) { setLoadError("notfound"); return; }
+      if (!res.ok) { setLoadError("error"); return; }
       const data = await res.json();
       setWebinar(data.webinar);
-
-      // 상태 연동 기본 진입 탭 (최초 1회): 종료→분석, 라이브/등록자 有→운영, 준비 단계→만들기
-      if (!defaultTabApplied.current && data.webinar) {
-        defaultTabApplied.current = true;
-        const status = resolveWebinarStatus(data.webinar).status;
-        if (status === "ended") setActiveTab("analytics");
-        else if (status === "live" || data.webinar._count.registrations > 0) setActiveTab("operate");
-        else setActiveTab("create");
-      }
+    } catch {
+      // 네트워크 실패 — 빈 상태로 위장하지 않고 재시도 경로 제공
+      setLoadError("error");
     } finally {
       setIsLoading(false);
     }
@@ -95,23 +151,26 @@ export default function WebinarDetailPage({ params }: { params: Promise<{ slug: 
 
   useEffect(() => { void Promise.resolve().then(fetchWebinar); }, [fetchWebinar]);
 
-  const activateTab = (tab: Tab) => {
-    setActiveTab(tab);
-  };
+  // tab 쿼리가 없으면 계산된 기본 탭을 URL 에 명시(replace) — 위치를 URL 단일 소스로 고정
+  useEffect(() => {
+    if (!webinar || !computedDefaultTab) return;
+    if (!TAB_IDS.includes(searchParams.get("tab") as Tab)) {
+      const sp = new URLSearchParams(searchParams.toString());
+      sp.set("tab", computedDefaultTab);
+      router.replace(`${pathname}?${sp.toString()}`, { scroll: false });
+    }
+  }, [webinar, computedDefaultTab, searchParams, pathname, router]);
 
   const handleNavigate = (target: NavigationTarget | string) => {
     if (target.startsWith("create-")) {
-      setSettingsSection(target.replace("create-", "") as SettingsSection);
-      setActiveTab("create");
+      navigate("create", target.replace("create-", "") as SettingsSection);
       return;
     }
     if (target === "operate-registrants") {
-      setOperateSection("registrants");
-      setActiveTab("operate");
+      navigate("operate", "registrants");
       return;
     }
-
-    setActiveTab(target as Tab);
+    navigate(target as Tab);
   };
 
   const liveUrl = webinar ? `${window.location.origin}/webinar/${webinar.slug}/live` : "";
@@ -122,15 +181,18 @@ export default function WebinarDetailPage({ params }: { params: Promise<{ slug: 
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (isLoading) {
+  if (isLoading) return <HubLoader />;
+
+  // 로드 실패(네트워크·5xx)는 재시도 가능 — '찾을 수 없음'과 구분
+  if (loadError === "error") {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      <div className="p-8">
+        <InlineError message="웨비나를 불러오지 못했어요" onRetry={() => void fetchWebinar()} />
       </div>
     );
   }
 
-  if (!webinar) {
+  if (loadError === "notfound" || !webinar) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-center">
         <Video className="w-10 h-10 text-muted-foreground/30 mb-3" />
@@ -149,13 +211,21 @@ export default function WebinarDetailPage({ params }: { params: Promise<{ slug: 
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 sm:px-6 lg:px-8 pt-6 lg:pt-8 pb-0 space-y-4">
-        <Link
-          href="/webinar"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          웨비나 목록
-        </Link>
+        {/* 브레드크럼 — 목록 + 소속 프로젝트 맥락 (딥링크/복제 진입 시 어느 프로젝트인지) */}
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground flex-wrap">
+          <Link
+            href="/webinar"
+            className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            웨비나 목록
+          </Link>
+          {webinar.project && (
+            <span className="text-muted-foreground/60">
+              · {webinar.workspace ? `${webinar.workspace.name} / ` : ""}{webinar.project.name}
+            </span>
+          )}
+        </div>
 
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
@@ -203,11 +273,13 @@ export default function WebinarDetailPage({ params }: { params: Promise<{ slug: 
           </div>
         </div>
 
-        <div className="flex items-center gap-1 border-b border-border -mb-px overflow-x-auto">
+        <div className="flex items-center gap-1 border-b border-border -mb-px overflow-x-auto" role="tablist">
           {tabs.map(({ id: tabId, label, icon: Icon }) => (
             <button
               key={tabId}
-              onClick={() => activateTab(tabId)}
+              role="tab"
+              aria-selected={activeTab === tabId}
+              onClick={() => navigate(tabId)}
               className={`flex shrink-0 items-center gap-1.5 px-3 py-2.5 text-sm border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === tabId
                   ? "border-violet-500 text-violet-500 font-medium"
@@ -241,7 +313,7 @@ export default function WebinarDetailPage({ params }: { params: Promise<{ slug: 
                 webinar={webinar}
                 onUpdate={fetchWebinar}
                 section={settingsSection}
-                onSectionChange={setSettingsSection}
+                onSectionChange={(section) => navigate("create", section, { replace: true })}
               />
             )}
             {activeTab === "deploy" && <DeployTab webinarId={id} />}
@@ -251,7 +323,7 @@ export default function WebinarDetailPage({ params }: { params: Promise<{ slug: 
                 webinar={webinar}
                 onNavigate={handleNavigate}
                 section={operateSection}
-                onSectionChange={setOperateSection}
+                onSectionChange={(section) => navigate("operate", section, { replace: true })}
               />
             )}
             {activeTab === "analytics" && <AnalyticsTab webinarId={id} />}

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X, Loader2, Plus, Copy, Check, Trash2, AlertTriangle } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
 import { formatKstDateTime } from "@/lib/datetime";
 import { ApiTokenIcon } from "@/components/settings/settings-icons";
@@ -33,6 +34,7 @@ const SCOPES = [
 ];
 
 export default function ApiTokensModal({ workspaceId, onClose }: Props) {
+  const confirm = useConfirm();
   const [tokens, setTokens] = useState<Token[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -75,7 +77,7 @@ export default function ApiTokensModal({ workspaceId, onClose }: Props) {
   };
 
   const handleDelete = async (t: Token) => {
-    if (!confirm(`"${t.name}" 토큰을 폐기할까요? 이 토큰을 사용 중인 외부 도구는 즉시 동작을 멈춥니다.`)) return;
+    if (!(await confirm({ title: "토큰을 폐기할까요?", description: `"${t.name}"\n이 토큰을 사용 중인 외부 도구는 즉시 동작을 멈춰요.`, confirmLabel: "폐기", tone: "danger" }))) return;
     await fetch(`/api/api-tokens/${t.id}`, { method: "DELETE" });
     fetchTokens();
   };

@@ -23,6 +23,7 @@ import {
 import { toast } from "sonner";
 import QATab from "./QATab";
 import AnnouncementsTab from "./AnnouncementsTab";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -140,6 +141,7 @@ function Kpi({ label, value, sub }: { label: string; value: string; sub?: string
 
 /* ── 팝업 발행 패널 ── */
 function PopupPanel({ webinarId }: { webinarId: string }) {
+  const confirm = useConfirm();
   const [popups, setPopups] = useState<AdminPopup[]>([]);
   const [form, setForm] = useState({ type: "notice", title: "", message: "", buttonLabel: "", buttonUrl: "", tallyFormId: "", useTally: false });
   const [busy, setBusy] = useState(false);
@@ -191,7 +193,7 @@ function PopupPanel({ webinarId }: { webinarId: string }) {
   };
 
   const remove = async (popup: AdminPopup) => {
-    if (!confirm(`"${popup.title}" 팝업을 삭제할까요?`)) return;
+    if (!(await confirm({ title: "팝업을 삭제할까요?", description: `"${popup.title}"`, confirmLabel: "삭제", tone: "danger" }))) return;
     const res = await fetch(`/api/webinars/${webinarId}/popups/${popup.id}`, { method: "DELETE" });
     if (res.ok) { toast.success("삭제했어요"); void fetchPopups(); }
   };
@@ -260,6 +262,7 @@ function PopupPanel({ webinarId }: { webinarId: string }) {
 
 /* ── Tally 단독 푸시 패널 ── */
 function TallyPanel({ webinarId }: { webinarId: string }) {
+  const confirm = useConfirm();
   const [pushes, setPushes] = useState<AdminTallyPush[]>([]);
   const [form, setForm] = useState({ title: "", formId: "", memo: "" });
   const [busy, setBusy] = useState(false);
@@ -303,7 +306,7 @@ function TallyPanel({ webinarId }: { webinarId: string }) {
   };
 
   const remove = async (push: AdminTallyPush) => {
-    if (!confirm(`"${push.title}" 푸시를 삭제할까요?`)) return;
+    if (!(await confirm({ title: "푸시를 삭제할까요?", description: `"${push.title}"`, confirmLabel: "삭제", tone: "danger" }))) return;
     const res = await fetch(`/api/webinars/${webinarId}/tally-pushes/${push.id}`, { method: "DELETE" });
     if (res.ok) { toast.success("삭제했어요"); void fetchPushes(); }
   };
@@ -365,6 +368,7 @@ export default function LiveConsoleTab({
   webinar?: WebinarForConsole;
   onNavigate?: (target: string) => void;
 }) {
+  const confirm = useConfirm();
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [switching, setSwitching] = useState(false);
@@ -399,13 +403,13 @@ export default function LiveConsoleTab({
   const setOverride = async (value: WebinarStatus | null) => {
     if (switching) return;
     // 공개 아임웹 사이트를 즉시 바꾸는 고영향 전환(라이브 시작·종료)은 오조작 방지를 위해 확인
-    const confirmMsg =
+    const confirmCfg =
       value === "live"
-        ? "웨비나를 '라이브' 상태로 전환할까요?\n아임웹의 버튼·배너가 즉시 라이브 모드로 바뀌고, 등록자에게 시청 화면이 열려요."
+        ? { title: "'라이브'로 전환할까요?", description: "아임웹의 버튼·배너가 즉시 라이브 모드로 바뀌고, 등록자에게 시청 화면이 열려요.", confirmLabel: "라이브 시작", tone: "danger" as const }
         : value === "ended"
-          ? "웨비나를 '종료' 상태로 전환할까요?\n아임웹의 버튼·배너가 즉시 종료 모드로 바뀌어요."
+          ? { title: "'종료'로 전환할까요?", description: "아임웹의 버튼·배너가 즉시 종료 모드로 바뀌어요.", confirmLabel: "종료", tone: "danger" as const }
           : null;
-    if (confirmMsg && !confirm(confirmMsg)) return;
+    if (confirmCfg && !(await confirm(confirmCfg))) return;
     setSwitching(true);
     try {
       const res = await fetch(`/api/webinars/${webinarId}`, {

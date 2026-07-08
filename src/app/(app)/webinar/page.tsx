@@ -6,6 +6,7 @@ import { Plus, Video, Loader2, ChevronRight, Calendar, Users, Trash2 } from "luc
 import { toast } from "sonner";
 import { useWorkspace } from "@/contexts/workspace";
 import { kstDateTimeLocalToIso, formatKst } from "@/lib/datetime";
+import { InlineError } from "@/components/ui/inline-error";
 import Link from "next/link";
 
 interface Webinar {
@@ -38,14 +39,20 @@ export default function WebinarPage() {
   });
   const [isCreating, setIsCreating] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   const fetchWebinars = useCallback(async () => {
     if (!workspace || !currentProject) return;
     setIsLoading(true);
+    setLoadError(false);
     try {
       const res = await fetch(`/api/webinars?workspaceId=${workspace.id}&projectId=${currentProject.id}`);
+      if (!res.ok) { setLoadError(true); return; }
       const data = await res.json();
       setWebinars(data.webinars ?? []);
+    } catch {
+      // 로드 실패를 '웨비나 없음'으로 위장하지 않음
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -263,6 +270,8 @@ export default function WebinarPage() {
         <div className="flex items-center justify-center h-40">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
+      ) : loadError ? (
+        <InlineError message="웨비나 목록을 불러오지 못했어요" onRetry={() => void fetchWebinars()} />
       ) : webinars.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Video className="w-10 h-10 text-muted-foreground/20 mb-3" />
