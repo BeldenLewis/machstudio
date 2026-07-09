@@ -16,6 +16,7 @@ const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 interface Session {
   id: string;
   number: number;
+  type?: string; // "session" | "qa" | "break"
   title: string;
   speaker: string | null;
   speakerPhotoUrl?: string | null;
@@ -23,6 +24,9 @@ interface Session {
   startTime: string;
   endTime: string;
 }
+
+// 아젠다·메타에서 유형 라벨 (기본 세션은 라벨 없음)
+const SES_TYPE_LABEL: Record<string, string> = { qa: "Q&A", break: "휴식" };
 
 interface AnsweredQA {
   id: string;
@@ -246,6 +250,7 @@ const WATCH_CSS = `
 .stk-live .lv-ses .tc { font-size:12px; color:var(--sub); padding-top:2px; white-space:nowrap; }
 .stk-live .lv-ses.now .tc { color:var(--key); font-weight:650; }
 .stk-live .lv-ses h4 { margin:0; font-size:14px; font-weight:700; letter-spacing:-0.01em; word-break:keep-all; color:var(--text); }
+.stk-live .lv-setype { margin-left:6px; font-size:10px; font-weight:700; padding:1px 6px; border-radius:6px; background:var(--key-dim); color:var(--key); vertical-align:middle; white-space:nowrap; }
 .stk-live .lv-ses small { color:var(--sub); font-size:12px; }
 .stk-live .lv-ses .st { margin-left:auto; align-self:center; font-size:11px; font-weight:700; color:var(--sub); white-space:nowrap; }
 .stk-live .lv-ses.now .st { color:var(--key); display:inline-flex; align-items:center; gap:5px; }
@@ -360,8 +365,9 @@ export default function LiveContentStk({
   // 지금/다음 세션이 있을 때만 focus — 모든 세션 종료 후엔 끝난 세션을 "다음"으로 잘못 표기하지 않는다
   const focus = activeSession ?? nextSession ?? null;
 
+  const metaKind = focus?.type === "break" ? "휴식" : focus?.type === "qa" ? "Q&A" : "세션";
   const metaKicker = focus
-    ? `${activeSession ? "지금 세션" : "다음 세션"} · ${focus.number}/${sessions.length}`
+    ? `${activeSession ? "지금" : "다음"} ${metaKind} · ${focus.number}/${sessions.length}`
     : null;
   const metaTitle = focus?.title || webinar.name;
   const metaDesc = focus?.description || webinar.description;
@@ -519,22 +525,26 @@ export default function LiveContentStk({
               {/* Q&A */}
               {tab === "qa" && (
                 <div className="lv-panel" role="tabpanel" id="lv-panel-qa" aria-labelledby="lv-tab-qa">
-                  {qa.sessions.length > 1 && (
-                    <div className="lv-chips">
-                      {qa.sessions.map((s) => (
-                        <motion.button
-                          key={s.number}
-                          type="button"
-                          whileTap={{ scale: 0.96 }}
-                          transition={spring}
-                          className={`lv-chip ${qa.selectedSession === s.number ? "on" : ""}`}
-                          onClick={() => qa.setSelectedSession(qa.selectedSession === s.number ? null : s.number)}
-                        >
-                          세션 {s.number}
-                        </motion.button>
-                      ))}
-                    </div>
-                  )}
+                  {(() => {
+                    // 질문 대상 칩은 "세션" 유형만 (Q&A·브레이크 제외)
+                    const chipSessions = qa.sessions.filter((s) => (s.type ?? "session") === "session");
+                    return chipSessions.length > 1 ? (
+                      <div className="lv-chips">
+                        {chipSessions.map((s) => (
+                          <motion.button
+                            key={s.number}
+                            type="button"
+                            whileTap={{ scale: 0.96 }}
+                            transition={spring}
+                            className={`lv-chip ${qa.selectedSession === s.number ? "on" : ""}`}
+                            onClick={() => qa.setSelectedSession(qa.selectedSession === s.number ? null : s.number)}
+                          >
+                            세션 {s.number}
+                          </motion.button>
+                        ))}
+                      </div>
+                    ) : null;
+                  })()}
                   <div className="lv-ask">
                     <input
                       value={qa.question}
@@ -649,7 +659,10 @@ export default function LiveContentStk({
                           <div className={`lv-ses ${s.status}`} key={s.id}>
                             <span className="tc">{s.startTime}</span>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <h4>{s.title}</h4>
+                              <h4>
+                                {s.title}
+                                {s.type && s.type !== "session" && <span className="lv-setype">{SES_TYPE_LABEL[s.type] ?? s.type}</span>}
+                              </h4>
                               {s.speaker && <small>{s.speaker}</small>}
                               {s.status === "now" && (
                                 <div className="lv-prog"><span style={{ width: `${pct}%` }} /></div>

@@ -11,6 +11,7 @@ import ThemeTab from "./ThemeTab";
 interface WebinarSession {
   id: string;
   number: number;
+  type: string;
   title: string;
   speaker: string | null;
   speakerPhotoUrl: string | null;

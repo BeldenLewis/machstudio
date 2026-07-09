@@ -60,6 +60,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     data: {
       webinarId: webinar.id,
       number,
+      type: ["session", "qa", "break"].includes(String(body.type)) ? String(body.type) : "session",
       title,
       speaker: String(body.speaker ?? "").trim() || null,
       speakerPhotoUrl: String(body.speakerPhotoUrl ?? "").trim() || null,

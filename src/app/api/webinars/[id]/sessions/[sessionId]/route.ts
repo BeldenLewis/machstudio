@@ -52,6 +52,7 @@ export async function PATCH(
     where: { id: session.id },
     data: {
       ...(number !== undefined && { number }),
+      ...(["session", "qa", "break"].includes(String(body.type)) && { type: String(body.type) }),
       ...(title !== undefined && { title }),
       ...(body.speaker !== undefined && { speaker: String(body.speaker).trim() || null }),
       ...(body.speakerPhotoUrl !== undefined && { speakerPhotoUrl: String(body.speakerPhotoUrl).trim() || null }),

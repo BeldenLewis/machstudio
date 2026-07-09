@@ -7,9 +7,18 @@ import { toast } from "sonner";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
+// 세션 유형 — 라이브 Q&A 칩은 "세션"만, 아젠다엔 전부(유형 표시)
+const SESSION_TYPES = [
+  { value: "session", label: "세션" },
+  { value: "qa", label: "Q&A" },
+  { value: "break", label: "브레이크" },
+] as const;
+const TYPE_LABEL: Record<string, string> = { session: "세션", qa: "Q&A", break: "브레이크" };
+
 interface WebinarSession {
   id: string;
   number: number;
+  type: string;
   title: string;
   speaker: string | null;
   speakerPhotoUrl: string | null;
@@ -20,6 +29,7 @@ interface WebinarSession {
 
 interface SessionForm {
   number: string;
+  type: string;
   title: string;
   speaker: string;
   speakerPhotoUrl: string;
@@ -30,6 +40,7 @@ interface SessionForm {
 
 const emptyForm: SessionForm = {
   number: "",
+  type: "session",
   title: "",
   speaker: "",
   speakerPhotoUrl: "",
@@ -41,6 +52,7 @@ const emptyForm: SessionForm = {
 function toForm(session: WebinarSession): SessionForm {
   return {
     number: String(session.number),
+    type: session.type || "session",
     title: session.title,
     speaker: session.speaker ?? "",
     speakerPhotoUrl: session.speakerPhotoUrl ?? "",
@@ -59,7 +71,7 @@ function SessionFormFields({
 }) {
   return (
     <div className="grid grid-cols-12 gap-3">
-      <div className="col-span-3 sm:col-span-2">
+      <div className="col-span-4 sm:col-span-2">
         <label className="text-xs text-muted-foreground mb-1 block">번호</label>
         <input
           type="number"
@@ -69,13 +81,25 @@ function SessionFormFields({
           className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
         />
       </div>
-      <div className="col-span-9 sm:col-span-10">
-        <label className="text-xs text-muted-foreground mb-1 block">세션 제목</label>
+      <div className="col-span-8 sm:col-span-3">
+        <label className="text-xs text-muted-foreground mb-1 block">유형</label>
+        <select
+          value={form.type}
+          onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
+          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
+        >
+          {SESSION_TYPES.map((t) => (
+            <option key={t.value} value={t.value}>{t.label}</option>
+          ))}
+        </select>
+      </div>
+      <div className="col-span-12 sm:col-span-7">
+        <label className="text-xs text-muted-foreground mb-1 block">제목</label>
         <input
           type="text"
           value={form.title}
           onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-          placeholder="예: AI 기반 데이터 분석 플랫폼의 혁신"
+          placeholder={form.type === "break" ? "예: 휴식" : form.type === "qa" ? "예: 라이브 Q&A" : "예: AI 기반 데이터 분석 플랫폼의 혁신"}
           className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
         />
       </div>
@@ -160,6 +184,7 @@ export default function SessionsTab({
 
   const buildPayload = (form: SessionForm) => ({
     number: Number(form.number),
+    type: form.type,
     title: form.title.trim(),
     speaker: form.speaker.trim() || null,
     speakerPhotoUrl: form.speakerPhotoUrl.trim() || null,
@@ -350,6 +375,11 @@ export default function SessionsTab({
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
+                      {session.type && session.type !== "session" && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-500 font-semibold">
+                          {TYPE_LABEL[session.type] ?? session.type}
+                        </span>
+                      )}
                       <h4 className="text-sm font-medium">{session.title}</h4>
                       <span className="text-xs px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">
                         {session.startTime} - {session.endTime}

@@ -39,6 +39,7 @@ const OPERATE_SECTIONS: OperateSection[] = ["console", "registrants"];
 interface WebinarSession {
   id: string;
   number: number;
+  type: string;
   title: string;
   speaker: string | null;
   speakerPhotoUrl: string | null;

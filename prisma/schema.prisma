@@ -525,6 +525,7 @@ model WebinarSession {
   id              String  @id @default(cuid())
   webinarId       String
   number          Int
+  type            String  @default("session") // "session" | "qa" | "break"
   title           String
   speaker         String?
   speakerPhotoUrl String?

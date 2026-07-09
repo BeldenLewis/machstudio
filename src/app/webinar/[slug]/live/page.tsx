@@ -13,6 +13,7 @@ const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 interface WebinarSession {
   id: string;
   number: number;
+  type?: string;
   title: string;
   speaker: string | null;
   speakerPhotoUrl?: string | null;

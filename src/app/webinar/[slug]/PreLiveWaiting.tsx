@@ -28,6 +28,7 @@ const EXTRA_CSS = `
 interface Session {
   id: string;
   number: number;
+  type?: string; // "session" | "qa" | "break"
   title: string;
   speaker: string | null;
   speakerPhotoUrl?: string | null;
@@ -134,7 +135,7 @@ export default function PreLiveWaiting({
             {webinar.sessions.map((s) => (
               <div className="ag-session" key={s.id}>
                 <div className="ag-sess-head">
-                  <span className="ag-sess-num">SESSION {s.number}</span>
+                  <span className="ag-sess-num">{s.type === "break" ? "BREAK" : s.type === "qa" ? "Q&A" : `SESSION ${s.number}`}</span>
                   <h3 className="ag-sess-title">{s.title}</h3>
                   <span className="ag-sess-time">{s.startTime} ~ {s.endTime}</span>
                 </div>
