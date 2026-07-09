@@ -63,6 +63,7 @@ export type ActivityAction =
   | "webinar.chat_deleted"
   | "webinar.reminder_sent"
   | "webinar.registration_deleted"
+  | "webinar.registrations_bulk_deleted"
   | "dashboard.created"
   | "dashboard.updated"
   | "dashboard.deleted"

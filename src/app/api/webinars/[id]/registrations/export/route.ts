@@ -35,8 +35,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   });
   if (!membership) return NextResponse.json({ error: "접근 권한 없음" }, { status: 403 });
 
+  // ?ids=a,b,c 가 있으면 선택 등록자만 내보낸다(없으면 전체) — 이 웨비나 스코프 유지
+  const idsParam = new URL(request.url).searchParams.get("ids");
+  const ids = idsParam ? idsParam.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 1000) : null;
+
   const registrations = await prisma.webinarRegistration.findMany({
-    where: { webinarId: id },
+    where: { webinarId: id, ...(ids && ids.length ? { id: { in: ids } } : {}) },
     orderBy: { submittedAt: "desc" },
   });
 

@@ -293,6 +293,9 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
   const [detailDraft, setDetailDraft] = useState<RegistrationDetailDraft | null>(null);
   // 일괄등록 실패 행 — 개수만이 아니라 원인·행 번호를 모달에 남겨 수정 가능하게
   const [bulkErrors, setBulkErrors] = useState<{ index?: number; message: string }[]>([]);
+  // 선택 등록자(체크박스) — 현재 보고 있는 목록 기준(뷰가 바뀌면 초기화)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const modalOpen = showManual || showBulk || Boolean(selectedRegistration);
   // 현재 열린 대화상자 컨테이너 — 포커스 트랩·초기 포커스 대상
   const dialogRef = useRef<HTMLElement | null>(null);
@@ -311,8 +314,17 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
       const res = await fetch(`/api/webinars/${webinarId}/registrations?${params}`);
       if (!res.ok) { setLoadError(true); return; }
       const data = await res.json();
-      setRegistrations(data.registrations ?? []);
+      const rows: Registration[] = data.registrations ?? [];
+      setRegistrations(rows);
       setTotal(data.total ?? 0);
+      // 선택은 항상 현재 보이는 목록으로 한정 — 새로고침으로 사라진(다른 페이지로 밀린/삭제된) 행은
+      // 선택에서 자동 제거해, 보이지 않는 행이 선택된 채 일괄 삭제되는 일을 막는다.
+      setSelectedIds((prev) => {
+        if (prev.size === 0) return prev;
+        const visible = new Set(rows.map((r) => r.id));
+        const next = new Set([...prev].filter((id) => visible.has(id)));
+        return next.size === prev.size ? prev : next;
+      });
     } catch {
       // 로드 실패를 '등록자 없음'으로 위장하지 않음 — 재시도 경로 제공
       setLoadError(true);
@@ -325,6 +337,55 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
   useEffect(() => { if (!showBulk) setBulkErrors([]); }, [showBulk]);
 
   useEffect(() => { void Promise.resolve().then(fetchRegistrations); }, [fetchRegistrations]);
+
+  const allOnPageSelected = registrations.length > 0 && registrations.every((r) => selectedIds.has(r.id));
+  const toggleAllOnPage = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allOnPageSelected) registrations.forEach((r) => next.delete(r.id));
+      else registrations.forEach((r) => next.add(r.id));
+      return next;
+    });
+  };
+  const toggleOne = (id: string) => {
+    setSelectedIds((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    if (!(await confirm({ title: `선택한 ${ids.length}명을 삭제할까요?`, description: "삭제한 등록자는 되돌릴 수 없어요.", confirmLabel: "삭제", tone: "danger" }))) return;
+    setIsBulkDeleting(true);
+    try {
+      const res = await fetch(`/api/webinars/${webinarId}/registrations/bulk-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(data.error ?? "삭제 실패"); return; }
+      toast.success(`${data.deleted ?? ids.length}명을 삭제했어요`);
+      setSelectedIds(new Set());
+      if (selectedRegistration && ids.includes(selectedRegistration.id)) { setSelectedRegistration(null); setDetailDraft(null); }
+      await fetchRegistrations();
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  const handleExportSelected = async () => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    const res = await fetch(`/api/webinars/${webinarId}/registrations/export?ids=${encodeURIComponent(ids.join(","))}`);
+    if (!res.ok) { toast.error("내보내기 실패"); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `registrations-${webinarId}-selected.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -966,11 +1027,32 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
         </div>
       ) : (
         <>
+          {/* 선택 일괄 작업 바 — 체크박스로 고른 등록자에 내보내기·삭제 */}
+          {selectedIds.size > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-violet-500/30 bg-violet-500/5 px-4 py-2.5">
+              <span className="text-sm font-medium">{selectedIds.size}명 선택됨</span>
+              <div className="ml-auto flex items-center gap-2">
+                <button onClick={handleExportSelected} className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-secondary">선택 내보내기</button>
+                <button onClick={handleBulkDelete} disabled={isBulkDeleting} className="rounded-lg border border-red-500/30 px-3 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-500/10 disabled:opacity-50">{isBulkDeleting ? "삭제 중..." : "선택 삭제"}</button>
+                <button onClick={() => setSelectedIds(new Set())} className="rounded-lg px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground">선택 해제</button>
+              </div>
+            </div>
+          )}
           <div className="rounded-2xl border border-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-secondary/30">
+                    <th className="px-4 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        aria-label="이 페이지 전체 선택"
+                        checked={allOnPageSelected}
+                        ref={(el) => { if (el) el.indeterminate = !allOnPageSelected && registrations.some((r) => selectedIds.has(r.id)); }}
+                        onChange={toggleAllOnPage}
+                        className="align-middle accent-violet-500 cursor-pointer"
+                      />
+                    </th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="이름" sortKey="name" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="연락처" sortKey="phone" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="소속" sortKey="company" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
@@ -986,7 +1068,16 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {registrations.map((r) => (
-                    <tr key={r.id} className="hover:bg-secondary/20 transition-colors">
+                    <tr key={r.id} className={`transition-colors ${selectedIds.has(r.id) ? "bg-violet-500/5" : "hover:bg-secondary/20"}`}>
+                      <td className="px-4 py-3 w-10">
+                        <input
+                          type="checkbox"
+                          aria-label={`${r.name} 선택`}
+                          checked={selectedIds.has(r.id)}
+                          onChange={() => toggleOne(r.id)}
+                          className="align-middle accent-violet-500 cursor-pointer"
+                        />
+                      </td>
                       <td className="px-4 py-3 font-medium whitespace-nowrap">{r.name}</td>
                       <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                         <div>{r.phone ?? "-"}</div>
