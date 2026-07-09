@@ -508,6 +508,9 @@ model Webinar {
   questions          WebinarQA[]
   announcements      WebinarAnnouncement[]
   popups             WebinarPopup[]
+  polls              WebinarPoll[]
+  chatMessages       WebinarChatMessage[]
+  reminders          WebinarReminder[]
   tallyPushes        WebinarTallyPush[]
   embedSites         WebinarEmbedSite[]
   attendanceSegments WebinarAttendanceSegment[]
@@ -596,13 +599,27 @@ model WebinarQA {
   company        String?
   phone          String?
   email          String?
+  voteCount      Int      @default(0) // 시청자 추천 수 (추천순 정렬용)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+  webinar Webinar         @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+  votes   WebinarQAVote[]
 
   @@index([webinarId, createdAt(sort: Desc)])
   @@index([webinarId, status])
+}
+
+model WebinarQAVote {
+  id             String   @id @default(cuid())
+  qaId           String
+  registrationId String? // 등록자당 1표 (검증된 경우)
+  createdAt      DateTime @default(now())
+
+  qa WebinarQA @relation(fields: [qaId], references: [id], onDelete: Cascade)
+
+  @@unique([qaId, registrationId])
+  @@index([qaId])
 }
 
 model WebinarAnnouncement {
@@ -706,6 +723,80 @@ model WebinarVisitStat {
   webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
 
   @@unique([webinarId, date, utmSource, utmMedium])
+}
+
+// 실시간 투표 — 운영 콘솔에서 발행(단일 활성), 시청자 우하단 토스트로 노출.
+// 집계는 옵션별 voteCount(원자적 증가) + 중복 방지는 등록자당 1표(unique)로 처리.
+model WebinarPoll {
+  id        String   @id @default(cuid())
+  webinarId String
+  question  String
+  isActive  Boolean  @default(false) // 발행(활성) — 같은 웨비나에서 1개만 ON
+  sentBy    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  webinar Webinar             @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+  options WebinarPollOption[]
+  votes   WebinarPollVote[]
+
+  @@index([webinarId, isActive])
+}
+
+model WebinarPollOption {
+  id        String @id @default(cuid())
+  pollId    String
+  label     String
+  order     Int    @default(0)
+  voteCount Int    @default(0)
+
+  poll  WebinarPoll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes WebinarPollVote[]
+
+  @@index([pollId, order])
+}
+
+model WebinarPollVote {
+  id             String   @id @default(cuid())
+  pollId         String
+  optionId       String
+  registrationId String? // 등록자 식별 — 중복 투표 방지 키
+  createdAt      DateTime @default(now())
+
+  poll   WebinarPoll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option WebinarPollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, registrationId]) // 등록자당 1표 (registrationId 있을 때)
+  @@index([pollId])
+}
+
+// 실시간 채팅 — 라이브 중 시청자·호스트 메시지. 공개 노출 시 이름은 마스킹.
+model WebinarChatMessage {
+  id             String   @id @default(cuid())
+  webinarId      String
+  registrationId String? // 발신 등록자 (검증된 경우만)
+  name           String
+  message        String
+  isHost         Boolean  @default(false) // 운영자(호스트) 발언
+  createdAt      DateTime @default(now())
+
+  webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+
+  @@index([webinarId, createdAt])
+}
+
+// 알림 구독 — "알림 받고 이어보기" 스위치 ON 시 등록자 이메일을 저장. 운영자가 구독자에게 발송.
+model WebinarReminder {
+  id             String   @id @default(cuid())
+  webinarId      String
+  registrationId String?
+  email          String
+  createdAt      DateTime @default(now())
+
+  webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+
+  @@unique([webinarId, email])
+  @@index([webinarId])
 }
 
 model WebinarTallyPush {

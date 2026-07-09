@@ -9,6 +9,27 @@ import WebinarSchedulePicker from "@/components/webinar/WebinarSchedulePicker";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
+function Toggle({ checked, onChange, label, desc }: { checked: boolean; onChange: (v: boolean) => void; label: string; desc?: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <p className="text-sm font-medium">{label}</p>
+        {desc && <p className="text-[11px] text-muted-foreground/70 mt-0.5 leading-relaxed">{desc}</p>}
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
+        className={`relative shrink-0 w-11 h-6 rounded-full transition-colors ${checked ? "bg-violet-500" : "bg-secondary border border-border"}`}
+      >
+        <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-5" : ""}`} />
+      </button>
+    </div>
+  );
+}
+
 interface Webinar {
   id: string;
   name: string;
@@ -28,8 +49,12 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
 
   const livePage = (webinar.config?.livePage ?? {}) as Record<string, unknown>;
   const cta = (livePage.cta ?? {}) as Record<string, unknown>;
+  const notify = (livePage.notify ?? {}) as Record<string, unknown>;
   const components = (webinar.components ?? {}) as Record<string, unknown>;
   const ctaButtons = Array.isArray(cta.buttons) ? (cta.buttons as { label?: string; url?: string; style?: string }[]) : [];
+  // 위치가 아니라 style 로 슬롯을 판별 — 보조(ghost) 버튼만 있어도 저장·재로딩 시 메인(흰색)으로 뒤바뀌지 않게
+  const primaryBtn = ctaButtons.find((b) => b.style !== "ghost");
+  const secondaryBtn = ctaButtons.find((b) => b.style === "ghost");
 
   const [form, setForm] = useState({
     name: webinar.name,
@@ -49,10 +74,18 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
     ctaTitle: (cta.title as string) ?? "",
     ctaDescription: (cta.description as string) ?? "",
     ctaBenefits: Array.isArray(cta.benefits) ? (cta.benefits as string[]).join("\n") : "",
-    ctaPrimaryLabel: ctaButtons[0]?.label ?? "",
-    ctaPrimaryUrl: ctaButtons[0]?.url ?? "",
-    ctaSecondaryLabel: ctaButtons[1]?.label ?? "",
-    ctaSecondaryUrl: ctaButtons[1]?.url ?? "",
+    ctaPrimaryLabel: primaryBtn?.label ?? "",
+    ctaPrimaryUrl: primaryBtn?.url ?? "",
+    ctaSecondaryLabel: secondaryBtn?.label ?? "",
+    ctaSecondaryUrl: secondaryBtn?.url ?? "",
+    // 실시간 참여 — 채팅 탭 노출 (오프하면 시청 화면에서 채팅 탭이 사라짐)
+    chatEnabled: components.chatEnabled === true,
+    // 알림 받고 이어보기 박스 (config.livePage.notify)
+    notifyEnabled: notify.enabled === true,
+    notifyKicker: (notify.kicker as string) ?? "",
+    notifyTitle: (notify.title as string) ?? "",
+    notifyDescription: (notify.description as string) ?? "",
+    notifySwitchLabel: (notify.switchLabel as string) ?? "",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -76,10 +109,18 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
     if (benefits.length) cta.benefits = benefits;
     if (buttons.length) cta.buttons = buttons;
 
+    // 알림 박스 — enabled 플래그를 항상 담아 온/오프 상태가 유지되게 한다
+    const notifyObj: Record<string, unknown> = { enabled: form.notifyEnabled };
+    if (form.notifyKicker.trim()) notifyObj.kicker = form.notifyKicker.trim();
+    if (form.notifyTitle.trim()) notifyObj.title = form.notifyTitle.trim();
+    if (form.notifyDescription.trim()) notifyObj.description = form.notifyDescription.trim();
+    if (form.notifySwitchLabel.trim()) notifyObj.switchLabel = form.notifySwitchLabel.trim();
+
     const livePage: Record<string, unknown> = {};
     if (form.lpContact.trim()) livePage.infoContact = form.lpContact.trim();
     if (form.lpNotice.trim()) livePage.notice = form.lpNotice.trim();
     if (Object.keys(cta).length) livePage.cta = cta;
+    livePage.notify = notifyObj;
     return livePage;
   };
 
@@ -106,6 +147,7 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
           components: {
             ...(webinar.components ?? {}),
             allowLiveRegistration: form.closeRegOnLive ? false : null,
+            chatEnabled: form.chatEnabled,
           },
         }),
       });
@@ -248,7 +290,7 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
         </div>
 
         <div className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3">
-          <p className="text-xs font-medium text-muted-foreground">CTA 카드 (전시 사전등록 등 유도)</p>
+          <p className="text-xs font-medium text-muted-foreground">자료 받기 카드 (CTA) — 비워두면 표시되지 않아요</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input type="text" placeholder="상단 라벨 (예: STK 2026 Pre-Registration)" value={form.ctaEyebrow}
               onChange={(e) => setForm((f) => ({ ...f, ctaEyebrow: e.target.value }))}
@@ -277,6 +319,50 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
               onChange={(e) => setForm((f) => ({ ...f, ctaSecondaryUrl: e.target.value }))}
               className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
           </div>
+        </div>
+
+        {/* 알림 받고 이어보기 카드 (config.livePage.notify) */}
+        <div className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3">
+          <Toggle
+            checked={form.notifyEnabled}
+            onChange={(v) => setForm((f) => ({ ...f, notifyEnabled: v }))}
+            label="알림 받고 이어보기 카드 표시"
+            desc="시청 화면 하단에 다음 세션 알림·다시보기 안내 카드를 보여줘요."
+          />
+          {form.notifyEnabled && (
+            <div className="space-y-3 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input type="text" placeholder="상단 라벨 (예: 다음 세션 · 20:20)" value={form.notifyKicker}
+                  onChange={(e) => setForm((f) => ({ ...f, notifyKicker: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
+                <input type="text" placeholder="제목 (예: 알림 받고 이어보기)" value={form.notifyTitle}
+                  onChange={(e) => setForm((f) => ({ ...f, notifyTitle: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
+              </div>
+              <textarea rows={2} placeholder="설명 (비워두면 기본 문구)" value={form.notifyDescription}
+                onChange={(e) => setForm((f) => ({ ...f, notifyDescription: e.target.value }))}
+                className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm resize-none focus:outline-none focus:border-violet-400 transition-colors" />
+              <input type="text" placeholder="스위치 문구 (예: 세션 시작 알림 받기)" value={form.notifySwitchLabel}
+                onChange={(e) => setForm((f) => ({ ...f, notifySwitchLabel: e.target.value }))}
+                className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* 실시간 참여 */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold">실시간 참여</h3>
+          <p className="mt-1 text-xs text-muted-foreground">시청 화면의 참여 박스(Q&amp;A·채팅·세션) 구성이에요.</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+          <Toggle
+            checked={form.chatEnabled}
+            onChange={(v) => setForm((f) => ({ ...f, chatEnabled: v }))}
+            label="채팅 탭 사용"
+            desc="끄면 시청 화면 참여 박스에서 채팅 탭이 사라져요. (실시간 채팅 연결은 준비 중)"
+          />
         </div>
       </section>
 

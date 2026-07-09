@@ -17,6 +17,7 @@ interface QAItem {
   status: QAStatus;
   name: string | null;
   company: string | null;
+  voteCount: number;
   createdAt: string;
 }
 
@@ -114,6 +115,9 @@ export default function QATab({ webinarId, embedded = false }: { webinarId: stri
                     {q.company && <span className="text-xs text-muted-foreground">· {q.company}</span>}
                     {q.sessionNumber && (
                       <span className="text-xs px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">세션 {q.sessionNumber}</span>
+                    )}
+                    {q.voteCount > 0 && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-500 font-medium tabular-nums">▲ {q.voteCount}</span>
                     )}
                     <span className="text-xs text-muted-foreground">
                       {formatKst(q.createdAt, { hour: "2-digit", minute: "2-digit" })}

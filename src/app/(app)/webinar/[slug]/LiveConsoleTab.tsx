@@ -8,6 +8,7 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Activity,
+  BarChart3,
   Bell,
   ChevronDown,
   ClipboardList,
@@ -15,7 +16,9 @@ import {
   HelpCircle,
   ListChecks,
   Loader2,
+  Mail,
   Megaphone,
+  MessageSquare,
   MessageSquarePlus,
   RefreshCw,
   Users,
@@ -25,6 +28,7 @@ import QATab from "./QATab";
 import AnnouncementsTab from "./AnnouncementsTab";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { WEBINAR_STATUS_META } from "@/lib/webinar-status";
+import { formatKst } from "@/lib/datetime";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -76,6 +80,21 @@ interface AdminTallyPush {
   memo: string | null;
   isActive: boolean;
   createdAt: string;
+}
+
+interface AdminPollOption {
+  id: string;
+  label: string;
+  order: number;
+  voteCount: number;
+}
+
+interface AdminPoll {
+  id: string;
+  question: string;
+  isActive: boolean;
+  createdAt: string;
+  options: AdminPollOption[];
 }
 
 interface WebinarForConsole {
@@ -390,6 +409,374 @@ function TallyPanel({ webinarId }: { webinarId: string }) {
 }
 
 /* ── 운영 콘솔 본체 ── */
+/* ── 실시간 투표 패널 ── */
+function PollPanel({ webinarId }: { webinarId: string }) {
+  const confirm = useConfirm();
+  const [polls, setPolls] = useState<AdminPoll[]>([]);
+  const [question, setQuestion] = useState("");
+  const [options, setOptions] = useState<string[]>(["", ""]);
+  const [busy, setBusy] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editQuestion, setEditQuestion] = useState("");
+  const [editOptions, setEditOptions] = useState<{ id: string; label: string }[]>([]);
+
+  const fetchPolls = useCallback(async () => {
+    const res = await fetch(`/api/webinars/${webinarId}/polls`);
+    if (res.ok) setPolls((await res.json()).polls ?? []);
+  }, [webinarId]);
+  useEffect(() => { void fetchPolls(); }, [fetchPolls]);
+
+  const create = async () => {
+    const opts = options.map((o) => o.trim()).filter(Boolean);
+    if (!question.trim() || opts.length < 2 || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/webinars/${webinarId}/polls`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, options: opts }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      toast.success("투표가 등록됐어요. ON으로 켜면 시청자 화면 우하단에 표시돼요.");
+      setQuestion("");
+      setOptions(["", ""]);
+      void fetchPolls();
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "투표 등록에 실패했어요");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggle = async (poll: AdminPoll) => {
+    const res = await fetch(`/api/webinars/${webinarId}/polls/${poll.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive: !poll.isActive }),
+    });
+    if (res.ok) {
+      toast.success(poll.isActive ? "투표를 껐어요" : "투표가 시청자에게 표시돼요 (다른 투표는 자동 OFF)");
+      void fetchPolls();
+    }
+  };
+
+  const remove = async (poll: AdminPoll) => {
+    if (!(await confirm({ title: "투표를 삭제할까요?", description: `"${poll.question}" — 응답 기록도 함께 삭제돼요.`, confirmLabel: "삭제", tone: "danger" }))) return;
+    const res = await fetch(`/api/webinars/${webinarId}/polls/${poll.id}`, { method: "DELETE" });
+    if (res.ok) { toast.success("삭제했어요"); void fetchPolls(); }
+  };
+
+  const startEdit = (poll: AdminPoll) => {
+    setEditId(poll.id);
+    setEditQuestion(poll.question);
+    setEditOptions(poll.options.map((o) => ({ id: o.id, label: o.label })));
+  };
+
+  const saveEdit = async () => {
+    if (!editId || !editQuestion.trim()) return;
+    const res = await fetch(`/api/webinars/${webinarId}/polls/${editId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: editQuestion, options: editOptions }),
+    });
+    if (res.ok) { toast.success("수정했어요"); setEditId(null); void fetchPolls(); }
+    else toast.error("수정에 실패했어요");
+  };
+
+  const inputCls = "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
+
+  return (
+    <div className="space-y-4">
+      {/* 생성 폼 */}
+      <div className="space-y-2 rounded-xl border border-border bg-background/60 p-3.5">
+        <input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="투표 질문 *" className={inputCls} />
+        <div className="space-y-2">
+          {options.map((opt, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input value={opt} onChange={(e) => setOptions((prev) => prev.map((o, j) => (j === i ? e.target.value : o)))} placeholder={`선택지 ${i + 1}`} className={inputCls} />
+              {options.length > 2 && (
+                <button type="button" onClick={() => setOptions((prev) => prev.filter((_, j) => j !== i))} aria-label="선택지 삭제" className="shrink-0 rounded-lg border border-border px-2 py-2 text-xs text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500">×</button>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          {options.length < 8 ? (
+            <button type="button" onClick={() => setOptions((prev) => [...prev, ""])} className="text-xs font-medium text-violet-500 hover:underline">+ 선택지 추가</button>
+          ) : <span />}
+          <motion.button whileTap={{ scale: 0.97 }} onClick={create} disabled={!question.trim() || options.filter((o) => o.trim()).length < 2 || busy}
+            className="rounded-xl bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">
+            {busy ? "등록 중…" : "투표 등록"}
+          </motion.button>
+        </div>
+      </div>
+
+      {polls.length === 0 ? (
+        <p className="text-xs text-muted-foreground">등록된 투표가 없어요. ON 상태 투표 1개만 시청자 우하단에 표시돼요.</p>
+      ) : (
+        <div className="space-y-2">
+          <AnimatePresence initial={false}>
+            {polls.map((poll) => {
+              const total = poll.options.reduce((s, o) => s + o.voteCount, 0);
+              const editing = editId === poll.id;
+              return (
+                <motion.div
+                  key={poll.id}
+                  layout
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className={`rounded-xl border p-3 ${poll.isActive ? "border-violet-500/40 bg-violet-500/[0.04]" : "border-border"}`}
+                >
+                  {editing ? (
+                    <div className="space-y-2">
+                      <input value={editQuestion} onChange={(e) => setEditQuestion(e.target.value)} className={inputCls} />
+                      {editOptions.map((o, i) => (
+                        <input key={o.id} value={o.label} onChange={(e) => setEditOptions((prev) => prev.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} className={inputCls} />
+                      ))}
+                      <p className="text-[10px] text-muted-foreground">선택지 개수 변경은 새 투표로 만들어주세요 (응답 보존을 위해 문구만 수정돼요).</p>
+                      <div className="flex justify-end gap-1.5">
+                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => setEditId(null)} className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-secondary">취소</motion.button>
+                        <motion.button whileTap={{ scale: 0.9 }} onClick={saveEdit} className="rounded-lg bg-violet-500 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-violet-600">저장</motion.button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {poll.isActive && <span className="mr-1.5 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">ON</span>}
+                            {poll.question}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">{poll.options.length}개 선택지 · 총 {total}표</p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => toggle(poll)} className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${poll.isActive ? "border-border text-muted-foreground hover:bg-secondary" : "border-violet-500/40 text-violet-500 hover:bg-violet-500/10"}`}>
+                            {poll.isActive ? "OFF" : "ON"}
+                          </motion.button>
+                          <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => startEdit(poll)} className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-secondary">수정</motion.button>
+                          <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => remove(poll)} className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500">삭제</motion.button>
+                        </div>
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        {poll.options.map((o) => {
+                          const pct = total > 0 ? Math.round((o.voteCount / total) * 100) : 0;
+                          return (
+                            <div key={o.id} className="relative overflow-hidden rounded-lg border border-border/60 px-2.5 py-1.5 text-[11px]">
+                              <div className="absolute inset-y-0 left-0 bg-violet-500/10" style={{ width: `${pct}%` }} />
+                              <div className="relative flex items-center justify-between">
+                                <span className="truncate">{o.label}</span>
+                                <span className="tabular-nums text-muted-foreground">{o.voteCount}표 · {pct}%</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── 실시간 채팅 모더레이션 패널 ── */
+interface AdminChatMessage {
+  id: string;
+  name: string;
+  message: string;
+  isHost: boolean;
+  createdAt: string;
+}
+
+function ChatPanel({ webinarId }: { webinarId: string }) {
+  const confirm = useConfirm();
+  const [messages, setMessages] = useState<AdminChatMessage[]>([]);
+  const [hostMsg, setHostMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const fetchMessages = useCallback(async () => {
+    const res = await fetch(`/api/webinars/${webinarId}/chat`);
+    if (res.ok) setMessages((await res.json()).messages ?? []);
+    setLoading(false);
+  }, [webinarId]);
+  useEffect(() => { void fetchMessages(); }, [fetchMessages]);
+
+  const sendHost = async () => {
+    if (!hostMsg.trim() || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/webinars/${webinarId}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: hostMsg }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      toast.success("운영자 메시지를 보냈어요");
+      setHostMsg("");
+      void fetchMessages();
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "전송에 실패했어요");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (m: AdminChatMessage) => {
+    if (!(await confirm({ title: "메시지를 삭제할까요?", description: `"${m.message.slice(0, 40)}"`, confirmLabel: "삭제", tone: "danger" }))) return;
+    const res = await fetch(`/api/webinars/${webinarId}/chat/${m.id}`, { method: "DELETE" });
+    if (res.ok) { toast.success("삭제했어요"); setMessages((prev) => prev.filter((x) => x.id !== m.id)); }
+  };
+
+  const inputCls = "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
+
+  return (
+    <div className="space-y-4">
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        시청자 채팅은 <b className="font-semibold text-foreground">설정 → 실시간 참여 → 채팅 탭 사용</b>을 켜야 시청 화면에 보여요. 여기선 운영자 발언과 메시지 삭제(모더레이션)를 할 수 있어요.
+      </p>
+      <div className="flex gap-2">
+        <input
+          value={hostMsg}
+          onChange={(e) => setHostMsg(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) void sendHost(); }}
+          placeholder="운영자(HOST)로 메시지 보내기"
+          className={inputCls}
+        />
+        <motion.button whileTap={{ scale: 0.97 }} onClick={sendHost} disabled={!hostMsg.trim() || busy}
+          className="shrink-0 rounded-xl bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">
+          보내기
+        </motion.button>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] text-muted-foreground">최근 100개</p>
+        <button onClick={() => void fetchMessages()} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground">
+          <RefreshCw className="h-3 w-3" /> 새로고침
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="text-xs text-muted-foreground">불러오는 중…</p>
+      ) : messages.length === 0 ? (
+        <p className="text-xs text-muted-foreground">아직 채팅 메시지가 없어요.</p>
+      ) : (
+        <div className="max-h-80 space-y-1.5 overflow-y-auto">
+          <AnimatePresence initial={false}>
+            {messages.map((m) => (
+              <motion.div
+                key={m.id}
+                layout
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.12 }}
+                className="flex items-start justify-between gap-3 rounded-xl border border-border p-2.5"
+              >
+                <div className="min-w-0 text-xs">
+                  <span className={`mr-1.5 font-semibold ${m.isHost ? "text-red-500" : "text-foreground"}`}>
+                    {m.isHost && <span className="mr-1 rounded bg-red-500/10 px-1 py-0.5 text-[9px]">HOST</span>}
+                    {m.name}
+                  </span>
+                  <span className="text-muted-foreground">{formatKst(m.createdAt, { hour: "2-digit", minute: "2-digit" })}</span>
+                  <p className="mt-0.5 break-words text-foreground">{m.message}</p>
+                </div>
+                <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => remove(m)}
+                  className="shrink-0 rounded-lg border border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500">
+                  삭제
+                </motion.button>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── 알림 발송 패널 ("알림 받고 이어보기" 구독자에게) ── */
+function ReminderPanel({ webinarId }: { webinarId: string }) {
+  const [count, setCount] = useState(0);
+  const [emailReady, setEmailReady] = useState(false);
+  const [form, setForm] = useState({ subject: "", message: "", url: "", buttonLabel: "" });
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const fetchReminders = useCallback(async () => {
+    const res = await fetch(`/api/webinars/${webinarId}/reminders`);
+    if (res.ok) {
+      const d = await res.json();
+      setCount(d.count ?? 0);
+      setEmailReady(!!d.emailConfigured);
+    }
+    setLoading(false);
+  }, [webinarId]);
+  useEffect(() => { void fetchReminders(); }, [fetchReminders]);
+
+  const send = async () => {
+    if (!form.subject.trim() || !form.message.trim() || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/webinars/${webinarId}/reminders/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error);
+      if (d.emailConfigured) toast.success(`발송 완료 — ${d.sent}명 전송${d.failed ? `, ${d.failed}명 실패` : ""}`);
+      else toast.message(`이메일 발송 미설정 — 건너뜀 (구독자 ${d.total}명). RESEND_API_KEY 설정 후 사용하세요.`);
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "발송에 실패했어요");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const inputCls = "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm">
+          구독자 <b className="font-semibold text-violet-500">{loading ? "…" : count}</b>명
+          <span className="ml-1 text-[11px] text-muted-foreground">(&ldquo;알림 받고 이어보기&rdquo; 켠 시청자)</span>
+        </p>
+        <button onClick={() => void fetchReminders()} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground">
+          <RefreshCw className="h-3 w-3" /> 새로고침
+        </button>
+      </div>
+
+      {!loading && !emailReady && (
+        <p className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] p-2.5 text-[11px] leading-relaxed text-amber-600 dark:text-amber-400">
+          이메일 발송이 아직 연결되지 않았어요. <code className="rounded bg-black/10 px-1 dark:bg-white/10">RESEND_API_KEY</code>(+발송 도메인)를 설정하면 실제로 발송돼요. 지금은 구독자만 수집돼요.
+        </p>
+      )}
+
+      <div className="space-y-2 rounded-xl border border-border bg-background/60 p-3.5">
+        <input value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} placeholder="제목 (예: 곧 다음 세션이 시작돼요)" className={inputCls} />
+        <textarea value={form.message} onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))} placeholder="내용" rows={3} className={`${inputCls} resize-none`} />
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <input value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} placeholder="버튼 링크 (선택)" className={inputCls} />
+          <input value={form.buttonLabel} onChange={(e) => setForm((f) => ({ ...f, buttonLabel: e.target.value }))} placeholder="버튼 라벨 (선택)" className={inputCls} />
+        </div>
+        <div className="flex justify-end">
+          <motion.button whileTap={{ scale: 0.97 }} onClick={send} disabled={!form.subject.trim() || !form.message.trim() || busy || count === 0}
+            className="rounded-xl bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">
+            {busy ? "발송 중…" : `구독자 ${count}명에게 발송`}
+          </motion.button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function LiveConsoleTab({
   webinarId,
   webinar,
@@ -601,6 +988,21 @@ export default function LiveConsoleTab({
 
       <Section title="Tally 설문 푸시" icon={Bell}>
         <TallyPanel webinarId={webinarId} />
+      </Section>
+
+      <Section title="실시간 투표" icon={BarChart3} defaultOpen={status === "live"}>
+        <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">
+          팝업·설문과 별개로, 시청 화면 <b className="font-semibold text-foreground">우하단에 떠 있는</b> 실시간 투표예요. ON 상태 1개만 표시되고 집계는 자동으로 갱신돼요.
+        </p>
+        <PollPanel webinarId={webinarId} />
+      </Section>
+
+      <Section title="실시간 채팅" icon={MessageSquare} defaultOpen={status === "live"}>
+        <ChatPanel webinarId={webinarId} />
+      </Section>
+
+      <Section title="알림 발송" icon={Mail}>
+        <ReminderPanel webinarId={webinarId} />
       </Section>
 
       <Section title="시청자" icon={Activity} badge={viewers.length ? (

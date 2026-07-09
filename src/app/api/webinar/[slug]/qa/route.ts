@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/ratelimit";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
+import { maskName } from "@/lib/mask";
 
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -9,12 +10,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const webinar = await prisma.webinar.findUnique({ where: { slug }, select: { id: true } });
   if (!webinar) return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404 });
 
-  // 공개 GET — 답변된 질문만, 질문자 이름(PII)은 제외
-  const questions = await prisma.webinarQA.findMany({
-    where: { webinarId: webinar.id, status: "answered" },
-    orderBy: { createdAt: "asc" },
-    select: { id: true, question: true, sessionNumber: true, status: true, createdAt: true },
+  // 공개 GET — 라이브 Q&A 보드: 미채택(dismissed) 제외한 질문을 추천순으로.
+  // 이름은 서버에서 가운데 마스킹해 원본 PII 는 내보내지 않는다.
+  const rows = await prisma.webinarQA.findMany({
+    where: { webinarId: webinar.id, status: { not: "dismissed" } },
+    orderBy: [{ voteCount: "desc" }, { createdAt: "asc" }],
+    take: 100,
+    select: { id: true, question: true, sessionNumber: true, status: true, createdAt: true, name: true, voteCount: true },
   });
+  const questions = rows.map((q) => ({ ...q, name: q.name ? maskName(q.name) : null }));
 
   return NextResponse.json({ questions }, {
     headers: { "Access-Control-Allow-Origin": "*" },

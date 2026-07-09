@@ -86,8 +86,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     ? (webinar.config as Record<string, unknown>).youtubeId
     : undefined;
 
+  // 알림 스위치 초기 상태 복원용 — 이 등록자가 이미 구독 중인지
+  const reminderSubscribed = registration
+    ? !!(await prisma.webinarReminder.findFirst({ where: { webinarId: webinar.id, registrationId: registration.id }, select: { id: true } }))
+    : false;
+
   return NextResponse.json(
-    { found: !!registration, registration: registration ?? null, ...(youtubeId ? { youtubeId } : {}) },
+    { found: !!registration, registration: registration ?? null, reminderSubscribed, ...(youtubeId ? { youtubeId } : {}) },
     { headers: { "Access-Control-Allow-Origin": "*" } }
   );
 }
