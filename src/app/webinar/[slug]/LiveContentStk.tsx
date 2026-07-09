@@ -67,16 +67,19 @@ interface NotifyConfig {
   switchLabel?: string;
 }
 
+interface CtaCard {
+  eyebrow?: string;
+  title?: string;
+  description?: string;
+  benefits?: string[];
+  buttons?: CtaButton[];
+}
+
 interface LivePageConfig {
   infoContact?: string;
   notice?: string;
-  cta?: {
-    eyebrow?: string;
-    title?: string;
-    description?: string;
-    benefits?: string[];
-    buttons?: CtaButton[];
-  };
+  cta?: CtaCard; // 레거시 단일 (ctas 없을 때만 사용)
+  ctas?: CtaCard[];
   notify?: NotifyConfig;
 }
 
@@ -331,10 +334,12 @@ export default function LiveContentStk({
   const config = (webinar.config ?? {}) as Record<string, unknown>;
   const youtubeId = youtubeIdProp || (typeof config.youtubeId === "string" ? config.youtubeId : "");
   const live = (config.livePage ?? {}) as LivePageConfig;
-  const cta = live.cta;
-  const hasCta = !!(cta && (cta.title || (cta.buttons && cta.buttons.length)));
+  // CTA 카드 여러 장 — 신규 ctas[] 우선, 없으면 레거시 단일 cta. 내용 있는 카드만.
+  const ctaList: CtaCard[] = (Array.isArray(live.ctas) ? live.ctas : live.cta ? [live.cta] : [])
+    .filter((c) => !!c && (!!c.title || (Array.isArray(c.buttons) && c.buttons.length > 0)));
   const notify = live.notify;
   const hasNotify = !!notify?.enabled;
+  const footCount = ctaList.length + (hasNotify ? 1 : 0);
   const answered = qa.answered ?? [];
 
   // 세션 상태 계산용 시계 — 클라이언트 전용 렌더라 Date.now() 초기화 안전. 30초 틱.
@@ -686,22 +691,22 @@ export default function LiveContentStk({
           </aside>
         </div>
 
-        {/* 하단 카드: CTA + 알림 */}
-        {(hasCta || hasNotify) && (
-          <div className={`lv-foot ${hasCta && hasNotify ? "two" : ""}`} style={{ gridTemplateColumns: hasCta && hasNotify ? "1fr 1fr" : "1fr" }}>
-            {hasCta && (
-              <div className="lv-fc">
-                {cta!.eyebrow && <div className="lv-fk">{cta!.eyebrow}</div>}
-                {cta!.title && <h3>{cta!.title}</h3>}
-                {cta!.description && <p>{cta!.description}</p>}
-                {cta!.benefits && cta!.benefits.length > 0 && (
-                  <ul className="lv-fbenefits">{cta!.benefits.map((b, i) => <li key={i}>{b}</li>)}</ul>
+        {/* 하단 카드: CTA(여러 장) + 알림 */}
+        {footCount > 0 && (
+          <div className={`lv-foot ${footCount > 1 ? "two" : ""}`} style={{ gridTemplateColumns: footCount > 1 ? "repeat(2, minmax(0,1fr))" : "1fr" }}>
+            {ctaList.map((c, i) => (
+              <div className="lv-fc" key={`cta-${i}`}>
+                {c.eyebrow && <div className="lv-fk">{c.eyebrow}</div>}
+                {c.title && <h3>{c.title}</h3>}
+                {c.description && <p>{c.description}</p>}
+                {c.benefits && c.benefits.length > 0 && (
+                  <ul className="lv-fbenefits">{c.benefits.map((b, j) => <li key={j}>{b}</li>)}</ul>
                 )}
-                {cta!.buttons && cta!.buttons.length > 0 && (
+                {c.buttons && c.buttons.length > 0 && (
                   <div className="lv-fbtns">
-                    {cta!.buttons.map((btn, i) => (
+                    {c.buttons.map((btn, j) => (
                       <motion.a
-                        key={i}
+                        key={j}
                         whileTap={{ scale: 0.97 }}
                         transition={spring}
                         href={btn.url}
@@ -715,7 +720,7 @@ export default function LiveContentStk({
                   </div>
                 )}
               </div>
-            )}
+            ))}
             {hasNotify && (
               <div className="lv-fc">
                 {(notify!.kicker || "다음 세션") && <div className="lv-fk">{notify!.kicker || "다음 세션"}</div>}

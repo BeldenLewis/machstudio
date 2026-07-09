@@ -30,6 +30,40 @@ function Toggle({ checked, onChange, label, desc }: { checked: boolean; onChange
   );
 }
 
+// CTA 카드 편집 폼 (여러 장 지원)
+interface CtaFormCard {
+  eyebrow: string;
+  title: string;
+  description: string;
+  benefits: string; // 한 줄에 하나
+  primaryLabel: string;
+  primaryUrl: string;
+  secondaryLabel: string;
+  secondaryUrl: string;
+}
+
+const EMPTY_CTA: CtaFormCard = {
+  eyebrow: "", title: "", description: "", benefits: "",
+  primaryLabel: "", primaryUrl: "", secondaryLabel: "", secondaryUrl: "",
+};
+
+function ctaToForm(raw: Record<string, unknown>): CtaFormCard {
+  const buttons = Array.isArray(raw.buttons) ? (raw.buttons as { label?: string; url?: string; style?: string }[]) : [];
+  // style 로 슬롯 판별 — 보조(ghost)만 있어도 메인으로 뒤바뀌지 않게
+  const primary = buttons.find((b) => b.style !== "ghost");
+  const secondary = buttons.find((b) => b.style === "ghost");
+  return {
+    eyebrow: (raw.eyebrow as string) ?? "",
+    title: (raw.title as string) ?? "",
+    description: (raw.description as string) ?? "",
+    benefits: Array.isArray(raw.benefits) ? (raw.benefits as string[]).join("\n") : "",
+    primaryLabel: primary?.label ?? "",
+    primaryUrl: primary?.url ?? "",
+    secondaryLabel: secondary?.label ?? "",
+    secondaryUrl: secondary?.url ?? "",
+  };
+}
+
 interface Webinar {
   id: string;
   name: string;
@@ -48,13 +82,15 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
   const toLocal = (iso: string) => kstDateTimeLocalInput(iso);
 
   const livePage = (webinar.config?.livePage ?? {}) as Record<string, unknown>;
-  const cta = (livePage.cta ?? {}) as Record<string, unknown>;
   const notify = (livePage.notify ?? {}) as Record<string, unknown>;
   const components = (webinar.components ?? {}) as Record<string, unknown>;
-  const ctaButtons = Array.isArray(cta.buttons) ? (cta.buttons as { label?: string; url?: string; style?: string }[]) : [];
-  // 위치가 아니라 style 로 슬롯을 판별 — 보조(ghost) 버튼만 있어도 저장·재로딩 시 메인(흰색)으로 뒤바뀌지 않게
-  const primaryBtn = ctaButtons.find((b) => b.style !== "ghost");
-  const secondaryBtn = ctaButtons.find((b) => b.style === "ghost");
+  // CTA 카드 여러 장 — 신규 ctas[] 우선, 없으면 레거시 단일 cta 를 배열로 승격
+  const initialCtas: CtaFormCard[] = (Array.isArray(livePage.ctas)
+    ? (livePage.ctas as Record<string, unknown>[])
+    : livePage.cta
+      ? [livePage.cta as Record<string, unknown>]
+      : []
+  ).map(ctaToForm);
 
   const [form, setForm] = useState({
     name: webinar.name,
@@ -70,14 +106,6 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
     // 라이브 페이지 (config.livePage)
     lpContact: (livePage.infoContact as string) ?? "",
     lpNotice: (livePage.notice as string) ?? "",
-    ctaEyebrow: (cta.eyebrow as string) ?? "",
-    ctaTitle: (cta.title as string) ?? "",
-    ctaDescription: (cta.description as string) ?? "",
-    ctaBenefits: Array.isArray(cta.benefits) ? (cta.benefits as string[]).join("\n") : "",
-    ctaPrimaryLabel: primaryBtn?.label ?? "",
-    ctaPrimaryUrl: primaryBtn?.url ?? "",
-    ctaSecondaryLabel: secondaryBtn?.label ?? "",
-    ctaSecondaryUrl: secondaryBtn?.url ?? "",
     // 실시간 참여 — 채팅 탭 노출 (오프하면 시청 화면에서 채팅 탭이 사라짐)
     chatEnabled: components.chatEnabled === true,
     // 알림 받고 이어보기 박스 (config.livePage.notify)
@@ -87,27 +115,38 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
     notifyDescription: (notify.description as string) ?? "",
     notifySwitchLabel: (notify.switchLabel as string) ?? "",
   });
+  const [ctaCards, setCtaCards] = useState<CtaFormCard[]>(initialCtas);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
 
+  const updateCta = (i: number, patch: Partial<CtaFormCard>) =>
+    setCtaCards((prev) => prev.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+  const ctaInputCls = "w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors";
+
   // config.livePage 조립 — 빈 값은 넣지 않아 라이브 페이지에서 해당 요소가 자동으로 숨겨진다
   const buildLivePage = () => {
-    const buttons: { label: string; url: string; style: "white" | "ghost" }[] = [];
-    if (form.ctaPrimaryLabel.trim() && form.ctaPrimaryUrl.trim()) {
-      buttons.push({ label: form.ctaPrimaryLabel.trim(), url: form.ctaPrimaryUrl.trim(), style: "white" });
-    }
-    if (form.ctaSecondaryLabel.trim() && form.ctaSecondaryUrl.trim()) {
-      buttons.push({ label: form.ctaSecondaryLabel.trim(), url: form.ctaSecondaryUrl.trim(), style: "ghost" });
-    }
-    const benefits = form.ctaBenefits.split("\n").map((s) => s.trim()).filter(Boolean);
-    const cta: Record<string, unknown> = {};
-    if (form.ctaEyebrow.trim()) cta.eyebrow = form.ctaEyebrow.trim();
-    if (form.ctaTitle.trim()) cta.title = form.ctaTitle.trim();
-    if (form.ctaDescription.trim()) cta.description = form.ctaDescription.trim();
-    if (benefits.length) cta.benefits = benefits;
-    if (buttons.length) cta.buttons = buttons;
+    // CTA 카드 배열 — 내용 있는 카드만 저장 (빈 카드는 자동 제외)
+    const ctas = ctaCards
+      .map((card) => {
+        const buttons: { label: string; url: string; style: "white" | "ghost" }[] = [];
+        if (card.primaryLabel.trim() && card.primaryUrl.trim()) {
+          buttons.push({ label: card.primaryLabel.trim(), url: card.primaryUrl.trim(), style: "white" });
+        }
+        if (card.secondaryLabel.trim() && card.secondaryUrl.trim()) {
+          buttons.push({ label: card.secondaryLabel.trim(), url: card.secondaryUrl.trim(), style: "ghost" });
+        }
+        const benefits = card.benefits.split("\n").map((s) => s.trim()).filter(Boolean);
+        const c: Record<string, unknown> = {};
+        if (card.eyebrow.trim()) c.eyebrow = card.eyebrow.trim();
+        if (card.title.trim()) c.title = card.title.trim();
+        if (card.description.trim()) c.description = card.description.trim();
+        if (benefits.length) c.benefits = benefits;
+        if (buttons.length) c.buttons = buttons;
+        return c;
+      })
+      .filter((c) => Object.keys(c).length > 0);
 
     // 알림 박스 — enabled 플래그를 항상 담아 온/오프 상태가 유지되게 한다
     const notifyObj: Record<string, unknown> = { enabled: form.notifyEnabled };
@@ -119,7 +158,7 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
     const livePage: Record<string, unknown> = {};
     if (form.lpContact.trim()) livePage.infoContact = form.lpContact.trim();
     if (form.lpNotice.trim()) livePage.notice = form.lpNotice.trim();
-    if (Object.keys(cta).length) livePage.cta = cta;
+    if (ctas.length) livePage.ctas = ctas; // 신규 배열 키 (레거시 cta 는 승격되어 대체됨)
     livePage.notify = notifyObj;
     return livePage;
   };
@@ -289,36 +328,73 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
           </div>
         </div>
 
-        <div className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3">
-          <p className="text-xs font-medium text-muted-foreground">자료 받기 카드 (CTA) — 비워두면 표시되지 않아요</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <input type="text" placeholder="상단 라벨 (예: STK 2026 Pre-Registration)" value={form.ctaEyebrow}
-              onChange={(e) => setForm((f) => ({ ...f, ctaEyebrow: e.target.value }))}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
-            <input type="text" placeholder="제목" value={form.ctaTitle}
-              onChange={(e) => setForm((f) => ({ ...f, ctaTitle: e.target.value }))}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
+        {/* 자료 받기 카드 (CTA) — 여러 장 추가 가능 */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-muted-foreground">자료 받기 카드 (CTA)</p>
+            <span className="text-[11px] text-muted-foreground/70">시청 화면 하단에 표시돼요</span>
           </div>
-          <textarea rows={2} placeholder="설명" value={form.ctaDescription}
-            onChange={(e) => setForm((f) => ({ ...f, ctaDescription: e.target.value }))}
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm resize-none focus:outline-none focus:border-violet-400 transition-colors" />
-          <textarea rows={3} placeholder="혜택 목록 — 한 줄에 하나씩" value={form.ctaBenefits}
-            onChange={(e) => setForm((f) => ({ ...f, ctaBenefits: e.target.value }))}
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm resize-none focus:outline-none focus:border-violet-400 transition-colors" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <input type="text" placeholder="메인 버튼 라벨" value={form.ctaPrimaryLabel}
-              onChange={(e) => setForm((f) => ({ ...f, ctaPrimaryLabel: e.target.value }))}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
-            <input type="url" placeholder="메인 버튼 URL" value={form.ctaPrimaryUrl}
-              onChange={(e) => setForm((f) => ({ ...f, ctaPrimaryUrl: e.target.value }))}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
-            <input type="text" placeholder="보조 버튼 라벨" value={form.ctaSecondaryLabel}
-              onChange={(e) => setForm((f) => ({ ...f, ctaSecondaryLabel: e.target.value }))}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
-            <input type="url" placeholder="보조 버튼 URL" value={form.ctaSecondaryUrl}
-              onChange={(e) => setForm((f) => ({ ...f, ctaSecondaryUrl: e.target.value }))}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
-          </div>
+
+          {ctaCards.length === 0 && (
+            <p className="rounded-xl border border-dashed border-border p-3 text-xs text-muted-foreground">
+              아직 CTA 카드가 없어요. 아래 버튼으로 추가하세요.
+            </p>
+          )}
+
+          <AnimatePresence initial={false}>
+            {ctaCards.map((card, i) => (
+              <motion.div
+                key={i}
+                layout
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-muted-foreground">카드 {i + 1}</p>
+                  <button
+                    type="button"
+                    onClick={() => setCtaCards((prev) => prev.filter((_, j) => j !== i))}
+                    className="text-[11px] text-muted-foreground transition-colors hover:text-red-500"
+                  >
+                    카드 삭제
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input type="text" placeholder="상단 라벨 (예: 세션 자료)" value={card.eyebrow}
+                    onChange={(e) => updateCta(i, { eyebrow: e.target.value })} className={ctaInputCls} />
+                  <input type="text" placeholder="제목 (예: 발표 자료·템플릿 받기)" value={card.title}
+                    onChange={(e) => updateCta(i, { title: e.target.value })} className={ctaInputCls} />
+                </div>
+                <textarea rows={2} placeholder="설명" value={card.description}
+                  onChange={(e) => updateCta(i, { description: e.target.value })} className={`${ctaInputCls} resize-none`} />
+                <textarea rows={2} placeholder="혜택 목록 — 한 줄에 하나씩 (선택)" value={card.benefits}
+                  onChange={(e) => updateCta(i, { benefits: e.target.value })} className={`${ctaInputCls} resize-none`} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input type="text" placeholder="메인 버튼 라벨 (예: 자료 받기)" value={card.primaryLabel}
+                    onChange={(e) => updateCta(i, { primaryLabel: e.target.value })} className={ctaInputCls} />
+                  <input type="url" placeholder="메인 버튼 URL" value={card.primaryUrl}
+                    onChange={(e) => updateCta(i, { primaryUrl: e.target.value })} className={ctaInputCls} />
+                  <input type="text" placeholder="보조 버튼 라벨 (선택)" value={card.secondaryLabel}
+                    onChange={(e) => updateCta(i, { secondaryLabel: e.target.value })} className={ctaInputCls} />
+                  <input type="url" placeholder="보조 버튼 URL (선택)" value={card.secondaryUrl}
+                    onChange={(e) => updateCta(i, { secondaryUrl: e.target.value })} className={ctaInputCls} />
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.98 }}
+            transition={spring}
+            onClick={() => setCtaCards((prev) => [...prev, { ...EMPTY_CTA }])}
+            className="w-full rounded-xl border border-dashed border-border py-2.5 text-xs font-medium text-violet-500 transition-colors hover:bg-violet-500/5"
+          >
+            + CTA 카드 추가
+          </motion.button>
         </div>
 
         {/* 알림 받고 이어보기 카드 (config.livePage.notify) */}

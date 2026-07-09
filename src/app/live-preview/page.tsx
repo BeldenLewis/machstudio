@@ -24,12 +24,23 @@ const MOCK = {
   liveEndAt: "2026-08-20T21:00:00+09:00",
   config: {
     livePage: {
-      cta: {
-        eyebrow: "세션 자료",
-        title: "발표 자료·템플릿 받기",
-        description: "이번 세션에서 쓴 자동화 워크플로우와 슬라이드를 지금 내려받으세요.",
-        buttons: [{ label: "자료 받기 ↓", url: "#", style: "white" }],
-      },
+      ctas: [
+        {
+          eyebrow: "세션 자료",
+          title: "발표 자료·템플릿 받기",
+          description: "이번 세션에서 쓴 자동화 워크플로우와 슬라이드를 지금 내려받으세요.",
+          buttons: [{ label: "자료 받기 ↓", url: "#", style: "white" }],
+        },
+        {
+          eyebrow: "다음 전시",
+          title: "STK 2026 사전등록",
+          description: "다음 오프라인 전시 얼리버드 등록이 열렸어요.",
+          buttons: [
+            { label: "사전등록", url: "#", style: "white" },
+            { label: "자세히 보기", url: "#", style: "ghost" },
+          ],
+        },
+      ],
       notify: {
         enabled: true,
         kicker: "다음 세션 · 20:20",
