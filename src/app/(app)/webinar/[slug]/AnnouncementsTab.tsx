@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Megaphone, Plus, Trash2, Radio, Square } from "lucide-react";
 import { toast } from "sonner";
-import { useConfirm } from "@/components/ui/confirm-dialog";
 import { InlineError } from "@/components/ui/inline-error";
+import { useUndoableDelete } from "@/components/ui/use-undoable-delete";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -24,7 +24,7 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ type: "info", message: "" });
   const [isCreating, setIsCreating] = useState(false);
-  const confirm = useConfirm();
+  const { remove: undoableRemove } = useUndoableDelete();
 
   const fetchAnnouncements = useCallback(async () => {
     setIsLoading(true);
@@ -79,14 +79,20 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
     toast.success(ann.isActive ? "공지가 비활성화됐어요" : "공지가 라이브에 표시돼요");
   };
 
-  const handleDelete = async (id: string) => {
-    if (!(await confirm({ title: "공지를 삭제할까요?", description: "삭제한 공지는 되돌릴 수 없어요.", confirmLabel: "삭제", tone: "danger" }))) return;
-    const res = await fetch(`/api/webinars/${webinarId}/announcements/${id}`, { method: "DELETE" });
-    if (!res.ok) { toast.error("삭제 실패"); return; }
-    toast.success("공지가 삭제됐어요");
-    setAnnouncements((prev) => prev.filter((a) => a.id !== id));
+  // 낙관적 삭제 + 실행취소 — 즉시 목록에서 사라지고 5초 안에 되돌릴 수 있다(그 뒤 실제 삭제).
+  const handleDelete = (ann: Announcement) => {
+    undoableRemove({
+      key: ann.id,
+      message: "공지를 삭제했어요",
+      onOptimistic: () => setAnnouncements((prev) => prev.filter((a) => a.id !== ann.id)),
+      onUndo: () => setAnnouncements((prev) => (prev.some((a) => a.id === ann.id) ? prev
+        : [...prev, ann].sort((x, y) => y.createdAt.localeCompare(x.createdAt)))),
+      commit: async () => {
+        const res = await fetch(`/api/webinars/${webinarId}/announcements/${ann.id}`, { method: "DELETE" });
+        if (!res.ok) { toast.error("삭제 실패 — 목록을 새로고침합니다"); fetchAnnouncements(); }
+      },
+    });
   };
-
   const typeColors: Record<string, string> = {
     info: "bg-blue-500/10 text-blue-500",
     warning: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
@@ -227,7 +233,7 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
                 <motion.button
                   whileTap={{ scale: 0.9 }}
                   transition={spring}
-                  onClick={() => handleDelete(ann.id)}
+                  onClick={() => handleDelete(ann)}
                   className="p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-500 text-muted-foreground transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
