@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { use } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, CheckCircle2 } from "lucide-react";
-import LivePushLayer from "../LivePushLayer";
+import LivePushLayer, { type LivePopup, type LiveTallyPush, type LivePoll } from "../LivePushLayer";
 import LiveContentStk from "../LiveContentStk";
 import { formatKst } from "@/lib/datetime";
 
@@ -57,6 +57,19 @@ interface ChatMessage {
   message: string;
   isHost: boolean;
   createdAt: string;
+}
+
+// 통합 라이브 상태 응답 — 여러 폴링 엔드포인트를 대체 (/api/webinar/[slug]/live-state)
+interface LiveStateResponse {
+  status: string;
+  entryOpen: boolean;
+  serverNow: string;
+  announcements: Announcement[];
+  answeredQA?: AnsweredQA[];
+  chat?: { messages: ChatMessage[] };
+  poll: LivePoll | null;
+  popup: LivePopup | null;
+  tally: LiveTallyPush | null;
 }
 
 type PageView = "signup" | "live" | "ended";
@@ -141,7 +154,11 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [votedQa, setVotedQa] = useState<Set<string>>(() => new Set()); // 세션 내 추천한 질문
   const [activeTab, setActiveTab] = useState<string>("qa");
   const chatCursorRef = useRef<string | null>(null);
-  const chatTickRef = useRef(0);
+  const liveTickRef = useRef(0);
+  // 푸시(팝업·Tally·실시간 투표) — 통합 /live-state 폴링 결과를 LivePushLayer 로 내려준다
+  const [pushPopup, setPushPopup] = useState<LivePopup | null>(null);
+  const [pushTally, setPushTally] = useState<LiveTallyPush | null>(null);
+  const [pushPoll, setPushPoll] = useState<LivePoll | null>(null);
   // 알림 구독 ("알림 받고 이어보기")
   const [notifySubscribed, setNotifySubscribed] = useState(false);
   const [notifyError, setNotifyError] = useState("");
@@ -225,56 +242,56 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     }
   }, [slug]);
 
-  const fetchAnnouncements = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/webinar/${slug}/announcements`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setAnnouncements(data.announcements ?? []);
-    } catch {
-      /* 폴링 중 일시적 네트워크 오류는 다음 주기에 재시도 */
-    }
-  }, [slug]);
+  // 채팅 활성 여부 — components.chatEnabled (호스트가 라이브 페이지 참여 구성에서 ON)
+  const chatEnabled = (webinar?.components ?? {})["chatEnabled"] === true;
 
-  // 답변 완료된 Q&A (이름은 서버에서 마스킹됨) — 참여 독 Q&A 탭에 노출
-  const fetchAnsweredQA = useCallback(async () => {
+  // 통합 라이브 폴링 — 공지·답변 Q&A·채팅·투표·팝업·Tally·상태를 한 번의 요청으로 받아 egress 절감.
+  // 예전엔 announcements/qa/chat 3개 + LivePushLayer 자체 3개로 분산 폴링했다.
+  // fullChat=true 면 채팅 전체 재동기화(모더레이션 삭제 반영), 아니면 커서 이후 증분만. 최근 100개 유지.
+  const fetchLiveState = useCallback(async (fullChat = false) => {
     try {
-      const res = await fetch(`/api/webinar/${slug}/qa`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setAnsweredQA(data.questions ?? []);
-    } catch {
-      /* 폴링 중 일시적 네트워크 오류는 다음 주기에 재시도 */
-    }
-  }, [slug]);
-
-  // 채팅 — 증분(after 커서, 신규만) 또는 전체 재동기화(full). 최근 100개 유지. 이름은 서버 마스킹.
-  const fetchChat = useCallback(async (full = false) => {
-    try {
-      const after = full ? null : chatCursorRef.current;
-      const res = await fetch(`/api/webinar/${slug}/chat${after ? `?after=${encodeURIComponent(after)}` : ""}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      const incoming: ChatMessage[] = data.messages ?? [];
-      if (!after) {
-        // 초기/전체 재동기화 — 서버 현재 상태로 교체(모더레이션 삭제 반영)
-        const trimmed = incoming.slice(-100);
-        chatCursorRef.current = trimmed.length ? trimmed[trimmed.length - 1].createdAt : null;
-        setChatMessages(trimmed);
-        return;
+      const useChat = chatEnabled && activeTab === "chat" && !!registrationId;
+      const after = useChat && !fullChat ? chatCursorRef.current : null;
+      const params = new URLSearchParams();
+      if (registrationId) params.set("registrationId", registrationId);
+      if (useChat) {
+        params.set("chat", "1");
+        if (after) params.set("chatAfter", after);
       }
-      if (incoming.length === 0) return;
-      chatCursorRef.current = incoming[incoming.length - 1].createdAt ?? chatCursorRef.current;
-      setChatMessages((prev) => {
-        const seen = new Set(prev.map((m) => m.id));
-        const fresh = incoming.filter((m) => !seen.has(m.id));
-        if (fresh.length === 0) return prev; // gte 로 재조회된 경계 메시지뿐 → 변화 없음, 리렌더 스킵
-        return [...prev, ...fresh].slice(-100);
-      });
+      const qs = params.toString();
+      const res = await fetch(`/api/webinar/${slug}/live-state${qs ? `?${qs}` : ""}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as LiveStateResponse;
+
+      setAnnouncements(data.announcements ?? []);
+      if (data.answeredQA) setAnsweredQA(data.answeredQA);
+      setPushPopup(data.popup ?? null);
+      setPushTally(data.tally ?? null);
+      setPushPoll(data.poll ?? null);
+      if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
+      setIsTrulyLive(data.status === "live");
+
+      // 채팅 병합 — 요청 시 보낸 after 와 동일한 기준으로 처리(교체 vs 증분)
+      if (data.chat) {
+        const incoming = data.chat.messages ?? [];
+        if (!after) {
+          const trimmed = incoming.slice(-100);
+          chatCursorRef.current = trimmed.length ? trimmed[trimmed.length - 1].createdAt : null;
+          setChatMessages(trimmed);
+        } else if (incoming.length > 0) {
+          chatCursorRef.current = incoming[incoming.length - 1].createdAt ?? chatCursorRef.current;
+          setChatMessages((prev) => {
+            const seen = new Set(prev.map((m) => m.id));
+            const fresh = incoming.filter((m) => !seen.has(m.id));
+            if (fresh.length === 0) return prev; // gte 경계 메시지뿐 → 변화 없음, 리렌더 스킵
+            return [...prev, ...fresh].slice(-100);
+          });
+        }
+      }
     } catch {
       /* 폴링 중 일시적 네트워크 오류는 다음 주기에 재시도 */
     }
-  }, [slug]);
+  }, [slug, registrationId, chatEnabled, activeTab]);
 
   const handleSendChat = async () => {
     const msg = chatInput.trim();
@@ -289,7 +306,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       });
       if (res.ok) {
         setChatInput("");
-        await fetchChat();
+        await fetchLiveState();
       } else {
         const d = await res.json().catch(() => ({}));
         setChatError(d.error ?? "메시지 전송에 실패했어요. 잠시 후 다시 시도해주세요.");
@@ -341,34 +358,22 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     return () => clearInterval(interval);
   }, [view, fetchWebinar]);
 
-  // 라이브 중 공지·답변 Q&A 폴링 (30초마다, 탭 비활성 시 스킵)
+  // 라이브 중 통합 폴링 — 12초 주기(탭 비활성 시 스킵). 공지·답변 Q&A·채팅·투표·팝업·Tally·상태를
+  // 한 번의 요청으로 받는다. fetchLiveState 가 activeTab/채팅 여부를 반영하므로 탭 전환 시 이 이펙트가
+  // 재실행되어 즉시 재동기화된다. 5주기(약 60초)마다 채팅 전체 재동기화(모더레이션 삭제 반영).
+  // registrationId 없는 입장 확인 화면 시청자도 공지 배너·상태 전환은 받아야 하므로 view=live 면 폴링한다
+  // (Q&A·채팅·푸시는 서버/JSX 에서 registrationId 로 게이팅되어 인증 전엔 조회/표시되지 않음).
   useEffect(() => {
     if (view !== "live") return;
-    const tick = () => {
-      if (document.hidden) return;
-      void fetchAnnouncements();
-      // 답변 Q&A는 인증된 시청자(LiveContentStk 마운트)에게만 노출 — 그 전엔 폴링하지 않아 egress 낭비 방지
-      if (registrationId) void fetchAnsweredQA();
-    };
-    tick();
-    const interval = setInterval(tick, 30000);
-    return () => clearInterval(interval);
-  }, [view, registrationId, fetchAnnouncements, fetchAnsweredQA]);
-
-  // 채팅 폴링 — 라이브 + 채팅 탭 활성 + 인증 시에만 12초 주기(탭 숨김 스킵). egress 최소화.
-  const chatEnabled = (webinar?.components ?? {})["chatEnabled"] === true;
-  useEffect(() => {
-    if (view !== "live" || !registrationId || !chatEnabled || activeTab !== "chat") return;
-    chatTickRef.current = 0;
-    void fetchChat(true); // 진입 시 전체 동기화(최신·삭제 반영)
+    liveTickRef.current = 0;
+    void fetchLiveState(true);
     const interval = setInterval(() => {
       if (document.hidden) return;
-      chatTickRef.current += 1;
-      // 5주기(약 60초)마다 전체 재동기화 → 모더레이션 삭제가 세션 중에도 반영됨
-      void fetchChat(chatTickRef.current % 5 === 0);
+      liveTickRef.current += 1;
+      void fetchLiveState(liveTickRef.current % 5 === 0);
     }, 12000);
     return () => clearInterval(interval);
-  }, [view, registrationId, chatEnabled, activeTab, fetchChat]);
+  }, [view, registrationId, fetchLiveState]);
 
   // presence ping
   useEffect(() => {
@@ -651,8 +656,15 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       className="min-h-screen"
       style={{ backgroundColor: bg, color: text, fontFamily: `${font}, sans-serif` }}
     >
-      {/* 팝업·Tally 푸시 — 운영 콘솔에서 ON 한 항목이 시청 중 화면에 뜬다 */}
-      <LivePushLayer slug={slug} active={view === "live" && !!registrationId} registrationId={registrationId} accentColor={accent} />
+      {/* 팝업·Tally·투표 푸시 — 운영 콘솔에서 ON 한 항목이 시청 중 화면에 뜬다 (통합 폴링 결과 전달) */}
+      <LivePushLayer
+        slug={slug}
+        registrationId={registrationId}
+        accentColor={accent}
+        popup={view === "live" && registrationId ? pushPopup : null}
+        tally={view === "live" && registrationId ? pushTally : null}
+        poll={view === "live" && registrationId ? pushPoll : null}
+      />
 
       {/* 공지 배너 */}
       {announcements.length > 0 && (

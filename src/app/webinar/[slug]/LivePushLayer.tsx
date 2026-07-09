@@ -1,13 +1,14 @@
 "use client";
 
-// 라이브 시청 중 푸시 레이어 — 팝업 모달 + Tally 단독 푸시.
-// 운영 콘솔에서 ON 한 항목을 15초 폴링으로 받아 시청자 화면에 띄운다 (레거시 STK 라이브 페이지 계승).
+// 라이브 시청 중 푸시 레이어 — 팝업 모달 + Tally 단독 푸시 + 실시간 투표 토스트.
+// 운영 콘솔에서 ON 한 항목을 부모(live/page)가 통합 /live-state 폴링으로 받아 props 로 내려준다.
+// (예전엔 이 컴포넌트가 popups/tally-pushes/polls 를 각각 자체 폴링했으나, egress 절감 위해 폴링 일원화)
 // - 닫음/열림 기억: id + updatedAt 키 (수정하거나 다시 ON 하면 updatedAt 이 바뀌어 재노출)
 // - Tally: 공식 embed.js 를 지연 로드, hiddenFields 로 응답자 식별(registrationId) 전달
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-interface LivePopup {
+export interface LivePopup {
   id: string;
   type: string;
   title: string;
@@ -27,7 +28,7 @@ interface LivePopup {
   updatedAt: string;
 }
 
-interface LiveTallyPush {
+export interface LiveTallyPush {
   id: string;
   title: string;
   formId: string;
@@ -47,7 +48,7 @@ interface LivePollOption {
   voteCount: number;
 }
 
-interface LivePoll {
+export interface LivePoll {
   id: string;
   question: string;
   updatedAt: string;
@@ -57,8 +58,6 @@ interface LivePoll {
 interface TallyWindow extends Window {
   Tally?: { openPopup: (formId: string, options?: Record<string, unknown>) => void };
 }
-
-const POLL_MS = 15_000;
 
 function sessionGet(key: string): boolean {
   try { return !!sessionStorage.getItem(key); } catch { return false; }
@@ -103,83 +102,63 @@ function openTally(formId: string, options: { layout?: string | null; width?: nu
 
 export default function LivePushLayer({
   slug,
-  active,
   registrationId,
   accentColor,
+  popup: incomingPopup,
+  tally: incomingTally,
+  poll: incomingPoll,
 }: {
   slug: string;
-  active: boolean;
   registrationId: string | null;
   accentColor?: string;
+  popup: LivePopup | null;
+  tally: LiveTallyPush | null;
+  poll: LivePoll | null;
 }) {
+  // 표시 상태 — props(통합 폴링 결과)를 받아 세션 기억(닫음/투표)을 반영해 실제 노출 여부를 정한다.
   const [popup, setPopup] = useState<LivePopup | null>(null);
   const [activePoll, setActivePoll] = useState<LivePoll | null>(null);
   const [voted, setVoted] = useState(false);
   const openedTallyRef = useRef<Set<string>>(new Set());
   const accent = accentColor || "#6d28d9";
 
-  const poll = useCallback(async () => {
-    try {
-      const [popupRes, tallyRes, pollRes] = await Promise.all([
-        fetch(`/api/webinar/${slug}/popups`),
-        fetch(`/api/webinar/${slug}/tally-pushes`),
-        fetch(`/api/webinar/${slug}/polls`),
-      ]);
-
-      // 실시간 투표 — 활성 1개. 닫음(updatedAt 키)·투표 여부는 세션 기억.
-      if (pollRes.ok) {
-        const data = await pollRes.json();
-        const p: LivePoll | null = data.poll ?? null;
-        if (p && !sessionGet(`mach_pollclosed_${p.id}_${p.updatedAt}`)) {
-          setActivePoll(p);
-          setVoted(sessionGet(`mach_pollvote_${p.id}`));
-        } else {
-          setActivePoll(null);
-        }
-      }
-
-      // 한 번에 하나만 — 팝업 모달(z-70)과 Tally 오버레이가 겹치지 않게 팝업에 우선권을 준다.
-      // 팝업이 떠 있으면 단독 Tally 자동 오픈을 보류하고, 팝업이 사라진 다음 주기에 연다.
-      let popupShown = false;
-      if (popupRes.ok) {
-        const data = await popupRes.json();
-        const activePopup: LivePopup | undefined = (data.popups ?? [])[0];
-        if (activePopup) {
-          const key = `mach_popup_${activePopup.id}_${activePopup.updatedAt}`;
-          const willShow = !(activePopup.dismissible !== false && sessionGet(key));
-          setPopup(willShow ? activePopup : null);
-          popupShown = willShow;
-        } else {
-          setPopup(null);
-        }
-      }
-
-      if (tallyRes.ok && !popupShown) {
-        const data = await tallyRes.json();
-        const push: LiveTallyPush | undefined = (data.tallyPushes ?? [])[0];
-        if (push) {
-          const key = `mach_tally_${push.id}_${push.updatedAt}`;
-          if (!sessionGet(key) && !openedTallyRef.current.has(key)) {
-            openedTallyRef.current.add(key);
-            sessionSet(key);
-            openTally(push.formId, push, registrationId);
-          }
-        }
-      }
-    } catch { /* 폴링 실패는 다음 주기에 재시도 */ }
-  }, [slug, registrationId]);
-
+  // 팝업 — 닫음(dismissible + updatedAt 키) 기억을 반영. 수정/재ON 시 updatedAt 이 바뀌어 다시 노출.
   useEffect(() => {
-    if (!active) return;
-    void poll();
-    const interval = setInterval(() => {
-      if (document.hidden) return;
-      void poll();
-    }, POLL_MS);
-    return () => clearInterval(interval);
-  }, [active, poll]);
+    if (incomingPopup) {
+      const key = `mach_popup_${incomingPopup.id}_${incomingPopup.updatedAt}`;
+      const dismissed = incomingPopup.dismissible !== false && sessionGet(key);
+      setPopup(dismissed ? null : incomingPopup);
+    } else {
+      setPopup(null);
+    }
+  }, [incomingPopup]);
 
-  if (!active) return null;
+  // 실시간 투표 — 닫음(updatedAt 키)·투표 여부는 세션 기억. 프롭이 갱신되면 득표수도 함께 갱신.
+  useEffect(() => {
+    if (incomingPoll && !sessionGet(`mach_pollclosed_${incomingPoll.id}_${incomingPoll.updatedAt}`)) {
+      setActivePoll(incomingPoll);
+      setVoted(sessionGet(`mach_pollvote_${incomingPoll.id}`));
+    } else {
+      setActivePoll(null);
+    }
+  }, [incomingPoll]);
+
+  // 단독 Tally 자동 오픈 — 한 번만(키 기억). 팝업 모달이 (닫히지 않고) 뜰 상황이면 보류하고,
+  // 닫히면 다음 틱에 이 이펙트가 재실행되어 그때 연다(팝업 우선, z-index 겹침 방지).
+  // 팝업 표시 여부는 파생 상태 popup 이 아직 반영되기 전(둘 다 같은 틱에 켜진 채 진입)에도
+  // 정확히 판정하도록 원본 프롭(incomingPopup)으로 직접 계산한다.
+  useEffect(() => {
+    if (!incomingTally) return;
+    const popupWillShow =
+      incomingPopup != null &&
+      !(incomingPopup.dismissible !== false && sessionGet(`mach_popup_${incomingPopup.id}_${incomingPopup.updatedAt}`));
+    if (popupWillShow) return;
+    const key = `mach_tally_${incomingTally.id}_${incomingTally.updatedAt}`;
+    if (sessionGet(key) || openedTallyRef.current.has(key)) return;
+    openedTallyRef.current.add(key);
+    sessionSet(key);
+    openTally(incomingTally.formId, incomingTally, registrationId);
+  }, [incomingTally, incomingPopup, registrationId]);
 
   const dismiss = () => {
     if (!popup) return;
@@ -211,6 +190,8 @@ export default function LivePushLayer({
 
   const primaryIsTally = !!popup && popup.integrationType === "tally" && !!popup.tallyFormId;
   const pollTotal = activePoll ? activePoll.options.reduce((s, o) => s + o.voteCount, 0) : 0;
+
+  if (!popup && !activePoll) return null;
 
   return (
     <>
