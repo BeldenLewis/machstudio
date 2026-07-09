@@ -66,7 +66,8 @@ interface QAProps {
 const DEFAULT_NOTICE =
   "※ 영상이 보이지 않을 경우 새로고침 후 다시 접속해주세요. 일부 브라우저 환경에서는 자동 재생이 제한될 수 있으며, 이 경우 플레이어의 재생 버튼을 직접 눌러주세요.";
 
-function buildCss(accent: string, text: string, surface: string) {
+// 공유 STK 스타일 — 대기/입장확인/시청 세 상태가 같은 디자인 시스템을 쓰도록 export.
+export function buildStkCss(accent: string, text: string, surface: string) {
   // 팔레트를 테마 textColor/surfaceColor 에서 파생 — 밝은 배경 테마에서도 텍스트·경계선이 보이게.
   // muted/sub/line 은 text 를 투명도로 섞어 라이트·다크 어디서든 대비가 유지된다.
   return `
@@ -169,7 +170,7 @@ export default function LiveContentStk({
   qa: QAProps;
 }) {
   const css = useMemo(
-    () => buildCss(accent || "#FE5816", text || "#f0f0f2", surface || "#121216"),
+    () => buildStkCss(accent || "#FE5816", text || "#f0f0f2", surface || "#121216"),
     [accent, text, surface],
   );
   const config = (webinar.config ?? {}) as Record<string, unknown>;
