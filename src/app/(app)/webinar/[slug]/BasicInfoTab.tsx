@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -22,7 +22,7 @@ interface Webinar {
 
 // 만들기 › 기본 정보 — 정체성(이름·설명) + 일정 + 위험 구역만.
 // 라이브 페이지 콘텐츠·디자인·참여 설정은 '라이브 페이지' 섹션(LivePageTab)으로 분리됨.
-export default function BasicInfoTab({ webinar, onUpdate }: { webinar: Webinar; onUpdate: () => void }) {
+export default function BasicInfoTab({ webinar, onUpdate, onDirtyChange }: { webinar: Webinar; onUpdate: () => void; onDirtyChange?: (dirty: boolean) => void }) {
   const router = useRouter();
   const toLocal = (iso: string) => kstDateTimeLocalInput(iso);
   const components = (webinar.components ?? {}) as Record<string, unknown>;
@@ -40,6 +40,12 @@ export default function BasicInfoTab({ webinar, onUpdate }: { webinar: Webinar; 
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
+
+  // 미저장 편집 통지 — 저장 기준 스냅샷과 비교
+  const baselineRef = useRef(JSON.stringify(form));
+  const dirty = JSON.stringify(form) !== baselineRef.current;
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -62,6 +68,8 @@ export default function BasicInfoTab({ webinar, onUpdate }: { webinar: Webinar; 
       });
       if (!res.ok) { toast.error("저장 실패"); return; }
       toast.success("기본 정보가 저장됐어요");
+      baselineRef.current = JSON.stringify(form); // 저장 기준 갱신 → dirty 해제
+      onDirtyChange?.(false);
       onUpdate();
     } finally {
       setIsSaving(false);

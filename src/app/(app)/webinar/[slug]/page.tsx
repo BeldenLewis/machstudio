@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, Suspense, type ElementType } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense, type ElementType, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { use } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -135,6 +135,21 @@ function WebinarDetail({ id }: { id: string }) {
       else router.push(url, { scroll: false });
     },
     [pathname, router, searchParams],
+  );
+
+  // 상단 허브 탭 로빙 tabindex — 좌우 화살표로 포커스+선택 이동(WAI-ARIA tabs 패턴)
+  const tablistRef = useRef<HTMLDivElement>(null);
+  const handleTabKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      const dir = e.key === "ArrowRight" ? 1 : -1;
+      const nextIndex = (index + dir + TAB_IDS.length) % TAB_IDS.length;
+      const buttons = tablistRef.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+      buttons?.[nextIndex]?.focus();
+      navigate(TAB_IDS[nextIndex]);
+    },
+    [navigate],
   );
 
   const fetchWebinar = useCallback(async () => {
@@ -301,13 +316,17 @@ function WebinarDetail({ id }: { id: string }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-1 border-b border-border -mb-px overflow-x-auto" role="tablist">
-          {tabs.map(({ id: tabId, label, icon: Icon }) => (
+        <div ref={tablistRef} className="flex items-center gap-1 border-b border-border -mb-px overflow-x-auto" role="tablist">
+          {tabs.map(({ id: tabId, label, icon: Icon }, tabIndex) => (
             <motion.button
               key={tabId}
+              id={`tab-${tabId}`}
               role="tab"
               aria-selected={activeTab === tabId}
+              aria-controls={`panel-${tabId}`}
+              tabIndex={activeTab === tabId ? 0 : -1}
               onClick={() => navigate(tabId)}
+              onKeyDown={(e) => handleTabKeyDown(e, tabIndex)}
               whileHover={{ y: -1 }}
               whileTap={{ scale: 0.96 }}
               transition={spring}
@@ -336,7 +355,13 @@ function WebinarDetail({ id }: { id: string }) {
         </div>
       </div>
 
-      <div className={`flex-1 ${activeTab === "create" ? "overflow-hidden" : "overflow-auto"}`}>
+      <div
+        id={`panel-${activeTab}`}
+        role="tabpanel"
+        aria-labelledby={`tab-${activeTab}`}
+        tabIndex={0}
+        className={`flex-1 ${activeTab === "create" ? "overflow-hidden" : "overflow-auto"}`}
+      >
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}

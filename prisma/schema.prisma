@@ -518,7 +518,7 @@ model Webinar {
 
   @@index([projectId, createdAt(sort: Desc)])
   @@index([workspaceId])
-  @@index([slug])
+  // slug 는 @unique 가 이미 인덱스를 만들므로 별도 @@index 불필요 (중복 제거)
 }
 
 model WebinarSession {

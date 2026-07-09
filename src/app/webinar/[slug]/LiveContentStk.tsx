@@ -354,10 +354,25 @@ export default function LiveContentStk({
 
   const dayStr = useMemo(() => kstDateString(webinar.liveStartAt), [webinar.liveStartAt]);
   const sessions = useMemo(() => {
+    const DAY_MS = 86_400_000;
+    // KST 자정을 넘기는 웨비나(예: 23:30 → 00:30) 대응: 세션을 순서대로 훑으며
+    // 시작 시각이 직전 세션보다 앞서면 날짜가 넘어간 것으로 보고 dayOffset을 누적한다.
+    let dayOffset = 0;
+    let prevRawStartMs = -Infinity;
     const list = webinar.sessions.map((s) => {
-      const startMs = hhmmToMs(dayStr, s.startTime);
-      const endMs = hhmmToMs(dayStr, s.endTime);
-      const valid = !Number.isNaN(startMs) && !Number.isNaN(endMs);
+      const rawStartMs = hhmmToMs(dayStr, s.startTime);
+      const rawEndMs = hhmmToMs(dayStr, s.endTime);
+      const valid = !Number.isNaN(rawStartMs) && !Number.isNaN(rawEndMs);
+      let startMs = rawStartMs;
+      let endMs = rawEndMs;
+      if (valid) {
+        if (rawStartMs < prevRawStartMs) dayOffset += 1;
+        prevRawStartMs = rawStartMs;
+        startMs = rawStartMs + DAY_MS * dayOffset;
+        endMs = rawEndMs + DAY_MS * dayOffset;
+        // 세션 내부에서 종료가 시작보다 이르면(자정 통과) 종료를 다음 날로 넘긴다
+        if (endMs < startMs) endMs += DAY_MS;
+      }
       let status: "done" | "now" | "upcoming" | "none" = "none";
       if (valid) status = now >= endMs ? "done" : now >= startMs ? "now" : "upcoming";
       return { ...s, startMs, endMs, valid, status };

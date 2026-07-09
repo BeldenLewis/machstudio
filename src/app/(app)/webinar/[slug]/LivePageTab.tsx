@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 
@@ -29,10 +29,12 @@ function Toggle({ checked, onChange, label, desc }: { checked: boolean; onChange
 
 // CTA 카드 편집 폼 (여러 장 지원)
 interface CtaFormCard {
+  id: string;
   eyebrow: string; title: string; description: string; benefits: string;
   primaryLabel: string; primaryUrl: string; secondaryLabel: string; secondaryUrl: string;
 }
 const EMPTY_CTA: CtaFormCard = {
+  id: crypto.randomUUID(),
   eyebrow: "", title: "", description: "", benefits: "",
   primaryLabel: "", primaryUrl: "", secondaryLabel: "", secondaryUrl: "",
 };
@@ -41,6 +43,7 @@ function ctaToForm(raw: Record<string, unknown>): CtaFormCard {
   const primary = buttons.find((b) => b.style !== "ghost");
   const secondary = buttons.find((b) => b.style === "ghost");
   return {
+    id: crypto.randomUUID(),
     eyebrow: (raw.eyebrow as string) ?? "",
     title: (raw.title as string) ?? "",
     description: (raw.description as string) ?? "",
@@ -73,7 +76,7 @@ interface Webinar {
 const inputCls = "w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors";
 
 // 만들기 › 라이브 페이지 — 영상·콘텐츠·CTA·알림·참여·디자인을 한 곳에서 편집(단일 저장).
-export default function LivePageTab({ webinar, onUpdate }: { webinar: Webinar; onUpdate: () => void }) {
+export default function LivePageTab({ webinar, onUpdate, onDirtyChange }: { webinar: Webinar; onUpdate: () => void; onDirtyChange?: (dirty: boolean) => void }) {
   const livePage = (webinar.config?.livePage ?? {}) as Record<string, unknown>;
   const notify = (livePage.notify ?? {}) as Record<string, unknown>;
   const components = (webinar.components ?? {}) as Record<string, unknown>;
@@ -102,6 +105,12 @@ export default function LivePageTab({ webinar, onUpdate }: { webinar: Webinar; o
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // 미저장 편집 통지 — 폼·CTA·테마 전체를 저장 기준 스냅샷과 비교
+  const baselineRef = useRef(JSON.stringify({ form, ctaCards, theme }));
+  const dirty = JSON.stringify({ form, ctaCards, theme }) !== baselineRef.current;
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const updateCta = (i: number, patch: Partial<CtaFormCard>) =>
     setCtaCards((prev) => prev.map((c, j) => (j === i ? { ...c, ...patch } : c)));
@@ -158,6 +167,8 @@ export default function LivePageTab({ webinar, onUpdate }: { webinar: Webinar; o
       });
       if (!res.ok) { toast.error("저장 실패"); return; }
       toast.success("라이브 페이지가 저장됐어요");
+      baselineRef.current = JSON.stringify({ form, ctaCards, theme }); // 저장 기준 갱신
+      onDirtyChange?.(false);
       onUpdate();
     } finally {
       setIsSaving(false);
@@ -229,7 +240,7 @@ export default function LivePageTab({ webinar, onUpdate }: { webinar: Webinar; o
           )}
           <AnimatePresence initial={false}>
             {ctaCards.map((card, i) => (
-              <motion.div key={i} layout initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+              <motion.div key={card.id} layout initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
                 className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-medium text-muted-foreground">카드 {i + 1}</p>
@@ -252,7 +263,7 @@ export default function LivePageTab({ webinar, onUpdate }: { webinar: Webinar; o
             ))}
           </AnimatePresence>
           <motion.button type="button" whileTap={{ scale: 0.98 }} transition={spring}
-            onClick={() => setCtaCards((prev) => [...prev, { ...EMPTY_CTA }])}
+            onClick={() => setCtaCards((prev) => [...prev, { ...EMPTY_CTA, id: crypto.randomUUID() }])}
             className="w-full rounded-xl border border-dashed border-border py-2.5 text-xs font-medium text-violet-500 transition-colors hover:bg-violet-500/5">
             + CTA 카드 추가
           </motion.button>

@@ -56,7 +56,6 @@ ${ATTRIBUTION_CORE_JS}
   var lastVisRefetchAt = 0;
   var pollTimer = null;
   var boundaryTimer = null;
-  var countdownTimer = null;
 
   function warn(msg, e) {
     try { if (window.console && console.warn) console.warn("[mach webinar] " + msg, e || ""); } catch (e2) {}
@@ -791,16 +790,6 @@ ${ATTRIBUTION_CORE_JS}
     document.body.appendChild(banner);
   }
 
-  function updateCountdownInto(node) {
-    if (!node || !CFG) return;
-    var deadline = parseMs(CFG.signupDeadline);
-    if (deadline === null) { node.textContent = ""; return; }
-    var diff = deadline - serverNowMs();
-    if (diff <= 0) { node.textContent = "사전등록이 마감되었습니다."; return; }
-    var days = Math.floor(diff / (24 * 60 * 60 * 1000));
-    node.textContent = days > 0 ? ("사전등록 마감까지 D-" + days) : "오늘 사전등록이 마감돼요!";
-  }
-
   // KST 절대 시각 포맷 (예: "7월 7일 오후 7:44")
   function fmtKstDateTime(iso) {
     try {
@@ -865,12 +854,6 @@ ${ATTRIBUTION_CORE_JS}
     lastVisRefetchAt = now;
     fetchConfig(true);
   });
-
-  /* ── 카운트다운 틱 ── */
-  countdownTimer = setInterval(function() {
-    var node = document.getElementById("mw-banner-countdown");
-    if (node) updateCountdownInto(node);
-  }, 60 * 1000);
 
   /* ── 부트 ── */
   function boot() {

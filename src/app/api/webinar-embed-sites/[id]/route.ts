@@ -37,6 +37,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (typeof body.livePageUrl === "string") data.livePageUrl = body.livePageUrl.trim() || null;
   if (typeof body.isActive === "boolean") data.isActive = body.isActive;
 
+  // allowedOrigins: 저장만 하고 아직 강제하지 않음. register 응답은 여전히 Access-Control-Allow-Origin:* 를 반환한다.
+  // (향후 오리진 허용목록 기능을 위해 예약된 필드 — 현재는 CORS 보호를 제공하지 않음)
   const allowedOrigins = cleanStringArray(body.allowedOrigins);
   if (allowedOrigins !== undefined) data.allowedOrigins = allowedOrigins;
   const bannerPagePatterns = cleanStringArray(body.bannerPagePatterns);

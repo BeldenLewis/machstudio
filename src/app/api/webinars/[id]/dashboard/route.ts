@@ -51,7 +51,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     answeredQuestions,
     dismissedQuestions,
     totalQuestions,
-    registrations,
+    stayStats,
     currentViewers,
     latestQuestions,
   ] = await Promise.all([
@@ -72,15 +72,29 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     prisma.webinarQA.count({ where: { webinarId: id, status: "answered" } }),
     prisma.webinarQA.count({ where: { webinarId: id, status: "dismissed" } }),
     prisma.webinarQA.count({ where: { webinarId: id } }),
-    prisma.webinarRegistration.findMany({
-      where: { webinarId: id },
-      select: {
-        id: true,
-        enteredAt: true,
-        lastPingAt: true,
-        stayMinutes: true,
-      },
-    }),
+    // EGRESS: 체류 통계는 전 행을 JS로 옮기지 않고 Postgres에서 집계 (avg/max/stay30/stay60)
+    prisma.$queryRaw<
+      {
+        avgStayMinutes: number | string | null;
+        maxStayMinutes: number | string | null;
+        stay30: bigint | number;
+        stay60: bigint | number;
+      }[]
+    >`
+      SELECT
+        COALESCE(AVG("eff"), 0) AS "avgStayMinutes",
+        COALESCE(MAX("eff"), 0) AS "maxStayMinutes",
+        COUNT(*) FILTER (WHERE "eff" >= 30) AS "stay30",
+        COUNT(*) FILTER (WHERE "eff" >= 60) AS "stay60"
+      FROM (
+        SELECT GREATEST(
+          COALESCE("stayMinutes", 0),
+          FLOOR(EXTRACT(EPOCH FROM (COALESCE("lastPingAt", now()) - "enteredAt")) / 60)
+        ) AS "eff"
+        FROM "WebinarRegistration"
+        WHERE "enteredAt" IS NOT NULL AND "webinarId" = ${id}
+      ) sub
+    `,
     prisma.webinarRegistration.findMany({
       where: {
         webinarId: id,
@@ -121,15 +135,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }),
   ]);
 
-  const stayValues = registrations
-    .filter((row) => row.enteredAt)
-    .map((row) => Math.max(row.stayMinutes, minutesBetween(row.enteredAt, row.lastPingAt ?? now)));
-  const avgStayMinutes = stayValues.length
-    ? Math.round(stayValues.reduce((sum, value) => sum + value, 0) / stayValues.length)
-    : 0;
-  const maxStayMinutes = stayValues.length ? Math.max(...stayValues) : 0;
-  const stay30 = stayValues.filter((value) => value >= 30).length;
-  const stay60 = stayValues.filter((value) => value >= 60).length;
+  const stayRow = stayStats[0];
+  const avgStayMinutes = Math.round(Number(stayRow?.avgStayMinutes ?? 0));
+  const maxStayMinutes = Math.round(Number(stayRow?.maxStayMinutes ?? 0));
+  const stay30 = Number(stayRow?.stay30 ?? 0);
+  const stay60 = Number(stayRow?.stay60 ?? 0);
 
   const statusInfo = resolveWebinarStatus(webinar);
 

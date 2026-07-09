@@ -64,15 +64,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     return NextResponse.json({ error: "질문 내용을 입력해주세요" }, { status: 400 });
   }
 
+  // 필드 길이 상한 — 과도한 입력 차단(chat POST 의 slice 방식과 동일)
+  const questionValue = question.trim().slice(0, 1000);
+  const nameValue = name?.trim().slice(0, 100) || null;
+  const companyValue = company?.trim().slice(0, 100) || null;
+  const phoneValue = phone?.trim().slice(0, 200) || null;
+  const emailValue = email?.trim().slice(0, 200) || null;
+
   const qa = await prisma.webinarQA.create({
     data: {
       webinarId: webinar.id,
-      question: question.trim(),
+      question: questionValue,
       sessionNumber: sessionNumber ?? null,
-      name: name?.trim() || null,
-      company: company?.trim() || null,
-      phone: phone?.trim() || null,
-      email: email?.trim() || null,
+      name: nameValue,
+      company: companyValue,
+      phone: phoneValue,
+      email: emailValue,
     },
   });
 

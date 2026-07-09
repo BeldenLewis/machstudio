@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Download, Loader2, RefreshCw } from "lucide-react";
+import { InlineError } from "@/components/ui/inline-error";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -146,17 +147,22 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
   const [curve, setCurve] = useState<CurveData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const fetchAll = useCallback(async (quiet = false) => {
     if (quiet) setIsRefreshing(true);
     else setIsLoading(true);
+    setLoadError(false);
     try {
       const [analyticsRes, curveRes] = await Promise.all([
         fetch(`/api/webinars/${webinarId}/analytics`),
         fetch(`/api/webinars/${webinarId}/analytics/attendance-curve`),
       ]);
-      if (analyticsRes.ok) setData(await analyticsRes.json());
-      if (curveRes.ok) setCurve(await curveRes.json());
+      if (!analyticsRes.ok || !curveRes.ok) throw new Error("analytics load failed");
+      setData(await analyticsRes.json());
+      setCurve(await curveRes.json());
+    } catch {
+      setLoadError(true);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -173,6 +179,14 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8">
+        <InlineError message="분석을 불러오지 못했어요" onRetry={() => void fetchAll()} />
       </div>
     );
   }

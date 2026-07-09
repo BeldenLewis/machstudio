@@ -126,16 +126,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   });
 
   if (duplicate) {
+    // 재제출은 프로필 필드만 보강할 수 있고, 매칭된 기존 레코드의 식별자(phone/email)는
+    // 절대 변경/탈취할 수 없다 — 소유권 증명이 없으므로 연락처는 항상 기존 값을 유지한다.
+    // (예: 이메일만 알아도 피해자 전화번호를 덮어써 verify-by-phone 로 사칭하는 것을 차단)
+    const cleanCompany = clean(company);
+    const cleanDepartment = clean(department);
+    const cleanJobTitle = clean(jobTitle);
+    const cleanIndustry = clean(industry);
     const registration = await prisma.webinarRegistration.update({
       where: { id: duplicate.id },
       data: {
-        name: name.trim(),
-        phone: normalizedPhone,
-        email: normalizedEmail,
-        company: clean(company),
-        department: clean(department),
-        jobTitle: clean(jobTitle),
-        industry: clean(industry),
+        // 식별자(phone/email)는 갱신하지 않음 — 기존 레코드 값 보존.
+        // 비식별 프로필 필드만, 그리고 값이 제공된 경우에만 갱신한다.
+        ...(name?.trim() ? { name: name.trim() } : {}),
+        ...(cleanCompany !== null ? { company: cleanCompany } : {}),
+        ...(cleanDepartment !== null ? { department: cleanDepartment } : {}),
+        ...(cleanJobTitle !== null ? { jobTitle: cleanJobTitle } : {}),
+        ...(cleanIndustry !== null ? { industry: cleanIndustry } : {}),
         agreeMarketing: Boolean(agreeMarketing),
         // 재등록 시 기존 동의를 다운그레이드하지 않음 — 명시적으로 동의한 경우에만 갱신
         ...(agreePrivacy === true ? { agreePrivacy: true } : {}),

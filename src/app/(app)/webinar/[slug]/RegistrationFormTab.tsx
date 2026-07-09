@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { motion } from "framer-motion";
-import { GripVertical, Plus, Save, Trash2 } from "lucide-react";
+import { Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
@@ -91,7 +91,6 @@ function FieldEditor({
   return (
     <div className={`p-4 rounded-2xl border ${field.enabled ? "border-border bg-background" : "border-border bg-secondary/30 opacity-70"}`}>
       <div className="flex items-start gap-3">
-        <GripVertical className="w-4 h-4 text-muted-foreground/40 mt-2 shrink-0" />
         <div className="flex-1 min-w-0 space-y-3">
           <div className="grid grid-cols-12 gap-3">
             <div className="col-span-12 sm:col-span-4">
@@ -256,13 +255,19 @@ function RegistrationFormPreview({
   );
 }
 
-export default function RegistrationFormTab({ webinar, onUpdate }: { webinar: Webinar; onUpdate: () => void }) {
+export default function RegistrationFormTab({ webinar, onUpdate, onDirtyChange }: { webinar: Webinar; onUpdate: () => void; onDirtyChange?: (dirty: boolean) => void }) {
   const initial = normalizeRegistrationForm(webinar.config ?? {});
   const [fields, setFields] = useState<RegistrationField[]>(initial.fields);
   const [privacyText, setPrivacyText] = useState(initial.privacyText);
   const [marketingText, setMarketingText] = useState(initial.marketingText);
   const [submitLabel, setSubmitLabel] = useState(initial.submitLabel);
   const [isSaving, setIsSaving] = useState(false);
+
+  // 미저장 편집 통지 — 필드·문구를 저장 기준 스냅샷과 비교
+  const baselineRef = useRef(JSON.stringify({ fields, privacyText, marketingText, submitLabel }));
+  const dirty = JSON.stringify({ fields, privacyText, marketingText, submitLabel }) !== baselineRef.current;
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const addCustomField = () => {
     const id = crypto.randomUUID();
@@ -302,6 +307,8 @@ export default function RegistrationFormTab({ webinar, onUpdate }: { webinar: We
       });
       if (!res.ok) { toast.error("등록 폼 저장 실패"); return; }
       toast.success("등록 폼이 저장됐어요");
+      baselineRef.current = JSON.stringify({ fields, privacyText, marketingText, submitLabel }); // 저장 기준 갱신
+      onDirtyChange?.(false);
       onUpdate();
     } finally {
       setIsSaving(false);

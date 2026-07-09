@@ -1,12 +1,13 @@
 "use client";
 
-import { type ElementType } from "react";
+import { useCallback, useEffect, useRef, useState, type ElementType } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FileText, ListChecks, MonitorPlay, SlidersHorizontal } from "lucide-react";
 import BasicInfoTab from "./BasicInfoTab";
 import RegistrationFormTab from "./RegistrationFormTab";
 import SessionsTab from "./SessionsTab";
 import LivePageTab from "./LivePageTab";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface WebinarSession {
   id: string;
@@ -57,6 +58,34 @@ export default function PageSetupTab({
   const activeMeta = sections.find((item) => item.id === section) ?? sections[0];
   const ActiveIcon = activeMeta.icon;
 
+  // 미저장 편집 가드 — 폼 탭이 dirty 를 통지하면, 섹션 전환 시 확인 + 새로고침/닫기 경고
+  const confirm = useConfirm();
+  const [dirty, setDirty] = useState(false);
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
+
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
+
+  const changeSection = useCallback(async (id: PageSetupSection) => {
+    if (id === section) return;
+    if (dirtyRef.current) {
+      const ok = await confirm({
+        title: "저장하지 않은 변경이 있어요",
+        description: "지금 이동하면 저장하지 않은 편집 내용이 사라져요. 계속할까요?",
+        confirmLabel: "이동",
+        tone: "danger",
+      });
+      if (!ok) return;
+    }
+    setDirty(false);
+    onSectionChange(id);
+  }, [section, confirm, onSectionChange]);
+
   return (
     <div className="flex flex-col lg:grid lg:h-full lg:grid-cols-[230px_minmax(0,1fr)] lg:overflow-hidden">
       <aside className="border-b lg:border-r border-border bg-secondary/20 p-4 lg:p-5">
@@ -75,7 +104,7 @@ export default function PageSetupTab({
               <motion.button
                 key={item.id}
                 type="button"
-                onClick={() => onSectionChange(item.id)}
+                onClick={() => void changeSection(item.id)}
                 whileTap={{ scale: 0.98 }}
                 className={`relative flex w-auto lg:w-full shrink-0 items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm whitespace-nowrap transition-colors ${
                   active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
@@ -128,12 +157,12 @@ export default function PageSetupTab({
             >
               {section === "general" && (
                 <div className="lg:h-full overflow-auto">
-                  <BasicInfoTab webinar={webinar} onUpdate={onUpdate} />
+                  <BasicInfoTab webinar={webinar} onUpdate={onUpdate} onDirtyChange={setDirty} />
                 </div>
               )}
               {section === "registration" && (
                 <div className="lg:h-full overflow-auto">
-                  <RegistrationFormTab webinar={webinar} onUpdate={onUpdate} />
+                  <RegistrationFormTab webinar={webinar} onUpdate={onUpdate} onDirtyChange={setDirty} />
                 </div>
               )}
               {section === "sessions" && (
@@ -143,7 +172,7 @@ export default function PageSetupTab({
               )}
               {section === "livepage" && (
                 <div className="lg:h-full overflow-auto">
-                  <LivePageTab webinar={webinar} onUpdate={onUpdate} />
+                  <LivePageTab webinar={webinar} onUpdate={onUpdate} onDirtyChange={setDirty} />
                 </div>
               )}
             </motion.div>

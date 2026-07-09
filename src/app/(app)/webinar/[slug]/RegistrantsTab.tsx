@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowDown,
@@ -294,6 +294,8 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
   // 일괄등록 실패 행 — 개수만이 아니라 원인·행 번호를 모달에 남겨 수정 가능하게
   const [bulkErrors, setBulkErrors] = useState<{ index?: number; message: string }[]>([]);
   const modalOpen = showManual || showBulk || Boolean(selectedRegistration);
+  // 현재 열린 대화상자 컨테이너 — 포커스 트랩·초기 포커스 대상
+  const dialogRef = useRef<HTMLElement | null>(null);
 
   const fetchRegistrations = useCallback(async () => {
     setIsLoading(true);
@@ -329,13 +331,64 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    // 모달을 닫을 때 원래 위치로 포커스를 되돌리기 위해 저장
+    const previouslyFocused = document.activeElement as HTMLElement | null;
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+    const getFocusable = () => {
+      const root = dialogRef.current;
+      if (!root) return [] as HTMLElement[];
+      return Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+    };
+
+    // 모달이 열리면 첫 포커스를 대화상자 안(첫 입력 또는 닫기 버튼)으로 이동
+    const focusTimer = window.setTimeout(() => {
+      const focusables = getFocusable();
+      (focusables[0] ?? dialogRef.current)?.focus();
+    }, 0);
+
+    const closeModal = () => {
       setShowManual(false);
       setShowBulk(false);
       setSelectedRegistration(null);
       setDetailDraft(null);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeModal();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusables = getFocusable();
+      if (!focusables.length) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+
+      // 포커스가 대화상자 밖에 있으면 다시 안으로 끌어온다
+      if (!dialogRef.current?.contains(active)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+        return;
+      }
+      // 처음/마지막에서 감싸도록(wrap-around) Tab 순환을 대화상자 안에 가둔다
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
 
     document.addEventListener("keydown", handleKeyDown);
@@ -343,6 +396,8 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
+      window.clearTimeout(focusTimer);
+      previouslyFocused?.focus?.();
     };
   }, [modalOpen]);
 
@@ -587,6 +642,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
           }}
         >
           <motion.section
+            ref={dialogRef}
             initial={{ opacity: 0, y: 8, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.97 }}
@@ -665,6 +721,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
           }}
         >
           <motion.section
+            ref={dialogRef}
             initial={{ opacity: 0, y: 8, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.97 }}
@@ -796,6 +853,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
           }}
         >
           <motion.aside
+            ref={dialogRef}
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}

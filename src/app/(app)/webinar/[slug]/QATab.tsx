@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, MessageSquare, Check, X, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { formatKst } from "@/lib/datetime";
+import { InlineError } from "@/components/ui/inline-error";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -24,16 +25,21 @@ interface QAItem {
 export default function QATab({ webinarId, embedded = false }: { webinarId: string; embedded?: boolean }) {
   const [questions, setQuestions] = useState<QAItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [filter, setFilter] = useState<QAStatus | "all">("pending");
 
   const fetchQA = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(false);
     try {
       const params = new URLSearchParams();
       if (filter !== "all") params.set("status", filter);
       const res = await fetch(`/api/webinars/${webinarId}/qa?${params}`);
+      if (!res.ok) { setLoadError(true); return; }
       const data = await res.json();
       setQuestions(data.questions ?? []);
+    } catch {
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -88,6 +94,8 @@ export default function QATab({ webinarId, embedded = false }: { webinarId: stri
         <div className="flex items-center justify-center h-40">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
+      ) : loadError ? (
+        <InlineError message="Q&A를 불러오지 못했어요" onRetry={fetchQA} />
       ) : questions.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <MessageSquare className="w-10 h-10 text-muted-foreground/20 mb-3" />

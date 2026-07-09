@@ -171,32 +171,39 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const key = data.phone ? `p:${data.phone}` : `e:${data.email}`;
-    const duplicate = duplicateMode === "include" ? null : await findDuplicate(id, data.phone, data.email);
-    const batchDuplicate = duplicateMode !== "include" && seenKeys.has(key);
 
-    if ((duplicate || batchDuplicate) && duplicateMode === "skip") {
-      result.skipped += 1;
-      continue;
-    }
+    try {
+      const duplicate = duplicateMode === "include" ? null : await findDuplicate(id, data.phone, data.email);
+      const batchDuplicate = duplicateMode !== "include" && seenKeys.has(key);
 
-    if (duplicate && duplicateMode === "update") {
-      await prisma.webinarRegistration.update({
-        where: { id: duplicate.id },
-        data,
+      if ((duplicate || batchDuplicate) && duplicateMode === "skip") {
+        result.skipped += 1;
+        continue;
+      }
+
+      if (duplicate && duplicateMode === "update") {
+        await prisma.webinarRegistration.update({
+          where: { id: duplicate.id },
+          data,
+        });
+        result.updated += 1;
+        seenKeys.add(key);
+        continue;
+      }
+
+      await prisma.webinarRegistration.create({
+        data: {
+          webinarId: id,
+          ...data,
+        },
       });
-      result.updated += 1;
+      result.created += 1;
       seenKeys.add(key);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "알 수 없는 오류";
+      result.errors.push({ index, message: `${data.name || data.email || data.phone || "행"}: ${message}` });
       continue;
     }
-
-    await prisma.webinarRegistration.create({
-      data: {
-        webinarId: id,
-        ...data,
-      },
-    });
-    result.created += 1;
-    seenKeys.add(key);
   }
 
   return NextResponse.json(result, { status: result.created || result.updated || result.skipped ? 200 : 400 });

@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Megaphone, Plus, Trash2, Radio, Square } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { InlineError } from "@/components/ui/inline-error";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -18,16 +20,22 @@ interface Announcement {
 export default function AnnouncementsTab({ webinarId, embedded = false }: { webinarId: string; embedded?: boolean }) {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ type: "info", message: "" });
   const [isCreating, setIsCreating] = useState(false);
+  const confirm = useConfirm();
 
   const fetchAnnouncements = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(false);
     try {
       const res = await fetch(`/api/webinars/${webinarId}/announcements`);
+      if (!res.ok) { setLoadError(true); return; }
       const data = await res.json();
       setAnnouncements(data.announcements ?? []);
+    } catch {
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -72,6 +80,7 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
   };
 
   const handleDelete = async (id: string) => {
+    if (!(await confirm({ title: "공지를 삭제할까요?", description: "삭제한 공지는 되돌릴 수 없어요.", confirmLabel: "삭제", tone: "danger" }))) return;
     const res = await fetch(`/api/webinars/${webinarId}/announcements/${id}`, { method: "DELETE" });
     if (!res.ok) { toast.error("삭제 실패"); return; }
     toast.success("공지가 삭제됐어요");
@@ -168,6 +177,8 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
         <div className="flex items-center justify-center h-40">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
+      ) : loadError ? (
+        <InlineError message="공지를 불러오지 못했어요" onRetry={() => void fetchAnnouncements()} />
       ) : announcements.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Megaphone className="w-10 h-10 text-muted-foreground/20 mb-3" />

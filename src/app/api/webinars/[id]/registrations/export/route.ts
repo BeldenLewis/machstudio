@@ -78,8 +78,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     ];
   });
 
+  // CSV 수식 인젝션 방어 — 셀 첫 문자가 = + - @ 또는 선행 TAB/CR 이면 작은따옴표로 무력화한 뒤 인용/이스케이프
+  const csvCell = (cell: unknown) => {
+    const s = String(cell);
+    const neutralized = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+    return `"${neutralized.replace(/"/g, '""')}"`;
+  };
+
   const csv = [headers, ...rows]
-    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+    .map((row) => row.map(csvCell).join(","))
     .join("\n");
 
   await logActivity({

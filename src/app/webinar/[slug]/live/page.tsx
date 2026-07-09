@@ -313,6 +313,17 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     fetchWebinar();
   }, [fetchWebinar]);
 
+  // 라이브 전(사전등록·입장 대기) 상태 폴링 — 서버 status 가 live 로 바뀌면 fetchWebinar 가
+  // view/isTrulyLive/serverNowMs 를 갱신해 대기 중이던 시청자가 자동 전환된다. (30초, 탭 비활성 시 스킵)
+  useEffect(() => {
+    if (view === "live") return;
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      void fetchWebinar();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [view, fetchWebinar]);
+
   // 라이브 중 공지·답변 Q&A 폴링 (30초마다, 탭 비활성 시 스킵)
   useEffect(() => {
     if (view !== "live") return;
@@ -408,11 +419,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       if (typeof data.youtubeId === "string") setVideoId(data.youtubeId);
       setRegistered(true);
 
-      // 라이브 중이면 바로 이동
-      const now = new Date();
-      if (webinar && now >= new Date(webinar.liveStartAt) && now <= new Date(webinar.liveEndAt)) {
-        setView("live");
-      }
+      // 라이브 중이면 바로 이동 — 클라이언트 시계 대신 서버 상태(status/serverNow)로 판정
+      void fetchWebinar();
     } finally {
       setIsRegistering(false);
     }
