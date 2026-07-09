@@ -19,6 +19,7 @@ const CORS_HEADERS = {
 
 const SCRIPT_HEADERS = {
   "Content-Type": "application/javascript; charset=utf-8",
+  "X-Content-Type-Options": "nosniff", // 크로스오리진 스크립트 — 콘텐츠 스니핑 차단
   "X-Robots-Tag": "noindex",
   ...CORS_HEADERS,
 } as const;

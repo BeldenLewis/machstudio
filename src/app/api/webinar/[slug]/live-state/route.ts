@@ -97,6 +97,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       status: statusInfo.status,
       entryOpen: statusInfo.entryOpen,
       serverNow: new Date().toISOString(),
+      chatEnabled,
       announcements,
       answeredQA,
       chat,

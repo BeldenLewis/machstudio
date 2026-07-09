@@ -22,6 +22,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const questions = await prisma.webinarQA.findMany({
     where: { webinarId: id, ...(status ? { status } : {}) },
     orderBy: { createdAt: "desc" },
+    take: 500, // 최악의 경우 egress/렌더 상한 (실사용 규모 초과분은 페이지네이션 도입 시 확장)
   });
 
   return NextResponse.json({ questions });

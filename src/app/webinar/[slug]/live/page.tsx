@@ -64,6 +64,7 @@ interface LiveStateResponse {
   status: string;
   entryOpen: boolean;
   serverNow: string;
+  chatEnabled?: boolean;
   announcements: Announcement[];
   answeredQA?: AnsweredQA[];
   chat?: { messages: ChatMessage[] };
@@ -151,6 +152,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [chatInput, setChatInput] = useState("");
   const [isSendingChat, setIsSendingChat] = useState(false);
   const [chatError, setChatError] = useState("");
+  const [chatEnabledLive, setChatEnabledLive] = useState<boolean | null>(null); // 라이브 중 /live-state 로 동기화
   const [votedQa, setVotedQa] = useState<Set<string>>(() => new Set()); // 세션 내 추천한 질문
   const [activeTab, setActiveTab] = useState<string>("qa");
   const chatCursorRef = useRef<string | null>(null);
@@ -242,8 +244,27 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     }
   }, [slug]);
 
-  // 채팅 활성 여부 — components.chatEnabled (호스트가 라이브 페이지 참여 구성에서 ON)
-  const chatEnabled = (webinar?.components ?? {})["chatEnabled"] === true;
+  // 라이브 전 상태 전환 감지용 경량 폴 — /status(상태만) 를 받아 view/serverNow/isTrulyLive 갱신.
+  // 세션·테마·config 를 30초마다 다시 받지 않아 대기 시청자 egress 를 줄인다(정적 콘텐츠는 최초 /info 1회).
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/webinar/${slug}/status`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const status: string = data.status;
+      const entryOpen: boolean = data.entryOpen;
+      if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
+      setIsTrulyLive(status === "live");
+      const requestedView = new URLSearchParams(window.location.search).get("view");
+      if (requestedView === "signup" && status !== "ended") setView("signup");
+      else if (status === "ended") setView("ended");
+      else if (status === "live" || entryOpen) setView("live");
+      else setView("signup");
+    } catch { /* 폴링 중 일시적 오류는 다음 주기에 재시도 */ }
+  }, [slug]);
+
+  // 채팅 활성 여부 — 초기값은 /info(components.chatEnabled), 라이브 중엔 /live-state 의 chatEnabled 로 동기화
+  const chatEnabled = chatEnabledLive ?? ((webinar?.components ?? {})["chatEnabled"] === true);
 
   // 통합 라이브 폴링 — 공지·답변 Q&A·채팅·투표·팝업·Tally·상태를 한 번의 요청으로 받아 egress 절감.
   // 예전엔 announcements/qa/chat 3개 + LivePushLayer 자체 3개로 분산 폴링했다.
@@ -270,6 +291,10 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       setPushPoll(data.poll ?? null);
       if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
       setIsTrulyLive(data.status === "live");
+      // 채팅 on/off 를 라이브 중에도 반영 — 호스트가 세션 중 토글하면 다음 폴에서 탭 노출/숨김이 갱신됨
+      if (typeof data.chatEnabled === "boolean") setChatEnabledLive(data.chatEnabled);
+      // 라이브 중 종료 전환 — 종료되면 종료 화면으로. view!=="live" 가 되어 이 폴링도 자동 중단된다.
+      if (data.status === "ended") setView("ended");
 
       // 채팅 병합 — 요청 시 보낸 after 와 동일한 기준으로 처리(교체 vs 증분)
       if (data.chat) {
@@ -347,16 +372,17 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     fetchWebinar();
   }, [fetchWebinar]);
 
-  // 라이브 전(사전등록·입장 대기) 상태 폴링 — 서버 status 가 live 로 바뀌면 fetchWebinar 가
+  // 라이브 전(사전등록·입장 대기) 상태 폴링 — 서버 status 가 live 로 바뀌면 fetchStatus 가
   // view/isTrulyLive/serverNowMs 를 갱신해 대기 중이던 시청자가 자동 전환된다. (30초, 탭 비활성 시 스킵)
+  // 경량 /status 만 받아 정적 콘텐츠 재수신 egress 를 없앤다.
   useEffect(() => {
     if (view === "live") return;
     const interval = setInterval(() => {
       if (document.hidden) return;
-      void fetchWebinar();
+      void fetchStatus();
     }, 30000);
     return () => clearInterval(interval);
-  }, [view, fetchWebinar]);
+  }, [view, fetchStatus]);
 
   // 라이브 중 통합 폴링 — 12초 주기(탭 비활성 시 스킵). 공지·답변 Q&A·채팅·투표·팝업·Tally·상태를
   // 한 번의 요청으로 받는다. fetchLiveState 가 activeTab/채팅 여부를 반영하므로 탭 전환 시 이 이펙트가

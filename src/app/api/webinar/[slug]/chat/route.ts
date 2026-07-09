@@ -101,7 +101,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     });
     if (reg) {
       registrationId = reg.id;
-      if (!name) name = reg.name;
+      // 등록명 우선 — 검증된 등록자는 클라이언트가 보낸 name 을 무시하고 실제 등록명으로 표시(사칭 방지)
+      if (reg.name) name = reg.name;
     }
   }
   if (!name) name = "익명";

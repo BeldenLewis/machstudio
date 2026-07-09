@@ -65,7 +65,7 @@ export async function POST(request: Request) {
   };
   let config: unknown = {};
   let components: unknown = undefined;
-  let clonedSessions: { number: number; title: string; speaker: string | null; description: string | null; startTime: string; endTime: string }[] = [];
+  let clonedSessions: { number: number; type: string; title: string; speaker: string | null; speakerPhotoUrl: string | null; description: string | null; startTime: string; endTime: string }[] = [];
 
   // 프로젝트 간 복제 — 같은 워크스페이스의 어느 프로젝트 웨비나든 설정만 복사(일정·slug·등록자 제외).
   if (cloneFromId) {
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
         config: true,
         components: true,
         sessions: {
-          select: { number: true, title: true, speaker: true, description: true, startTime: true, endTime: true },
+          select: { number: true, type: true, title: true, speaker: true, speakerPhotoUrl: true, description: true, startTime: true, endTime: true },
           orderBy: { number: "asc" },
         },
       },

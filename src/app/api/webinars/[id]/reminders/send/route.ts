@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
-import { sendEmail, reminderEmailHtml, emailConfigured } from "@/lib/email";
+import { sendEmailBatch, reminderEmailHtml, emailConfigured } from "@/lib/email";
 
 async function authorize(webinarId: string, userId: string) {
   const webinar = await prisma.webinar.findUnique({ where: { id: webinarId } });
@@ -43,13 +43,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!configured) {
     skipped = reminders.length; // 키 미설정 — 전부 skip
   } else {
-    // 개별 발송(수신자 간 노출 방지). 소규모 리스트 가정.
-    for (const r of reminders) {
-      const result = await sendEmail({ to: r.email, subject, html });
-      if (result.sent) sent += 1;
-      else if (result.skipped) skipped += 1;
-      else failed += 1;
-    }
+    // 배치 발송 — 100건씩 묶어 Resend /emails/batch 로(수신자 간 노출 없음). 왕복 수 대폭 감소.
+    const result = await sendEmailBatch(reminders.map((r) => ({ to: r.email, subject, html })));
+    sent = result.sent;
+    skipped = result.skipped;
+    failed = result.failed;
   }
 
   await logActivity({

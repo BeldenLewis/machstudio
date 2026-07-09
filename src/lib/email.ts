@@ -36,6 +36,33 @@ export async function sendEmail({ to, subject, html, from }: SendArgs): Promise<
   }
 }
 
+// 배치 발송 — Resend /emails/batch(요청당 최대 100건)로 여러 수신자를 한 번에.
+// 각 메시지는 to:[단일주소] 라 수신자끼리 노출되지 않는다. 키 미설정 시 전부 skip.
+export async function sendEmailBatch(
+  messages: SendArgs[],
+): Promise<{ sent: number; skipped: number; failed: number }> {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return { sent: 0, skipped: messages.length, failed: 0 };
+  const defaultSender = process.env.EMAIL_FROM || "webinar@mach.studio";
+  let sent = 0;
+  let failed = 0;
+  for (let i = 0; i < messages.length; i += 100) {
+    const chunk = messages.slice(i, i + 100);
+    try {
+      const res = await fetch("https://api.resend.com/emails/batch", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(chunk.map((m) => ({ from: m.from || defaultSender, to: [m.to], subject: m.subject, html: m.html }))),
+      });
+      if (res.ok) sent += chunk.length;
+      else failed += chunk.length;
+    } catch {
+      failed += chunk.length;
+    }
+  }
+  return { sent, skipped: 0, failed };
+}
+
 // 간단한 알림 이메일 HTML — 제목/본문/버튼(선택).
 export function reminderEmailHtml(opts: { title: string; body: string; url?: string; buttonLabel?: string }): string {
   const { title, body, url, buttonLabel } = opts;

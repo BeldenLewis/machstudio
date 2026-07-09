@@ -62,17 +62,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ sit
   });
   if (updated.count === 0) return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 
-  const site = await prisma.webinarEmbedSite.findUnique({
-    where: { id: siteId },
-    select: { activeWebinarId: true },
-  });
-
   // 방문 집계는 webinar 컴포넌트가 실제로 렌더된 페이지에서만 (로더가 visit:true 전송).
-  // 배너만 뜨는 일반 페이지의 연결 비콘은 lastSeenAt 만 갱신하고 방문으로 세지 않는다.
-  if (site?.activeWebinarId && body?.visit === true) {
-    const utmSource = cleanUtm(body?.utmSource);
-    const utmMedium = cleanUtm(body?.utmMedium);
-    await prisma.webinarVisitStat.upsert({
+  // 배너만 뜨는 일반 페이지의 연결 비콘(visit!==true, 대다수)은 lastSeenAt 만 갱신하고 종료 —
+  // 아래 findUnique 를 그 경우 건너뛰어 비콘당 DB 왕복 1회를 아낀다(Hobby egress 절감).
+  if (body?.visit === true) {
+    const site = await prisma.webinarEmbedSite.findUnique({
+      where: { id: siteId },
+      select: { activeWebinarId: true },
+    });
+    if (site?.activeWebinarId) {
+      const utmSource = cleanUtm(body?.utmSource);
+      const utmMedium = cleanUtm(body?.utmMedium);
+      await prisma.webinarVisitStat.upsert({
       where: {
         webinarId_date_utmSource_utmMedium: {
           webinarId: site.activeWebinarId,
@@ -87,9 +88,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ sit
         date: kstDate(now),
         utmSource,
         utmMedium,
-        visits: 1,
-      },
-    }).catch(() => {});
+          visits: 1,
+        },
+      }).catch(() => {});
+    }
   }
 
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
