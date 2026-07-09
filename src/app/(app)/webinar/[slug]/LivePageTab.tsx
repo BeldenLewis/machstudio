@@ -76,7 +76,7 @@ interface Webinar {
 const inputCls = "w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors";
 
 // 만들기 › 라이브 페이지 — 영상·콘텐츠·CTA·알림·참여·디자인을 한 곳에서 편집(단일 저장).
-export default function LivePageTab({ webinar, onUpdate, onDirtyChange }: { webinar: Webinar; onUpdate: () => void; onDirtyChange?: (dirty: boolean) => void }) {
+export default function LivePageTab({ webinar, slug, onUpdate, onDirtyChange }: { webinar: Webinar; slug: string; onUpdate: () => void; onDirtyChange?: (dirty: boolean) => void }) {
   const livePage = (webinar.config?.livePage ?? {}) as Record<string, unknown>;
   const notify = (livePage.notify ?? {}) as Record<string, unknown>;
   const components = (webinar.components ?? {}) as Record<string, unknown>;
@@ -376,10 +376,18 @@ export default function LivePageTab({ webinar, onUpdate, onDirtyChange }: { webi
         </div>
       </section>
 
-      <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }} transition={spring} onClick={handleSave} disabled={isSaving}
-        className="px-5 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors disabled:opacity-40">
-        {isSaving ? "저장 중..." : "라이브 페이지 저장"}
-      </motion.button>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }} transition={spring} onClick={handleSave} disabled={isSaving}
+          className="px-5 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors disabled:opacity-40">
+          {isSaving ? "저장 중..." : "라이브 페이지 저장"}
+        </motion.button>
+        <a href={`/live-preview?slug=${encodeURIComponent(slug)}`} target="_blank" rel="noopener noreferrer"
+          title="저장된 내용 기준으로 새 탭에서 라이브 시청 화면을 미리봅니다 (영상은 보안상 미표시)"
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1.5">
+          미리보기 ↗
+        </a>
+        {dirty && <span className="text-[11px] text-amber-500">저장하면 미리보기에 반영돼요</span>}
+      </div>
     </div>
   );
 }

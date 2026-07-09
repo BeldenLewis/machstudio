@@ -172,7 +172,7 @@ export default function PageSetupTab({
               )}
               {section === "livepage" && (
                 <div className="lg:h-full overflow-auto">
-                  <LivePageTab webinar={webinar} onUpdate={onUpdate} onDirtyChange={setDirty} />
+                  <LivePageTab webinar={webinar} slug={webinar.slug} onUpdate={onUpdate} onDirtyChange={setDirty} />
                 </div>
               )}
             </motion.div>

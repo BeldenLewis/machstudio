@@ -1,10 +1,13 @@
 "use client";
 
-// 라이브 페이지 상태별 디자인 프리뷰 하니스 (목업 데이터).
-// 실제 상태머신/인증/타이밍 없이 각 상태를 브라우저에서 바로 확인·검토하기 위한 개발용 화면.
-// 공개 라우트지만 데이터는 전부 가짜다.
+// 라이브 페이지 상태별 디자인 프리뷰 하니스.
+// 실제 상태머신/인증/타이밍 없이 각 상태를 브라우저에서 바로 확인·검토하기 위한 화면.
+// - ?slug= 없으면 목업 데이터로 각 상태 디자인을 확인(개발용)
+// - ?slug=<웨비나> 가 있으면 공개 /info 로 그 웨비나의 실제 저장된 테마·CTA·세션·알림 구성을 불러와
+//   라이브 시청 레이아웃을 그대로 미리보기(만들기 › 라이브 페이지의 "미리보기" 링크가 사용).
+//   youtubeId 는 /info 가 게이팅해 노출하지 않으므로 영상 자리엔 포스터가 뜬다(레이아웃/테마 확인용).
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import LiveContentStk from "@/app/webinar/[slug]/LiveContentStk";
 import EntryVerify from "@/app/webinar/[slug]/EntryVerify";
 import PreLiveWaiting from "@/app/webinar/[slug]/PreLiveWaiting";
@@ -57,10 +60,68 @@ const MOCK = {
   ],
 };
 
+interface RealWebinar {
+  name: string;
+  description: string | null;
+  liveStartAt: string;
+  liveEndAt: string;
+  config: Record<string, unknown>;
+  theme: Record<string, string> | null;
+  chatEnabled: boolean;
+  sessions: { id: string; number: number; type?: string; title: string; speaker: string | null; speakerPhotoUrl: string | null; description: string | null; startTime: string; endTime: string }[];
+}
+
 export default function LivePreviewPage() {
   const [state, setState] = useState<State>("waiting");
   const [themeKey, setThemeKey] = useState<ThemeKey>("dark");
-  const t = THEMES[themeKey];
+  const [real, setReal] = useState<RealWebinar | null>(null);
+
+  // ?slug= 가 있으면 그 웨비나의 실제 저장 구성을 공개 /info 로 불러와 미리보기(없으면 목업 유지)
+  useEffect(() => {
+    const slug = new URLSearchParams(window.location.search).get("slug");
+    if (!slug) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/webinar/${slug}/info`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const w = data.webinar;
+        if (cancelled || !w) return;
+        const comps = (w.components ?? {}) as Record<string, unknown>;
+        setReal({
+          name: w.name,
+          description: w.description ?? null,
+          liveStartAt: w.liveStartAt,
+          liveEndAt: w.liveEndAt,
+          config: (w.config ?? {}) as Record<string, unknown>,
+          theme: (w.theme ?? null) as Record<string, string> | null,
+          chatEnabled: comps.chatEnabled === true,
+          sessions: Array.isArray(w.sessions)
+            ? w.sessions.map((s: Record<string, unknown>) => ({
+                id: String(s.id), number: Number(s.number), type: s.type as string | undefined, title: String(s.title),
+                speaker: (s.speaker as string) ?? null, speakerPhotoUrl: (s.speakerPhotoUrl as string) ?? null,
+                description: (s.description as string) ?? null, startTime: String(s.startTime), endTime: String(s.endTime),
+              }))
+            : [],
+        });
+        setChatOn(comps.chatEnabled === true);
+        setState("live"); // 실제 데이터 로드 시 라이브 시청 레이아웃부터 보여준다
+      } catch { /* 무시 — 목업으로 폴백 */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // 미리보기 대상 — 실제 웨비나가 로드됐으면 그것, 아니면 목업
+  const webinarData = real ?? MOCK;
+  const t = real?.theme
+    ? {
+        bg: real.theme.bgColor ?? THEMES.dark.bg,
+        text: real.theme.textColor ?? THEMES.dark.text,
+        surface: real.theme.surfaceColor ?? THEMES.dark.surface,
+        accent: real.theme.accentColor ?? THEMES.dark.accent,
+      }
+    : THEMES[themeKey];
 
   // EntryVerify 로컬 상태
   const [authMethod, setAuthMethod] = useState<"phone" | "email">("phone");
@@ -71,8 +132,10 @@ export default function LivePreviewPage() {
   const [chatOn, setChatOn] = useState(true);
 
   const target = useMemo(() => new Date(Date.now() + (2 * 86400 + 5 * 3600 + 37 * 60) * 1000).toISOString(), []);
-  // 라이브 프리뷰에선 세션 2 진행 중으로 보이게 서버시각을 행사 중으로 고정
+  // 라이브 프리뷰에선 세션이 진행 중으로 보이게 서버시각을 행사 중으로 고정.
+  // 실제 웨비나는 시작 20분 후 시점으로 잡아 첫 세션이 진행 중으로 표시된다(레이아웃 확인용).
   const liveNowMs = useMemo(() => new Date("2026-08-20T19:45:00+09:00").getTime(), []);
+  const previewNowMs = real ? Date.parse(real.liveStartAt) + 20 * 60_000 : liveNowMs;
   const ANSWERED = useMemo(
     () => [
       { id: "a1", question: "레코드가 흩어져 있을 때 중복은 어떤 기준으로 잡나요?", sessionNumber: 2, name: "박*훈", voteCount: 24, status: "answered" },
@@ -97,6 +160,11 @@ export default function LivePreviewPage() {
       {/* 프리뷰 툴바 */}
       <div style={{ position: "sticky", top: 0, zIndex: 100, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", padding: "10px 16px", background: "rgba(0,0,0,0.55)", backdropFilter: "blur(10px)", borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
         <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.04em", color: "#fff", opacity: 0.7 }}>LIVE PREVIEW</span>
+        {real && (
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", opacity: 0.9, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            실제 · {real.name}
+          </span>
+        )}
         <div style={{ display: "flex", gap: 4 }}>
           {(["waiting", "entry", "live", "ended"] as State[]).map((s) => (
             <button key={s} onClick={() => setState(s)}
@@ -109,32 +177,36 @@ export default function LivePreviewPage() {
           style={{ marginLeft: "auto", padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.16)", fontSize: 12, fontWeight: 700, cursor: "pointer", background: chatOn ? t.accent : "transparent", color: "#fff" }}>
           채팅 {chatOn ? "ON" : "OFF"}
         </button>
-        <div style={{ display: "flex", gap: 4 }}>
-          {(["dark", "light"] as ThemeKey[]).map((k) => (
-            <button key={k} onClick={() => setThemeKey(k)}
-              style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.16)", fontSize: 12, fontWeight: 700, cursor: "pointer", background: themeKey === k ? t.accent : "transparent", color: "#fff" }}>
-              {k === "dark" ? "다크" : "라이트"}
-            </button>
-          ))}
-        </div>
+        {/* 목업일 때만 테마 토글 노출 — 실제 웨비나는 저장된 테마를 그대로 사용 */}
+        {!real && (
+          <div style={{ display: "flex", gap: 4 }}>
+            {(["dark", "light"] as ThemeKey[]).map((k) => (
+              <button key={k} onClick={() => setThemeKey(k)}
+                style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.16)", fontSize: 12, fontWeight: 700, cursor: "pointer", background: themeKey === k ? t.accent : "transparent", color: "#fff" }}>
+                {k === "dark" ? "다크" : "라이트"}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {state === "waiting" && (
-        <PreLiveWaiting webinar={MOCK} accent={t.accent} text={t.text} surface={t.surface} targetIso={target} registered onCalendar={() => {}} />
+        <PreLiveWaiting webinar={webinarData} accent={t.accent} text={t.text} surface={t.surface} targetIso={real?.liveStartAt ?? target} registered onCalendar={() => {}} />
       )}
       {state === "entry" && (
         <EntryVerify
-          webinar={MOCK} accent={t.accent} text={t.text} surface={t.surface}
+          webinar={webinarData} accent={t.accent} text={t.text} surface={t.surface}
           authMethod={authMethod} authValue={authValue} verifyError="" isVerifying={false}
           onAuthMethod={setAuthMethod} onAuthValueChange={setAuthValue} onVerify={() => {}} onGoSignup={() => {}}
         />
       )}
       {state === "live" && (
         <LiveContentStk
-          webinar={MOCK} accent={t.accent} text={t.text} surface={t.surface} youtubeId={null}
-          serverNowMs={liveNowMs} chatEnabled={chatOn}
-          qa={{ sessions: MOCK.sessions, question, setQuestion, selectedSession, setSelectedSession, onSend: () => {}, isSending: false, sent: false, answered: ANSWERED, onVote: () => {}, votedIds: [] }}
+          webinar={webinarData} accent={t.accent} text={t.text} surface={t.surface} youtubeId={null}
+          serverNowMs={previewNowMs} chatEnabled={chatOn}
+          qa={{ sessions: webinarData.sessions, question, setQuestion, selectedSession, setSelectedSession, onSend: () => {}, isSending: false, sent: false, answered: ANSWERED, onVote: () => {}, votedIds: [] }}
           chat={chatOn ? { messages: CHAT, input: chatText, setInput: setChatText, onSend: () => setChatText(""), isSending: false } : undefined}
+          notifyState={{ subscribed: false, onToggle: () => {}, error: "", pending: false }}
         />
       )}
       {state === "ended" && (

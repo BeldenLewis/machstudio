@@ -6,6 +6,8 @@ import { maskName } from "@/lib/mask";
 
 const CORS = { "Access-Control-Allow-Origin": "*" };
 const MAX_LEN = 300;
+// 링크 도배 방지 — http(s):// 또는 www. 로 시작하는 토큰만 보수적으로 매칭(일반 문장의 마침표는 건드리지 않음)
+const LINK_RE = /(https?:\/\/|www\.)\S+/gi;
 
 // 공개 GET — 최근 채팅. after(ISO) 이후만 증분 조회. 이름은 마스킹(호스트는 표시명 유지).
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -81,8 +83,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   }
 
   const body = await request.json().catch(() => ({}));
-  const message = String(body?.message ?? "").trim().slice(0, MAX_LEN);
-  if (!message) return NextResponse.json({ error: "메시지를 입력해주세요" }, { status: 400, headers: CORS });
+  const rawMessage = String(body?.message ?? "").trim().slice(0, MAX_LEN);
+  if (!rawMessage) return NextResponse.json({ error: "메시지를 입력해주세요" }, { status: 400, headers: CORS });
+  // 링크는 제거하고 통과(강한 거절 대신 차분한 UX). 단, 링크 외 내용이 없으면(링크만) 거절.
+  const withoutLinks = rawMessage.replace(LINK_RE, " ").replace(/\s+/g, " ").trim();
+  if (!withoutLinks) return NextResponse.json({ error: "링크만 있는 메시지는 보낼 수 없어요." }, { status: 400, headers: CORS });
+  const message = rawMessage.replace(LINK_RE, "[링크 제거됨]").trim();
 
   // 등록자 검증 — 이 웨비나 등록자일 때만 신뢰. 이름은 등록명 우선.
   const rawRegId = body?.registrationId ? String(body.registrationId) : null;
@@ -99,6 +105,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     }
   }
   if (!name) name = "익명";
+
+  // 인증된 등록자 대상 도배 방지 — 짧은 최소 간격(10초 3건) + 직전과 동일한 메시지 반복 차단.
+  // 반복 차단은 DB 기반이라 서버리스 인스턴스가 바뀌거나 재시작해도 유지된다.
+  if (registrationId) {
+    const regRl = rateLimit(`webinar-chat-reg:${webinar.id}:${registrationId}`, { limit: 3, windowMs: 10_000 });
+    if (!regRl.allowed) {
+      return NextResponse.json(
+        { error: "메시지를 너무 자주 보내고 있어요. 잠시 후 다시 시도해주세요." },
+        { status: 429, headers: { ...CORS, "Retry-After": Math.ceil(regRl.retryAfterMs / 1000).toString() } },
+      );
+    }
+    const last = await prisma.webinarChatMessage.findFirst({
+      where: { webinarId: webinar.id, registrationId, isHost: false },
+      orderBy: { createdAt: "desc" },
+      select: { message: true, createdAt: true },
+    });
+    if (last && last.message === message && Date.now() - last.createdAt.getTime() < 30_000) {
+      return NextResponse.json({ error: "같은 메시지를 반복해서 보낼 수 없어요." }, { status: 429, headers: CORS });
+    }
+  }
 
   const created = await prisma.webinarChatMessage.create({
     data: { webinarId: webinar.id, registrationId, name: name.slice(0, 60), message, isHost: false },
