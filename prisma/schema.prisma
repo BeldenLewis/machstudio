@@ -609,6 +609,8 @@ model WebinarQA {
 
   @@index([webinarId, createdAt(sort: Desc)])
   @@index([webinarId, status])
+  // 라이브 상태(/live-state)의 추천순 정렬(voteCount DESC, createdAt ASC) 지원
+  @@index([webinarId, voteCount(sort: Desc), createdAt])
 }
 
 model WebinarQAVote {
@@ -639,6 +641,7 @@ model WebinarAnnouncement {
   @@index([webinarId, isActive])
 }
 
+// 웨비나당 활성 1개 보장: DB 부분 유니크 인덱스 WebinarPopup_webinarId_active_key (Prisma DSL 미표현 → 마이그레이션 SQL 관리)
 model WebinarPopup {
   id                  String   @id @default(cuid())
   webinarId           String
@@ -728,6 +731,7 @@ model WebinarVisitStat {
 
 // 실시간 투표 — 운영 콘솔에서 발행(단일 활성), 시청자 우하단 토스트로 노출.
 // 집계는 옵션별 voteCount(원자적 증가) + 중복 방지는 등록자당 1표(unique)로 처리.
+// 웨비나당 활성 1개 보장: DB 부분 유니크 인덱스 WebinarPoll_webinarId_active_key (Prisma DSL 미표현 → 마이그레이션 SQL 관리)
 model WebinarPoll {
   id        String   @id @default(cuid())
   webinarId String
@@ -800,6 +804,7 @@ model WebinarReminder {
   @@index([webinarId])
 }
 
+// 웨비나당 활성 1개 보장: DB 부분 유니크 인덱스 WebinarTallyPush_webinarId_active_key (Prisma DSL 미표현 → 마이그레이션 SQL 관리)
 model WebinarTallyPush {
   id                   String   @id @default(cuid())
   webinarId            String

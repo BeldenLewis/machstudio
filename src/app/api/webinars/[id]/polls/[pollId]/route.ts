@@ -47,10 +47,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   // 발행(ON) 은 웨비나당 1개만 — 켜는 순간 다른 투표를 전부 끈다 (팝업·Tally 규칙 계승)
   if (body.isActive === true) {
-    await prisma.$transaction([
-      prisma.webinarPoll.updateMany({ where: { webinarId: id, isActive: true }, data: { isActive: false } }),
-      prisma.webinarPoll.update({ where: { id: poll.id }, data: { isActive: true } }),
-    ]);
+    try {
+      await prisma.$transaction([
+        prisma.webinarPoll.updateMany({ where: { webinarId: id, isActive: true }, data: { isActive: false } }),
+        prisma.webinarPoll.update({ where: { id: poll.id }, data: { isActive: true } }),
+      ]);
+    } catch (e) {
+      // 부분 유니크 인덱스(웨비나당 활성 1개) 위반 — 동시에 다른 항목이 켜진 경우. 500 대신 409.
+      if (e && typeof e === "object" && (e as { code?: string }).code === "P2002") {
+        return NextResponse.json({ error: "다른 항목이 방금 활성화됐어요. 새로고침 후 다시 시도해주세요." }, { status: 409 });
+      }
+      throw e;
+    }
   } else if (body.isActive === false) {
     await prisma.webinarPoll.update({ where: { id: poll.id }, data: { isActive: false } });
   }
