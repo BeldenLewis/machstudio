@@ -8,6 +8,7 @@ import { useWorkspace } from "@/contexts/workspace";
 import { kstDateTimeLocalToIso, formatKst } from "@/lib/datetime";
 import { InlineError } from "@/components/ui/inline-error";
 import { resolveWebinarStatus, WEBINAR_STATUS_META } from "@/lib/webinar-status";
+import WebinarSchedulePicker from "@/components/webinar/WebinarSchedulePicker";
 import Link from "next/link";
 
 interface Webinar {
@@ -218,34 +219,12 @@ export default function WebinarPage() {
                   className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400"
                 />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">사전등록 마감 *</label>
-                  <input
-                    type="datetime-local"
-                    value={form.signupDeadline}
-                    onChange={(e) => setForm((f) => ({ ...f, signupDeadline: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">라이브 시작 *</label>
-                  <input
-                    type="datetime-local"
-                    value={form.liveStartAt}
-                    onChange={(e) => setForm((f) => ({ ...f, liveStartAt: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">라이브 종료 *</label>
-                  <input
-                    type="datetime-local"
-                    value={form.liveEndAt}
-                    onChange={(e) => setForm((f) => ({ ...f, liveEndAt: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400"
-                  />
-                </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block">일정 *</label>
+                <WebinarSchedulePicker
+                  value={{ liveStartAt: form.liveStartAt, liveEndAt: form.liveEndAt, signupDeadline: form.signupDeadline }}
+                  onChange={(v) => setForm((f) => ({ ...f, liveStartAt: v.liveStartAt, liveEndAt: v.liveEndAt, signupDeadline: v.signupDeadline }))}
+                />
               </div>
               <div className="flex gap-2 pt-1">
                 <motion.button

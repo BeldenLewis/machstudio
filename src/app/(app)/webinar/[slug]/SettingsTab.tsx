@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
+import WebinarSchedulePicker from "@/components/webinar/WebinarSchedulePicker";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -159,35 +160,10 @@ export default function SettingsTab({ webinar, onUpdate }: { webinar: Webinar; o
       {/* 일정 */}
       <section className="space-y-4">
         <h3 className="text-sm font-semibold">일정</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">사전등록 마감</label>
-            <input
-              type="datetime-local"
-              value={form.signupDeadline}
-              onChange={(e) => setForm((f) => ({ ...f, signupDeadline: e.target.value }))}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">라이브 시작</label>
-            <input
-              type="datetime-local"
-              value={form.liveStartAt}
-              onChange={(e) => setForm((f) => ({ ...f, liveStartAt: e.target.value }))}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">라이브 종료</label>
-            <input
-              type="datetime-local"
-              value={form.liveEndAt}
-              onChange={(e) => setForm((f) => ({ ...f, liveEndAt: e.target.value }))}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
-            />
-          </div>
-        </div>
+        <WebinarSchedulePicker
+          value={{ liveStartAt: form.liveStartAt, liveEndAt: form.liveEndAt, signupDeadline: form.signupDeadline }}
+          onChange={(v) => setForm((f) => ({ ...f, liveStartAt: v.liveStartAt, liveEndAt: v.liveEndAt, signupDeadline: v.signupDeadline }))}
+        />
         <label className="flex items-start gap-2.5 cursor-pointer pt-1">
           <input
             type="checkbox"
