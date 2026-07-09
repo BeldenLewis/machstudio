@@ -28,9 +28,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   // 상태머신 단일 판정 — 라이브 페이지가 운영 콘솔의 statusOverride·입장오픈 윈도를 반영하도록.
   const statusInfo = resolveWebinarStatus(webinar);
 
-  // youtubeId 는 공개 노출하지 않음 — 입장 인증(verify) 통과 시 verify 응답으로 전달한다.
-  const config = { ...((webinar.config ?? {}) as Record<string, unknown>) };
-  delete config.youtubeId;
+  // config 는 뷰어가 실제로 쓰는 키만 allowlist 로 노출 — youtubeId(입장 verify 시 전달) 및
+  // 향후 추가될 수 있는 민감 키(토큰·내부 URL 등)가 실수로 공개되지 않도록 blocklist 대신 allowlist.
+  const rawConfig = (webinar.config ?? {}) as Record<string, unknown>;
+  const config: Record<string, unknown> = {
+    calendarUrl: rawConfig.calendarUrl,
+    surveyUrl: rawConfig.surveyUrl,
+    livePage: rawConfig.livePage,
+    registrationForm: rawConfig.registrationForm,
+  };
 
   return NextResponse.json(
     {

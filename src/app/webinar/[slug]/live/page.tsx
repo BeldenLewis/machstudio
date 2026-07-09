@@ -186,6 +186,23 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     return () => ro.disconnect();
   }, []);
 
+  // 재접속 유지 — 인증한 registrationId·영상을 브라우저에 저장해 새로고침해도 입장 확인부터 다시 하지 않게
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`mach_reg_${slug}`);
+      if (raw) {
+        const s = JSON.parse(raw) as { registrationId?: string; videoId?: string | null };
+        if (s.registrationId) setRegistrationId(s.registrationId);
+        if (typeof s.videoId === "string") setVideoId(s.videoId);
+      }
+    } catch { /* 스토리지 차단 무시 */ }
+  }, [slug]);
+  useEffect(() => {
+    try {
+      if (registrationId) localStorage.setItem(`mach_reg_${slug}`, JSON.stringify({ registrationId, videoId }));
+    } catch { /* 무시 */ }
+  }, [slug, registrationId, videoId]);
+
   const fetchWebinar = useCallback(async () => {
     try {
       const res = await fetch(`/api/webinar/${slug}/info`);

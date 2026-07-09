@@ -434,11 +434,18 @@ export default function LiveContentStk({
     };
   }, []);
 
-  // 채팅 피드 자동 스크롤 — 탭 진입/새 메시지 시 최신(하단)으로
+  // 채팅 탭 진입 시엔 항상 최신(하단)으로
   useEffect(() => {
     if (tab !== "chat") return;
     const el = feedRef.current;
     if (el) el.scrollTop = el.scrollHeight;
+  }, [tab]);
+  // 새 메시지 — 이미 하단 근처(≤120px)일 때만 따라감. 위로 스크롤해 과거를 읽는 중이면 방해하지 않음.
+  useEffect(() => {
+    if (tab !== "chat") return;
+    const el = feedRef.current;
+    if (!el) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) el.scrollTop = el.scrollHeight;
   }, [tab, chat?.messages]);
 
   const [shared, setShared] = useState(false);
