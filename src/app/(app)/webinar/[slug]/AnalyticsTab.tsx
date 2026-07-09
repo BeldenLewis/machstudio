@@ -194,7 +194,7 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
         <div className="flex items-center gap-2">
           <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }} transition={spring} onClick={exportCsv}
             className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs transition-colors hover:bg-secondary">
-            <Download className="h-3.5 w-3.5" /> CSV 내보내기
+            <Download className="h-3.5 w-3.5" /> 등록자 명단 내보내기
           </motion.button>
           <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }} transition={spring} onClick={() => fetchAll(true)} disabled={isRefreshing}
             className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs transition-colors hover:bg-secondary disabled:opacity-50">
@@ -202,6 +202,26 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
           </motion.button>
         </div>
       </div>
+
+      {/* 등록 추이 — 시간 순서(등록 → 시청)의 맨 앞 */}
+      {trend.length > 0 && (
+        <motion.section initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} className="rounded-2xl border border-border bg-background p-5">
+          <h3 className="text-sm font-semibold">일자별 등록 추이</h3>
+          <div className="mt-4 flex items-end gap-1 h-28">
+            {trend.map((t, i) => (
+              <div key={t.date} className="group flex flex-1 flex-col items-center gap-1" title={`${t.date}: ${t.count}명`}>
+                <motion.div
+                  className="w-full rounded-t bg-violet-500/60 transition-colors group-hover:bg-violet-500"
+                  initial={{ height: 0 }}
+                  animate={{ height: `${Math.max(2, (t.count / maxTrend) * 100)}%` }}
+                  transition={{ duration: 0.4, ease: "easeOut", delay: Math.min(i * 0.02, 0.3) }}
+                />
+                <span className="text-[9px] text-muted-foreground">{t.date.slice(5)}</span>
+              </div>
+            ))}
+          </div>
+        </motion.section>
+      )}
 
       {/* 퍼널 */}
       {funnel && (
@@ -268,26 +288,6 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
         <p className="mt-1 mb-3 text-xs text-muted-foreground">라이브 중 몇 분 지점에 몇 명이 함께 보고 있었는지 (중복 제거).</p>
         {curve && <AttendanceCurve data={curve} />}
       </motion.section>
-
-      {/* 등록 추이 */}
-      {trend.length > 0 && (
-        <motion.section initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} className="rounded-2xl border border-border bg-background p-5">
-          <h3 className="text-sm font-semibold">일자별 등록 추이</h3>
-          <div className="mt-4 flex items-end gap-1 h-28">
-            {trend.map((t, i) => (
-              <div key={t.date} className="group flex flex-1 flex-col items-center gap-1" title={`${t.date}: ${t.count}명`}>
-                <motion.div
-                  className="w-full rounded-t bg-violet-500/60 transition-colors group-hover:bg-violet-500"
-                  initial={{ height: 0 }}
-                  animate={{ height: `${Math.max(2, (t.count / maxTrend) * 100)}%` }}
-                  transition={{ duration: 0.4, ease: "easeOut", delay: Math.min(i * 0.02, 0.3) }}
-                />
-                <span className="text-[9px] text-muted-foreground">{t.date.slice(5)}</span>
-              </div>
-            ))}
-          </div>
-        </motion.section>
-      )}
     </div>
   );
 }

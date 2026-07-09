@@ -384,7 +384,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
         toast.error(data.error ?? data.errors?.[0]?.message ?? "등록 실패");
         return;
       }
-      toast.success(`DB 등록 완료 · 신규 ${data.created}명, 갱신 ${data.updated}명, 제외 ${data.skipped}명`);
+      toast.success(`등록 완료 · 신규 ${data.created}명, 갱신 ${data.updated}명, 제외 ${data.skipped}명`);
       setManual(emptyDraft);
       setShowManual(false);
       setPage(1);
@@ -518,7 +518,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
           onClick={() => { setShowManual(true); setShowBulk(false); }}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border text-xs hover:bg-secondary transition-colors"
         >
-          <Database className="w-3.5 h-3.5" />DB 등록
+          <Database className="w-3.5 h-3.5" />등록자 직접 추가
         </motion.button>
         <motion.button
           whileHover={{ y: -1 }}
@@ -595,7 +595,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
           >
             <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border bg-background/95 px-5 py-4 backdrop-blur">
               <div>
-                <h3 id="manual-registration-title" className="text-sm font-semibold">DB 직접 등록</h3>
+                <h3 id="manual-registration-title" className="text-sm font-semibold">등록자 직접 추가</h3>
                 <p className="text-xs text-muted-foreground mt-1">운영자가 직접 등록자를 추가합니다.</p>
               </div>
               <motion.button

@@ -27,13 +27,13 @@ import { InlineError } from "@/components/ui/inline-error";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
-type SettingsSection = "general" | "form" | "sessions" | "theme";
+type SettingsSection = "general" | "registration" | "sessions" | "livepage";
 // 새 IA: 만들기(create=설정) / 배포(deploy) / 운영(operate=콘솔+등록자) / 분석(analytics)
 type Tab = "create" | "deploy" | "operate" | "analytics";
 type NavigationTarget = Tab | `create-${SettingsSection}` | "operate-registrants";
 
 const TAB_IDS: Tab[] = ["create", "deploy", "operate", "analytics"];
-const CREATE_SECTIONS: SettingsSection[] = ["general", "form", "sessions", "theme"];
+const CREATE_SECTIONS: SettingsSection[] = ["general", "registration", "sessions", "livepage"];
 const OPERATE_SECTIONS: OperateSection[] = ["console", "registrants"];
 
 interface WebinarSession {
@@ -107,10 +107,11 @@ function WebinarDetail({ id }: { id: string }) {
 
   const computedDefaultTab = useMemo<Tab | null>(() => {
     if (!webinar) return null;
-    // 상태 연동 기본 진입: 종료→분석, 라이브/등록자 有→운영, 준비 단계→만들기
+    // 상태 연동 기본 진입: 종료→분석, 라이브→운영, 그 외(준비·등록중)→만들기.
+    // 등록자 수는 진입 탭을 바꾸지 않는다 — 셋업 중 첫 등록자가 들어와도 만들기에 머문다.
     const status = resolveWebinarStatus(webinar).status;
     if (status === "ended") return "analytics";
-    if (status === "live" || webinar._count.registrations > 0) return "operate";
+    if (status === "live") return "operate";
     return "create";
   }, [webinar]);
 

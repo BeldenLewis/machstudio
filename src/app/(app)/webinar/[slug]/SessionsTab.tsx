@@ -11,9 +11,9 @@ const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 const SESSION_TYPES = [
   { value: "session", label: "세션" },
   { value: "qa", label: "Q&A" },
-  { value: "break", label: "브레이크" },
+  { value: "break", label: "휴식" },
 ] as const;
-const TYPE_LABEL: Record<string, string> = { session: "세션", qa: "Q&A", break: "브레이크" };
+const TYPE_LABEL: Record<string, string> = { session: "세션", qa: "Q&A", break: "휴식" };
 
 interface WebinarSession {
   id: string;

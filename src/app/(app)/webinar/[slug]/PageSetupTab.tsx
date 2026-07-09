@@ -2,11 +2,11 @@
 
 import { type ElementType } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FileText, ListChecks, Palette, SlidersHorizontal } from "lucide-react";
-import SettingsTab from "./SettingsTab";
+import { FileText, ListChecks, MonitorPlay, SlidersHorizontal } from "lucide-react";
+import BasicInfoTab from "./BasicInfoTab";
 import RegistrationFormTab from "./RegistrationFormTab";
 import SessionsTab from "./SessionsTab";
-import ThemeTab from "./ThemeTab";
+import LivePageTab from "./LivePageTab";
 
 interface WebinarSession {
   id: string;
@@ -34,13 +34,13 @@ interface Webinar {
   sessions: WebinarSession[];
 }
 
-type PageSetupSection = "general" | "form" | "sessions" | "theme";
+type PageSetupSection = "general" | "registration" | "sessions" | "livepage";
 
 const sections: { id: PageSetupSection; label: string; desc: string; icon: ElementType }[] = [
-  { id: "general", label: "기본 설정", desc: "일정, 영상, 링크 등 웨비나의 기본 정보를 관리합니다.", icon: SlidersHorizontal },
-  { id: "form", label: "등록폼", desc: "사전등록에서 수집할 항목과 동의 문구를 설정합니다.", icon: FileText },
+  { id: "general", label: "기본 정보", desc: "웨비나 이름·설명·일정과 삭제를 관리합니다.", icon: SlidersHorizontal },
+  { id: "registration", label: "등록", desc: "사전등록에서 수집할 항목과 동의 문구를 설정합니다.", icon: FileText },
   { id: "sessions", label: "세션", desc: "라이브 페이지에 표시될 아젠다와 시간표를 정리합니다.", icon: ListChecks },
-  { id: "theme", label: "테마", desc: "외부 페이지의 색상, 폰트, 화면 톤을 맞춥니다.", icon: Palette },
+  { id: "livepage", label: "라이브 페이지", desc: "시청 화면의 영상·콘텐츠·CTA·참여·디자인을 한 곳에서 꾸밉니다.", icon: MonitorPlay },
 ];
 
 export default function PageSetupTab({
@@ -128,10 +128,10 @@ export default function PageSetupTab({
             >
               {section === "general" && (
                 <div className="lg:h-full overflow-auto">
-                  <SettingsTab webinar={webinar} onUpdate={onUpdate} />
+                  <BasicInfoTab webinar={webinar} onUpdate={onUpdate} />
                 </div>
               )}
-              {section === "form" && (
+              {section === "registration" && (
                 <div className="lg:h-full overflow-auto">
                   <RegistrationFormTab webinar={webinar} onUpdate={onUpdate} />
                 </div>
@@ -141,9 +141,9 @@ export default function PageSetupTab({
                   <SessionsTab webinarId={webinar.id} sessions={webinar.sessions} onUpdate={onUpdate} />
                 </div>
               )}
-              {section === "theme" && (
+              {section === "livepage" && (
                 <div className="lg:h-full overflow-auto">
-                  <ThemeTab webinar={webinar} onUpdate={onUpdate} />
+                  <LivePageTab webinar={webinar} onUpdate={onUpdate} />
                 </div>
               )}
             </motion.div>

@@ -154,6 +154,10 @@ function Section({
   );
 }
 
+function GroupLabel({ children }: { children: ReactNode }) {
+  return <p className="px-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">{children}</p>;
+}
+
 function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <motion.div
@@ -639,7 +643,7 @@ function ChatPanel({ webinarId }: { webinarId: string }) {
   return (
     <div className="space-y-4">
       <p className="text-[11px] leading-relaxed text-muted-foreground">
-        시청자 채팅은 <b className="font-semibold text-foreground">설정 → 실시간 참여 → 채팅 탭 사용</b>을 켜야 시청 화면에 보여요. 여기선 운영자 발언과 메시지 삭제(모더레이션)를 할 수 있어요.
+        시청자 채팅은 <b className="font-semibold text-foreground">만들기 → 라이브 페이지 → 참여 구성 → 채팅 탭 사용</b>을 켜야 시청 화면에 보여요. 여기선 운영자 발언과 메시지 삭제(모더레이션)를 할 수 있어요.
       </p>
       <div className="flex gap-2">
         <input
@@ -921,6 +925,7 @@ export default function LiveConsoleTab({
       </section>
 
       {/* KPI — 폴링으로 갱신되므로 스크린리더에 변경을 알림 */}
+      {summary && <GroupLabel>실시간 지표</GroupLabel>}
       {summary && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" aria-live="polite">
           <Kpi label="사전 등록" value={summary.totalRegistered.toLocaleString()} />
@@ -938,10 +943,10 @@ export default function LiveConsoleTab({
           <h3 className="text-sm font-semibold">라이브 전 준비</h3>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { done: hasRegistrationForm, icon: ClipboardList, label: "등록 폼 정리", target: "create-form" },
+              { done: hasRegistrationForm, icon: ClipboardList, label: "등록 폼 정리", target: "create-registration" },
               { done: (summary?.totalRegistered ?? 0) > 0, icon: Users, label: "등록자 확보", target: "operate-registrants" },
               { done: hasSessions, icon: ListChecks, label: "세션 구성", target: "create-sessions" },
-              { done: hasVideo, icon: Eye, label: "라이브 영상 연결", target: "create-general" },
+              { done: hasVideo, icon: Eye, label: "라이브 영상 연결", target: "create-livepage" },
             ].map((item) => (
               <motion.button
                 key={item.label}
@@ -961,11 +966,25 @@ export default function LiveConsoleTab({
         </section>
       )}
 
-      {/* 발행 패널들 */}
+      {/* ── 화면에 띄우기 — 시청 화면 위에 뜨는 것. 한 번에 하나만(팝업 우선). ── */}
+      <GroupLabel>화면에 띄우기 · 한 번에 하나만</GroupLabel>
       <Section title="공지" icon={Megaphone} defaultOpen={status === "live"}>
         <AnnouncementsTab webinarId={webinarId} embedded />
       </Section>
 
+      <Section title="팝업 푸시" icon={MessageSquarePlus}>
+        <PopupPanel webinarId={webinarId} />
+      </Section>
+
+      <Section title="실시간 투표" icon={BarChart3} defaultOpen={status === "live"}>
+        <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">
+          우하단에 떠 있는 실시간 투표예요. ON 상태 1개만 표시되고 집계는 자동으로 갱신돼요.
+        </p>
+        <PollPanel webinarId={webinarId} />
+      </Section>
+
+      {/* ── 참여 관리 — 시청자가 남긴 것 관리 ── */}
+      <GroupLabel>참여 관리</GroupLabel>
       <Section
         title="Q&A 모더레이션"
         icon={HelpCircle}
@@ -977,28 +996,14 @@ export default function LiveConsoleTab({
         <QATab webinarId={webinarId} embedded />
       </Section>
 
-      {/* 푸시 두 종류의 관계·우선순위를 한 줄로 안내 (개념 중첩 해소) */}
-      <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
-        시청 화면에 띄우는 푸시는 <b className="font-semibold text-foreground">팝업</b>(안내·바로가기·설문 유도 카드)과 <b className="font-semibold text-foreground">Tally 설문</b>(설문 창 즉시 열기) 두 가지예요. 겹치지 않게 <b className="font-semibold text-foreground">한 번에 하나만</b> 표시되고, 팝업이 우선합니다.
-      </p>
-
-      <Section title="팝업 푸시" icon={MessageSquarePlus}>
-        <PopupPanel webinarId={webinarId} />
-      </Section>
-
-      <Section title="Tally 설문 푸시" icon={Bell}>
-        <TallyPanel webinarId={webinarId} />
-      </Section>
-
-      <Section title="실시간 투표" icon={BarChart3} defaultOpen={status === "live"}>
-        <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">
-          팝업·설문과 별개로, 시청 화면 <b className="font-semibold text-foreground">우하단에 떠 있는</b> 실시간 투표예요. ON 상태 1개만 표시되고 집계는 자동으로 갱신돼요.
-        </p>
-        <PollPanel webinarId={webinarId} />
-      </Section>
-
       <Section title="실시간 채팅" icon={MessageSquare} defaultOpen={status === "live"}>
         <ChatPanel webinarId={webinarId} />
+      </Section>
+
+      {/* ── 발송 — 외부 설문·이메일 내보내기 ── */}
+      <GroupLabel>발송</GroupLabel>
+      <Section title="Tally 설문 푸시" icon={Bell}>
+        <TallyPanel webinarId={webinarId} />
       </Section>
 
       <Section title="알림 발송" icon={Mail}>
