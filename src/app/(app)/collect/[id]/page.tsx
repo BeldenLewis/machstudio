@@ -26,6 +26,7 @@ const TestModal = dynamic(() => import("./TestModal"), { ssr: false });
 import DangerDeleteModal from "./DangerDeleteModal";
 import GdprModal from "./GdprModal";
 import RetentionPolicyEditor from "./RetentionPolicyEditor";
+import DateRangeField from "@/components/DateRangeField";
 import { formatKst, formatKstDateTime } from "@/lib/datetime";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
@@ -1102,25 +1103,11 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                           className="overflow-hidden"
                         >
                           <div className="flex items-center gap-2 mt-2 flex-wrap">
-                            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              시작일
-                              <input
-                                type="date"
-                                value={filterDateFrom}
-                                onChange={(e) => { setFilterDateFrom(e.target.value); resetToFirstPage(); }}
-                                className="px-2 py-1.5 rounded-lg border border-border bg-background text-xs focus:outline-none focus:border-violet-400"
-                              />
-                            </label>
-                            <span className="text-xs text-muted-foreground">~</span>
-                            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              종료일
-                              <input
-                                type="date"
-                                value={filterDateTo}
-                                onChange={(e) => { setFilterDateTo(e.target.value); resetToFirstPage(); }}
-                                className="px-2 py-1.5 rounded-lg border border-border bg-background text-xs focus:outline-none focus:border-violet-400"
-                              />
-                            </label>
+                            <DateRangeField
+                              from={filterDateFrom}
+                              to={filterDateTo}
+                              onChange={(f, t) => { setFilterDateFrom(f); setFilterDateTo(t); resetToFirstPage(); }}
+                            />
                             {utmSourceOptions.length > 0 && (
                               <select
                                 value={filterUtmSource}

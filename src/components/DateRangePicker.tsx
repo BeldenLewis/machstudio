@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Calendar, ChevronDown } from "lucide-react";
 import { kstDateString } from "@/lib/datetime";
+import RangeCalendar from "@/components/webinar/RangeCalendar";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -87,7 +88,7 @@ export default function DateRangePicker({ value, onChange, allowAllTime = false 
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -4, scale: 0.98 }}
           transition={spring}
-          className="absolute right-0 mt-2 w-72 rounded-2xl border border-border bg-card shadow-xl z-20 p-3 space-y-2 origin-top-right"
+          className="absolute right-0 mt-2 w-80 rounded-2xl border border-border bg-card shadow-xl z-20 p-3 space-y-2 origin-top-right"
         >
           <div className="space-y-1">
             {presets(allowAllTime).map((p) => (
@@ -106,22 +107,17 @@ export default function DateRangePicker({ value, onChange, allowAllTime = false 
             ))}
           </div>
           <div className="border-t border-border pt-2 space-y-2">
-            <p className="text-[11px] text-muted-foreground">커스텀</p>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="date"
-                value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
-                className="flex-1 px-2 py-1 rounded-lg border border-border bg-background text-xs focus:outline-none focus:border-violet-400 transition-colors"
-              />
-              <span className="text-xs text-muted-foreground">~</span>
-              <input
-                type="date"
-                value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
-                className="flex-1 px-2 py-1 rounded-lg border border-border bg-background text-xs focus:outline-none focus:border-violet-400 transition-colors"
-              />
+            <p className="text-[11px] text-muted-foreground">기간 선택 (시작일 → 종료일 클릭)</p>
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className={`flex-1 px-2 py-1.5 rounded-lg border text-center ${customFrom ? "border-violet-400 text-foreground" : "border-border text-muted-foreground"}`}>
+                {customFrom || "시작일"}
+              </span>
+              <span className="text-muted-foreground">~</span>
+              <span className={`flex-1 px-2 py-1.5 rounded-lg border text-center ${customTo ? "border-violet-400 text-foreground" : "border-border text-muted-foreground"}`}>
+                {customTo || "종료일"}
+              </span>
             </div>
+            <RangeCalendar start={customFrom} end={customTo} onChange={(s, e) => { setCustomFrom(s); setCustomTo(e); }} />
             <motion.button
               whileHover={{ y: -1 }}
               whileTap={{ scale: 0.97 }}
