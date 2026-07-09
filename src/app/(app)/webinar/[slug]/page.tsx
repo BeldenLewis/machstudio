@@ -25,6 +25,8 @@ import { resolveWebinarStatus, WEBINAR_STATUS_META } from "@/lib/webinar-status"
 import { formatKst } from "@/lib/datetime";
 import { InlineError } from "@/components/ui/inline-error";
 
+const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
+
 type SettingsSection = "general" | "form" | "sessions" | "theme";
 // 새 IA: 만들기(create=설정) / 배포(deploy) / 운영(operate=콘솔+등록자) / 분석(analytics)
 type Tab = "create" | "deploy" | "operate" | "analytics";
@@ -268,36 +270,49 @@ function WebinarDetail({ id }: { id: string }) {
             <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border bg-secondary/50 text-xs font-mono text-muted-foreground max-w-xs truncate">
               /webinar/{webinar.slug}/live
             </div>
-            <button
+            <motion.button
               onClick={copyLiveUrl}
+              whileTap={{ scale: 0.9 }}
+              transition={spring}
               className="p-2 rounded-xl border border-border hover:bg-secondary transition-colors"
               title="라이브 URL 복사"
             >
-              {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5 text-muted-foreground" />}
-            </button>
-            <a
+              {copied ? (
+                <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={spring} className="inline-flex">
+                  <Check className="w-3.5 h-3.5 text-green-500" />
+                </motion.span>
+              ) : (
+                <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+              )}
+            </motion.button>
+            <motion.a
               href={liveUrl}
               target="_blank"
               rel="noopener noreferrer"
+              whileTap={{ scale: 0.9 }}
+              transition={spring}
               className="p-2 rounded-xl border border-border hover:bg-secondary transition-colors"
               title="라이브 페이지 열기"
             >
               <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-            </a>
+            </motion.a>
           </div>
         </div>
 
         <div className="flex items-center gap-1 border-b border-border -mb-px overflow-x-auto" role="tablist">
           {tabs.map(({ id: tabId, label, icon: Icon }) => (
-            <button
+            <motion.button
               key={tabId}
               role="tab"
               aria-selected={activeTab === tabId}
               onClick={() => navigate(tabId)}
-              className={`flex shrink-0 items-center gap-1.5 px-3 py-2.5 text-sm border-b-2 transition-colors whitespace-nowrap ${
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.96 }}
+              transition={spring}
+              className={`relative flex shrink-0 items-center gap-1.5 px-3 py-2.5 text-sm border-b-2 border-transparent transition-colors whitespace-nowrap ${
                 activeTab === tabId
-                  ? "border-violet-500 text-violet-500 font-medium"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                  ? "text-violet-500 font-medium"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -307,7 +322,14 @@ function WebinarDetail({ id }: { id: string }) {
                   {webinar._count.registrations}
                 </span>
               )}
-            </button>
+              {activeTab === tabId && (
+                <motion.span
+                  layoutId="webinar-hub-tab-underline"
+                  className="absolute left-0 right-0 -bottom-px h-0.5 bg-violet-500 rounded-full"
+                  transition={spring}
+                />
+              )}
+            </motion.button>
           ))}
         </div>
       </div>

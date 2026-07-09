@@ -3,9 +3,12 @@
 // 운영 탭 — 라이브 콘솔(기본)과 등록자 관리를 하나의 탭 아래 묶는다.
 // 설계 §2: RegistrantsTab 은 "운영 > 등록자"로 이동.
 
+import { motion } from "framer-motion";
 import { Radio, Users } from "lucide-react";
 import LiveConsoleTab from "./LiveConsoleTab";
 import RegistrantsTab from "./RegistrantsTab";
+
+const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
 export type OperateSection = "console" | "registrants";
 
@@ -39,16 +42,26 @@ export default function OperateTab({
     <div className="p-4 sm:p-6 lg:p-8 space-y-4">
       <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-background p-1">
         {items.map(({ id, label, icon: Icon }) => (
-          <button
+          <motion.button
             key={id}
             onClick={() => setSection(id)}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-              section === id ? "bg-violet-500 text-white" : "text-muted-foreground hover:bg-secondary"
+            whileHover={{ y: -1 }}
+            whileTap={{ scale: 0.96 }}
+            transition={spring}
+            className={`relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+              section === id ? "text-white" : "text-muted-foreground hover:bg-secondary"
             }`}
           >
-            <Icon className="h-3.5 w-3.5" />
-            {label}
-          </button>
+            {section === id && (
+              <motion.span
+                layoutId="op-seg"
+                transition={spring}
+                className="absolute inset-0 z-0 rounded-lg bg-violet-500"
+              />
+            )}
+            <Icon className="relative z-10 h-3.5 w-3.5" />
+            <span className="relative z-10">{label}</span>
+          </motion.button>
         ))}
       </div>
 

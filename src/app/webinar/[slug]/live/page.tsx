@@ -2,10 +2,13 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { use } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Send, CheckCircle2 } from "lucide-react";
 import LivePushLayer from "../LivePushLayer";
 import LiveContentStk from "../LiveContentStk";
 import { formatKst } from "@/lib/datetime";
+
+const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
 interface WebinarSession {
   id: string;
@@ -511,22 +514,38 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
         {/* 뷰: 사전등록 */}
         {view === "signup" && (
-          <div style={{ backgroundColor: surface, borderRadius: radius }} className="p-6 md:p-8">
+          <motion.div
+            style={{ backgroundColor: surface, borderRadius: radius }}
+            className="p-6 md:p-8"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.15 }}
+          >
             {registered ? (
               <div className="text-center py-8">
-                <CheckCircle2 className="w-12 h-12 mx-auto mb-3" style={{ color: accent }} />
+                <motion.div
+                  className="w-12 h-12 mx-auto mb-3"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={spring}
+                >
+                  <CheckCircle2 className="w-12 h-12" style={{ color: accent }} />
+                </motion.div>
                 <h3 className="text-lg font-semibold mb-1">사전 등록 완료!</h3>
                 <p className="text-sm opacity-60">웨비나 시작 시 이 페이지를 다시 방문하시면 라이브를 시청하실 수 있어요.</p>
                 {calendarUrl && (
-                  <a
+                  <motion.a
                     href={calendarUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-block mt-4 px-4 py-2 text-sm font-medium"
                     style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)` }}
+                    whileHover={{ y: -1 }}
+                    whileTap={{ scale: 0.96 }}
+                    transition={spring}
                   >
                     캘린더에 추가하기
-                  </a>
+                  </motion.a>
                 )}
               </div>
             ) : (
@@ -566,30 +585,39 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
                     <p className="text-xs text-red-400 pt-1" role="alert">{formError}</p>
                   )}
 
-                  <button
+                  <motion.button
                     onClick={handleRegister}
                     disabled={isRegistering}
                     className="w-full py-3 font-semibold text-white transition-opacity disabled:opacity-40"
                     style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)` }}
+                    whileHover={{ y: -1 }}
+                    whileTap={{ scale: 0.96 }}
+                    transition={spring}
                   >
                     {isRegistering ? "등록 중..." : registrationForm.submitLabel}
-                  </button>
+                  </motion.button>
                 </div>
               </>
             )}
-          </div>
+          </motion.div>
         )}
 
         {/* 뷰: 라이브 */}
         {view === "live" && !registrationId && (
-          <div style={{ backgroundColor: surface, borderRadius: radius }} className="p-6 md:p-8">
+          <motion.div
+            style={{ backgroundColor: surface, borderRadius: radius }}
+            className="p-6 md:p-8"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.15 }}
+          >
             <div className="max-w-md mx-auto">
               <h2 className="text-lg font-semibold mb-2">입장 확인</h2>
               <p className="text-sm opacity-60 mb-5">사전등록 시 입력한 전화번호 또는 이메일로 입장할 수 있습니다.</p>
 
               <div className="grid grid-cols-2 gap-2 mb-3">
                 {(["phone", "email"] as const).map((method) => (
-                  <button
+                  <motion.button
                     key={method}
                     type="button"
                     onClick={() => {
@@ -597,15 +625,27 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
                       setAuthValue("");
                       setVerifyError("");
                     }}
-                    className="px-3 py-2 text-sm font-medium transition-colors"
+                    className="relative px-3 py-2 text-sm font-medium"
+                    whileTap={{ scale: 0.96 }}
+                    transition={spring}
                     style={{
                       borderRadius: `calc(${radius} * 0.6)`,
-                      backgroundColor: authMethod === method ? accent : "rgba(255,255,255,0.08)",
+                      backgroundColor: authMethod === method ? "transparent" : "rgba(255,255,255,0.08)",
                       color: text,
                     }}
                   >
-                    {method === "phone" ? "전화번호" : "이메일"}
-                  </button>
+                    {authMethod === method && (
+                      <motion.span
+                        layoutId="entry-auth-seg"
+                        className="absolute inset-0"
+                        style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)`, zIndex: 0 }}
+                        transition={spring}
+                      />
+                    )}
+                    <span className="relative" style={{ zIndex: 1 }}>
+                      {method === "phone" ? "전화번호" : "이메일"}
+                    </span>
+                  </motion.button>
                 ))}
               </div>
 
@@ -621,46 +661,57 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
               {verifyError && <p className="text-xs mt-2 text-red-400">{verifyError}</p>}
 
-              <button
+              <motion.button
                 onClick={handleVerifyEntry}
                 disabled={isVerifying}
                 className="w-full mt-4 py-3 font-semibold text-white transition-opacity disabled:opacity-40"
                 style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)` }}
+                whileHover={{ y: -1 }}
+                whileTap={{ scale: 0.96 }}
+                transition={spring}
               >
                 {isVerifying ? "확인 중..." : "웨비나 입장하기"}
-              </button>
+              </motion.button>
 
-              <button
+              <motion.button
                 type="button"
                 onClick={() => setView("signup")}
                 className="w-full mt-3 py-2 text-sm opacity-60 hover:opacity-100 transition-opacity"
+                whileTap={{ scale: 0.96 }}
+                transition={spring}
               >
                 아직 등록하지 않았다면 사전등록하기
-              </button>
+              </motion.button>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {/* 뷰: 종료 */}
         {view === "ended" && (
-          <div
+          <motion.div
             className="text-center py-12"
             style={{ backgroundColor: surface, borderRadius: radius }}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.15 }}
           >
             <p className="text-lg font-semibold mb-2">웨비나가 종료됐어요</p>
             <p className="text-sm opacity-50">참여해주셔서 감사합니다.</p>
             {surveyUrl && (
-              <a
+              <motion.a
                 href={surveyUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-block mt-5 px-5 py-2.5 font-medium text-sm"
                 style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)` }}
+                whileHover={{ y: -1 }}
+                whileTap={{ scale: 0.96 }}
+                transition={spring}
               >
                 만족도 조사 참여하기
-              </a>
+              </motion.a>
             )}
-          </div>
+          </motion.div>
         )}
       </div>
       )}

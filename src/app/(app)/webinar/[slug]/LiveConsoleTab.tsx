@@ -104,7 +104,9 @@ function Section({
   const panelId = useId();
   return (
     <section className="rounded-2xl border border-border bg-card">
-      <button
+      <motion.button
+        whileTap={{ scale: 0.99 }}
+        transition={spring}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls={panelId}
@@ -114,7 +116,7 @@ function Section({
           <Icon className="h-4 w-4 text-violet-500" /> {title} {badge}
         </span>
         <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
+      </motion.button>
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
@@ -135,11 +137,16 @@ function Section({
 
 function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-xl border border-border bg-background px-3.5 py-3">
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.15 }}
+      className="rounded-xl border border-border bg-background px-3.5 py-3"
+    >
       <p className="text-[11px] text-muted-foreground">{label}</p>
       <p className="mt-0.5 text-lg font-semibold tabular-nums">{value}</p>
       {sub && <p className="mt-0.5 text-[10px] text-muted-foreground">{sub}</p>}
-    </div>
+    </motion.div>
   );
 }
 
@@ -241,23 +248,33 @@ function PopupPanel({ webinarId }: { webinarId: string }) {
         <p className="text-xs text-muted-foreground">등록된 팝업이 없어요. ON 상태 팝업 1개만 시청자에게 표시돼요.</p>
       ) : (
         <div className="space-y-2">
-          {popups.map((popup) => (
-            <div key={popup.id} className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${popup.isActive ? "border-violet-500/40 bg-violet-500/[0.04]" : "border-border"}`}>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">
-                  {popup.isActive && <span className="mr-1.5 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">ON</span>}
-                  {popup.title}
-                </p>
-                {popup.message && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{popup.message}</p>}
-              </div>
-              <div className="flex shrink-0 items-center gap-1.5">
-                <button onClick={() => toggle(popup)} className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${popup.isActive ? "border-border text-muted-foreground hover:bg-secondary" : "border-violet-500/40 text-violet-500 hover:bg-violet-500/10"}`}>
-                  {popup.isActive ? "OFF" : "ON"}
-                </button>
-                <button onClick={() => remove(popup)} className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500">삭제</button>
-              </div>
-            </div>
-          ))}
+          <AnimatePresence initial={false}>
+            {popups.map((popup) => (
+              <motion.div
+                key={popup.id}
+                layout
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${popup.isActive ? "border-violet-500/40 bg-violet-500/[0.04]" : "border-border"}`}
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {popup.isActive && <span className="mr-1.5 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">ON</span>}
+                    {popup.title}
+                  </p>
+                  {popup.message && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{popup.message}</p>}
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => toggle(popup)} className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${popup.isActive ? "border-border text-muted-foreground hover:bg-secondary" : "border-violet-500/40 text-violet-500 hover:bg-violet-500/10"}`}>
+                    {popup.isActive ? "OFF" : "ON"}
+                  </motion.button>
+                  <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => remove(popup)} className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500">삭제</motion.button>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       )}
     </div>
@@ -338,24 +355,34 @@ function TallyPanel({ webinarId }: { webinarId: string }) {
         <p className="text-xs text-muted-foreground">등록된 Tally 푸시가 없어요.</p>
       ) : (
         <div className="space-y-2">
-          {pushes.map((push) => (
-            <div key={push.id} className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${push.isActive ? "border-violet-500/40 bg-violet-500/[0.04]" : "border-border"}`}>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">
-                  {push.isActive && <span className="mr-1.5 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">ON</span>}
-                  {push.title}
-                  <span className="ml-2 font-mono text-[10px] text-muted-foreground">{push.formId}</span>
-                </p>
-                {push.memo && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{push.memo}</p>}
-              </div>
-              <div className="flex shrink-0 items-center gap-1.5">
-                <button onClick={() => toggle(push)} className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${push.isActive ? "border-border text-muted-foreground hover:bg-secondary" : "border-violet-500/40 text-violet-500 hover:bg-violet-500/10"}`}>
-                  {push.isActive ? "OFF" : "ON"}
-                </button>
-                <button onClick={() => remove(push)} className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500">삭제</button>
-              </div>
-            </div>
-          ))}
+          <AnimatePresence initial={false}>
+            {pushes.map((push) => (
+              <motion.div
+                key={push.id}
+                layout
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${push.isActive ? "border-violet-500/40 bg-violet-500/[0.04]" : "border-border"}`}
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {push.isActive && <span className="mr-1.5 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">ON</span>}
+                    {push.title}
+                    <span className="ml-2 font-mono text-[10px] text-muted-foreground">{push.formId}</span>
+                  </p>
+                  {push.memo && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{push.memo}</p>}
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => toggle(push)} className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${push.isActive ? "border-border text-muted-foreground hover:bg-secondary" : "border-violet-500/40 text-violet-500 hover:bg-violet-500/10"}`}>
+                    {push.isActive ? "OFF" : "ON"}
+                  </motion.button>
+                  <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => remove(push)} className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500">삭제</motion.button>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       )}
     </div>
@@ -469,24 +496,34 @@ export default function LiveConsoleTab({
                 수동 전환됨
               </span>
             )}
-            <button onClick={() => void fetchDashboard()} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary" aria-label="새로고침">
+            <motion.button whileHover={{ rotate: 90 }} whileTap={{ scale: 0.9 }} transition={spring} onClick={() => void fetchDashboard()} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary" aria-label="새로고침">
               <RefreshCw className="h-3.5 w-3.5" />
-            </button>
+            </motion.button>
           </div>
           <div className="flex items-center gap-1 rounded-xl border border-border bg-background p-1">
             {overrideOptions.map((option) => {
               const selected = option.value === null ? !isOverridden : isOverridden && status === option.value;
               return (
-                <button
+                <motion.button
                   key={option.label}
+                  whileTap={{ scale: 0.96 }}
+                  transition={spring}
                   onClick={() => setOverride(option.value)}
                   disabled={switching || selected}
-                  className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-default ${
-                    selected ? "bg-violet-500 text-white" : "text-muted-foreground hover:bg-secondary"
+                  className={`relative rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-default ${
+                    selected ? "text-white" : "text-muted-foreground hover:bg-secondary"
                   }`}
                 >
-                  {option.label}
-                </button>
+                  {selected && (
+                    <motion.span
+                      layoutId="live-status-seg"
+                      transition={spring}
+                      className="absolute inset-0 rounded-lg bg-violet-500"
+                      style={{ zIndex: 0 }}
+                    />
+                  )}
+                  <span className="relative z-10">{option.label}</span>
+                </motion.button>
               );
             })}
           </div>
@@ -519,8 +556,11 @@ export default function LiveConsoleTab({
               { done: hasSessions, icon: ListChecks, label: "세션 구성", target: "create-sessions" },
               { done: hasVideo, icon: Eye, label: "라이브 영상 연결", target: "create-general" },
             ].map((item) => (
-              <button
+              <motion.button
                 key={item.label}
+                whileHover={{ y: -1 }}
+                whileTap={{ scale: 0.96 }}
+                transition={spring}
                 onClick={() => onNavigate?.(item.target)}
                 className={`flex items-center gap-2 rounded-xl border p-3 text-left text-xs transition-colors hover:border-violet-400/40 ${
                   item.done ? "border-green-500/30 bg-green-500/[0.04]" : "border-border bg-background"
@@ -528,7 +568,7 @@ export default function LiveConsoleTab({
               >
                 <item.icon className={`h-4 w-4 shrink-0 ${item.done ? "text-green-500" : "text-muted-foreground"}`} />
                 <span className={item.done ? "text-muted-foreground line-through" : ""}>{item.label}</span>
-              </button>
+              </motion.button>
             ))}
           </div>
         </section>
@@ -580,20 +620,30 @@ export default function LiveConsoleTab({
                 </tr>
               </thead>
               <tbody>
-                {viewers.map((viewer) => (
-                  <tr key={viewer.id} className="border-b border-border/40 last:border-0">
-                    <td className="py-2 pr-3 font-medium">{viewer.name}</td>
-                    <td className="py-2 pr-3 text-muted-foreground">{viewer.company ?? "—"}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{viewer.currentStayMinutes}분</td>
-                    <td className="py-2 text-right">
-                      {viewer.isLive ? (
-                        <span className="rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] font-medium text-green-600 dark:text-green-400">시청 중</span>
-                      ) : (
-                        <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">유지</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                <AnimatePresence initial={false}>
+                  {viewers.map((viewer) => (
+                    <motion.tr
+                      key={viewer.id}
+                      layout
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="border-b border-border/40 last:border-0"
+                    >
+                      <td className="py-2 pr-3 font-medium">{viewer.name}</td>
+                      <td className="py-2 pr-3 text-muted-foreground">{viewer.company ?? "—"}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{viewer.currentStayMinutes}분</td>
+                      <td className="py-2 text-right">
+                        {viewer.isLive ? (
+                          <span className="rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] font-medium text-green-600 dark:text-green-400">시청 중</span>
+                        ) : (
+                          <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">유지</span>
+                        )}
+                      </td>
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
               </tbody>
             </table>
           </div>

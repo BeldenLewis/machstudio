@@ -60,6 +60,15 @@ export default function DateRangePicker({ value, onChange, allowAllTime = false 
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
+  // 프리셋 등으로 value 가 바뀌면 커스텀 달력도 동기화(마운트 1회 시드 → stale 방지).
+  // 전체기간(epoch) 같은 극단값은 달력 앵커로 부적절해 비워 오늘 기준으로 연다.
+  useEffect(() => {
+    const f = kstDateString(value.from);
+    const t = kstDateString(value.to);
+    if (f < "2000-01-01") { setCustomFrom(""); setCustomTo(""); }
+    else { setCustomFrom(f); setCustomTo(t); }
+  }, [value.from, value.to]);
+
   const applyCustom = () => {
     const from = new Date(customFrom + "T00:00:00+09:00");
     const to = new Date(customTo + "T23:59:59+09:00");

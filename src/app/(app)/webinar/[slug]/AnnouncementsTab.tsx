@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Megaphone, Plus, Trash2, Radio, Square } from "lucide-react";
 import { toast } from "sonner";
 
+const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
+
 interface Announcement {
   id: string;
   type: string;
@@ -94,12 +96,15 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
     <div className={embedded ? "space-y-4" : "p-4 sm:p-6 lg:p-8 space-y-4"}>
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">라이브 중 참여자에게 공지를 표시해요 · 한 번에 하나만 노출돼요</p>
-        <button
+        <motion.button
+          whileHover={{ y: -1 }}
+          whileTap={{ scale: 0.96 }}
+          transition={spring}
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-500 text-white text-xs font-medium hover:bg-violet-600 transition-colors"
         >
           <Plus className="w-3.5 h-3.5" />공지 추가
-        </button>
+        </motion.button>
       </div>
 
       <AnimatePresence>
@@ -112,15 +117,18 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
           >
             <div className="flex items-center gap-2">
               {["info", "warning", "success", "error"].map((t) => (
-                <button
+                <motion.button
                   key={t}
+                  whileTap={{ scale: 0.9 }}
+                  animate={{ scale: form.type === t ? 1.05 : 1 }}
+                  transition={spring}
                   onClick={() => setForm((f) => ({ ...f, type: t }))}
                   className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
                     form.type === t ? typeColors[t] + " ring-1 ring-current" : "bg-secondary text-muted-foreground"
                   }`}
                 >
                   {typeLabels[t] ?? t}
-                </button>
+                </motion.button>
               ))}
             </div>
             <textarea
@@ -132,19 +140,25 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
               className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm resize-none focus:outline-none focus:border-violet-400"
             />
             <div className="flex gap-2">
-              <button
+              <motion.button
+                whileHover={{ y: -1 }}
+                whileTap={{ scale: 0.96 }}
+                transition={spring}
                 onClick={handleCreate}
                 disabled={!form.message.trim() || isCreating}
                 className="px-4 py-2 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors disabled:opacity-40"
               >
                 {isCreating ? "생성 중..." : "생성"}
-              </button>
-              <button
+              </motion.button>
+              <motion.button
+                whileHover={{ y: -1 }}
+                whileTap={{ scale: 0.96 }}
+                transition={spring}
                 onClick={() => setShowCreate(false)}
                 className="px-4 py-2 rounded-xl border border-border text-sm hover:bg-secondary transition-colors"
               >
                 취소
-              </button>
+              </motion.button>
             </div>
           </motion.div>
         )}
@@ -161,9 +175,15 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
         </div>
       ) : (
         <div className="space-y-2">
+          <AnimatePresence initial={false}>
           {announcements.map((ann) => (
-            <div
+            <motion.div
               key={ann.id}
+              layout
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={spring}
               className={`flex items-start gap-3 p-4 rounded-2xl border transition-colors ${
                 ann.isActive ? "border-violet-400/30 bg-violet-500/5" : "border-border bg-background"
               }`}
@@ -180,7 +200,9 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
                 <p className="text-sm">{ann.message}</p>
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                <button
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  transition={spring}
                   onClick={() => toggleActive(ann)}
                   className={`p-1.5 rounded-lg transition-colors ${
                     ann.isActive
@@ -190,16 +212,19 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
                   title={ann.isActive ? "표시 중지" : "라이브에 표시"}
                 >
                   {ann.isActive ? <Square className="w-4 h-4" /> : <Radio className="w-4 h-4" />}
-                </button>
-                <button
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  transition={spring}
                   onClick={() => handleDelete(ann.id)}
                   className="p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-500 text-muted-foreground transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                </motion.button>
               </div>
-            </div>
+            </motion.div>
           ))}
+          </AnimatePresence>
         </div>
       )}
     </div>

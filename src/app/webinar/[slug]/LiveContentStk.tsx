@@ -5,8 +5,11 @@
 // 액센트 색은 theme.accentColor 로 구동해 전시별 테마에 맞춘다. Q&A 는 mach 파이프라인 유지.
 
 import { useMemo } from "react";
+import { motion } from "framer-motion";
 import { CheckCircle2, Send } from "lucide-react";
 import { formatKst } from "@/lib/datetime";
+
+const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
 interface Session {
   id: string;
@@ -204,7 +207,7 @@ export default function LiveContentStk({
                 <strong>Live Streaming</strong>
                 <small>실시간 송출 화면입니다. 재생 버튼을 눌러 시청해주세요.</small>
               </div>
-              <a href="#stk-qa" className="qa-btn">💬 Q&amp;A 질문하기</a>
+              <motion.a whileTap={{ scale: 0.96 }} transition={spring} href="#stk-qa" className="qa-btn">💬 Q&amp;A 질문하기</motion.a>
             </div>
             <div className="video-wrap">
               {youtubeId ? (
@@ -247,9 +250,9 @@ export default function LiveContentStk({
                 {cta!.buttons && cta!.buttons.length > 0 && (
                   <div className="btn-stack">
                     {cta!.buttons.map((btn, i) => (
-                      <a key={i} href={btn.url} target="_blank" rel="noopener noreferrer" className={`stk-btn ${btn.style === "ghost" ? "btn-ghost" : "btn-white"}`}>
+                      <motion.a key={i} whileTap={{ scale: 0.96 }} transition={spring} href={btn.url} target="_blank" rel="noopener noreferrer" className={`stk-btn ${btn.style === "ghost" ? "btn-ghost" : "btn-white"}`}>
                         {btn.label}
-                      </a>
+                      </motion.a>
                     ))}
                   </div>
                 )}
@@ -263,14 +266,16 @@ export default function LiveContentStk({
             {qa.sessions.length > 1 && (
               <div className="qa-chips">
                 {qa.sessions.map((s) => (
-                  <button
+                  <motion.button
                     key={s.number}
                     type="button"
+                    whileTap={{ scale: 0.96 }}
+                    transition={spring}
                     className={`qa-chip ${qa.selectedSession === s.number ? "on" : ""}`}
                     onClick={() => qa.setSelectedSession(qa.selectedSession === s.number ? null : s.number)}
                   >
                     세션 {s.number}
-                  </button>
+                  </motion.button>
                 ))}
               </div>
             )}
@@ -282,10 +287,10 @@ export default function LiveContentStk({
                 onChange={(e) => qa.setQuestion(e.target.value)}
                 placeholder="연사에게 궁금한 점을 남겨주세요…"
               />
-              <button className="qa-send" onClick={qa.onSend} disabled={!qa.question.trim() || qa.isSending}
+              <motion.button className="qa-send" whileTap={{ scale: 0.9 }} transition={spring} onClick={qa.onSend} disabled={!qa.question.trim() || qa.isSending}
                 style={qa.sent ? { background: "#22c55e" } : undefined}>
                 {qa.sent ? <CheckCircle2 className="w-4 h-4" /> : <Send className="w-4 h-4" />}
-              </button>
+              </motion.button>
             </div>
             {qa.sent && <p style={{ color: "#22c55e", fontSize: 12, marginTop: 8 }}>질문이 전달됐어요!</p>}
             {qa.error && <p style={{ color: "#f87171", fontSize: 12, marginTop: 8 }}>{qa.error}</p>}

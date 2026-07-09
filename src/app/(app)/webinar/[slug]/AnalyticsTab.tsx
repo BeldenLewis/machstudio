@@ -43,7 +43,7 @@ function pct(part: number, total: number) {
 }
 
 /* ── 퍼널 단계 막대 ── */
-function FunnelStep({ label, value, base, color }: { label: string; value: number; base: number; color: string }) {
+function FunnelStep({ label, value, base, color, delay = 0 }: { label: string; value: number; base: number; color: string; delay?: number }) {
   const width = base ? Math.max(3, Math.round((value / base) * 100)) : 0;
   const rate = pct(value, base);
   return (
@@ -56,7 +56,7 @@ function FunnelStep({ label, value, base, color }: { label: string; value: numbe
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${width}%` }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
+          transition={{ duration: 0.5, ease: "easeOut", delay }}
           className="h-full rounded-full"
           style={{ backgroundColor: color }}
         />
@@ -99,7 +99,7 @@ function AttendanceCurve({ data }: { data: CurveData }) {
   const tickEvery = Math.max(1, Math.ceil(points.length / tickCount));
 
   return (
-    <div>
+    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}>
       <div className="mb-3 flex flex-wrap gap-4 text-xs">
         <span className="text-muted-foreground">피크 동시 시청 <b className="text-foreground tabular-nums">{data.peak.toLocaleString()}명</b></span>
         <span className="text-muted-foreground">평균 <b className="text-foreground tabular-nums">{data.avg.toLocaleString()}명</b></span>
@@ -135,7 +135,7 @@ function AttendanceCurve({ data }: { data: CurveData }) {
           ) : null,
         )}
       </svg>
-    </div>
+    </motion.div>
   );
 }
 
@@ -205,7 +205,7 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
 
       {/* 퍼널 */}
       {funnel && (
-        <section className="rounded-2xl border border-border bg-background p-5">
+        <motion.section initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} className="rounded-2xl border border-border bg-background p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold">참가 퍼널</h3>
@@ -215,17 +215,17 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
             </div>
           </div>
           <div className="space-y-3.5">
-            {hasVisits && <FunnelStep label="페이지 방문" value={funnel.visits} base={funnelBase} color="#8b5cf6" />}
-            <FunnelStep label="사전 등록" value={funnel.registered} base={funnelBase} color="#7c3aed" />
-            <FunnelStep label="실제 입장" value={funnel.attended} base={funnelBase} color="#2563eb" />
-            <FunnelStep label="30분 이상 체류" value={funnel.stay30} base={funnelBase} color="#16a34a" />
-            <FunnelStep label="60분 이상 체류" value={funnel.stay60} base={funnelBase} color="#f97316" />
+            {hasVisits && <FunnelStep label="페이지 방문" value={funnel.visits} base={funnelBase} color="#8b5cf6" delay={0} />}
+            <FunnelStep label="사전 등록" value={funnel.registered} base={funnelBase} color="#7c3aed" delay={0.06} />
+            <FunnelStep label="실제 입장" value={funnel.attended} base={funnelBase} color="#2563eb" delay={0.12} />
+            <FunnelStep label="30분 이상 체류" value={funnel.stay30} base={funnelBase} color="#16a34a" delay={0.18} />
+            <FunnelStep label="60분 이상 체류" value={funnel.stay60} base={funnelBase} color="#f97316" delay={0.24} />
           </div>
-        </section>
+        </motion.section>
       )}
 
       {/* UTM 분해 */}
-      <section className="rounded-2xl border border-border bg-background p-5">
+      <motion.section initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} className="rounded-2xl border border-border bg-background p-5">
         <h3 className="text-sm font-semibold">유입 채널별 성과</h3>
         <p className="mt-1 text-xs text-muted-foreground">등록 광고·캠페인이 어디서 성과를 냈는지 소스·매체로 나눠 봅니다.</p>
         {utm.length === 0 ? (
@@ -246,7 +246,7 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
               </thead>
               <tbody>
                 {utm.map((row, i) => (
-                  <tr key={`${row.source}:${row.medium}:${i}`} className="border-b border-border/40 last:border-0">
+                  <motion.tr key={`${row.source}:${row.medium}:${i}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.15, delay: Math.min(i * 0.03, 0.3) }} className="border-b border-border/40 last:border-0">
                     <td className="py-2 pr-3 font-medium">{SOURCE_LABEL[row.source] ?? row.source}</td>
                     <td className="py-2 pr-3 text-muted-foreground">{SOURCE_LABEL[row.medium] ?? row.medium}</td>
                     {hasVisits && <td className="py-2 pr-3 text-right tabular-nums">{row.visits.toLocaleString()}</td>}
@@ -254,34 +254,39 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
                     {hasVisits && <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">{row.regRate}%</td>}
                     <td className="py-2 pr-3 text-right tabular-nums">{row.entered.toLocaleString()}</td>
                     <td className="py-2 text-right tabular-nums text-muted-foreground">{row.entryRate}%</td>
-                  </tr>
+                  </motion.tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-      </section>
+      </motion.section>
 
       {/* 시청 곡선 */}
-      <section className="rounded-2xl border border-border bg-background p-5">
+      <motion.section initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} className="rounded-2xl border border-border bg-background p-5">
         <h3 className="text-sm font-semibold">시간대별 동시 시청자</h3>
         <p className="mt-1 mb-3 text-xs text-muted-foreground">라이브 중 몇 분 지점에 몇 명이 함께 보고 있었는지 (중복 제거).</p>
         {curve && <AttendanceCurve data={curve} />}
-      </section>
+      </motion.section>
 
       {/* 등록 추이 */}
       {trend.length > 0 && (
-        <section className="rounded-2xl border border-border bg-background p-5">
+        <motion.section initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} className="rounded-2xl border border-border bg-background p-5">
           <h3 className="text-sm font-semibold">일자별 등록 추이</h3>
           <div className="mt-4 flex items-end gap-1 h-28">
-            {trend.map((t) => (
+            {trend.map((t, i) => (
               <div key={t.date} className="group flex flex-1 flex-col items-center gap-1" title={`${t.date}: ${t.count}명`}>
-                <div className="w-full rounded-t bg-violet-500/60 transition-colors group-hover:bg-violet-500" style={{ height: `${Math.max(2, (t.count / maxTrend) * 100)}%` }} />
+                <motion.div
+                  className="w-full rounded-t bg-violet-500/60 transition-colors group-hover:bg-violet-500"
+                  initial={{ height: 0 }}
+                  animate={{ height: `${Math.max(2, (t.count / maxTrend) * 100)}%` }}
+                  transition={{ duration: 0.4, ease: "easeOut", delay: Math.min(i * 0.02, 0.3) }}
+                />
                 <span className="text-[9px] text-muted-foreground">{t.date.slice(5)}</span>
               </div>
             ))}
           </div>
-        </section>
+        </motion.section>
       )}
     </div>
   );
