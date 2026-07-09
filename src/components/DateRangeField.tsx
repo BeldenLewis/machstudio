@@ -42,14 +42,17 @@ export default function DateRangeField({
       setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    const onScroll = () => setOpen(false); // fixed 팝오버가 트리거에서 떨어지지 않게 스크롤 시 닫기
+    // fixed 팝오버 좌표는 1회 계산 — 스크롤/리사이즈로 트리거가 움직이면 어긋나므로 닫는다
+    const onReposition = () => setOpen(false);
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("scroll", onReposition, true);
+    window.addEventListener("resize", onReposition);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("scroll", onReposition, true);
+      window.removeEventListener("resize", onReposition);
     };
   }, [open]);
 
