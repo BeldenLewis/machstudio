@@ -414,6 +414,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           if (!alive) return;
           if (res.ok) {
             const data = await res.json();
+            if (!alive) return; // json 파싱 대기 중 slug 변경/언마운트 — stale 데이터로 새 상태를 덮지 않게
             setWebinar(data.webinar);
             if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
             setPreviewVideoId(typeof data.youtubeId === "string" ? data.youtubeId : null);
