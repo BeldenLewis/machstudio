@@ -601,6 +601,7 @@ model WebinarQA {
   phone          String?
   email          String?
   voteCount      Int      @default(0) // 시청자 추천 수 (추천순 정렬용)
+  onScreen       Boolean  @default(false) // 화면 송출 중(웨비나당 1개 — 부분 유니크 인덱스는 마이그레이션에 존재)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

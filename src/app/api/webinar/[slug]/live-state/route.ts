@@ -29,7 +29,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const wid = webinar.id;
 
   // 동시 병렬 조회 — 필요할 때만 (Q&A/채팅은 게이팅)
-  const [announcements, qaRows, pollRow, popupRow, tallyRow, chatRows] = await Promise.all([
+  const [announcements, qaRows, pollRow, popupRow, tallyRow, chatRows, pushedRow] = await Promise.all([
     prisma.webinarAnnouncement.findMany({
       where: { webinarId: wid, isActive: true },
       orderBy: { createdAt: "desc" },
@@ -83,6 +83,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
               }).then((r) => r.reverse());
         })()
       : Promise.resolve(null),
+    // Q&A '화면에 띄우기' — 현재 송출 중인 질문(웨비나당 1개). Q&A 보드처럼 registrationId 게이팅 + dismissed 제외.
+    registrationId
+      ? prisma.webinarQA.findFirst({
+          where: { webinarId: wid, onScreen: true, status: { not: "dismissed" } },
+          select: { id: true, question: true, name: true },
+        })
+      : Promise.resolve(null),
   ]);
 
   const answeredQA = qaRows
@@ -91,6 +98,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const chat = chatRows
     ? { messages: chatRows.map((m) => ({ id: m.id, name: m.isHost ? m.name : maskName(m.name), message: m.message, isHost: m.isHost, createdAt: m.createdAt })) }
     : undefined;
+  const pushedQuestion = pushedRow
+    ? { id: pushedRow.id, question: pushedRow.question, name: pushedRow.name ? maskName(pushedRow.name) : null }
+    : null;
 
   return NextResponse.json(
     {
@@ -104,6 +114,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       poll: pollRow ?? null,
       popup: popupRow ?? null,
       tally: tallyRow ?? null,
+      pushedQuestion,
     },
     // 동적 데이터 — 캐시 안 함 (registrationId/chatAfter 별로 응답이 다름)
     { headers: { ...CORS, "Cache-Control": "no-store" } },

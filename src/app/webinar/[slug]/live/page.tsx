@@ -71,6 +71,7 @@ interface LiveStateResponse {
   poll: LivePoll | null;
   popup: LivePopup | null;
   tally: LiveTallyPush | null;
+  pushedQuestion?: { id: string; question: string; name: string | null } | null;
 }
 
 type PageView = "signup" | "live" | "ended";
@@ -145,6 +146,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [view, setView] = useState<PageView>("signup");
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [answeredQA, setAnsweredQA] = useState<AnsweredQA[]>([]);
+  const [pushedQuestion, setPushedQuestion] = useState<{ id: string; question: string; name: string | null } | null>(null);
   const [serverNowMs, setServerNowMs] = useState<number | undefined>(undefined);
   const [isTrulyLive, setIsTrulyLive] = useState(false); // status === "live" (입장오픈 전 창과 구분)
   // 채팅 상태
@@ -286,6 +288,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
       setAnnouncements(data.announcements ?? []);
       if (data.answeredQA) setAnsweredQA(data.answeredQA);
+      setPushedQuestion(data.pushedQuestion ?? null);
       setPushPopup(data.popup ?? null);
       setPushTally(data.tally ?? null);
       setPushPoll(data.poll ?? null);
@@ -701,6 +704,27 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           {announcements[0].message}
         </div>
       )}
+
+      {/* 진행자가 화면에 띄운 Q&A — 지금 답변 중인 질문 (등록 시청자에게만) */}
+      <AnimatePresence>
+        {view === "live" && registrationId && pushedQuestion && (
+          <motion.div
+            key="pushed-q"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden"
+            style={{ borderBottom: `1px solid ${accent}` }}
+          >
+            <div className="mx-auto max-w-3xl px-4 py-3">
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: accent }}>지금 답변 중인 질문</div>
+              <p className="text-sm font-medium" style={{ color: text }}>{pushedQuestion.question}</p>
+              {pushedQuestion.name && <p className="mt-0.5 text-xs opacity-60" style={{ color: text }}>— {pushedQuestion.name}</p>}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {view === "live" && registrationId ? (
         <LiveContentStk
