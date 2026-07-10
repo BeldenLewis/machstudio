@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
+import { useAutosave } from "@/components/ui/use-autosave";
+import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -76,7 +78,7 @@ interface Webinar {
 const inputCls = "w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors";
 
 // 만들기 › 라이브 페이지 — 영상·콘텐츠·CTA·알림·참여·디자인을 한 곳에서 편집(단일 저장).
-export default function LivePageTab({ webinar, slug, onUpdate, onDirtyChange }: { webinar: Webinar; slug: string; onUpdate: () => void; onDirtyChange?: (dirty: boolean) => void }) {
+export default function LivePageTab({ webinar, slug, onSilentUpdate }: { webinar: Webinar; slug: string; onSilentUpdate: () => void }) {
   const livePage = (webinar.config?.livePage ?? {}) as Record<string, unknown>;
   const notify = (livePage.notify ?? {}) as Record<string, unknown>;
   const components = (webinar.components ?? {}) as Record<string, unknown>;
@@ -104,13 +106,6 @@ export default function LivePageTab({ webinar, slug, onUpdate, onDirtyChange }: 
     ...(webinar.theme as Partial<Theme>),
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-
-  // 미저장 편집 통지 — 폼·CTA·테마 전체를 저장 기준 스냅샷과 비교
-  const baselineRef = useRef(JSON.stringify({ form, ctaCards, theme }));
-  const dirty = JSON.stringify({ form, ctaCards, theme }) !== baselineRef.current;
-  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
-  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const updateCta = (i: number, patch: Partial<CtaFormCard>) =>
     setCtaCards((prev) => prev.map((c, j) => (j === i ? { ...c, ...patch } : c)));
@@ -146,12 +141,13 @@ export default function LivePageTab({ webinar, slug, onUpdate, onDirtyChange }: 
     return lp;
   };
 
-  const handleSave = async () => {
-    setIsSaving(true);
+  // 자동저장 — 폼·CTA·테마 변경 시 디바운스 후 PATCH. 성공하면 상위 config 를 조용히 최신화.
+  const save = async () => {
     try {
       const res = await fetch(`/api/webinars/${webinar.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
+        keepalive: true, // 페이지 이탈 중 flush 도 서버에 도달하도록
         body: JSON.stringify({
           config: {
             ...(webinar.config ?? {}),
@@ -165,15 +161,12 @@ export default function LivePageTab({ webinar, slug, onUpdate, onDirtyChange }: 
           components: { ...(webinar.components ?? {}), chatEnabled: form.chatEnabled },
         }),
       });
-      if (!res.ok) { toast.error("저장 실패"); return; }
-      toast.success("라이브 페이지가 저장됐어요");
-      baselineRef.current = JSON.stringify({ form, ctaCards, theme }); // 저장 기준 갱신
-      onDirtyChange?.(false);
-      onUpdate();
-    } finally {
-      setIsSaving(false);
-    }
+      if (!res.ok) { toast.error("자동 저장 실패 — 잠시 후 다시 시도돼요", { id: "autosave-error" }); return false; }
+      onSilentUpdate(); // 상위 webinar.config 를 조용히 최신화(탭 간 config 유지, 로더 플래시 없음)
+      return true;
+    } catch { return false; }
   };
+  const { state: saveState, retry } = useAutosave({ form, ctaCards, theme }, save);
 
   const colorFields: { key: keyof Theme; label: string }[] = [
     { key: "accentColor", label: "키 컬러" },
@@ -376,17 +369,13 @@ export default function LivePageTab({ webinar, slug, onUpdate, onDirtyChange }: 
         </div>
       </section>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }} transition={spring} onClick={handleSave} disabled={isSaving}
-          className="px-5 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors disabled:opacity-40">
-          {isSaving ? "저장 중..." : "라이브 페이지 저장"}
-        </motion.button>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-4">
+        <AutosaveIndicator state={saveState} onRetry={retry} />
         <a href={`/live-preview?slug=${encodeURIComponent(slug)}`} target="_blank" rel="noopener noreferrer"
           title="저장된 내용 기준으로 새 탭에서 라이브 시청 화면을 미리봅니다 (영상은 보안상 미표시)"
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1.5">
+          className="ml-auto text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1.5">
           미리보기 ↗
         </a>
-        {dirty && <span className="text-[11px] text-amber-500">저장하면 미리보기에 반영돼요</span>}
       </div>
     </div>
   );

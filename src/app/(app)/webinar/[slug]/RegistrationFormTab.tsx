@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import { motion } from "framer-motion";
-import { Plus, Save, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useAutosave } from "@/components/ui/use-autosave";
+import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -255,19 +257,12 @@ function RegistrationFormPreview({
   );
 }
 
-export default function RegistrationFormTab({ webinar, onUpdate, onDirtyChange }: { webinar: Webinar; onUpdate: () => void; onDirtyChange?: (dirty: boolean) => void }) {
+export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webinar: Webinar; onSilentUpdate: () => void }) {
   const initial = normalizeRegistrationForm(webinar.config ?? {});
   const [fields, setFields] = useState<RegistrationField[]>(initial.fields);
   const [privacyText, setPrivacyText] = useState(initial.privacyText);
   const [marketingText, setMarketingText] = useState(initial.marketingText);
   const [submitLabel, setSubmitLabel] = useState(initial.submitLabel);
-  const [isSaving, setIsSaving] = useState(false);
-
-  // 미저장 편집 통지 — 필드·문구를 저장 기준 스냅샷과 비교
-  const baselineRef = useRef(JSON.stringify({ fields, privacyText, marketingText, submitLabel }));
-  const dirty = JSON.stringify({ fields, privacyText, marketingText, submitLabel }) !== baselineRef.current;
-  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
-  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const addCustomField = () => {
     const id = crypto.randomUUID();
@@ -287,12 +282,13 @@ export default function RegistrationFormTab({ webinar, onUpdate, onDirtyChange }
     ]);
   };
 
-  const handleSave = async () => {
-    setIsSaving(true);
+  // 자동저장 — 필드·동의 문구 변경 시 디바운스 후 PATCH(config.registrationForm). 성공 시 상위 config 최신화.
+  const save = async () => {
     try {
       const res = await fetch(`/api/webinars/${webinar.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
+        keepalive: true, // 페이지 이탈 중 flush 도 서버에 도달하도록
         body: JSON.stringify({
           config: {
             ...(webinar.config ?? {}),
@@ -305,15 +301,12 @@ export default function RegistrationFormTab({ webinar, onUpdate, onDirtyChange }
           },
         }),
       });
-      if (!res.ok) { toast.error("등록 폼 저장 실패"); return; }
-      toast.success("등록 폼이 저장됐어요");
-      baselineRef.current = JSON.stringify({ fields, privacyText, marketingText, submitLabel }); // 저장 기준 갱신
-      onDirtyChange?.(false);
-      onUpdate();
-    } finally {
-      setIsSaving(false);
-    }
+      if (!res.ok) { toast.error("자동 저장 실패 — 잠시 후 다시 시도돼요", { id: "autosave-error" }); return false; }
+      onSilentUpdate();
+      return true;
+    } catch { return false; }
   };
+  const { state: saveState, retry } = useAutosave({ fields, privacyText, marketingText, submitLabel }, save);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
@@ -377,17 +370,7 @@ export default function RegistrationFormTab({ webinar, onUpdate, onDirtyChange }
         </div>
       </section>
 
-      <motion.button
-        whileHover={{ y: -1 }}
-        whileTap={{ scale: 0.97 }}
-        transition={spring}
-        onClick={handleSave}
-        disabled={isSaving}
-        className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors disabled:opacity-40"
-      >
-        <Save className="w-4 h-4" />
-        {isSaving ? "저장 중..." : "등록 폼 저장"}
-      </motion.button>
+      <AutosaveIndicator state={saveState} onRetry={retry} />
       </div>
 
       <RegistrationFormPreview

@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
 import WebinarSchedulePicker from "@/components/webinar/WebinarSchedulePicker";
+import { useAutosave } from "@/components/ui/use-autosave";
+import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -22,7 +24,7 @@ interface Webinar {
 
 // 만들기 › 기본 정보 — 정체성(이름·설명) + 일정 + 위험 구역만.
 // 라이브 페이지 콘텐츠·디자인·참여 설정은 '라이브 페이지' 섹션(LivePageTab)으로 분리됨.
-export default function BasicInfoTab({ webinar, onUpdate, onDirtyChange }: { webinar: Webinar; onUpdate: () => void; onDirtyChange?: (dirty: boolean) => void }) {
+export default function BasicInfoTab({ webinar, onSilentUpdate }: { webinar: Webinar; onSilentUpdate: () => void }) {
   const router = useRouter();
   const toLocal = (iso: string) => kstDateTimeLocalInput(iso);
   const components = (webinar.components ?? {}) as Record<string, unknown>;
@@ -36,23 +38,18 @@ export default function BasicInfoTab({ webinar, onUpdate, onDirtyChange }: { web
     // 라이브 시작 후 사전등록 마감 여부 (components.allowLiveRegistration === false 일 때 체크됨)
     closeRegOnLive: components.allowLiveRegistration === false,
   });
-  const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
 
-  // 미저장 편집 통지 — 저장 기준 스냅샷과 비교
-  const baselineRef = useRef(JSON.stringify(form));
-  const dirty = JSON.stringify(form) !== baselineRef.current;
-  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
-  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
-
-  const handleSave = async () => {
-    setIsSaving(true);
+  // 자동저장 — 이름·설명·일정·마감옵션 변경 시 디바운스 후 PATCH. 이름이 비면 저장하지 않는다(필수).
+  const save = async () => {
+    if (!form.name.trim()) return false; // 이름 필수 — 빈 값으로 덮어쓰지 않음
     try {
       const res = await fetch(`/api/webinars/${webinar.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
+        keepalive: true, // 페이지 이탈 중 flush 도 서버에 도달하도록
         body: JSON.stringify({
           name: form.name.trim(),
           description: form.description.trim() || null,
@@ -66,15 +63,12 @@ export default function BasicInfoTab({ webinar, onUpdate, onDirtyChange }: { web
           },
         }),
       });
-      if (!res.ok) { toast.error("저장 실패"); return; }
-      toast.success("기본 정보가 저장됐어요");
-      baselineRef.current = JSON.stringify(form); // 저장 기준 갱신 → dirty 해제
-      onDirtyChange?.(false);
-      onUpdate();
-    } finally {
-      setIsSaving(false);
-    }
+      if (!res.ok) { toast.error("자동 저장 실패 — 잠시 후 다시 시도돼요", { id: "autosave-error" }); return false; }
+      onSilentUpdate();
+      return true;
+    } catch { return false; }
   };
+  const { state: saveState, retry } = useAutosave(form, save);
 
   const handleDelete = async () => {
     if (deleteInput !== webinar.name) return;
@@ -140,16 +134,10 @@ export default function BasicInfoTab({ webinar, onUpdate, onDirtyChange }: { web
         </label>
       </section>
 
-      <motion.button
-        whileHover={{ y: -1 }}
-        whileTap={{ scale: 0.97 }}
-        transition={spring}
-        onClick={handleSave}
-        disabled={!form.name.trim() || isSaving}
-        className="px-5 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors disabled:opacity-40"
-      >
-        {isSaving ? "저장 중..." : "기본 정보 저장"}
-      </motion.button>
+      <div className="flex items-center gap-3">
+        <AutosaveIndicator state={saveState} onRetry={retry} />
+        {!form.name.trim() && <span className="text-[11px] text-red-500">이름을 입력해야 저장돼요</span>}
+      </div>
 
       {/* 위험 구역 */}
       <section className="space-y-3 pt-4 border-t border-border">

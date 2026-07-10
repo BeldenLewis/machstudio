@@ -152,26 +152,26 @@ function WebinarDetail({ id }: { id: string }) {
     [navigate],
   );
 
-  const fetchWebinar = useCallback(async () => {
-    setIsLoading(true);
-    setLoadError(null);
+  // silent=true 면 로더 플래시 없이 webinar 만 갱신 — 자동저장 후 config 를 최신으로 유지하는 용도.
+  const fetchWebinar = useCallback(async (silent = false) => {
+    if (!silent) { setIsLoading(true); setLoadError(null); }
     try {
       const res = await fetch(`/api/webinars/${id}`);
-      if (res.status === 404) { setLoadError("notfound"); return; }
+      if (res.status === 404) { if (!silent) setLoadError("notfound"); return; }
       // 401/403 은 재시도해도 조건이 불변 — 재시도 버튼 없는 안내로 분기
-      if (res.status === 401 || res.status === 403) { setLoadError("forbidden"); return; }
-      if (!res.ok) { setLoadError("error"); return; }
+      if (res.status === 401 || res.status === 403) { if (!silent) setLoadError("forbidden"); return; }
+      if (!res.ok) { if (!silent) setLoadError("error"); return; }
       const data = await res.json();
       setWebinar(data.webinar);
     } catch {
       // 네트워크 실패 — 빈 상태로 위장하지 않고 재시도 경로 제공
-      setLoadError("error");
+      if (!silent) setLoadError("error");
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, [id]);
 
-  useEffect(() => { void Promise.resolve().then(fetchWebinar); }, [fetchWebinar]);
+  useEffect(() => { void Promise.resolve().then(() => fetchWebinar()); }, [fetchWebinar]);
 
   // tab 쿼리가 없으면 계산된 기본 탭을 URL 에 명시(replace) — 위치를 URL 단일 소스로 고정
   useEffect(() => {
@@ -375,6 +375,7 @@ function WebinarDetail({ id }: { id: string }) {
               <PageSetupTab
                 webinar={webinar}
                 onUpdate={fetchWebinar}
+                onSilentUpdate={() => fetchWebinar(true)}
                 section={settingsSection}
                 onSectionChange={(section) => navigate("create", section, { replace: true })}
               />
