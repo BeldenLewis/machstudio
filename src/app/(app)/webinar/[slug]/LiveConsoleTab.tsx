@@ -1252,7 +1252,7 @@ export default function LiveConsoleTab({
   );
 
   return (
-    <div className="max-w-6xl space-y-4">
+    <div className="mx-auto w-full max-w-[1600px] space-y-4">
       {/* 상태(커맨드) 바 */}
       <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1335,7 +1335,7 @@ export default function LiveConsoleTab({
       {status === "live" ? (
         <>
           {/* 라이브 1행: 동시 접속 추이(좌) + 화면에 띄우기 송출(우) */}
-          <div className="grid items-start gap-4 lg:grid-cols-[1.6fr_1fr]">
+          <div className="grid items-start gap-4 lg:grid-cols-[1.4fr_1fr]">
             <ViewerChart curve={curve} events={chartEvents} />
             <div className="space-y-3">
               <GroupLabel>화면에 띄우기 · 한 번에 하나만</GroupLabel>
