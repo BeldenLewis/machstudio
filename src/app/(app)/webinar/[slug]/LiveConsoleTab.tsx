@@ -1083,7 +1083,7 @@ function ViewerChart({ curve, events = [], range = "all", onRangeChange }: { cur
 function ActivityFeed({ items }: { items: ActivityItem[] }) {
   if (!items.length) return <p className="rounded-2xl border border-border bg-card px-4 py-6 text-center text-xs text-muted-foreground">아직 운영 활동이 없어요.</p>;
   return (
-    <section className="rounded-2xl border border-border bg-card">
+    <section className="max-h-64 overflow-y-auto rounded-2xl border border-border bg-card">
       {items.map((it) => (
         <div key={it.id} className="flex items-center gap-3 border-b border-border px-4 py-2.5 text-[13px] last:border-0">
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500" />
@@ -1548,22 +1548,25 @@ export default function LiveConsoleTab({
 
       {status === "live" ? (
         <>
-          {/* 라이브 1행: 동시 접속 추이(좌) + 화면에 띄우기 송출(우) */}
-          <div className="grid items-start gap-4 lg:grid-cols-[1.4fr_1fr]">
+          {/* 라이브 1행: 동시 접속 추이 + 러닝오더 (같은 줄 높이 일치) */}
+          <div className="grid items-stretch gap-4 lg:grid-cols-[1.6fr_1fr]">
             <ViewerChart curve={curve} events={chartEvents} range={curveRange} onRangeChange={setCurveRange} />
-            <div className="space-y-3">
-              <GroupLabel>화면에 띄우기 · 한 번에 하나만</GroupLabel>
-              {pushGroup}
-            </div>
+            {runningOrder}
           </div>
 
-          {/* 라이브 2행: Q&A 대기열(좌) + 채팅 모더레이션(우) — 480px 고정 + 내부 스크롤 */}
-          <div className="grid gap-4 lg:grid-cols-2">
+          {/* 라이브 2행: 화면에 띄우기 · Q&A 대기열 · 채팅 모더레이션 (높이 일치) */}
+          <div className="grid gap-4 lg:grid-cols-3">
+            <section className="flex h-[70vh] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[480px]">
+              <div className="flex shrink-0 items-center gap-2 border-b border-border p-4 sm:px-5">
+                <MessageSquarePlus className="h-4 w-4 text-violet-500" />
+                <h2 className="text-sm font-semibold">화면에 띄우기</h2>
+                <span className="ml-auto text-[10px] text-muted-foreground">한 번에 하나만</span>
+              </div>
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 sm:p-5">{pushGroup}</div>
+            </section>
             {qaCard}
             {chatCard}
           </div>
-
-          {runningOrder}
 
           {/* 발송·시청자·운영 로그 — 라이브 작업 영역 아래로 */}
           <GroupLabel>발송</GroupLabel>
