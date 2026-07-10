@@ -14,6 +14,7 @@ export type OperateSection = "console" | "registrants";
 
 interface WebinarForConsole {
   config: Record<string, unknown>;
+  components?: Record<string, unknown> | null;
   liveStartAt?: string;
   liveEndAt?: string;
   sessions: { id: string; number: number; type: string; title: string; startTime: string; endTime: string }[];

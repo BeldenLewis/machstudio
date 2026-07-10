@@ -103,6 +103,7 @@ interface AdminPoll {
 
 interface WebinarForConsole {
   config: Record<string, unknown>;
+  components?: Record<string, unknown> | null;
   liveStartAt?: string;
   liveEndAt?: string;
   sessions: { id: string; number: number; type: string; title: string; startTime: string; endTime: string }[];
@@ -606,6 +607,16 @@ interface AdminChatMessage {
   createdAt: string;
 }
 
+// 토글 스위치 — 채팅 on/off·모더레이션 설정 등에서 공용.
+function Switch({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={onClick}
+      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-violet-500" : "border border-border bg-secondary"}`}>
+      <span className={`absolute top-[2px] h-[14px] w-[14px] rounded-full bg-white shadow transition-all ${on ? "left-[18px]" : "left-[3px]"}`} />
+    </button>
+  );
+}
+
 function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: string; tick?: number; fillHeight?: boolean }) {
   const confirm = useConfirm();
   const [messages, setMessages] = useState<AdminChatMessage[]>([]);
@@ -725,30 +736,13 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
       apply();
     } finally { mutatingRef.current = false; }
   };
-  const toggleChat = () => { const next = !settings.chatEnabled; void patchChat({ chatEnabled: next }, () => { setSettings((s) => ({ ...s, chatEnabled: next })); toast.success(next ? "시청자 채팅을 켰어요" : "시청자 채팅을 껐어요"); }); };
   const toggleHideLinks = () => { const next = !settings.hideLinks; void patchChat({ hideLinks: next }, () => setSettings((s) => ({ ...s, hideLinks: next }))); };
   const toggleSlow = () => { const next = settings.slowSec > 0 ? 0 : 10; void patchChat({ slowSec: next }, () => { setSettings((s) => ({ ...s, slowSec: next })); setSlowInput(String(next)); }); };
-
-  const Switch = ({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) => (
-    <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={onClick}
-      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-violet-500" : "border border-border bg-secondary"}`}>
-      <span className={`absolute top-[2px] h-[14px] w-[14px] rounded-full bg-white shadow transition-all ${on ? "left-[18px]" : "left-[3px]"}`} />
-    </button>
-  );
 
   const inputCls = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
 
   return (
     <div className={fillHeight ? "flex h-full min-h-0 flex-col gap-3" : "space-y-4"}>
-      {fillHeight && (
-        <div className="flex shrink-0 items-center justify-between">
-          <span className="text-[11px] font-medium text-muted-foreground">시청자 채팅 표시</span>
-          <div className="flex items-center gap-2">
-            <span className={`text-[11px] font-medium ${settings.chatEnabled ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>{settings.chatEnabled ? "켜짐" : "꺼짐"}</span>
-            <Switch on={settings.chatEnabled} onClick={toggleChat} label="시청자 채팅 켜기/끄기" />
-          </div>
-        </div>
-      )}
       {!fillHeight && (
         <p className="text-[11px] leading-relaxed text-muted-foreground">
           시청자 채팅은 <b className="font-semibold text-foreground">만들기 → 라이브 페이지 → 참여 구성 → 채팅 탭 사용</b>을 켜야 시청 화면에 보여요. 여기선 운영자 발언과 메시지 삭제(모더레이션)를 할 수 있어요.
@@ -1318,6 +1312,21 @@ export default function LiveConsoleTab({
   const [curveRange, setCurveRange] = useState("all");
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [syncAt, setSyncAt] = useState<number>(() => Date.now());
+  // 시청자 채팅 on/off — 콘솔 프로퍼티(components.chatEnabled)로 초기화, 헤더 스위치로 낙관적 토글.
+  const [chatOn, setChatOn] = useState<boolean>(
+    () => (webinar?.components as { chatEnabled?: boolean } | null | undefined)?.chatEnabled === true,
+  );
+  const toggleChatOn = () => {
+    const next = !chatOn;
+    setChatOn(next);
+    fetch(`/api/webinars/${webinarId}/chat`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chatEnabled: next }),
+    })
+      .then((r) => { if (!r.ok) throw new Error(); toast.success(next ? "시청자 채팅을 켰어요" : "시청자 채팅을 껐어요"); })
+      .catch(() => { setChatOn(!next); toast.error("변경에 실패했어요"); });
+  };
   const statusRef = useRef<WebinarStatus>("registration");
 
   const fetchDashboard = useCallback(async () => {
@@ -1548,6 +1557,10 @@ export default function LiveConsoleTab({
       <div className="flex shrink-0 items-center gap-2 border-b border-border p-4 sm:px-5">
         <MessageSquare className="h-4 w-4 text-violet-500" />
         <h2 className="text-sm font-semibold">채팅 모더레이션</h2>
+        <div className="ml-auto flex items-center gap-2">
+          <span className={`text-[11px] font-medium ${chatOn ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>{chatOn ? "켜짐" : "꺼짐"}</span>
+          <Switch on={chatOn} onClick={toggleChatOn} label="시청자 채팅 켜기/끄기" />
+        </div>
       </div>
       <div className="min-h-0 flex-1 p-4 sm:p-5">
         <ChatPanel webinarId={webinarId} tick={liveTick} fillHeight />
