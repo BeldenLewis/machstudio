@@ -135,7 +135,7 @@ function Section({
   const [open, setOpen] = useState(defaultOpen);
   const panelId = useId();
   return (
-    <section className="rounded-2xl border border-border bg-card">
+    <section className="rounded-2xl border border-border bg-card shadow-card">
       <motion.button
         whileTap={{ scale: 0.99 }}
         transition={spring}
@@ -144,10 +144,14 @@ function Section({
         aria-controls={panelId}
         className="flex w-full items-center justify-between gap-3 p-4 text-left sm:px-5"
       >
-        <span className="flex items-center gap-2 text-sm font-semibold">
-          <Icon className="h-4 w-4 text-violet-500" /> {title} {badge}
+        <span className="flex min-w-0 items-center gap-2 text-sm font-semibold tracking-[-0.01em]">
+          <Icon className="h-4 w-4 shrink-0 text-violet-500" />
+          <span className="truncate">{title}</span>
         </span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+        <span className="flex shrink-0 items-center gap-2">
+          {badge}
+          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+        </span>
       </motion.button>
       <AnimatePresence initial={false}>
         {open && (
@@ -230,7 +234,7 @@ function PopupPanel({ webinarId }: { webinarId: string }) {
     if (res.ok) { toast.success("삭제했어요"); void fetchPopups(); }
   };
 
-  const inputCls = "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
+  const inputCls = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
 
   return (
     <div className="space-y-4">
@@ -258,8 +262,8 @@ function PopupPanel({ webinarId }: { webinarId: string }) {
             <input type="checkbox" checked={form.useTally} onChange={(e) => setForm((f) => ({ ...f, useTally: e.target.checked }))} className="accent-violet-500" />
             버튼을 Tally 설문으로 연결
           </label>
-          <motion.button whileTap={{ scale: 0.97 }} onClick={create} disabled={!form.title.trim() || busy}
-            className="rounded-xl bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">
+          <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }} onClick={create} disabled={!form.title.trim() || busy}
+            className="rounded-lg bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">
             {busy ? "등록 중…" : "팝업 등록"}
           </motion.button>
         </div>
@@ -278,17 +282,17 @@ function PopupPanel({ webinarId }: { webinarId: string }) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.15 }}
-                className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${popup.isActive ? "border-violet-500/40 bg-violet-500/[0.04]" : "border-border"}`}
+                className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${popup.isActive ? "border-green-500/40 bg-green-500/[0.06]" : "border-border"}`}
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">
-                    {popup.isActive && <span className="mr-1.5 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">ON</span>}
+                    {popup.isActive && <span className="mr-1.5 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-green-600 dark:text-green-400">ON</span>}
                     {popup.title}
                   </p>
                   {popup.message && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{popup.message}</p>}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => toggle(popup)} className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${popup.isActive ? "border-border text-muted-foreground hover:bg-secondary" : "border-violet-500/40 text-violet-500 hover:bg-violet-500/10"}`}>
+                  <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => toggle(popup)} className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${popup.isActive ? "border-border text-muted-foreground hover:bg-secondary" : "border-green-500/40 text-green-600 dark:text-green-400 hover:bg-green-500/10"}`}>
                     {popup.isActive ? "OFF" : "ON"}
                   </motion.button>
                   <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => remove(popup)} className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500">삭제</motion.button>
@@ -353,7 +357,7 @@ function TallyPanel({ webinarId }: { webinarId: string }) {
     if (res.ok) { toast.success("삭제했어요"); void fetchPushes(); }
   };
 
-  const inputCls = "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
+  const inputCls = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
 
   return (
     <div className="space-y-4">
@@ -364,8 +368,8 @@ function TallyPanel({ webinarId }: { webinarId: string }) {
         </div>
         <div className="flex items-center gap-2">
           <input value={form.memo} onChange={(e) => setForm((f) => ({ ...f, memo: e.target.value }))} placeholder="메모 (선택)" className={inputCls} />
-          <motion.button whileTap={{ scale: 0.97 }} onClick={create} disabled={!form.formId.trim() || busy}
-            className="shrink-0 rounded-xl bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">
+          <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }} onClick={create} disabled={!form.formId.trim() || busy}
+            className="shrink-0 rounded-lg bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">
             {busy ? "등록 중…" : "푸시 등록"}
           </motion.button>
         </div>
@@ -385,18 +389,18 @@ function TallyPanel({ webinarId }: { webinarId: string }) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.15 }}
-                className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${push.isActive ? "border-violet-500/40 bg-violet-500/[0.04]" : "border-border"}`}
+                className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${push.isActive ? "border-green-500/40 bg-green-500/[0.06]" : "border-border"}`}
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">
-                    {push.isActive && <span className="mr-1.5 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">ON</span>}
+                    {push.isActive && <span className="mr-1.5 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-green-600 dark:text-green-400">ON</span>}
                     {push.title}
                     <span className="ml-2 font-mono text-[10px] text-muted-foreground">{push.formId}</span>
                   </p>
                   {push.memo && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{push.memo}</p>}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => toggle(push)} className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${push.isActive ? "border-border text-muted-foreground hover:bg-secondary" : "border-violet-500/40 text-violet-500 hover:bg-violet-500/10"}`}>
+                  <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => toggle(push)} className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${push.isActive ? "border-border text-muted-foreground hover:bg-secondary" : "border-green-500/40 text-green-600 dark:text-green-400 hover:bg-green-500/10"}`}>
                     {push.isActive ? "OFF" : "ON"}
                   </motion.button>
                   <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => remove(push)} className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500">삭제</motion.button>
@@ -489,7 +493,7 @@ function PollPanel({ webinarId, tick = 0 }: { webinarId: string; tick?: number }
     else toast.error("수정에 실패했어요");
   };
 
-  const inputCls = "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
+  const inputCls = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
 
   return (
     <div className="space-y-4">
@@ -510,8 +514,8 @@ function PollPanel({ webinarId, tick = 0 }: { webinarId: string; tick?: number }
           {options.length < 8 ? (
             <button type="button" onClick={() => setOptions((prev) => [...prev, ""])} className="text-xs font-medium text-violet-500 hover:underline">+ 선택지 추가</button>
           ) : <span />}
-          <motion.button whileTap={{ scale: 0.97 }} onClick={create} disabled={!question.trim() || options.filter((o) => o.trim()).length < 2 || busy}
-            className="rounded-xl bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">
+          <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }} onClick={create} disabled={!question.trim() || options.filter((o) => o.trim()).length < 2 || busy}
+            className="rounded-lg bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">
             {busy ? "등록 중…" : "투표 등록"}
           </motion.button>
         </div>
@@ -533,7 +537,7 @@ function PollPanel({ webinarId, tick = 0 }: { webinarId: string; tick?: number }
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.15 }}
-                  className={`rounded-xl border p-3 ${poll.isActive ? "border-violet-500/40 bg-violet-500/[0.04]" : "border-border"}`}
+                  className={`rounded-xl border p-3 ${poll.isActive ? "border-green-500/40 bg-green-500/[0.06]" : "border-border"}`}
                 >
                   {editing ? (
                     <div className="space-y-2">
@@ -552,13 +556,13 @@ function PollPanel({ webinarId, tick = 0 }: { webinarId: string; tick?: number }
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium">
-                            {poll.isActive && <span className="mr-1.5 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">ON</span>}
+                            {poll.isActive && <span className="mr-1.5 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-green-600 dark:text-green-400">ON</span>}
                             {poll.question}
                           </p>
                           <p className="mt-0.5 text-[11px] text-muted-foreground">{poll.options.length}개 선택지 · 총 {total}표</p>
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
-                          <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => toggle(poll)} className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${poll.isActive ? "border-border text-muted-foreground hover:bg-secondary" : "border-violet-500/40 text-violet-500 hover:bg-violet-500/10"}`}>
+                          <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => toggle(poll)} className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${poll.isActive ? "border-border text-muted-foreground hover:bg-secondary" : "border-green-500/40 text-green-600 dark:text-green-400 hover:bg-green-500/10"}`}>
                             {poll.isActive ? "OFF" : "ON"}
                           </motion.button>
                           <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => startEdit(poll)} className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-secondary">수정</motion.button>
@@ -711,7 +715,7 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
     } finally { setSavingMod(false); mutatingRef.current = false; }
   };
 
-  const inputCls = "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
+  const inputCls = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
 
   return (
     <div className={fillHeight ? "flex h-full min-h-0 flex-col gap-3" : "space-y-4"}>
@@ -729,7 +733,7 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
           className={inputCls}
         />
         <motion.button whileTap={{ scale: 0.97 }} onClick={sendHost} disabled={!hostMsg.trim() || busy}
-          className="shrink-0 rounded-xl bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">
+          className="shrink-0 rounded-lg bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">
           보내기
         </motion.button>
       </div>
@@ -856,7 +860,7 @@ function ReminderPanel({ webinarId }: { webinarId: string }) {
     }
   };
 
-  const inputCls = "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
+  const inputCls = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
 
   return (
     <div className="space-y-4">
@@ -885,7 +889,7 @@ function ReminderPanel({ webinarId }: { webinarId: string }) {
         </div>
         <div className="flex justify-end">
           <motion.button whileTap={{ scale: 0.97 }} onClick={send} disabled={!form.subject.trim() || !form.message.trim() || busy || count === 0}
-            className="rounded-xl bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">
+            className="rounded-lg bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">
             {busy ? "발송 중…" : `구독자 ${count}명에게 발송`}
           </motion.button>
         </div>
@@ -1513,14 +1517,14 @@ export default function LiveConsoleTab({
 
       {/* 실시간 지표 — 통합 스트립(현재 시청 강조 + 미니 스파크). 종료 상태에선 recap 카드가 대신함 */}
       {summary && status !== "ended" && (
-        <section className="flex flex-wrap overflow-hidden rounded-2xl border border-border bg-card">
-          <div className="flex min-w-[200px] flex-[1.6] flex-col gap-1.5 p-4">
-            <span className="text-[11px] text-muted-foreground">현재 시청</span>
-            <div className="flex items-end gap-3">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <div className="text-[11px] text-muted-foreground">현재 시청</div>
+            <div className="mt-1 flex items-end gap-2">
               <span className="text-3xl font-semibold leading-none tabular-nums">{summary.activeViewers.toLocaleString()}</span>
-              <div className="h-8 min-w-[56px] flex-1"><Sparkline values={(curve?.points ?? []).map((p) => p.viewers)} /></div>
+              <div className="h-7 min-w-[48px] flex-1"><Sparkline values={(curve?.points ?? []).map((p) => p.viewers)} /></div>
             </div>
-            <span className="text-[11px] text-muted-foreground">최근 90초{curve?.peak ? ` · 피크 ${curve.peak.toLocaleString()}` : ""}</span>
+            <div className="mt-1.5 text-[11px] text-muted-foreground">최근 90초{curve?.peak ? ` · 피크 ${curve.peak.toLocaleString()}` : ""}</div>
           </div>
           {([
             { l: "입장률", v: `${summary.attendRate}`, u: "%", bar: summary.attendRate },
@@ -1529,7 +1533,7 @@ export default function LiveConsoleTab({
             { l: "평균 체류", v: `${summary.avgStayMinutes}`, u: "분" },
             { l: "대기 질문", v: summary.pendingQuestions.toLocaleString(), attn: summary.pendingQuestions > 0 },
           ] as { l: string; v: string; u?: string; sub?: string; bar?: number; attn?: boolean }[]).map((s) => (
-            <div key={s.l} className="flex min-w-[116px] flex-1 flex-col gap-1.5 border-l border-border p-4">
+            <div key={s.l} className="flex flex-col gap-1.5 rounded-2xl border border-border bg-card p-4">
               <span className="text-[11px] text-muted-foreground">{s.l}</span>
               <span className={`text-2xl font-semibold leading-none tabular-nums ${s.attn ? "text-amber-500" : ""}`}>{s.v}{s.u && <span className="ml-0.5 text-sm font-medium text-muted-foreground">{s.u}</span>}</span>
               {s.bar != null ? (
@@ -1539,7 +1543,7 @@ export default function LiveConsoleTab({
               )}
             </div>
           ))}
-        </section>
+        </div>
       )}
 
       {status === "live" ? (

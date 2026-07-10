@@ -116,7 +116,7 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
           whileTap={{ scale: 0.96 }}
           transition={spring}
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-500 text-white text-xs font-medium hover:bg-violet-600 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-violet-500 text-white text-xs font-medium hover:bg-violet-600 transition-colors"
         >
           <Plus className="w-3.5 h-3.5" />공지 추가
         </motion.button>
@@ -152,7 +152,7 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
               placeholder="공지 내용을 입력하세요"
               value={form.message}
               onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm resize-none focus:outline-none focus:border-violet-400"
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm resize-none focus:outline-none focus:border-violet-400"
             />
             <div className="flex gap-2">
               <motion.button
@@ -161,7 +161,7 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
                 transition={spring}
                 onClick={handleCreate}
                 disabled={!form.message.trim() || isCreating}
-                className="px-4 py-2 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors disabled:opacity-40"
+                className="px-4 py-2 rounded-lg bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors disabled:opacity-40"
               >
                 {isCreating ? "생성 중..." : "생성"}
               </motion.button>
@@ -170,7 +170,7 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
                 whileTap={{ scale: 0.96 }}
                 transition={spring}
                 onClick={() => setShowCreate(false)}
-                className="px-4 py-2 rounded-xl border border-border text-sm hover:bg-secondary transition-colors"
+                className="px-4 py-2 rounded-lg border border-border text-sm hover:bg-secondary transition-colors"
               >
                 취소
               </motion.button>
@@ -201,8 +201,8 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={spring}
-              className={`flex items-start gap-3 p-4 rounded-2xl border transition-colors ${
-                ann.isActive ? "border-violet-400/30 bg-violet-500/5" : "border-border bg-background"
+              className={`flex items-start gap-3 p-4 rounded-xl border transition-colors ${
+                ann.isActive ? "border-green-500/40 bg-green-500/[0.06]" : "border-border bg-background"
               }`}
             >
               <div className="flex-1 min-w-0">
@@ -211,7 +211,7 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
                     {typeLabels[ann.type] ?? ann.type}
                   </span>
                   {ann.isActive && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-500 font-medium">표시 중</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 font-medium">표시 중</span>
                   )}
                 </div>
                 <p className="text-sm">{ann.message}</p>
@@ -223,8 +223,8 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
                   onClick={() => toggleActive(ann)}
                   className={`p-1.5 rounded-lg transition-colors ${
                     ann.isActive
-                      ? "hover:bg-secondary text-violet-500"
-                      : "hover:bg-violet-500/10 text-muted-foreground hover:text-violet-500"
+                      ? "hover:bg-secondary text-green-600 dark:text-green-400"
+                      : "hover:bg-green-500/10 text-muted-foreground hover:text-green-600 dark:hover:text-green-400"
                   }`}
                   title={ann.isActive ? "표시 중지" : "라이브에 표시"}
                 >
