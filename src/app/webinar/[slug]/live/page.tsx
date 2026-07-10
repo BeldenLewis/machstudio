@@ -386,8 +386,9 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   };
 
   useEffect(() => {
-    // 항상 일반 로드 — 미리보기(소유자)는 아래 전용 로더가 그 위에 상태를 덮어쓰고,
-    // 비소유자가 ?preview 로 와도 인증 실패 시 일반 화면으로 폴백(무한 로딩 방지).
+    // 미리보기(소유자)는 아래 /preview 로더가 데이터를 세팅하고, 인증 실패자는 로더가 ?preview 를 떼고 재이동한다.
+    // 여기서 /info 를 함께 돌리면 프리뷰 드라이버가 세팅한 view/isTrulyLive 를 덮어써 초기 화면이 잘못 뜬다(레이스).
+    if (isPreviewUrl()) return;
     fetchWebinar();
   }, [fetchWebinar]);
 
@@ -396,18 +397,26 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     if (!isPreviewUrl()) return;
     const p = new URLSearchParams(window.location.search).get("preview");
     const init = (["registration", "entry", "live", "ended"] as const).find((s) => s === p) ?? "registration";
+    // 인증 실패(비소유자·세션 만료)면 ?preview 를 떼고 깨끗한 URL 로 재이동 → 일반 시청 화면으로 완전 복구.
+    // (부작용 가드가 URL 기준이라, 파라미터를 남기면 등록·입장·ping 이 아무 표시 없이 죽는다.)
+    const fallbackToClean = () => {
+      const u = new URL(window.location.href);
+      u.searchParams.delete("preview");
+      window.location.replace(u.toString());
+    };
     let alive = true;
     (async () => {
       try {
         const res = await fetch(`/api/webinar/${slug}/preview`);
-        if (!res.ok || !alive) return;
+        if (!alive) return;
+        if (!res.ok) { fallbackToClean(); return; }
         const data = await res.json();
         setWebinar(data.webinar);
         if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
         setPreviewVideoId(typeof data.youtubeId === "string" ? data.youtubeId : null);
         setPreviewState(init);
         setIsLoading(false);
-      } catch { /* 인증 실패 등 — 미리보기 비활성 유지 */ }
+      } catch { if (alive) fallbackToClean(); }
     })();
     return () => { alive = false; };
   }, [slug]);
@@ -1070,7 +1079,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
               <motion.button
                 type="button"
-                onClick={() => setView("signup")}
+                onClick={() => (previewMode ? setPreviewState("registration") : setView("signup"))}
                 className="w-full mt-3 py-2 text-sm opacity-60 hover:opacity-100 transition-opacity"
                 whileTap={{ scale: 0.96 }}
                 transition={spring}
