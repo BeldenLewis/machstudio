@@ -158,21 +158,6 @@ function GroupLabel({ children }: { children: ReactNode }) {
   return <p className="px-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">{children}</p>;
 }
 
-function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.15 }}
-      className="rounded-xl border border-border bg-background px-3.5 py-3"
-    >
-      <p className="text-[11px] text-muted-foreground">{label}</p>
-      <p className="mt-0.5 text-lg font-semibold tabular-nums">{value}</p>
-      {sub && <p className="mt-0.5 text-[10px] text-muted-foreground">{sub}</p>}
-    </motion.div>
-  );
-}
-
 /* ── 팝업 발행 패널 ── */
 function PopupPanel({ webinarId }: { webinarId: string }) {
   const confirm = useConfirm();
@@ -787,6 +772,150 @@ function ReminderPanel({ webinarId }: { webinarId: string }) {
   );
 }
 
+interface CurveData { points: { label: string; viewers: number }[]; peak: number; avg: number; hasData: boolean }
+interface ActivityItem { id: string; action: string; label: string; at: string; actor: string | null }
+
+// tailwind 토큰(oklch)을 canvas 용 concrete 색으로 — 프로브 span 의 computed color 를 읽는다(테마 반영).
+function readColor(className: string, alpha?: number) {
+  if (typeof document === "undefined") return "#888";
+  const el = document.createElement("span");
+  el.className = className; el.style.display = "none"; document.body.appendChild(el);
+  const rgb = getComputedStyle(el).color; el.remove();
+  if (alpha == null) return rgb;
+  const m = rgb.match(/[\d.]+/g);
+  return m ? `rgba(${m[0]},${m[1]},${m[2]},${alpha})` : rgb;
+}
+
+// 실시간 신선도 — 마지막 동기화 후 경과를 1초마다 갱신 표시
+function FreshBadge({ syncAt }: { syncAt: number }) {
+  const [, force] = useState(0);
+  useEffect(() => { const t = setInterval(() => force((n) => n + 1), 1000); return () => clearInterval(t); }, []);
+  const ago = Math.max(0, Math.round((Date.now() - syncAt) / 1000));
+  const txt = ago < 5 ? "방금" : ago < 60 ? `${ago}초 전` : `${Math.floor(ago / 60)}분 전`;
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+      <span className="h-1.5 w-1.5 rounded-full bg-green-500" /> 실시간 · {txt} 갱신
+    </span>
+  );
+}
+
+function Sparkline({ values }: { values: number[] }) {
+  const ref = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    const cv = ref.current; if (!cv || !cv.getContext) return;
+    const ctx = cv.getContext("2d"); if (!ctx) return;
+    const ratio = Math.min(2, window.devicePixelRatio || 1);
+    const r = cv.getBoundingClientRect();
+    const W = Math.max(40, r.width || 80), H = Math.max(20, r.height || 34);
+    cv.width = W * ratio; cv.height = H * ratio; ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    const vals = values.length ? values : [0, 0];
+    const max = Math.max(1, ...vals), min = Math.min(...vals);
+    const rng = Math.max(1, max - min);
+    const x = (i: number) => (i / Math.max(1, vals.length - 1)) * W;
+    const y = (v: number) => H - 2 - ((v - min) / rng) * (H - 4);
+    const ac = readColor("text-violet-500");
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, readColor("text-violet-500", 0.28) as string); g.addColorStop(1, readColor("text-violet-500", 0) as string);
+    ctx.beginPath(); vals.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v))));
+    ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fillStyle = g; ctx.fill();
+    ctx.beginPath(); vals.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v))));
+    ctx.strokeStyle = ac as string; ctx.lineWidth = 1.6; ctx.lineJoin = "round"; ctx.stroke();
+  }, [values]);
+  return <canvas ref={ref} className="h-full w-full" />;
+}
+
+// 동시 접속 추이 — analytics/attendance-curve 실데이터. 면적+선+피크+호버 크로스헤어.
+function ViewerChart({ curve }: { curve: CurveData | null }) {
+  const ref = useRef<HTMLCanvasElement | null>(null);
+  const [hover, setHover] = useState<number | null>(null);
+  const [tip, setTip] = useState<{ x: number; label: string; v: number } | null>(null);
+  const pts = curve?.points ?? [];
+  useEffect(() => {
+    const cv = ref.current; if (!cv || !cv.getContext) return;
+    const ctx = cv.getContext("2d"); if (!ctx) return;
+    const ratio = Math.min(2, window.devicePixelRatio || 1);
+    const draw = () => {
+      const r = cv.getBoundingClientRect();
+      const W = Math.max(280, r.width || 600), H = Math.max(160, r.height || 220);
+      cv.width = W * ratio; cv.height = H * ratio; ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      const padL = 8, padR = 8, padT = 14, padB = 22;
+      const vals = pts.map((p) => p.viewers);
+      const yMax = Math.max(10, curve?.peak ?? Math.max(1, ...vals)) * 1.15;
+      const N = pts.length;
+      const ac = readColor("text-violet-500"), muted = readColor("text-muted-foreground"), gl = readColor("text-muted-foreground", 0.14);
+      const x = (i: number) => padL + (N <= 1 ? 0.5 : i / (N - 1)) * (W - padL - padR);
+      const y = (v: number) => padT + (1 - v / yMax) * (H - padT - padB);
+      ctx.font = "10px sans-serif"; ctx.textBaseline = "middle";
+      [0, 0.5, 1].forEach((f) => { const gv = Math.round(yMax * f), yy = y(gv); ctx.strokeStyle = gl as string; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(W - padR, yy); ctx.stroke(); ctx.fillStyle = muted as string; ctx.textAlign = "left"; ctx.fillText(gv >= 1000 ? (gv / 1000).toFixed(1) + "k" : String(gv), padL + 2, yy - 7); });
+      if (N >= 2) {
+        const grad = ctx.createLinearGradient(0, padT, 0, H - padB); grad.addColorStop(0, readColor("text-violet-500", 0.26) as string); grad.addColorStop(1, readColor("text-violet-500", 0) as string);
+        ctx.beginPath(); vals.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v)))); ctx.lineTo(x(N - 1), H - padB); ctx.lineTo(x(0), H - padB); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+        ctx.beginPath(); vals.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v)))); ctx.strokeStyle = ac as string; ctx.lineWidth = 2.2; ctx.lineJoin = "round"; ctx.stroke();
+        const ex = x(N - 1), ey = y(vals[N - 1]); ctx.beginPath(); ctx.arc(ex, ey, 3.6, 0, 7); ctx.fillStyle = ac as string; ctx.fill();
+      }
+      ctx.fillStyle = muted as string; ctx.textBaseline = "alphabetic";
+      if (N) { ctx.textAlign = "left"; ctx.fillText(pts[0].label, padL, H - 6); ctx.textAlign = "right"; ctx.fillText(pts[N - 1].label, W - padR, H - 6); }
+      if (hover != null && pts[hover]) { const hx = x(hover); ctx.strokeStyle = readColor("text-muted-foreground", 0.4) as string; ctx.setLineDash([3, 3]); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(hx, padT); ctx.lineTo(hx, H - padB); ctx.stroke(); ctx.setLineDash([]); ctx.beginPath(); ctx.arc(hx, y(vals[hover]), 3.4, 0, 7); ctx.fillStyle = ac as string; ctx.fill(); }
+    };
+    draw();
+    const ro = new ResizeObserver(draw); ro.observe(cv);
+    const mq = window.matchMedia("(prefers-color-scheme: dark)"); mq.addEventListener("change", draw);
+    return () => { ro.disconnect(); mq.removeEventListener("change", draw); };
+  }, [pts, hover, curve]);
+  const onMove = (clientX: number) => {
+    const cv = ref.current; if (!cv || !pts.length) return;
+    const r = cv.getBoundingClientRect(); const padL = 8, padR = 8, W = Math.max(280, r.width);
+    let i = Math.round(((clientX - r.left - padL) / (W - padL - padR)) * (pts.length - 1));
+    i = Math.max(0, Math.min(pts.length - 1, i)); setHover(i); setTip({ x: padL + (pts.length <= 1 ? 0.5 : i / (pts.length - 1)) * (W - padL - padR), label: pts[i].label, v: pts[i].viewers });
+  };
+  if (!curve || !curve.hasData) {
+    return (
+      <section className="rounded-2xl border border-border bg-card">
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3.5 sm:px-5"><BarChart3 className="h-4 w-4 text-violet-500" /><h2 className="text-sm font-semibold">동시 접속 추이</h2></div>
+        <div className="flex flex-col items-center gap-1.5 px-4 py-12 text-center">
+          <p className="text-sm font-medium">아직 시청 데이터가 없어요</p>
+          <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">라이브가 시작되고 시청자가 입장하면 분 단위 동시 접속 추이가 여기 표시돼요.</p>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section className="rounded-2xl border border-border bg-card">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-3.5 sm:px-5">
+        <BarChart3 className="h-4 w-4 text-violet-500" /><h2 className="text-sm font-semibold">동시 접속 추이</h2>
+        <span className="ml-auto text-[11px] text-muted-foreground">피크 <b className="font-semibold text-foreground tabular-nums">{curve.peak.toLocaleString()}</b> · 평균 <b className="font-semibold text-foreground tabular-nums">{curve.avg.toLocaleString()}</b></span>
+      </div>
+      <div className="relative px-3 py-3" style={{ height: 240 }}>
+        <canvas ref={ref} className="block h-full w-full cursor-crosshair" style={{ touchAction: "none" }}
+          onMouseMove={(e) => onMove(e.clientX)} onMouseLeave={() => { setHover(null); setTip(null); }}
+          onTouchStart={(e) => onMove(e.touches[0].clientX)} onTouchMove={(e) => onMove(e.touches[0].clientX)} />
+        {tip && (
+          <div className="pointer-events-none absolute top-2 -translate-x-1/2 rounded-lg bg-foreground px-2.5 py-1.5 text-[11px] leading-tight text-background shadow-lg" style={{ left: tip.x }}>
+            <div className="font-bold">{tip.label}</div><div className="tabular-nums">동시 {tip.v.toLocaleString()}명</div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ActivityFeed({ items }: { items: ActivityItem[] }) {
+  if (!items.length) return <p className="rounded-2xl border border-border bg-card px-4 py-6 text-center text-xs text-muted-foreground">아직 운영 활동이 없어요.</p>;
+  return (
+    <section className="rounded-2xl border border-border bg-card">
+      {items.map((it) => (
+        <div key={it.id} className="flex items-center gap-3 border-b border-border px-4 py-2.5 text-[13px] last:border-0">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500" />
+          <span className="min-w-[52px] shrink-0 text-[11px] tabular-nums text-muted-foreground">{formatKst(it.at, { hour: "2-digit", minute: "2-digit" })}</span>
+          <span className="min-w-0 flex-1 truncate">{it.label}{it.actor ? <span className="text-muted-foreground"> · {it.actor}</span> : null}</span>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 export default function LiveConsoleTab({
   webinarId,
   webinar,
@@ -803,6 +932,9 @@ export default function LiveConsoleTab({
   // 라이브 폴링 tick — 대시보드 적응형 주기(라이브 15초/평시 90초, 탭 숨김 스킵)에 맞춰 증가시켜,
   // 투표 집계·채팅 모더레이션 피드가 별도 타이머 없이 같은 주기로 갱신되게 한다.
   const [liveTick, setLiveTick] = useState(0);
+  const [curve, setCurve] = useState<CurveData | null>(null);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [syncAt, setSyncAt] = useState<number>(() => Date.now());
   const statusRef = useRef<WebinarStatus>("registration");
 
   const fetchDashboard = useCallback(async () => {
@@ -812,24 +944,43 @@ export default function LiveConsoleTab({
       const next: DashboardData = await res.json();
       statusRef.current = next.status;
       setData(next);
+      setSyncAt(Date.now());
+    } catch {
+      /* 일시적 네트워크 오류 — 폴링 루프가 죽지 않도록 삼킴(다음 주기 재시도) */
     } finally {
       setIsLoading(false);
     }
   }, [webinarId]);
 
+  // 동시 접속 추이(차트·미니 스파크라인) + 운영 로그 — 대시보드와 같은 폴링 주기로 갱신
+  const fetchCurve = useCallback(async () => {
+    try { const res = await fetch(`/api/webinars/${webinarId}/analytics/attendance-curve`); if (res.ok) setCurve(await res.json()); } catch { /* 다음 주기 재시도 */ }
+  }, [webinarId]);
+  const fetchActivity = useCallback(async () => {
+    try { const res = await fetch(`/api/webinars/${webinarId}/activity`); if (res.ok) setActivity((await res.json()).items ?? []); } catch { /* 다음 주기 재시도 */ }
+  }, [webinarId]);
+
   // 적응형 폴링 — 라이브 15초 / 평시 90초, 탭 숨김 시 건너뜀
   useEffect(() => {
-    void fetchDashboard();
+    void fetchDashboard(); void fetchCurve(); void fetchActivity();
     let timer: ReturnType<typeof setTimeout>;
+    let ticks = 0;
     const schedule = () => {
       timer = setTimeout(async () => {
-        if (!document.hidden) { await fetchDashboard(); setLiveTick((t) => t + 1); }
+        if (!document.hidden) {
+          await fetchDashboard();
+          void fetchActivity();
+          // 동시접속 곡선은 5분 버킷이라 매 틱(라이브 15초) 재조회는 낭비 — 4틱(≈60초)마다만
+          if (ticks % 4 === 0) void fetchCurve();
+          ticks += 1;
+          setLiveTick((t) => t + 1);
+        }
         schedule();
       }, statusRef.current === "live" ? 15_000 : 90_000);
     };
     schedule();
     return () => clearTimeout(timer);
-  }, [fetchDashboard]);
+  }, [fetchDashboard, fetchCurve, fetchActivity]);
 
   const setOverride = async (value: WebinarStatus | null) => {
     if (switching) return;
@@ -885,8 +1036,8 @@ export default function LiveConsoleTab({
   ];
 
   return (
-    <div className="max-w-4xl space-y-4">
-      {/* 상태 바 */}
+    <div className="max-w-6xl space-y-4">
+      {/* 상태(커맨드) 바 */}
       <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
@@ -896,9 +1047,10 @@ export default function LiveConsoleTab({
                 수동 전환됨
               </span>
             )}
-            <motion.button whileHover={{ rotate: 90 }} whileTap={{ scale: 0.9 }} transition={spring} onClick={() => void fetchDashboard()} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary" aria-label="새로고침">
+            <motion.button whileHover={{ rotate: 90 }} whileTap={{ scale: 0.9 }} transition={spring} onClick={() => { void fetchDashboard(); void fetchCurve(); void fetchActivity(); }} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary" aria-label="새로고침">
               <RefreshCw className="h-3.5 w-3.5" />
             </motion.button>
+            <FreshBadge syncAt={syncAt} />
           </div>
           <div className="flex items-center gap-1 rounded-xl border border-border bg-background p-1">
             {overrideOptions.map((option) => {
@@ -933,17 +1085,47 @@ export default function LiveConsoleTab({
         </p>
       </section>
 
-      {/* KPI — 폴링으로 갱신되므로 스크린리더에 변경을 알림 */}
-      {summary && <GroupLabel>실시간 지표</GroupLabel>}
+      {/* 실시간 지표 — 통합 스트립(현재 시청 강조 + 미니 스파크). 폴링 갱신을 스크린리더에 알림 */}
       {summary && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" aria-live="polite">
-          <Kpi label="사전 등록" value={summary.totalRegistered.toLocaleString()} />
-          <Kpi label="입장" value={summary.attended.toLocaleString()} sub={`입장률 ${summary.attendRate}%`} />
-          <Kpi label="현재 시청" value={summary.activeViewers.toLocaleString()} sub="최근 90초" />
-          <Kpi label="페이지 유지" value={summary.presenceViewers.toLocaleString()} sub="최근 5분" />
-          <Kpi label="대기 질문" value={summary.pendingQuestions.toLocaleString()} />
-          <Kpi label="평균 체류" value={`${summary.avgStayMinutes}분`} />
-        </div>
+        <section className="flex flex-wrap overflow-hidden rounded-2xl border border-border bg-card" aria-live="polite">
+          <div className="flex min-w-[200px] flex-[1.6] flex-col gap-1.5 p-4">
+            <span className="text-[11px] text-muted-foreground">현재 시청</span>
+            <div className="flex items-end gap-3">
+              <span className="text-3xl font-semibold leading-none tabular-nums">{summary.activeViewers.toLocaleString()}</span>
+              <div className="h-8 min-w-[56px] flex-1"><Sparkline values={(curve?.points ?? []).map((p) => p.viewers)} /></div>
+            </div>
+            <span className="text-[11px] text-muted-foreground">최근 90초{curve?.peak ? ` · 피크 ${curve.peak.toLocaleString()}` : ""}</span>
+          </div>
+          {([
+            { l: "입장률", v: `${summary.attendRate}`, u: "%", bar: summary.attendRate },
+            { l: "입장", v: summary.attended.toLocaleString(), sub: `사전등록 ${summary.totalRegistered.toLocaleString()}` },
+            { l: "페이지 유지", v: summary.presenceViewers.toLocaleString(), sub: "최근 5분" },
+            { l: "평균 체류", v: `${summary.avgStayMinutes}`, u: "분" },
+            { l: "대기 질문", v: summary.pendingQuestions.toLocaleString(), attn: summary.pendingQuestions > 0 },
+          ] as { l: string; v: string; u?: string; sub?: string; bar?: number; attn?: boolean }[]).map((s) => (
+            <div key={s.l} className="flex min-w-[116px] flex-1 flex-col gap-1.5 border-l border-border p-4">
+              <span className="text-[11px] text-muted-foreground">{s.l}</span>
+              <span className={`text-2xl font-semibold leading-none tabular-nums ${s.attn ? "text-amber-500" : ""}`}>{s.v}{s.u && <span className="ml-0.5 text-sm font-medium text-muted-foreground">{s.u}</span>}</span>
+              {s.bar != null ? (
+                <div className="h-1 overflow-hidden rounded-full bg-secondary"><div className="h-full rounded-full bg-green-500" style={{ width: `${s.bar}%` }} /></div>
+              ) : (
+                <span className="text-[11px] text-muted-foreground">{s.sub ?? " "}</span>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
+
+      {/* 동시 접속 추이 — 실데이터(attendance-curve). 라이브·종료에 표시 */}
+      {(status === "live" || status === "ended") && <ViewerChart curve={curve} />}
+
+      {/* 종료 — 사후 작업 안내 */}
+      {status === "ended" && (
+        <section className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-secondary/30 p-4 sm:px-5">
+          <span className="text-sm font-semibold">방송이 종료됐어요</span>
+          <span className="text-xs text-muted-foreground">아래에서 등록자 내보내기·다시보기 발송을 이어서 진행하세요.</span>
+          <button onClick={() => onNavigate?.("operate-registrants")} className="ml-auto rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium transition-colors hover:bg-secondary">등록자 내보내기 →</button>
+        </section>
       )}
 
       {/* 준비 체크리스트 — 아직 입장자가 없는 준비 단계에만 */}
@@ -1064,6 +1246,10 @@ export default function LiveConsoleTab({
           </div>
         )}
       </Section>
+
+      {/* ── 운영 로그 — 실제 활동 기록(activity 엔드포인트) ── */}
+      <GroupLabel>운영 로그</GroupLabel>
+      <ActivityFeed items={activity} />
     </div>
   );
 }
