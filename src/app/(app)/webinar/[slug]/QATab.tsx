@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2, MessageSquare, Check, X, Clock, MonitorUp, MonitorOff } from "lucide-react";
+import { Loader2, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { formatKst } from "@/lib/datetime";
 import { InlineError } from "@/components/ui/inline-error";
@@ -160,7 +160,10 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
       ) : (
         <div className="space-y-2">
           <AnimatePresence initial={false}>
-          {ordered.map((q, idx) => (
+          {ordered.map((q, idx) => {
+            const hot = q.voteCount > 0 && q.voteCount === maxVote;
+            const focused = idx === focusIdx && kbActive;
+            return (
             <motion.div
               key={q.id}
               layout
@@ -168,102 +171,47 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, x: -8 }}
               transition={spring}
-              className={`p-4 rounded-2xl border bg-background space-y-2 ${idx === focusIdx && kbActive ? "border-violet-500 ring-2 ring-violet-500/30" : "border-border"}`}
+              className={`flex gap-3 rounded-xl border bg-background p-3 transition-colors ${focused ? "border-violet-500 ring-2 ring-violet-500/30" : q.onScreen ? "border-green-500/40" : "border-border"}`}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <p className="text-sm">{q.question}</p>
-                  <div className="flex items-center gap-2 mt-1.5">
-                    {q.name && <span className="text-xs text-muted-foreground">{q.name}</span>}
-                    {q.company && <span className="text-xs text-muted-foreground">· {q.company}</span>}
-                    {q.sessionNumber && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">세션 {q.sessionNumber}</span>
-                    )}
-                    {q.voteCount > 0 && (
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium tabular-nums ${q.voteCount === maxVote ? "bg-violet-500 text-white" : "bg-violet-500/10 text-violet-500"}`}>▲ {q.voteCount}</span>
-                    )}
-                    {q.onScreen && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 font-medium">● 지금 답변 중</span>
-                    )}
-                    <span className="text-xs text-muted-foreground">
-                      {formatKst(q.createdAt, { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                  </div>
+              {/* 추천수 — 좌측 배지(정렬 키). 최다 득표는 강조 */}
+              <div className={`flex w-11 shrink-0 flex-col items-center justify-center rounded-lg py-1.5 ${hot ? "bg-violet-500 text-white" : "bg-secondary text-foreground"}`}>
+                <span className="text-[15px] font-bold leading-none tabular-nums">{q.voteCount}</span>
+                <span className={`mt-0.5 text-[9.5px] ${hot ? "text-white/80" : "text-muted-foreground"}`}>추천</span>
+              </div>
+              {/* 질문 본문 + 작성자 + 액션 */}
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] leading-snug">{q.question}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                  {q.name && <span>{q.name}</span>}
+                  {q.company && <span>· {q.company}</span>}
+                  {q.sessionNumber != null && <span>· 세션 {q.sessionNumber}</span>}
+                  {q.onScreen && <span className="font-semibold text-green-600 dark:text-green-400">· 지금 답변 중</span>}
+                  <span>· {formatKst(q.createdAt, { hour: "2-digit", minute: "2-digit" })}</span>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  {q.onScreen ? (
-                    <motion.button
-                      whileTap={{ scale: 0.92 }}
-                      transition={spring}
-                      onClick={() => setOnScreen(q.id, false)}
-                      className="p-1.5 rounded-lg bg-green-500/10 text-green-600 dark:text-green-400 transition-colors hover:bg-green-500/20"
-                      title="송출 끄기"
-                    >
-                      <MonitorOff className="w-4 h-4" />
-                    </motion.button>
-                  ) : (
-                    <motion.button
-                      whileHover={{ y: -1 }}
-                      whileTap={{ scale: 0.92 }}
-                      transition={spring}
-                      onClick={() => setOnScreen(q.id, true)}
-                      className="p-1.5 rounded-lg text-muted-foreground transition-colors hover:bg-violet-500/10 hover:text-violet-500"
-                      title="화면에 띄우기"
-                    >
-                      <MonitorUp className="w-4 h-4" />
-                    </motion.button>
-                  )}
-                  {q.status === "pending" && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {q.status === "pending" ? (
                     <>
-                      <motion.button
-                        whileHover={{ y: -1 }}
-                        whileTap={{ scale: 0.92 }}
-                        transition={spring}
-                        onClick={() => updateStatus(q.id, "answered")}
-                        className="p-1.5 rounded-lg hover:bg-green-500/10 hover:text-green-500 text-muted-foreground transition-colors"
-                        title="답변 완료"
-                      >
-                        <Check className="w-4 h-4" />
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ y: -1 }}
-                        whileTap={{ scale: 0.92 }}
-                        transition={spring}
-                        onClick={() => updateStatus(q.id, "dismissed")}
-                        className="p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-500 text-muted-foreground transition-colors"
-                        title="미채택"
-                      >
-                        <X className="w-4 h-4" />
-                      </motion.button>
+                      <motion.button whileTap={{ scale: 0.96 }} transition={spring} onClick={() => updateStatus(q.id, "answered")}
+                        className="rounded-lg bg-violet-500 px-2.5 py-1 text-[11.5px] font-medium text-white transition hover:brightness-110">답변 완료</motion.button>
+                      <motion.button whileTap={{ scale: 0.96 }} transition={spring} onClick={() => setOnScreen(q.id, !q.onScreen)}
+                        className={`rounded-lg px-2.5 py-1 text-[11.5px] font-medium transition ${q.onScreen ? "border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400" : "border border-border hover:border-violet-500/40 hover:text-violet-500"}`}>
+                        {q.onScreen ? "송출 끄기" : "화면에 띄우기"}</motion.button>
+                      <motion.button whileTap={{ scale: 0.96 }} transition={spring} onClick={() => updateStatus(q.id, "dismissed")}
+                        className="rounded-lg px-2.5 py-1 text-[11.5px] font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground">숨기기</motion.button>
                     </>
-                  )}
-                  {q.status === "answered" && (
-                    <motion.button
-                      whileHover={{ y: -1 }}
-                      whileTap={{ scale: 0.95 }}
-                      transition={spring}
-                      onClick={() => updateStatus(q.id, "pending")}
-                      className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-500/20 transition-colors flex items-center gap-1"
-                      title="대기로 되돌리기"
-                    >
-                      <Clock className="w-2.5 h-2.5" />답변 완료
-                    </motion.button>
-                  )}
-                  {q.status === "dismissed" && (
-                    <motion.button
-                      whileHover={{ y: -1 }}
-                      whileTap={{ scale: 0.95 }}
-                      transition={spring}
-                      onClick={() => updateStatus(q.id, "pending")}
-                      className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground hover:bg-secondary/80 transition-colors flex items-center gap-1"
-                    >
-                      <Clock className="w-2.5 h-2.5" />미채택
-                    </motion.button>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${q.status === "answered" ? "bg-green-500/10 text-green-600 dark:text-green-400" : "bg-secondary text-muted-foreground"}`}>
+                        {q.status === "answered" ? "답변 완료" : "미채택"}</span>
+                      <motion.button whileTap={{ scale: 0.96 }} transition={spring} onClick={() => updateStatus(q.id, "pending")}
+                        className="rounded-lg px-2.5 py-1 text-[11.5px] font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground">대기로 되돌리기</motion.button>
+                    </div>
                   )}
                 </div>
               </div>
             </motion.div>
-          ))}
+            );
+          })}
           </AnimatePresence>
         </div>
       )}

@@ -1199,7 +1199,7 @@ function RunningOrder({ sessions }: { sessions: WebinarForConsole["sessions"] })
 
 const DRAWER_SPRING = { type: "spring", stiffness: 420, damping: 34 } as const;
 
-// 인터렉션 — 통합 송출 카드. 타입별 현재/활성 항목을 토글 행으로, 활성 투표는 실시간 결과 프리뷰.
+// 인터랙션 — 통합 송출 카드. 타입별 현재/활성 항목을 토글 행으로, 활성 투표는 실시간 결과 프리뷰.
 // 생성/편집·알림 발송은 헤더 ⚙(또는 하단 버튼)으로 여는 우측 설정 드로어(세그먼트 탭)에서.
 function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; tick?: number; sections: { key: string; label: string; icon: typeof Bell; node: ReactNode }[] }) {
   const [polls, setPolls] = useState<AdminPoll[]>([]);
@@ -1289,9 +1289,9 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
     <section className="flex h-[76vh] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[620px]">
       <div className="flex shrink-0 items-center gap-2 border-b border-border p-4 sm:px-5">
         <MessageSquarePlus className="h-4 w-4 text-violet-500" />
-        <h2 className="text-sm font-semibold">인터렉션</h2>
+        <h2 className="text-sm font-semibold">인터랙션</h2>
         <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-medium ${activeCount ? "bg-green-500/10 text-green-600 dark:text-green-400" : "bg-secondary text-muted-foreground"}`}>{activeCount ? `${activeCount}개 송출 중` : "대기"}</span>
-        <button type="button" onClick={() => setDrawerOpen(true)} aria-label="인터렉션 설정" className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+        <button type="button" onClick={() => setDrawerOpen(true)} aria-label="인터랙션 설정" className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
           <Settings className="h-4 w-4" />
         </button>
       </div>
@@ -1355,12 +1355,12 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
             initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={DRAWER_SPRING}
             className="ml-auto flex h-full w-full max-w-lg flex-col bg-background shadow-2xl outline-none"
             onClick={(e) => e.stopPropagation()}
-            role="dialog" aria-modal="true" aria-label="인터렉션 설정"
+            role="dialog" aria-modal="true" aria-label="인터랙션 설정"
           >
             <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-4">
               <div className="flex items-center gap-2">
                 <Settings className="h-4 w-4 text-violet-500" />
-                <h2 className="text-sm font-semibold">인터렉션 설정</h2>
+                <h2 className="text-sm font-semibold">인터랙션 설정</h2>
               </div>
               <motion.button
                 whileHover={{ rotate: 90 }} whileTap={{ scale: 0.9 }} transition={DRAWER_SPRING}
@@ -1637,7 +1637,7 @@ export default function LiveConsoleTab({
     </>
   );
 
-  // 인터렉션 설정 드로어 섹션 — 화면에 뜨는 것(공지·팝업·투표·Tally)과 알림 발송을 한 곳에서 만들기/편집.
+  // 인터랙션 설정 드로어 섹션 — 화면에 뜨는 것(공지·팝업·투표·Tally)과 알림 발송을 한 곳에서 만들기/편집.
   const interactionSections = [
     { key: "announcements", label: "공지", icon: Megaphone, node: <AnnouncementsTab webinarId={webinarId} embedded /> },
     { key: "popups", label: "팝업", icon: MessageSquarePlus, node: <PopupPanel webinarId={webinarId} /> },
@@ -1664,6 +1664,7 @@ export default function LiveConsoleTab({
         {summary && summary.pendingQuestions > 0 && (
           <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">{summary.pendingQuestions}</span>
         )}
+        <span className="ml-auto rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">추천순</span>
       </div>
       <div className="min-h-0 flex-1 p-4 sm:p-5">
         <QATab webinarId={webinarId} embedded fillHeight tick={liveTick} />
@@ -1839,7 +1840,7 @@ export default function LiveConsoleTab({
             {chatCard}
           </div>
 
-          {/* 시청자·운영 로그 — 라이브 작업 영역 아래로 (발송·편집은 인터렉션 카드의 설정 드로어로 이동) */}
+          {/* 시청자·운영 로그 — 라이브 작업 영역 아래로 (발송·편집은 인터랙션 카드의 설정 드로어로 이동) */}
           {viewerSection}
           {activityLog}
         </>
@@ -1851,7 +1852,7 @@ export default function LiveConsoleTab({
           {runningOrder}
 
           {/* ── 화면에 띄우기 — 시청 화면 위에 뜨는 것. 한 번에 하나만(팝업 우선). ── */}
-          <GroupLabel>인터렉션 · 한 번에 하나만</GroupLabel>
+          <GroupLabel>인터랙션 · 한 번에 하나만</GroupLabel>
           {pushGroup}
 
           {/* ── 참여 관리 — 시청자가 남긴 것 관리 ── */}
