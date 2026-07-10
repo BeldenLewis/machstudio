@@ -22,14 +22,14 @@ interface QAItem {
   createdAt: string;
 }
 
-export default function QATab({ webinarId, embedded = false }: { webinarId: string; embedded?: boolean }) {
+export default function QATab({ webinarId, embedded = false, fillHeight = false, tick = 0 }: { webinarId: string; embedded?: boolean; fillHeight?: boolean; tick?: number }) {
   const [questions, setQuestions] = useState<QAItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [filter, setFilter] = useState<QAStatus | "all">("pending");
 
-  const fetchQA = useCallback(async () => {
-    setIsLoading(true);
+  const fetchQA = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true);
     setLoadError(false);
     try {
       const params = new URLSearchParams();
@@ -46,6 +46,8 @@ export default function QATab({ webinarId, embedded = false }: { webinarId: stri
   }, [webinarId, filter]);
 
   useEffect(() => { fetchQA(); }, [fetchQA]);
+  // 라이브 주기(tick)마다 조용히 갱신 — 새 질문·상태변경이 목록에 자동 반영(채팅·투표 패널과 대칭). 스피너 없이 in-place.
+  useEffect(() => { if (tick > 0) void fetchQA(true); }, [tick, fetchQA]);
 
   const updateStatus = async (id: string, status: QAStatus) => {
     const res = await fetch(`/api/webinars/${webinarId}/qa/${id}`, {
@@ -65,11 +67,13 @@ export default function QATab({ webinarId, embedded = false }: { webinarId: stri
   useEffect(() => {
     if (!kbActive || !questions.length) return;
     const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      const el = e.target as HTMLElement;
+      const tag = el?.tagName;
+      // 텍스트 입력에는 절대 개입하지 않음. 버튼/링크는 Enter(네이티브 활성 키)만 양보하고 화살표 이동은 허용.
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable) return;
       if (e.key === "ArrowDown") { e.preventDefault(); setFocusIdx((i) => Math.min(questions.length - 1, i + 1)); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setFocusIdx((i) => Math.max(0, i - 1)); }
-      else if (e.key === "Enter") { const q = questions[focusIdx]; if (q?.status === "pending") { e.preventDefault(); void updateStatus(q.id, "answered"); } }
+      else if (e.key === "Enter") { if (tag === "BUTTON" || tag === "A") return; const q = questions[focusIdx]; if (q?.status === "pending") { e.preventDefault(); void updateStatus(q.id, "answered"); } }
       else if (e.key === "Backspace") { const q = questions[focusIdx]; if (q?.status === "pending") { e.preventDefault(); void updateStatus(q.id, "dismissed"); } }
     };
     window.addEventListener("keydown", onKey);
@@ -84,14 +88,14 @@ export default function QATab({ webinarId, embedded = false }: { webinarId: stri
   ];
 
   return (
-    <div className={embedded ? "space-y-4" : "p-4 sm:p-6 lg:p-8 space-y-4"} onMouseEnter={() => setKbActive(true)} onMouseLeave={() => setKbActive(false)}>
-      <div className="relative flex items-center gap-1">
+    <div className={fillHeight ? "flex h-full min-h-0 flex-col gap-3" : embedded ? "space-y-4" : "p-4 sm:p-6 lg:p-8 space-y-4"} onMouseEnter={() => setKbActive(true)} onMouseLeave={() => setKbActive(false)}>
+      <div className="relative flex shrink-0 items-center gap-1">
         {filters.map(({ value, label }) => {
           const active = filter === value;
           return (
             <button
               key={value}
-              onClick={() => setFilter(value)}
+              onClick={(e) => { setFilter(value); e.currentTarget.blur(); }}
               className={`relative z-10 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${
                 active ? "text-violet-500" : "text-muted-foreground hover:bg-secondary"
               }`}
@@ -116,12 +120,13 @@ export default function QATab({ webinarId, embedded = false }: { webinarId: stri
         )}
       </div>
 
+      <div className={fillHeight ? "min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5" : ""}>
       {isLoading ? (
         <div className="flex items-center justify-center h-40">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
       ) : loadError ? (
-        <InlineError message="Q&A를 불러오지 못했어요" onRetry={fetchQA} />
+        <InlineError message="Q&A를 불러오지 못했어요" onRetry={() => fetchQA()} />
       ) : questions.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <MessageSquare className="w-10 h-10 text-muted-foreground/20 mb-3" />
@@ -203,6 +208,7 @@ export default function QATab({ webinarId, embedded = false }: { webinarId: stri
           </AnimatePresence>
         </div>
       )}
+      </div>
     </div>
   );
 }

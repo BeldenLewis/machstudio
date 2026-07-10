@@ -594,7 +594,7 @@ interface AdminChatMessage {
   createdAt: string;
 }
 
-function ChatPanel({ webinarId, tick = 0 }: { webinarId: string; tick?: number }) {
+function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: string; tick?: number; fillHeight?: boolean }) {
   const confirm = useConfirm();
   const [messages, setMessages] = useState<AdminChatMessage[]>([]);
   const [hostMsg, setHostMsg] = useState("");
@@ -639,11 +639,13 @@ function ChatPanel({ webinarId, tick = 0 }: { webinarId: string; tick?: number }
   const inputCls = "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
 
   return (
-    <div className="space-y-4">
-      <p className="text-[11px] leading-relaxed text-muted-foreground">
-        시청자 채팅은 <b className="font-semibold text-foreground">만들기 → 라이브 페이지 → 참여 구성 → 채팅 탭 사용</b>을 켜야 시청 화면에 보여요. 여기선 운영자 발언과 메시지 삭제(모더레이션)를 할 수 있어요.
-      </p>
-      <div className="flex gap-2">
+    <div className={fillHeight ? "flex h-full min-h-0 flex-col gap-3" : "space-y-4"}>
+      {!fillHeight && (
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          시청자 채팅은 <b className="font-semibold text-foreground">만들기 → 라이브 페이지 → 참여 구성 → 채팅 탭 사용</b>을 켜야 시청 화면에 보여요. 여기선 운영자 발언과 메시지 삭제(모더레이션)를 할 수 있어요.
+        </p>
+      )}
+      <div className="flex shrink-0 gap-2">
         <input
           value={hostMsg}
           onChange={(e) => setHostMsg(e.target.value)}
@@ -657,7 +659,7 @@ function ChatPanel({ webinarId, tick = 0 }: { webinarId: string; tick?: number }
         </motion.button>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex shrink-0 items-center justify-between">
         <p className="text-[11px] text-muted-foreground">최근 100개</p>
         <button onClick={() => void fetchMessages()} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground">
           <RefreshCw className="h-3 w-3" /> 새로고침
@@ -665,11 +667,15 @@ function ChatPanel({ webinarId, tick = 0 }: { webinarId: string; tick?: number }
       </div>
 
       {loading ? (
-        <p className="text-xs text-muted-foreground">불러오는 중…</p>
+        <div className={fillHeight ? "flex min-h-0 flex-1 items-center justify-center" : ""}>
+          <p className="text-xs text-muted-foreground">불러오는 중…</p>
+        </div>
       ) : messages.length === 0 ? (
-        <p className="text-xs text-muted-foreground">아직 채팅 메시지가 없어요.</p>
+        <div className={fillHeight ? "flex min-h-0 flex-1 items-center justify-center" : ""}>
+          <p className="text-xs text-muted-foreground">아직 채팅 메시지가 없어요.</p>
+        </div>
       ) : (
-        <div className="max-h-80 space-y-1.5 overflow-y-auto">
+        <div className={`${fillHeight ? "min-h-0 flex-1 overscroll-contain" : "max-h-80"} space-y-1.5 overflow-y-auto`}>
           <AnimatePresence initial={false}>
             {messages.map((m) => (
               <motion.div
@@ -1060,6 +1066,191 @@ export default function LiveConsoleTab({
     { value: "ended", label: "종료" },
   ];
 
+  // ── 레이아웃 사이 재사용 블록 (라이브=2×2 그리드 / 그 외=단일 컬럼) ──
+  const pushGroup = (
+    <>
+      <Section title="공지" icon={Megaphone} defaultOpen={status === "live"}>
+        <AnnouncementsTab webinarId={webinarId} embedded />
+      </Section>
+      <Section title="팝업 푸시" icon={MessageSquarePlus}>
+        <PopupPanel webinarId={webinarId} />
+      </Section>
+      <Section title="실시간 투표" icon={BarChart3} defaultOpen={status === "live"}>
+        <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">
+          우하단에 떠 있는 실시간 투표예요. ON 상태 1개만 표시되고 집계는 자동으로 갱신돼요.
+        </p>
+        <PollPanel webinarId={webinarId} tick={liveTick} />
+      </Section>
+    </>
+  );
+
+  const participationGroup = (
+    <>
+      <Section
+        title="Q&A 모더레이션"
+        icon={HelpCircle}
+        defaultOpen={false}
+        badge={summary && summary.pendingQuestions > 0 ? (
+          <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">{summary.pendingQuestions}</span>
+        ) : undefined}
+      >
+        <QATab webinarId={webinarId} embedded tick={liveTick} />
+      </Section>
+      <Section title="실시간 채팅" icon={MessageSquare} defaultOpen={false}>
+        <ChatPanel webinarId={webinarId} tick={liveTick} />
+      </Section>
+    </>
+  );
+
+  const sendGroup = (
+    <>
+      <Section title="Tally 설문 푸시" icon={Bell}>
+        <TallyPanel webinarId={webinarId} />
+      </Section>
+      <Section title="알림 발송" icon={Mail}>
+        <ReminderPanel webinarId={webinarId} />
+      </Section>
+    </>
+  );
+
+  const viewerSection = (
+    <Section title="시청자" icon={Activity} badge={viewers.length ? (
+      <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">{viewers.length}</span>
+    ) : undefined}>
+      {viewers.length === 0 ? (
+        <p className="text-xs text-muted-foreground">현재 시청 중인 참여자가 없어요.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border text-left text-muted-foreground">
+                <th className="py-2 pr-3 font-medium">이름</th>
+                <th className="py-2 pr-3 font-medium">회사</th>
+                <th className="py-2 pr-3 font-medium text-right">체류</th>
+                <th className="py-2 font-medium text-right">상태</th>
+              </tr>
+            </thead>
+            <tbody>
+              <AnimatePresence initial={false}>
+                {viewers.map((viewer) => (
+                  <motion.tr
+                    key={viewer.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="border-b border-border/40 last:border-0"
+                  >
+                    <td className="py-2 pr-3 font-medium">{viewer.name}</td>
+                    <td className="py-2 pr-3 text-muted-foreground">{viewer.company ?? "—"}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{viewer.currentStayMinutes}분</td>
+                    <td className="py-2 text-right">
+                      {viewer.isLive ? (
+                        <span className="rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] font-medium text-green-600 dark:text-green-400">시청 중</span>
+                      ) : (
+                        <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">유지</span>
+                      )}
+                    </td>
+                  </motion.tr>
+                ))}
+              </AnimatePresence>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Section>
+  );
+
+  const activityLog = (
+    <>
+      <GroupLabel>운영 로그</GroupLabel>
+      <ActivityFeed items={activity} />
+    </>
+  );
+
+  // 라이브 2행 좌우 — 480px 고정 높이, 헤더 고정 + 내부만 스크롤(fillHeight)
+  const qaCard = (
+    <section className="flex h-[70vh] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[480px]">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border p-4 sm:px-5">
+        <HelpCircle className="h-4 w-4 text-violet-500" />
+        <h2 className="text-sm font-semibold">Q&amp;A 대기열</h2>
+        {summary && summary.pendingQuestions > 0 && (
+          <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">{summary.pendingQuestions}</span>
+        )}
+      </div>
+      <div className="min-h-0 flex-1 p-4 sm:p-5">
+        <QATab webinarId={webinarId} embedded fillHeight tick={liveTick} />
+      </div>
+    </section>
+  );
+
+  const chatCard = (
+    <section className="flex h-[70vh] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[480px]">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border p-4 sm:px-5">
+        <MessageSquare className="h-4 w-4 text-violet-500" />
+        <h2 className="text-sm font-semibold">채팅 모더레이션</h2>
+      </div>
+      <div className="min-h-0 flex-1 p-4 sm:p-5">
+        <ChatPanel webinarId={webinarId} tick={liveTick} fillHeight />
+      </div>
+    </section>
+  );
+
+  // 종료 요약 — 사용 가능한 실데이터(누적 입장·평균 체류·피크·입장률)로 목업 recapgrid 재현
+  const recapCard = status === "ended" && summary && (
+    <section className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="flex items-center gap-2 border-b border-border p-4 sm:px-5">
+        <h2 className="text-sm font-semibold">방송 요약</h2>
+        <span className="ml-auto rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">종료됨</span>
+      </div>
+      <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
+        {([
+          { l: "누적 입장", v: summary.attended.toLocaleString() },
+          { l: "평균 체류", v: `${summary.avgStayMinutes}분` },
+          { l: "피크 동시", v: (curve?.peak ?? 0).toLocaleString() },
+          { l: "입장률", v: `${summary.attendRate}%` },
+        ]).map((r) => (
+          <div key={r.l} className="bg-card p-4">
+            <div className="text-[11px] text-muted-foreground">{r.l}</div>
+            <div className="mt-1 text-2xl font-semibold tabular-nums">{r.v}</div>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 border-t border-border p-4 sm:px-5">
+        <button onClick={() => onNavigate?.("operate-registrants")} className="rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium transition-colors hover:bg-secondary">등록자 내보내기 (CSV) →</button>
+        <span className="text-[11px] text-muted-foreground">다시보기·설문 발송은 아래 &lsquo;발송&rsquo;에서 이어서 진행하세요.</span>
+      </div>
+    </section>
+  );
+
+  const checklist = showChecklist && (
+    <section className="rounded-2xl border border-border bg-secondary/20 p-4">
+      <h3 className="text-sm font-semibold">라이브 전 준비</h3>
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { done: hasRegistrationForm, icon: ClipboardList, label: "등록 폼 정리", target: "create-registration" },
+          { done: (summary?.totalRegistered ?? 0) > 0, icon: Users, label: "등록자 확보", target: "operate-registrants" },
+          { done: hasSessions, icon: ListChecks, label: "세션 구성", target: "create-sessions" },
+          { done: hasVideo, icon: Eye, label: "라이브 영상 연결", target: "create-livepage" },
+        ].map((item) => (
+          <motion.button
+            key={item.label}
+            whileHover={{ y: -1 }}
+            whileTap={{ scale: 0.96 }}
+            transition={spring}
+            onClick={() => onNavigate?.(item.target)}
+            className={`flex items-center gap-2 rounded-xl border p-3 text-left text-xs transition-colors hover:border-violet-400/40 ${
+              item.done ? "border-green-500/30 bg-green-500/[0.04]" : "border-border bg-background"
+            }`}
+          >
+            <item.icon className={`h-4 w-4 shrink-0 ${item.done ? "text-green-500" : "text-muted-foreground"}`} />
+            <span className={item.done ? "text-muted-foreground line-through" : ""}>{item.label}</span>
+          </motion.button>
+        ))}
+      </div>
+    </section>
+  );
+
   return (
     <div className="max-w-6xl space-y-4">
       {/* 상태(커맨드) 바 */}
@@ -1110,9 +1301,9 @@ export default function LiveConsoleTab({
         </p>
       </section>
 
-      {/* 실시간 지표 — 통합 스트립(현재 시청 강조 + 미니 스파크). 폴링 갱신을 스크린리더에 알림 */}
-      {summary && (
-        <section className="flex flex-wrap overflow-hidden rounded-2xl border border-border bg-card" aria-live="polite">
+      {/* 실시간 지표 — 통합 스트립(현재 시청 강조 + 미니 스파크). 종료 상태에선 recap 카드가 대신함 */}
+      {summary && status !== "ended" && (
+        <section className="flex flex-wrap overflow-hidden rounded-2xl border border-border bg-card">
           <div className="flex min-w-[200px] flex-[1.6] flex-col gap-1.5 p-4">
             <span className="text-[11px] text-muted-foreground">현재 시청</span>
             <div className="flex items-end gap-3">
@@ -1141,140 +1332,50 @@ export default function LiveConsoleTab({
         </section>
       )}
 
-      {/* 동시 접속 추이 — 실데이터(attendance-curve). 라이브·종료에 표시 */}
-      {(status === "live" || status === "ended") && <ViewerChart curve={curve} events={chartEvents} />}
-
-      {/* 종료 — 사후 작업 안내 */}
-      {status === "ended" && (
-        <section className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-secondary/30 p-4 sm:px-5">
-          <span className="text-sm font-semibold">방송이 종료됐어요</span>
-          <span className="text-xs text-muted-foreground">아래에서 등록자 내보내기·다시보기 발송을 이어서 진행하세요.</span>
-          <button onClick={() => onNavigate?.("operate-registrants")} className="ml-auto rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium transition-colors hover:bg-secondary">등록자 내보내기 →</button>
-        </section>
-      )}
-
-      {/* 준비 체크리스트 — 아직 입장자가 없는 준비 단계에만 */}
-      {showChecklist && (
-        <section className="rounded-2xl border border-border bg-secondary/20 p-4">
-          <h3 className="text-sm font-semibold">라이브 전 준비</h3>
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              { done: hasRegistrationForm, icon: ClipboardList, label: "등록 폼 정리", target: "create-registration" },
-              { done: (summary?.totalRegistered ?? 0) > 0, icon: Users, label: "등록자 확보", target: "operate-registrants" },
-              { done: hasSessions, icon: ListChecks, label: "세션 구성", target: "create-sessions" },
-              { done: hasVideo, icon: Eye, label: "라이브 영상 연결", target: "create-livepage" },
-            ].map((item) => (
-              <motion.button
-                key={item.label}
-                whileHover={{ y: -1 }}
-                whileTap={{ scale: 0.96 }}
-                transition={spring}
-                onClick={() => onNavigate?.(item.target)}
-                className={`flex items-center gap-2 rounded-xl border p-3 text-left text-xs transition-colors hover:border-violet-400/40 ${
-                  item.done ? "border-green-500/30 bg-green-500/[0.04]" : "border-border bg-background"
-                }`}
-              >
-                <item.icon className={`h-4 w-4 shrink-0 ${item.done ? "text-green-500" : "text-muted-foreground"}`} />
-                <span className={item.done ? "text-muted-foreground line-through" : ""}>{item.label}</span>
-              </motion.button>
-            ))}
+      {status === "live" ? (
+        <>
+          {/* 라이브 1행: 동시 접속 추이(좌) + 화면에 띄우기 송출(우) */}
+          <div className="grid items-start gap-4 lg:grid-cols-[1.6fr_1fr]">
+            <ViewerChart curve={curve} events={chartEvents} />
+            <div className="space-y-3">
+              <GroupLabel>화면에 띄우기 · 한 번에 하나만</GroupLabel>
+              {pushGroup}
+            </div>
           </div>
-        </section>
-      )}
 
-      {/* ── 화면에 띄우기 — 시청 화면 위에 뜨는 것. 한 번에 하나만(팝업 우선). ── */}
-      <GroupLabel>화면에 띄우기 · 한 번에 하나만</GroupLabel>
-      <Section title="공지" icon={Megaphone} defaultOpen={status === "live"}>
-        <AnnouncementsTab webinarId={webinarId} embedded />
-      </Section>
-
-      <Section title="팝업 푸시" icon={MessageSquarePlus}>
-        <PopupPanel webinarId={webinarId} />
-      </Section>
-
-      <Section title="실시간 투표" icon={BarChart3} defaultOpen={status === "live"}>
-        <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">
-          우하단에 떠 있는 실시간 투표예요. ON 상태 1개만 표시되고 집계는 자동으로 갱신돼요.
-        </p>
-        <PollPanel webinarId={webinarId} tick={liveTick} />
-      </Section>
-
-      {/* ── 참여 관리 — 시청자가 남긴 것 관리 ── */}
-      <GroupLabel>참여 관리</GroupLabel>
-      <Section
-        title="Q&A 모더레이션"
-        icon={HelpCircle}
-        defaultOpen={status === "live"}
-        badge={summary && summary.pendingQuestions > 0 ? (
-          <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">{summary.pendingQuestions}</span>
-        ) : undefined}
-      >
-        <QATab webinarId={webinarId} embedded />
-      </Section>
-
-      <Section title="실시간 채팅" icon={MessageSquare} defaultOpen={status === "live"}>
-        <ChatPanel webinarId={webinarId} tick={liveTick} />
-      </Section>
-
-      {/* ── 발송 — 외부 설문·이메일 내보내기 ── */}
-      <GroupLabel>발송</GroupLabel>
-      <Section title="Tally 설문 푸시" icon={Bell}>
-        <TallyPanel webinarId={webinarId} />
-      </Section>
-
-      <Section title="알림 발송" icon={Mail}>
-        <ReminderPanel webinarId={webinarId} />
-      </Section>
-
-      <Section title="시청자" icon={Activity} badge={viewers.length ? (
-        <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">{viewers.length}</span>
-      ) : undefined}>
-        {viewers.length === 0 ? (
-          <p className="text-xs text-muted-foreground">현재 시청 중인 참여자가 없어요.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-border text-left text-muted-foreground">
-                  <th className="py-2 pr-3 font-medium">이름</th>
-                  <th className="py-2 pr-3 font-medium">회사</th>
-                  <th className="py-2 pr-3 font-medium text-right">체류</th>
-                  <th className="py-2 font-medium text-right">상태</th>
-                </tr>
-              </thead>
-              <tbody>
-                <AnimatePresence initial={false}>
-                  {viewers.map((viewer) => (
-                    <motion.tr
-                      key={viewer.id}
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.15 }}
-                      className="border-b border-border/40 last:border-0"
-                    >
-                      <td className="py-2 pr-3 font-medium">{viewer.name}</td>
-                      <td className="py-2 pr-3 text-muted-foreground">{viewer.company ?? "—"}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{viewer.currentStayMinutes}분</td>
-                      <td className="py-2 text-right">
-                        {viewer.isLive ? (
-                          <span className="rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] font-medium text-green-600 dark:text-green-400">시청 중</span>
-                        ) : (
-                          <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">유지</span>
-                        )}
-                      </td>
-                    </motion.tr>
-                  ))}
-                </AnimatePresence>
-              </tbody>
-            </table>
+          {/* 라이브 2행: Q&A 대기열(좌) + 채팅 모더레이션(우) — 480px 고정 + 내부 스크롤 */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            {qaCard}
+            {chatCard}
           </div>
-        )}
-      </Section>
 
-      {/* ── 운영 로그 — 실제 활동 기록(activity 엔드포인트) ── */}
-      <GroupLabel>운영 로그</GroupLabel>
-      <ActivityFeed items={activity} />
+          {/* 발송·시청자·운영 로그 — 라이브 작업 영역 아래로 */}
+          <GroupLabel>발송</GroupLabel>
+          {sendGroup}
+          {viewerSection}
+          {activityLog}
+        </>
+      ) : (
+        <>
+          {recapCard}
+          {status === "ended" && <ViewerChart curve={curve} events={chartEvents} />}
+          {checklist}
+
+          {/* ── 화면에 띄우기 — 시청 화면 위에 뜨는 것. 한 번에 하나만(팝업 우선). ── */}
+          <GroupLabel>화면에 띄우기 · 한 번에 하나만</GroupLabel>
+          {pushGroup}
+
+          {/* ── 참여 관리 — 시청자가 남긴 것 관리 ── */}
+          <GroupLabel>참여 관리</GroupLabel>
+          {participationGroup}
+
+          {/* ── 발송 — 외부 설문·이메일 내보내기 ── */}
+          <GroupLabel>발송</GroupLabel>
+          {sendGroup}
+          {viewerSection}
+          {activityLog}
+        </>
+      )}
     </div>
   );
 }
