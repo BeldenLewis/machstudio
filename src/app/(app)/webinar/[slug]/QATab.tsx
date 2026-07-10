@@ -57,6 +57,25 @@ export default function QATab({ webinarId, embedded = false }: { webinarId: stri
     setQuestions((prev) => prev.map((q) => q.id === id ? { ...q, status } : q));
   };
 
+  // 키보드 트리아지 — 목록에 마우스를 올린 동안만 활성(전역 방향키 가로채기 방지).
+  // ↑↓ 이동 · Enter 답변완료 · ⌫ 미채택
+  const [focusIdx, setFocusIdx] = useState(0);
+  const [kbActive, setKbActive] = useState(false);
+  useEffect(() => { setFocusIdx((i) => Math.max(0, Math.min(questions.length - 1, i))); }, [questions.length]);
+  useEffect(() => {
+    if (!kbActive || !questions.length) return;
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key === "ArrowDown") { e.preventDefault(); setFocusIdx((i) => Math.min(questions.length - 1, i + 1)); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); setFocusIdx((i) => Math.max(0, i - 1)); }
+      else if (e.key === "Enter") { const q = questions[focusIdx]; if (q?.status === "pending") { e.preventDefault(); void updateStatus(q.id, "answered"); } }
+      else if (e.key === "Backspace") { const q = questions[focusIdx]; if (q?.status === "pending") { e.preventDefault(); void updateStatus(q.id, "dismissed"); } }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [kbActive, questions, focusIdx]);
+
   const filters: { value: QAStatus | "all"; label: string }[] = [
     { value: "pending", label: "대기 중" },
     { value: "answered", label: "답변 완료" },
@@ -65,7 +84,7 @@ export default function QATab({ webinarId, embedded = false }: { webinarId: stri
   ];
 
   return (
-    <div className={embedded ? "space-y-4" : "p-4 sm:p-6 lg:p-8 space-y-4"}>
+    <div className={embedded ? "space-y-4" : "p-4 sm:p-6 lg:p-8 space-y-4"} onMouseEnter={() => setKbActive(true)} onMouseLeave={() => setKbActive(false)}>
       <div className="relative flex items-center gap-1">
         {filters.map(({ value, label }) => {
           const active = filter === value;
@@ -88,6 +107,13 @@ export default function QATab({ webinarId, embedded = false }: { webinarId: stri
             </button>
           );
         })}
+        {questions.length > 0 && (
+          <span className="ml-auto hidden items-center gap-1.5 text-[11px] text-muted-foreground sm:inline-flex">
+            <kbd className="rounded border border-border bg-secondary px-1 py-0.5 text-[10px]">↑↓</kbd> 이동
+            <kbd className="rounded border border-border bg-secondary px-1 py-0.5 text-[10px]">↵</kbd> 답변
+            <kbd className="rounded border border-border bg-secondary px-1 py-0.5 text-[10px]">⌫</kbd> 미채택
+          </span>
+        )}
       </div>
 
       {isLoading ? (
@@ -104,16 +130,15 @@ export default function QATab({ webinarId, embedded = false }: { webinarId: stri
       ) : (
         <div className="space-y-2">
           <AnimatePresence initial={false}>
-          {questions.map((q) => (
+          {questions.map((q, idx) => (
             <motion.div
               key={q.id}
               layout
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, x: -8 }}
-              whileHover={{ borderColor: "rgba(139, 92, 246, 0.18)" }}
               transition={spring}
-              className="p-4 rounded-2xl border border-border bg-background space-y-2"
+              className={`p-4 rounded-2xl border bg-background space-y-2 ${idx === focusIdx && kbActive ? "border-violet-500 ring-2 ring-violet-500/30" : "border-border"}`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1">

@@ -106,6 +106,13 @@ interface WebinarForConsole {
 // 상태 라벨·톤은 lib/webinar-status 의 WEBINAR_STATUS_META 단일 정의 사용
 const STATUS_META = WEBINAR_STATUS_META;
 
+// 차트에 마커로 표시할 운영 이벤트(송출·발행·발송) 종류
+const CHART_EVENT_ACTIONS = new Set([
+  "webinar.poll_created", "webinar.poll_updated",
+  "webinar.announcement_created", "webinar.announcement_updated",
+  "webinar.popup_updated", "webinar.tally_push_updated", "webinar.reminder_sent",
+]);
+
 function Section({
   title,
   icon: Icon,
@@ -826,11 +833,21 @@ function Sparkline({ values }: { values: number[] }) {
 }
 
 // 동시 접속 추이 — analytics/attendance-curve 실데이터. 면적+선+피크+호버 크로스헤어.
-function ViewerChart({ curve }: { curve: CurveData | null }) {
+function ViewerChart({ curve, events = [] }: { curve: CurveData | null; events?: { min: number; label: string }[] }) {
   const ref = useRef<HTMLCanvasElement | null>(null);
   const [hover, setHover] = useState<number | null>(null);
   const [tip, setTip] = useState<{ x: number; label: string; v: number } | null>(null);
   const pts = curve?.points ?? [];
+  // 운영 이벤트(투표 발행·공지 등)를 가장 가까운(≤10분) 버킷에 매핑 — 추이와 액션 상관 표시
+  const evByIdx = new Map<number, string[]>();
+  if (pts.length) {
+    const ptMin = pts.map((p) => { const [h, m] = p.label.split(":").map(Number); return (h || 0) * 60 + (m || 0); });
+    events.forEach((e) => {
+      let best = 0, bd = Infinity;
+      ptMin.forEach((pm, i) => { const d = Math.abs(pm - e.min); if (d < bd) { bd = d; best = i; } });
+      if (bd <= 10) { const arr = evByIdx.get(best) ?? []; arr.push(e.label); evByIdx.set(best, arr); }
+    });
+  }
   useEffect(() => {
     const cv = ref.current; if (!cv || !cv.getContext) return;
     const ctx = cv.getContext("2d"); if (!ctx) return;
@@ -855,6 +872,8 @@ function ViewerChart({ curve }: { curve: CurveData | null }) {
         ctx.beginPath(); vals.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v)))); ctx.strokeStyle = ac as string; ctx.lineWidth = 2.2; ctx.lineJoin = "round"; ctx.stroke();
         const ex = x(N - 1), ey = y(vals[N - 1]); ctx.beginPath(); ctx.arc(ex, ey, 3.6, 0, 7); ctx.fillStyle = ac as string; ctx.fill();
       }
+      // 운영 이벤트 마커 — 베이스라인의 작은 점(해당 버킷에 액션 발생)
+      evByIdx.forEach((_l, i) => { ctx.beginPath(); ctx.arc(x(i), H - padB, 2.6, 0, 7); ctx.fillStyle = ac as string; ctx.fill(); });
       ctx.fillStyle = muted as string; ctx.textBaseline = "alphabetic";
       if (N) { ctx.textAlign = "left"; ctx.fillText(pts[0].label, padL, H - 6); ctx.textAlign = "right"; ctx.fillText(pts[N - 1].label, W - padR, H - 6); }
       if (hover != null && pts[hover]) { const hx = x(hover); ctx.strokeStyle = readColor("text-muted-foreground", 0.4) as string; ctx.setLineDash([3, 3]); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(hx, padT); ctx.lineTo(hx, H - padB); ctx.stroke(); ctx.setLineDash([]); ctx.beginPath(); ctx.arc(hx, y(vals[hover]), 3.4, 0, 7); ctx.fillStyle = ac as string; ctx.fill(); }
@@ -863,7 +882,7 @@ function ViewerChart({ curve }: { curve: CurveData | null }) {
     const ro = new ResizeObserver(draw); ro.observe(cv);
     const mq = window.matchMedia("(prefers-color-scheme: dark)"); mq.addEventListener("change", draw);
     return () => { ro.disconnect(); mq.removeEventListener("change", draw); };
-  }, [pts, hover, curve]);
+  }, [pts, hover, curve, events]);
   const onMove = (clientX: number) => {
     const cv = ref.current; if (!cv || !pts.length) return;
     const r = cv.getBoundingClientRect(); const padL = 8, padR = 8, W = Math.max(280, r.width);
@@ -894,6 +913,7 @@ function ViewerChart({ curve }: { curve: CurveData | null }) {
         {tip && (
           <div className="pointer-events-none absolute top-2 -translate-x-1/2 rounded-lg bg-foreground px-2.5 py-1.5 text-[11px] leading-tight text-background shadow-lg" style={{ left: tip.x }}>
             <div className="font-bold">{tip.label}</div><div className="tabular-nums">동시 {tip.v.toLocaleString()}명</div>
+            {hover != null && evByIdx.get(hover)?.map((lb, k) => <div key={k} className="mt-0.5 opacity-80">● {lb}</div>)}
           </div>
         )}
       </div>
@@ -1022,6 +1042,11 @@ export default function LiveConsoleTab({
   const summary = data?.summary;
   const viewers = data?.currentViewers ?? [];
   const meta = STATUS_META[status];
+  // 활동 로그 → 차트 이벤트 마커(KST 분 단위). 최근 8건.
+  const chartEvents = activity
+    .filter((a) => CHART_EVENT_ACTIONS.has(a.action))
+    .slice(0, 8)
+    .map((a) => { const d = new Date(a.at); return { min: ((d.getUTCHours() + 9) % 24) * 60 + d.getUTCMinutes(), label: a.label }; });
 
   const hasRegistrationForm = Boolean(webinar?.config?.registrationForm);
   const hasVideo = typeof webinar?.config?.youtubeId === "string" && Boolean(webinar.config.youtubeId);
@@ -1117,7 +1142,7 @@ export default function LiveConsoleTab({
       )}
 
       {/* 동시 접속 추이 — 실데이터(attendance-curve). 라이브·종료에 표시 */}
-      {(status === "live" || status === "ended") && <ViewerChart curve={curve} />}
+      {(status === "live" || status === "ended") && <ViewerChart curve={curve} events={chartEvents} />}
 
       {/* 종료 — 사후 작업 안내 */}
       {status === "ended" && (
