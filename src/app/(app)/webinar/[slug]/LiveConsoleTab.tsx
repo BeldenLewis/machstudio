@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { createPortal } from "react-dom";
 import {
   Activity,
   Ban,
@@ -24,8 +25,10 @@ import {
   MessageSquarePlus,
   Pin,
   RefreshCw,
+  Settings,
   Trash2,
   Users,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import QATab from "./QATab";
@@ -435,7 +438,12 @@ function PollPanel({ webinarId, tick = 0 }: { webinarId: string; tick?: number }
   // 라이브 주기(tick)마다 집계 갱신 — 단, 편집 중엔 스킵해 입력 중 폼이 서버값으로 덮이지 않게
   const editIdRef = useRef(editId);
   editIdRef.current = editId;
-  useEffect(() => { if (tick > 0 && !editIdRef.current) void fetchPolls(); }, [tick, fetchPolls]);
+  // 마운트 시 tick 효과 중복 발화 방지 — 초기 1회는 위 마운트 효과가 담당하고, tick 실제 변화에만 갱신.
+  const tickMountedRef = useRef(false);
+  useEffect(() => {
+    if (!tickMountedRef.current) { tickMountedRef.current = true; return; }
+    if (tick > 0 && !editIdRef.current) void fetchPolls();
+  }, [tick, fetchPolls]);
 
   const create = async () => {
     const opts = options.map((o) => o.trim()).filter(Boolean);
@@ -1189,14 +1197,22 @@ function RunningOrder({ sessions }: { sessions: WebinarForConsole["sessions"] })
   );
 }
 
-// 화면에 띄우기 — 목업식 통합 송출 카드. 타입별 현재/활성 항목을 토글 행으로,
-// 활성 투표는 실시간 결과 프리뷰. 생성/편집은 하단 '콘텐츠 관리' 디스클로저(기존 CRUD 패널).
-function BroadcastCard({ webinarId, tick = 0, editors }: { webinarId: string; tick?: number; editors: ReactNode }) {
+const DRAWER_SPRING = { type: "spring", stiffness: 420, damping: 34 } as const;
+
+// 인터렉션 — 통합 송출 카드. 타입별 현재/활성 항목을 토글 행으로, 활성 투표는 실시간 결과 프리뷰.
+// 생성/편집·알림 발송은 헤더 ⚙(또는 하단 버튼)으로 여는 우측 설정 드로어(세그먼트 탭)에서.
+function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; tick?: number; sections: { key: string; label: string; icon: typeof Bell; node: ReactNode }[] }) {
   const [polls, setPolls] = useState<AdminPoll[]>([]);
   const [anns, setAnns] = useState<{ id: string; message: string; isActive: boolean }[]>([]);
   const [popups, setPopups] = useState<{ id: string; title: string; isActive: boolean }[]>([]);
   const [tallies, setTallies] = useState<{ id: string; title: string; isActive: boolean }[]>([]);
-  const [showEditors, setShowEditors] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState(sections[0]?.key ?? "");
+  // 최초 열람 후 유지(mount-on-first-view) — 드로어 열 때 안 본 탭까지 즉시 fetch 하지 않게 방문한 섹션만 마운트.
+  const [visited, setVisited] = useState<string[]>(() => (sections[0]?.key ? [sections[0].key] : []));
+  const selectSection = (key: string) => { setActiveSection(key); setVisited((v) => (v.includes(key) ? v : [...v, key])); };
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const mut = useRef(false);
 
   const fetchAll = useCallback(async () => {
@@ -1224,6 +1240,41 @@ function BroadcastCard({ webinarId, tick = 0, editors }: { webinarId: string; ti
     } finally { mut.current = false; }
   };
 
+  // 드로어 접근성 — 열 때 패널로 포커스 진입 + Tab 트랩 + Esc 닫기 + 스크롤 잠금, 닫힐 때 여닫은 요소로 포커스 복원.
+  const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  useEffect(() => {
+    if (!drawerOpen) return;
+    previousFocusRef.current = (document.activeElement as HTMLElement) ?? null;
+    const focusTimer = window.setTimeout(() => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      (panel.querySelector<HTMLElement>(FOCUSABLE) ?? panel).focus();
+    }, 0);
+    // 패널에 바운드(버블) — 포커스가 드로어 안일 때만 Esc/Tab 처리. 편집 패널이 여는 중첩 확인창(별도 포털,
+    // 패널 DOM 밖)에서 Esc 를 누르면 이 리스너가 아니라 확인창 자신의 핸들러가 처리 → 드로어 오폭발 방지.
+    const panel = panelRef.current;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); setDrawerOpen(false); return; }
+      if (e.key === "Tab" && panelRef.current) {
+        const f = panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE);
+        if (f.length === 0) { e.preventDefault(); panelRef.current.focus(); return; }
+        const first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    };
+    panel?.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.clearTimeout(focusTimer);
+      panel?.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+      previousFocusRef.current?.focus?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawerOpen]);
+
   const activePoll = polls.find((p) => p.isActive) ?? null;
   const rows = [
     { seg: "polls", icon: BarChart3, tone: "bg-violet-500/10 text-violet-600 dark:text-violet-400", name: "실시간 투표", cur: activePoll ?? polls[0] ?? null, summary: (activePoll ?? polls[0])?.question ?? "등록된 투표 없음" },
@@ -1234,11 +1285,15 @@ function BroadcastCard({ webinarId, tick = 0, editors }: { webinarId: string; ti
   const activeCount = rows.filter((r) => r.cur && (r.cur as { isActive: boolean }).isActive).length;
 
   return (
+    <>
     <section className="flex h-[76vh] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[620px]">
       <div className="flex shrink-0 items-center gap-2 border-b border-border p-4 sm:px-5">
         <MessageSquarePlus className="h-4 w-4 text-violet-500" />
-        <h2 className="text-sm font-semibold">화면에 띄우기</h2>
+        <h2 className="text-sm font-semibold">인터렉션</h2>
         <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-medium ${activeCount ? "bg-green-500/10 text-green-600 dark:text-green-400" : "bg-secondary text-muted-foreground"}`}>{activeCount ? `${activeCount}개 송출 중` : "대기"}</span>
+        <button type="button" onClick={() => setDrawerOpen(true)} aria-label="인터렉션 설정" className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+          <Settings className="h-4 w-4" />
+        </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
         {rows.map((r) => {
@@ -1256,7 +1311,7 @@ function BroadcastCard({ webinarId, tick = 0, editors }: { webinarId: string; ti
                   <span className={`absolute top-[2px] h-[16px] w-[16px] rounded-full bg-white shadow transition-all ${cur.isActive ? "left-[18px]" : "left-[3px]"}`} />
                 </button>
               ) : (
-                <span className="shrink-0 text-[10px] text-muted-foreground">아래에서 추가</span>
+                <span className="shrink-0 text-[10px] text-muted-foreground">설정에서 추가</span>
               )}
             </div>
           );
@@ -1281,14 +1336,62 @@ function BroadcastCard({ webinarId, tick = 0, editors }: { webinarId: string; ti
           </div>
         )}
       </div>
-      <div className="shrink-0 border-t border-border">
-        <button onClick={() => setShowEditors((v) => !v)} className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary sm:px-5">
-          <span>콘텐츠 관리 · 만들기 / 편집</span>
-          <ChevronDown className={`h-4 w-4 transition-transform ${showEditors ? "rotate-180" : ""}`} />
-        </button>
-        {showEditors && <div className="max-h-[52vh] space-y-3 overflow-y-auto border-t border-border p-4 sm:p-5">{editors}</div>}
-      </div>
+      <button onClick={() => setDrawerOpen(true)} className="flex shrink-0 w-full items-center justify-between border-t border-border px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:px-5">
+        <span>콘텐츠 관리 · 만들기 / 편집</span>
+        <Settings className="h-4 w-4" />
+      </button>
     </section>
+
+    {typeof document !== "undefined" && createPortal(
+      <AnimatePresence>
+      {drawerOpen && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+          className="fixed inset-0 z-50 flex bg-black/50 backdrop-blur-sm"
+          onClick={() => setDrawerOpen(false)}
+        >
+          <motion.div
+            ref={panelRef} tabIndex={-1}
+            initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={DRAWER_SPRING}
+            className="ml-auto flex h-full w-full max-w-lg flex-col bg-background shadow-2xl outline-none"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog" aria-modal="true" aria-label="인터렉션 설정"
+          >
+            <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-4">
+              <div className="flex items-center gap-2">
+                <Settings className="h-4 w-4 text-violet-500" />
+                <h2 className="text-sm font-semibold">인터렉션 설정</h2>
+              </div>
+              <motion.button
+                whileHover={{ rotate: 90 }} whileTap={{ scale: 0.9 }} transition={DRAWER_SPRING}
+                onClick={() => setDrawerOpen(false)} aria-label="닫기"
+                className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary"
+              >
+                <X className="h-4 w-4" />
+              </motion.button>
+            </div>
+            <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-5 py-2">
+              {sections.map((s) => (
+                <button
+                  key={s.key} type="button" aria-pressed={activeSection === s.key} onClick={() => selectSection(s.key)}
+                  className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${activeSection === s.key ? "bg-violet-500 text-white" : "text-muted-foreground hover:bg-secondary"}`}
+                >
+                  <s.icon className="h-3.5 w-3.5" />{s.label}
+                </button>
+              ))}
+            </div>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
+              {sections.map((s) => (visited.includes(s.key) ? (
+                <div key={s.key} className={activeSection === s.key ? "" : "hidden"}>{s.node}</div>
+              ) : null))}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+      </AnimatePresence>,
+      document.body,
+    )}
+    </>
   );
 }
 
@@ -1534,6 +1637,22 @@ export default function LiveConsoleTab({
     </>
   );
 
+  // 인터렉션 설정 드로어 섹션 — 화면에 뜨는 것(공지·팝업·투표·Tally)과 알림 발송을 한 곳에서 만들기/편집.
+  const interactionSections = [
+    { key: "announcements", label: "공지", icon: Megaphone, node: <AnnouncementsTab webinarId={webinarId} embedded /> },
+    { key: "popups", label: "팝업", icon: MessageSquarePlus, node: <PopupPanel webinarId={webinarId} /> },
+    {
+      key: "polls", label: "투표", icon: BarChart3, node: (
+        <>
+          <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">우하단에 떠 있는 실시간 투표예요. ON 상태 1개만 표시되고 집계는 자동으로 갱신돼요.</p>
+          <PollPanel webinarId={webinarId} tick={liveTick} />
+        </>
+      ),
+    },
+    { key: "tally", label: "Tally", icon: Bell, node: <TallyPanel webinarId={webinarId} /> },
+    { key: "reminders", label: "알림", icon: Mail, node: <ReminderPanel webinarId={webinarId} /> },
+  ];
+
   const runningOrder = <RunningOrder sessions={webinar?.sessions ?? []} />;
 
   // 라이브 2행 좌우 — 480px 고정 높이, 헤더 고정 + 내부만 스크롤(fillHeight)
@@ -1715,14 +1834,12 @@ export default function LiveConsoleTab({
 
           {/* 라이브 2행: 화면에 띄우기(통합 송출 카드) · Q&A 대기열 · 채팅 모더레이션 (높이 일치) */}
           <div className="grid gap-4 lg:grid-cols-3">
-            <BroadcastCard webinarId={webinarId} tick={liveTick} editors={pushGroup} />
+            <BroadcastCard webinarId={webinarId} tick={liveTick} sections={interactionSections} />
             {qaCard}
             {chatCard}
           </div>
 
-          {/* 발송·시청자·운영 로그 — 라이브 작업 영역 아래로 */}
-          <GroupLabel>발송</GroupLabel>
-          {sendGroup}
+          {/* 시청자·운영 로그 — 라이브 작업 영역 아래로 (발송·편집은 인터렉션 카드의 설정 드로어로 이동) */}
           {viewerSection}
           {activityLog}
         </>
@@ -1734,7 +1851,7 @@ export default function LiveConsoleTab({
           {runningOrder}
 
           {/* ── 화면에 띄우기 — 시청 화면 위에 뜨는 것. 한 번에 하나만(팝업 우선). ── */}
-          <GroupLabel>화면에 띄우기 · 한 번에 하나만</GroupLabel>
+          <GroupLabel>인터렉션 · 한 번에 하나만</GroupLabel>
           {pushGroup}
 
           {/* ── 참여 관리 — 시청자가 남긴 것 관리 ── */}
