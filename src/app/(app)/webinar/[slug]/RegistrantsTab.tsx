@@ -275,6 +275,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
   const confirm = useConfirm();
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState<{ registered: number; entered: number; active: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [page, setPage] = useState(1);
@@ -317,6 +318,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
       const rows: Registration[] = data.registrations ?? [];
       setRegistrations(rows);
       setTotal(data.total ?? 0);
+      if (data.stats) setStats(data.stats);
       // 선택은 항상 현재 보이는 목록으로 한정 — 새로고침으로 사라진(다른 페이지로 밀린/삭제된) 행은
       // 선택에서 자동 제거해, 보이지 않는 행이 선택된 채 일괄 삭제되는 일을 막는다.
       setSelectedIds((prev) => {
@@ -625,6 +627,28 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
           </p>
         </div>
       </div>
+
+      {stats && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <div className="text-[11px] text-muted-foreground">사전 등록</div>
+            <div className="mt-1 text-2xl font-semibold tabular-nums">{stats.registered.toLocaleString()}</div>
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <div className="text-[11px] text-muted-foreground">입장</div>
+            <div className="mt-1 text-2xl font-semibold tabular-nums">{stats.entered.toLocaleString()}</div>
+            <div className="mt-1.5 text-[11px] text-muted-foreground">입장률 {stats.registered > 0 ? Math.round((stats.entered / stats.registered) * 100) : 0}%</div>
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <div className="text-[11px] text-muted-foreground">현재 시청</div>
+            <div className="mt-1 text-2xl font-semibold tabular-nums text-green-600 dark:text-green-400">{stats.active.toLocaleString()}</div>
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <div className="text-[11px] text-muted-foreground">미입장</div>
+            <div className="mt-1 text-2xl font-semibold tabular-nums">{Math.max(0, stats.registered - stats.entered).toLocaleString()}</div>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-end gap-2 flex-wrap">
         <motion.button
@@ -1078,7 +1102,12 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                           className="align-middle accent-violet-500 cursor-pointer"
                         />
                       </td>
-                      <td className="px-4 py-3 font-medium whitespace-nowrap">{r.name}</td>
+                      <td className="px-4 py-3 font-medium whitespace-nowrap">
+                        <span className="inline-flex items-center gap-2">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-500/10 text-[11px] font-semibold text-violet-600 dark:text-violet-400" aria-hidden>{r.name?.[0] ?? "?"}</span>
+                          {r.name}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                         <div>{r.phone ?? "-"}</div>
                         {r.email && <div className="text-xs">{r.email}</div>}

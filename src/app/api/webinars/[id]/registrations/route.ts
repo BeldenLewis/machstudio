@@ -121,7 +121,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     } : {}),
   };
 
-  const [registrations, total] = await Promise.all([
+  const [registrations, total, registered, entered, active] = await Promise.all([
     prisma.webinarRegistration.findMany({
       where,
       orderBy: [{ [sortColumn]: sortDir }, { submittedAt: "desc" }],
@@ -129,9 +129,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       take: pageSize,
     }),
     prisma.webinarRegistration.count({ where }),
+    prisma.webinarRegistration.count({ where: { webinarId: id } }),
+    prisma.webinarRegistration.count({ where: { webinarId: id, enteredAt: { not: null } } }),
+    prisma.webinarRegistration.count({ where: { webinarId: id, isActive: true } }),
   ]);
 
-  return NextResponse.json({ registrations, total });
+  // stats 는 검색 필터와 무관한 전체 집계(요약 카드용). total 은 검색 반영 페이지네이션용.
+  return NextResponse.json({ registrations, total, stats: { registered, entered, active } });
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
