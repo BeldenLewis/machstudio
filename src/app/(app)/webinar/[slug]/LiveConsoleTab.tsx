@@ -414,7 +414,7 @@ function TallyPanel({ webinarId }: { webinarId: string }) {
 
 /* ── 운영 콘솔 본체 ── */
 /* ── 실시간 투표 패널 ── */
-function PollPanel({ webinarId }: { webinarId: string }) {
+function PollPanel({ webinarId, tick = 0 }: { webinarId: string; tick?: number }) {
   const confirm = useConfirm();
   const [polls, setPolls] = useState<AdminPoll[]>([]);
   const [question, setQuestion] = useState("");
@@ -429,6 +429,10 @@ function PollPanel({ webinarId }: { webinarId: string }) {
     if (res.ok) setPolls((await res.json()).polls ?? []);
   }, [webinarId]);
   useEffect(() => { void fetchPolls(); }, [fetchPolls]);
+  // 라이브 주기(tick)마다 집계 갱신 — 단, 편집 중엔 스킵해 입력 중 폼이 서버값으로 덮이지 않게
+  const editIdRef = useRef(editId);
+  editIdRef.current = editId;
+  useEffect(() => { if (tick > 0 && !editIdRef.current) void fetchPolls(); }, [tick, fetchPolls]);
 
   const create = async () => {
     const opts = options.map((o) => o.trim()).filter(Boolean);
@@ -598,7 +602,7 @@ interface AdminChatMessage {
   createdAt: string;
 }
 
-function ChatPanel({ webinarId }: { webinarId: string }) {
+function ChatPanel({ webinarId, tick = 0 }: { webinarId: string; tick?: number }) {
   const confirm = useConfirm();
   const [messages, setMessages] = useState<AdminChatMessage[]>([]);
   const [hostMsg, setHostMsg] = useState("");
@@ -611,6 +615,8 @@ function ChatPanel({ webinarId }: { webinarId: string }) {
     setLoading(false);
   }, [webinarId]);
   useEffect(() => { void fetchMessages(); }, [fetchMessages]);
+  // 라이브 주기(tick)마다 모더레이션 피드 갱신 — 새 시청자 메시지가 자동으로 나타난다
+  useEffect(() => { if (tick > 0) void fetchMessages(); }, [tick, fetchMessages]);
 
   const sendHost = async () => {
     if (!hostMsg.trim() || busy) return;
@@ -794,6 +800,9 @@ export default function LiveConsoleTab({
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [switching, setSwitching] = useState(false);
+  // 라이브 폴링 tick — 대시보드 적응형 주기(라이브 15초/평시 90초, 탭 숨김 스킵)에 맞춰 증가시켜,
+  // 투표 집계·채팅 모더레이션 피드가 별도 타이머 없이 같은 주기로 갱신되게 한다.
+  const [liveTick, setLiveTick] = useState(0);
   const statusRef = useRef<WebinarStatus>("registration");
 
   const fetchDashboard = useCallback(async () => {
@@ -814,7 +823,7 @@ export default function LiveConsoleTab({
     let timer: ReturnType<typeof setTimeout>;
     const schedule = () => {
       timer = setTimeout(async () => {
-        if (!document.hidden) await fetchDashboard();
+        if (!document.hidden) { await fetchDashboard(); setLiveTick((t) => t + 1); }
         schedule();
       }, statusRef.current === "live" ? 15_000 : 90_000);
     };
@@ -980,7 +989,7 @@ export default function LiveConsoleTab({
         <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">
           우하단에 떠 있는 실시간 투표예요. ON 상태 1개만 표시되고 집계는 자동으로 갱신돼요.
         </p>
-        <PollPanel webinarId={webinarId} />
+        <PollPanel webinarId={webinarId} tick={liveTick} />
       </Section>
 
       {/* ── 참여 관리 — 시청자가 남긴 것 관리 ── */}
@@ -997,7 +1006,7 @@ export default function LiveConsoleTab({
       </Section>
 
       <Section title="실시간 채팅" icon={MessageSquare} defaultOpen={status === "live"}>
-        <ChatPanel webinarId={webinarId} />
+        <ChatPanel webinarId={webinarId} tick={liveTick} />
       </Section>
 
       {/* ── 발송 — 외부 설문·이메일 내보내기 ── */}
