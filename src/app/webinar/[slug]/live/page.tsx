@@ -10,6 +10,9 @@ import { formatKst } from "@/lib/datetime";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
+// 소유자 미리보기 진입 여부 — ?preview 파라미터. 이 tab 에선 폴링·ping·제출 등 모든 부작용을 정지시킨다.
+const isPreviewUrl = () => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("preview");
+
 interface WebinarSession {
   id: string;
   number: number;
@@ -145,6 +148,10 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [webinar, setWebinar] = useState<WebinarInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [view, setView] = useState<PageView>("signup");
+  // ── 소유자 미리보기 — ?preview=<상태>. 4개 상태를 강제 렌더(부작용 차단). null = 일반 시청자 뷰.
+  const [previewState, setPreviewState] = useState<null | "registration" | "entry" | "live" | "ended">(null);
+  const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
+  const previewMode = previewState !== null;
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [answeredQA, setAnsweredQA] = useState<AnsweredQA[]>([]);
   const [pushedQuestion, setPushedQuestion] = useState<{ id: string; question: string; name: string | null } | null>(null);
@@ -211,6 +218,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
   // 재접속 유지 — 인증한 registrationId·영상을 브라우저에 저장해 새로고침해도 입장 확인부터 다시 하지 않게
   useEffect(() => {
+    if (isPreviewUrl()) return;
     try {
       const raw = localStorage.getItem(`mach_reg_${slug}`);
       if (raw) {
@@ -221,6 +229,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     } catch { /* 스토리지 차단 무시 */ }
   }, [slug]);
   useEffect(() => {
+    if (isPreviewUrl()) return;
     try {
       if (registrationId) localStorage.setItem(`mach_reg_${slug}`, JSON.stringify({ registrationId, videoId }));
     } catch { /* 무시 */ }
@@ -325,6 +334,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   }, [slug, registrationId, chatEnabled, activeTab]);
 
   const handleSendChat = async () => {
+    if (isPreviewUrl()) return;
     const msg = chatInput.trim();
     if (!msg || isSendingChat) return;
     setIsSendingChat(true);
@@ -349,6 +359,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
   // 알림 스위치 토글 — ON: 구독(등록 이메일 저장), OFF: 해제. 낙관적 업데이트 + 실패 시 이전 상태로 복원.
   const handleNotifyToggle = async () => {
+    if (isPreviewUrl()) return;
     if (notifyPending) return; // 연타 방지 (진행 중 중복 요청 차단)
     const prev = notifySubscribed;
     const next = !prev;
@@ -375,13 +386,47 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   };
 
   useEffect(() => {
+    // 항상 일반 로드 — 미리보기(소유자)는 아래 전용 로더가 그 위에 상태를 덮어쓰고,
+    // 비소유자가 ?preview 로 와도 인증 실패 시 일반 화면으로 폴백(무한 로딩 방지).
     fetchWebinar();
   }, [fetchWebinar]);
+
+  // 미리보기 진입 — ?preview 있으면 소유자 인증 후 데이터 로드. 실패(비소유자·비로그인) 시 조용히 폴백(일반 뷰).
+  useEffect(() => {
+    if (!isPreviewUrl()) return;
+    const p = new URLSearchParams(window.location.search).get("preview");
+    const init = (["registration", "entry", "live", "ended"] as const).find((s) => s === p) ?? "registration";
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/webinar/${slug}/preview`);
+        if (!res.ok || !alive) return;
+        const data = await res.json();
+        setWebinar(data.webinar);
+        if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
+        setPreviewVideoId(typeof data.youtubeId === "string" ? data.youtubeId : null);
+        setPreviewState(init);
+        setIsLoading(false);
+      } catch { /* 인증 실패 등 — 미리보기 비활성 유지 */ }
+    })();
+    return () => { alive = false; };
+  }, [slug]);
+
+  // 미리보기 상태 → view/registrationId/videoId 강제. 부작용 이펙트는 isPreviewUrl 가드로 정지돼 있어 덮이지 않는다.
+  useEffect(() => {
+    if (!previewState) return;
+    setView(previewState === "ended" ? "ended" : previewState === "registration" ? "signup" : "live");
+    setRegistrationId(previewState === "live" ? "preview" : null);
+    setRegistered(false);
+    setVideoId(previewState === "live" ? previewVideoId : null);
+    setIsTrulyLive(previewState === "live");
+  }, [previewState, previewVideoId]);
 
   // 라이브 전(사전등록·입장 대기) 상태 폴링 — 서버 status 가 live 로 바뀌면 fetchStatus 가
   // view/isTrulyLive/serverNowMs 를 갱신해 대기 중이던 시청자가 자동 전환된다. (30초, 탭 비활성 시 스킵)
   // 경량 /status 만 받아 정적 콘텐츠 재수신 egress 를 없앤다.
   useEffect(() => {
+    if (isPreviewUrl()) return;
     if (view === "live") return;
     const interval = setInterval(() => {
       if (document.hidden) return;
@@ -396,6 +441,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   // registrationId 없는 입장 확인 화면 시청자도 공지 배너·상태 전환은 받아야 하므로 view=live 면 폴링한다
   // (Q&A·채팅·푸시는 서버/JSX 에서 registrationId 로 게이팅되어 인증 전엔 조회/표시되지 않음).
   useEffect(() => {
+    if (isPreviewUrl()) return;
     if (view !== "live") return;
     liveTickRef.current = 0;
     void fetchLiveState(true);
@@ -409,6 +455,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
   // presence ping
   useEffect(() => {
+    if (isPreviewUrl()) return;
     if (view !== "live" || !registrationId) return;
 
     fetch(`/api/webinar/${slug}/ping`, {
@@ -439,6 +486,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   }, [view, registrationId, slug]);
 
   const handleRegister = async () => {
+    if (isPreviewUrl()) return;
     setFormError("");
     if (!form.agreePrivacy) {
       setFormError(registrationForm.privacyText || "개인정보 수집 및 이용 동의가 필요합니다.");
@@ -481,6 +529,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   };
 
   const handleVerifyEntry = async () => {
+    if (isPreviewUrl()) return;
     const value = authMethod === "phone" ? authValue.replace(/[^0-9]/g, "") : authValue.trim().toLowerCase();
     if (!value || (authMethod === "phone" && value.length < 10) || (authMethod === "email" && !value.includes("@"))) {
       setVerifyError(authMethod === "phone" ? "올바른 연락처를 입력해주세요." : "올바른 이메일을 입력해주세요.");
@@ -540,6 +589,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   }, [slug]);
 
   const handleVoteQA = async (qaId: string) => {
+    if (isPreviewUrl()) return;
     if (votedQa.has(qaId)) return;
     const persist = (set: Set<string>) => {
       try { sessionStorage.setItem(`mach_qavote_${slug}`, JSON.stringify([...set])); } catch { /* 무시 */ }
@@ -570,6 +620,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   };
 
   const handleSendQA = async () => {
+    if (isPreviewUrl()) return;
     if (!question.trim()) return;
     setQaError("");
     setIsSendingQA(true);
@@ -688,6 +739,29 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       className="min-h-screen"
       style={{ backgroundColor: bg, color: text, fontFamily: `${font}, sans-serif` }}
     >
+      {/* 소유자 미리보기 — 상태 전환 바(대기·입장확인·라이브·종료). 실제 부작용은 모두 정지. */}
+      {previewMode && (
+        <div
+          className="sticky top-0 z-[70] flex flex-wrap items-center gap-2 border-b border-white/10 bg-neutral-900/90 px-3 py-2 text-white backdrop-blur"
+          style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}
+        >
+          <span className="rounded-md bg-violet-500 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide">미리보기</span>
+          <div className="flex flex-wrap gap-1">
+            {(([["registration", "대기화면"], ["entry", "입장확인"], ["live", "라이브 시청"], ["ended", "종료화면"]]) as const).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setPreviewState(k)}
+                className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${previewState === k ? "bg-white text-neutral-900" : "bg-white/10 text-white/80 hover:bg-white/20"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="ml-auto hidden text-[11px] text-white/50 sm:inline">실제 전송·입장·집계는 되지 않아요</span>
+        </div>
+      )}
+
       {/* 팝업·Tally·투표 푸시 — 운영 콘솔에서 ON 한 항목이 시청 중 화면에 뜬다 (통합 폴링 결과 전달) */}
       <LivePushLayer
         slug={slug}

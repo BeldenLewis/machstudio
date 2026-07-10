@@ -12,6 +12,7 @@ import {
   Check,
   Copy,
   ExternalLink,
+  Eye,
   Loader2,
   Settings2,
   Video,
@@ -312,6 +313,19 @@ function WebinarDetail({ id }: { id: string }) {
               title="라이브 페이지 열기"
             >
               <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+            </motion.a>
+            <motion.a
+              href={`${liveUrl}?preview=registration`}
+              target="_blank"
+              rel="noopener noreferrer"
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.95 }}
+              transition={spring}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:bg-secondary transition-colors"
+              title="시청 화면 미리보기 — 대기·입장확인·라이브·종료를 한 창에서 전환"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              미리보기
             </motion.a>
           </div>
         </div>
