@@ -26,9 +26,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     where: { webinarId: id },
     orderBy: { createdAt: "desc" },
     take: 100,
-    select: { id: true, name: true, message: true, isHost: true, createdAt: true },
+    select: { id: true, name: true, message: true, isHost: true, isPinned: true, registrationId: true, createdAt: true },
   });
-  return NextResponse.json({ messages: recent });
+  const settings = {
+    slowSec: webinar.chatSlowSec ?? 0,
+    bannedWords: webinar.chatBannedWords ?? [],
+    bannedCount: (webinar.chatBannedRegIds ?? []).length,
+  };
+  return NextResponse.json({ messages: recent, settings });
 }
 
 // 어드민 POST — 호스트(운영자) 발언.
@@ -59,4 +64,33 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   });
 
   return NextResponse.json({ message: created }, { status: 201 });
+}
+
+// 어드민 PATCH — 채팅 모더레이션 설정(천천히 모드 초·금지어)을 components 에 병합(다른 플래그 보존).
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "인증 필요" }, { status: 401 });
+
+  const { id } = await params;
+  const webinar = await authorize(id, user.id);
+  if (!webinar) return NextResponse.json({ error: "접근 권한 없음" }, { status: 403 });
+
+  const body = await request.json().catch(() => ({}));
+  const data: { chatSlowSec?: number; chatBannedWords?: string[] } = {};
+  if (body.slowSec !== undefined) data.chatSlowSec = Math.max(0, Math.min(300, Number(body.slowSec) || 0));
+  if (Array.isArray(body.bannedWords)) {
+    // substring 매칭이라 1자 토큰은 과다 차단 위험 — 2자 이상만 저장(최대 40자·50개).
+    data.chatBannedWords = (body.bannedWords as unknown[]).map((w) => String(w).trim().slice(0, 40)).filter((w) => w.length >= 2).slice(0, 50);
+  }
+  const updated = await prisma.webinar.update({ where: { id }, data, select: { chatSlowSec: true, chatBannedWords: true } });
+
+  await logActivity({
+    workspaceId: webinar.workspaceId,
+    userId: user.id,
+    action: "webinar.updated",
+    meta: { webinarId: id, changes: ["chatModeration"] },
+  });
+
+  return NextResponse.json({ ok: true, settings: { slowSec: updated.chatSlowSec, bannedWords: updated.chatBannedWords } });
 }

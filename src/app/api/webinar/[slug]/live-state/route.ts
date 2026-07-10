@@ -29,7 +29,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const wid = webinar.id;
 
   // 동시 병렬 조회 — 필요할 때만 (Q&A/채팅은 게이팅)
-  const [announcements, qaRows, pollRow, popupRow, tallyRow, chatRows, pushedRow] = await Promise.all([
+  const [announcements, qaRows, pollRow, popupRow, tallyRow, chatRows, pushedRow, pinnedRow] = await Promise.all([
     prisma.webinarAnnouncement.findMany({
       where: { webinarId: wid, isActive: true },
       orderBy: { createdAt: "desc" },
@@ -90,6 +90,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
           select: { id: true, question: true, name: true },
         })
       : Promise.resolve(null),
+    // 고정 채팅 메시지 — chatEnabled + registrationId 일 때만(채팅 콘텐츠).
+    chatEnabled && registrationId
+      ? prisma.webinarChatMessage.findFirst({
+          where: { webinarId: wid, isPinned: true },
+          select: { id: true, name: true, message: true, isHost: true, createdAt: true },
+        })
+      : Promise.resolve(null),
   ]);
 
   const answeredQA = qaRows
@@ -100,6 +107,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     : undefined;
   const pushedQuestion = pushedRow
     ? { id: pushedRow.id, question: pushedRow.question, name: pushedRow.name ? maskName(pushedRow.name) : null }
+    : null;
+  const pinnedMessage = pinnedRow
+    ? { id: pinnedRow.id, name: pinnedRow.isHost ? pinnedRow.name : maskName(pinnedRow.name), message: pinnedRow.message, isHost: pinnedRow.isHost, createdAt: pinnedRow.createdAt }
     : null;
 
   return NextResponse.json(
@@ -115,6 +125,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       popup: popupRow ?? null,
       tally: tallyRow ?? null,
       pushedQuestion,
+      pinnedMessage,
     },
     // 동적 데이터 — 캐시 안 함 (registrationId/chatAfter 별로 응답이 다름)
     { headers: { ...CORS, "Cache-Control": "no-store" } },

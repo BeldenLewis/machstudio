@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { rateLimit } from "@/lib/ratelimit";
+import { rateLimit, rateLimitPeek } from "@/lib/ratelimit";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
 import { maskName } from "@/lib/mask";
 
@@ -90,6 +90,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (!withoutLinks) return NextResponse.json({ error: "링크만 있는 메시지는 보낼 수 없어요." }, { status: 400, headers: CORS });
   const message = rawMessage.replace(LINK_RE, "[링크 제거됨]").trim();
 
+  // 금지어 — 운영자가 설정한 표현이 포함되면 거절(대소문자 무시). 전용 컬럼.
+  const bannedWords = webinar.chatBannedWords ?? [];
+  if (bannedWords.length) {
+    const lower = message.toLowerCase();
+    if (bannedWords.some((w) => w && lower.includes(w.toLowerCase()))) {
+      return NextResponse.json({ error: "사용할 수 없는 표현이 포함되어 있어요." }, { status: 400, headers: CORS });
+    }
+  }
+
   // 등록자 검증 — 이 웨비나 등록자일 때만 신뢰. 이름은 등록명 우선.
   const rawRegId = body?.registrationId ? String(body.registrationId) : null;
   let registrationId: string | null = null;
@@ -107,25 +116,40 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   }
   if (!name) name = "익명";
 
-  // 인증된 등록자 대상 도배 방지 — 짧은 최소 간격(10초 3건) + 직전과 동일한 메시지 반복 차단.
-  // 반복 차단은 DB 기반이라 서버리스 인스턴스가 바뀌거나 재시작해도 유지된다.
-  if (registrationId) {
-    const regRl = rateLimit(`webinar-chat-reg:${webinar.id}:${registrationId}`, { limit: 3, windowMs: 10_000 });
-    if (!regRl.allowed) {
-      return NextResponse.json(
-        { error: "메시지를 너무 자주 보내고 있어요. 잠시 후 다시 시도해주세요." },
-        { status: 429, headers: { ...CORS, "Retry-After": Math.ceil(regRl.retryAfterMs / 1000).toString() } },
-      );
-    }
-    const last = await prisma.webinarChatMessage.findFirst({
-      where: { webinarId: webinar.id, registrationId, isHost: false },
-      orderBy: { createdAt: "desc" },
-      select: { message: true, createdAt: true },
-    });
-    if (last && last.message === message && Date.now() - last.createdAt.getTime() < 30_000) {
-      return NextResponse.json({ error: "같은 메시지를 반복해서 보낼 수 없어요." }, { status: 429, headers: CORS });
-    }
+  // 등록 시청자만 채팅 가능 — 익명 경로가 차단·천천히모드·반복차단을 우회하지 못하게 유효 등록 강제.
+  if (!registrationId) {
+    return NextResponse.json({ error: "등록 후 입장한 시청자만 채팅할 수 있어요." }, { status: 403, headers: CORS });
   }
+
+  // 차단된 시청자 — 운영자가 이 등록자를 채팅에서 차단함(전용 컬럼).
+  if ((webinar.chatBannedRegIds ?? []).includes(registrationId)) {
+    return NextResponse.json({ error: "채팅이 제한되었어요." }, { status: 403, headers: CORS });
+  }
+
+  // 도배 방지 — 3건/10초는 peek 로 선검사만 하고, 모든 검사 통과 후 create 직전에 실제 기록(거절 요청이 토큰을 소모하지 않게).
+  const regKey = `webinar-chat-reg:${webinar.id}:${registrationId}`;
+  if (rateLimitPeek(regKey, { limit: 3, windowMs: 10_000 }).blocked) {
+    return NextResponse.json(
+      { error: "메시지를 너무 자주 보내고 있어요. 잠시 후 다시 시도해주세요." },
+      { status: 429, headers: { ...CORS, "Retry-After": "10" } },
+    );
+  }
+  // 직전 동일 메시지 반복 차단 + 천천히 모드(운영자 설정 간격). DB 기반이라 인스턴스 교체에도 유지.
+  const last = await prisma.webinarChatMessage.findFirst({
+    where: { webinarId: webinar.id, registrationId, isHost: false },
+    orderBy: { createdAt: "desc" },
+    select: { message: true, createdAt: true },
+  });
+  if (last && last.message === message && Date.now() - last.createdAt.getTime() < 30_000) {
+    return NextResponse.json({ error: "같은 메시지를 반복해서 보낼 수 없어요." }, { status: 429, headers: CORS });
+  }
+  const slowSec = webinar.chatSlowSec ?? 0;
+  if (last && slowSec > 0 && Date.now() - last.createdAt.getTime() < slowSec * 1000) {
+    const wait = Math.ceil((slowSec * 1000 - (Date.now() - last.createdAt.getTime())) / 1000);
+    return NextResponse.json({ error: `천천히 모드예요. ${wait}초 후 다시 보낼 수 있어요.` }, { status: 429, headers: { ...CORS, "Retry-After": String(wait) } });
+  }
+  // 모든 검사 통과 — 이제 3/10초 버킷에 실제 기록.
+  rateLimit(regKey, { limit: 3, windowMs: 10_000 });
 
   const created = await prisma.webinarChatMessage.create({
     data: { webinarId: webinar.id, registrationId, name: name.slice(0, 60), message, isHost: false },

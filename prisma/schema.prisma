@@ -498,6 +498,10 @@ model Webinar {
   config         Json // { youtubeId, calendarUrl, surveyUrl, etc. }
   statusOverride String? // 수동 상태 오버라이드: "registration" | "live" | "ended" | null(일정 기반 자동)
   components     Json? // 임베드 컴포넌트 설정 { heroButton, banner, formWidget, allowLiveRegistration, entryOpenBeforeMinutes, endedMode }
+  // 채팅 모더레이션 — 전용 컬럼(components 블롭이 설정탭 저장으로 덮어써지는 것 방지). 천천히모드 초·금지어·차단 등록자.
+  chatSlowSec      Int      @default(0)
+  chatBannedWords  String[] @default([])
+  chatBannedRegIds String[] @default([])
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -784,6 +788,7 @@ model WebinarChatMessage {
   name           String
   message        String
   isHost         Boolean  @default(false) // 운영자(호스트) 발언
+  isPinned       Boolean  @default(false) // 고정 메시지(웨비나당 1개 — 부분 유니크 인덱스는 마이그레이션에 존재)
   createdAt      DateTime @default(now())
 
   webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)

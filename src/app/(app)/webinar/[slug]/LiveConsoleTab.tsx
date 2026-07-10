@@ -8,6 +8,7 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Activity,
+  Ban,
   BarChart3,
   Bell,
   ChevronDown,
@@ -21,7 +22,9 @@ import {
   Megaphone,
   MessageSquare,
   MessageSquarePlus,
+  Pin,
   RefreshCw,
+  Trash2,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -594,6 +597,8 @@ interface AdminChatMessage {
   name: string;
   message: string;
   isHost: boolean;
+  isPinned: boolean;
+  registrationId: string | null;
   createdAt: string;
 }
 
@@ -603,15 +608,34 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
   const [hostMsg, setHostMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [settings, setSettings] = useState<{ slowSec: number; bannedWords: string[]; bannedCount: number }>({ slowSec: 0, bannedWords: [], bannedCount: 0 });
+  const [slowInput, setSlowInput] = useState("0");
+  const [bannedInput, setBannedInput] = useState("");
+  const [savingMod, setSavingMod] = useState(false);
+  const seededRef = useRef(false);
+  // 진행 중 mutation(고정·차단·설정) 동안 사일런트 폴링이 상태를 덮지 않게 가드 + 인플라이트 응답 펜스.
+  const mutatingRef = useRef(false);
+  const reqIdRef = useRef(0);
 
   const fetchMessages = useCallback(async () => {
+    const gen = ++reqIdRef.current;
     const res = await fetch(`/api/webinars/${webinarId}/chat`);
-    if (res.ok) setMessages((await res.json()).messages ?? []);
+    if (res.ok) {
+      const d = await res.json();
+      // 요청 출발 후 mutation 이 reqId 를 올렸으면(=그 사이 고정/차단/저장 발생) 이 응답은 버린다.
+      if (gen !== reqIdRef.current) { setLoading(false); return; }
+      setMessages(d.messages ?? []);
+      if (d.settings) {
+        setSettings({ slowSec: d.settings.slowSec ?? 0, bannedWords: d.settings.bannedWords ?? [], bannedCount: d.settings.bannedCount ?? 0 });
+        // 입력 버퍼는 최초 1회만 시드 — 폴링이 편집 중 값을 덮지 않게.
+        if (!seededRef.current) { seededRef.current = true; setSlowInput(String(d.settings.slowSec ?? 0)); setBannedInput((d.settings.bannedWords ?? []).join(", ")); }
+      }
+    }
     setLoading(false);
   }, [webinarId]);
   useEffect(() => { void fetchMessages(); }, [fetchMessages]);
-  // 라이브 주기(tick)마다 모더레이션 피드 갱신 — 새 시청자 메시지가 자동으로 나타난다
-  useEffect(() => { if (tick > 0) void fetchMessages(); }, [tick, fetchMessages]);
+  // 라이브 주기(tick)마다 모더레이션 피드 갱신(mutation 중엔 스킵 — 낙관적 갱신 보호)
+  useEffect(() => { if (tick > 0 && !mutatingRef.current) void fetchMessages(); }, [tick, fetchMessages]);
 
   const sendHost = async () => {
     if (!hostMsg.trim() || busy) return;
@@ -637,6 +661,54 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
     if (!(await confirm({ title: "메시지를 삭제할까요?", description: `"${m.message.slice(0, 40)}"`, confirmLabel: "삭제", tone: "danger" }))) return;
     const res = await fetch(`/api/webinars/${webinarId}/chat/${m.id}`, { method: "DELETE" });
     if (res.ok) { toast.success("삭제했어요"); setMessages((prev) => prev.filter((x) => x.id !== m.id)); }
+  };
+
+  // 고정 — 웨비나당 1개(켜면 나머지 고정 해제).
+  const togglePin = async (m: AdminChatMessage) => {
+    mutatingRef.current = true;
+    reqIdRef.current++;
+    try {
+      const next = !m.isPinned;
+      const res = await fetch(`/api/webinars/${webinarId}/chat/${m.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isPinned: next }),
+      });
+      if (!res.ok) { toast.error("고정하지 못했어요"); return; }
+      setMessages((prev) => prev.map((x) => x.id === m.id ? { ...x, isPinned: next } : (next ? { ...x, isPinned: false } : x)));
+      toast.success(next ? "메시지를 고정했어요" : "고정을 해제했어요");
+    } finally { mutatingRef.current = false; }
+  };
+
+  // 차단 — 작성 시청자를 채팅에서 차단하고 기존 메시지 정리.
+  const ban = async (m: AdminChatMessage) => {
+    if (!m.registrationId) { toast.error("이 메시지는 차단할 수 없어요(익명)"); return; }
+    if (!(await confirm({ title: `${m.name}님을 차단할까요?`, description: "이 시청자는 더 이상 채팅할 수 없고, 남긴 메시지는 삭제돼요.", confirmLabel: "차단", tone: "danger" }))) return;
+    mutatingRef.current = true;
+    reqIdRef.current++;
+    try {
+      const res = await fetch(`/api/webinars/${webinarId}/chat/${m.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ban: true }),
+      });
+      if (!res.ok) { toast.error("차단하지 못했어요"); return; }
+      toast.success("차단했어요");
+      setMessages((prev) => prev.filter((x) => x.registrationId !== m.registrationId));
+      setSettings((s) => ({ ...s, bannedCount: s.bannedCount + 1 }));
+    } finally { mutatingRef.current = false; }
+  };
+
+  const saveMod = async () => {
+    setSavingMod(true);
+    mutatingRef.current = true;
+    reqIdRef.current++;
+    try {
+      const bannedWords = bannedInput.split(",").map((w) => w.trim()).filter(Boolean);
+      const res = await fetch(`/api/webinars/${webinarId}/chat`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slowSec: Number(slowInput) || 0, bannedWords }),
+      });
+      if (!res.ok) { toast.error("설정 저장 실패"); return; }
+      setSettings((s) => ({ ...s, slowSec: Number(slowInput) || 0, bannedWords }));
+      toast.success("모더레이션 설정을 저장했어요");
+    } finally { setSavingMod(false); mutatingRef.current = false; }
   };
 
   const inputCls = "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
@@ -688,7 +760,7 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.12 }}
-                className="flex items-start justify-between gap-3 rounded-xl border border-border p-2.5"
+                className={`flex items-start justify-between gap-3 rounded-xl border p-2.5 ${m.isPinned ? "border-violet-500/40 bg-violet-500/[0.04]" : "border-border"}`}
               >
                 <div className="flex min-w-0 items-start gap-2">
                   <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${m.isHost ? "bg-red-500/10 text-red-500" : "bg-violet-500/10 text-violet-600 dark:text-violet-400"}`} aria-hidden>
@@ -700,18 +772,47 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
                       {m.name}
                     </span>
                     <span className="text-muted-foreground">{formatKst(m.createdAt, { hour: "2-digit", minute: "2-digit" })}</span>
+                    {m.isPinned && <span className="ml-1 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-medium text-violet-500">📌 고정됨</span>}
                     <p className="mt-0.5 break-words text-foreground">{m.message}</p>
                   </div>
                 </div>
-                <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => remove(m)}
-                  className="shrink-0 rounded-lg border border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500">
-                  삭제
-                </motion.button>
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => togglePin(m)}
+                    className={`rounded-lg p-1.5 transition-colors ${m.isPinned ? "bg-violet-500/10 text-violet-500" : "text-muted-foreground hover:bg-violet-500/10 hover:text-violet-500"}`}
+                    title={m.isPinned ? "고정 해제" : "고정"}>
+                    <Pin className="h-3.5 w-3.5" />
+                  </motion.button>
+                  {!m.isHost && m.registrationId && (
+                    <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => ban(m)}
+                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500" title="차단">
+                      <Ban className="h-3.5 w-3.5" />
+                    </motion.button>
+                  )}
+                  <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => remove(m)}
+                    className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500" title="삭제">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </motion.button>
+                </div>
               </motion.div>
             ))}
           </AnimatePresence>
         </div>
       )}
+
+      {/* 모더레이션 설정 — 천천히 모드 · 금지어(공개 채팅 POST 라우트에서 적용) */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border pt-3 text-[11px]">
+        <label className="flex items-center gap-1.5 text-muted-foreground">
+          천천히 모드
+          <input type="number" min={0} max={300} value={slowInput} onChange={(e) => setSlowInput(e.target.value)}
+            className="w-14 rounded-lg border border-border bg-background px-2 py-1 text-xs outline-none transition-colors focus:border-violet-400" />
+          초
+        </label>
+        <input value={bannedInput} onChange={(e) => setBannedInput(e.target.value)} placeholder="금지어(쉼표로 구분)"
+          className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2 py-1 text-xs outline-none transition-colors focus:border-violet-400" />
+        <motion.button whileTap={{ scale: 0.97 }} transition={spring} onClick={saveMod} disabled={savingMod}
+          className="shrink-0 rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-50">저장</motion.button>
+        {settings.bannedCount > 0 && <span className="text-muted-foreground">차단 {settings.bannedCount}명</span>}
+      </div>
     </div>
   );
 }

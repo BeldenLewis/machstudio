@@ -72,6 +72,7 @@ interface LiveStateResponse {
   popup: LivePopup | null;
   tally: LiveTallyPush | null;
   pushedQuestion?: { id: string; question: string; name: string | null } | null;
+  pinnedMessage?: { id: string; name: string; message: string; isHost: boolean; createdAt: string } | null;
 }
 
 type PageView = "signup" | "live" | "ended";
@@ -147,6 +148,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [answeredQA, setAnsweredQA] = useState<AnsweredQA[]>([]);
   const [pushedQuestion, setPushedQuestion] = useState<{ id: string; question: string; name: string | null } | null>(null);
+  const [pinnedMessage, setPinnedMessage] = useState<{ id: string; name: string; message: string; isHost: boolean } | null>(null);
   const [serverNowMs, setServerNowMs] = useState<number | undefined>(undefined);
   const [isTrulyLive, setIsTrulyLive] = useState(false); // status === "live" (입장오픈 전 창과 구분)
   // 채팅 상태
@@ -289,6 +291,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       setAnnouncements(data.announcements ?? []);
       if (data.answeredQA) setAnsweredQA(data.answeredQA);
       setPushedQuestion(data.pushedQuestion ?? null);
+      setPinnedMessage(data.pinnedMessage ?? null);
       setPushPopup(data.popup ?? null);
       setPushTally(data.tally ?? null);
       setPushPoll(data.poll ?? null);
@@ -721,6 +724,28 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: accent }}>지금 답변 중인 질문</div>
               <p className="text-sm font-medium" style={{ color: text }}>{pushedQuestion.question}</p>
               {pushedQuestion.name && <p className="mt-0.5 text-xs opacity-60" style={{ color: text }}>— {pushedQuestion.name}</p>}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 진행자가 고정한 채팅 메시지 (등록 시청자에게만) */}
+      <AnimatePresence>
+        {view === "live" && registrationId && pinnedMessage && (
+          <motion.div
+            key="pinned-msg"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden border-b border-black/10 dark:border-white/10"
+          >
+            <div className="mx-auto flex max-w-3xl items-start gap-2 px-4 py-2.5">
+              <span className="mt-0.5 shrink-0 text-xs" style={{ color: accent }}>📌</span>
+              <p className="min-w-0 text-sm" style={{ color: text }}>
+                <b className="font-semibold">{pinnedMessage.isHost ? `${pinnedMessage.name} · 진행자` : pinnedMessage.name}</b>{" "}
+                <span className="opacity-90">{pinnedMessage.message}</span>
+              </p>
             </div>
           </motion.div>
         )}
