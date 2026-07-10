@@ -1234,7 +1234,7 @@ function BroadcastCard({ webinarId, tick = 0, editors }: { webinarId: string; ti
   const activeCount = rows.filter((r) => r.cur && (r.cur as { isActive: boolean }).isActive).length;
 
   return (
-    <section className="flex h-[70vh] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[480px]">
+    <section className="flex h-[76vh] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[620px]">
       <div className="flex shrink-0 items-center gap-2 border-b border-border p-4 sm:px-5">
         <MessageSquarePlus className="h-4 w-4 text-violet-500" />
         <h2 className="text-sm font-semibold">화면에 띄우기</h2>
@@ -1538,7 +1538,7 @@ export default function LiveConsoleTab({
 
   // 라이브 2행 좌우 — 480px 고정 높이, 헤더 고정 + 내부만 스크롤(fillHeight)
   const qaCard = (
-    <section className="flex h-[70vh] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[480px]">
+    <section className="flex h-[76vh] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[620px]">
       <div className="flex shrink-0 items-center gap-2 border-b border-border p-4 sm:px-5">
         <HelpCircle className="h-4 w-4 text-violet-500" />
         <h2 className="text-sm font-semibold">Q&amp;A 대기열</h2>
@@ -1553,7 +1553,7 @@ export default function LiveConsoleTab({
   );
 
   const chatCard = (
-    <section className="flex h-[70vh] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[480px]">
+    <section className="flex h-[76vh] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[620px]">
       <div className="flex shrink-0 items-center gap-2 border-b border-border p-4 sm:px-5">
         <MessageSquare className="h-4 w-4 text-violet-500" />
         <h2 className="text-sm font-semibold">채팅 모더레이션</h2>
