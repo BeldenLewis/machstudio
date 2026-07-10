@@ -1201,12 +1201,14 @@ const DRAWER_SPRING = { type: "spring", stiffness: 420, damping: 34 } as const;
 
 // 인터랙션 — 통합 송출 카드. 타입별 현재/활성 항목을 토글 행으로, 활성 투표는 실시간 결과 프리뷰.
 // 생성/편집·알림 발송은 헤더 ⚙(또는 하단 버튼)으로 여는 우측 설정 드로어(세그먼트 탭)에서.
-function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; tick?: number; sections: { key: string; label: string; icon: typeof Bell; node: ReactNode }[] }) {
+function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; tick?: number; sections: { key: string; label: string; icon: typeof Bell; render: (open: boolean) => ReactNode }[] }) {
   const [polls, setPolls] = useState<AdminPoll[]>([]);
   const [anns, setAnns] = useState<{ id: string; message: string; isActive: boolean }[]>([]);
   const [popups, setPopups] = useState<{ id: string; title: string; isActive: boolean }[]>([]);
   const [tallies, setTallies] = useState<{ id: string; title: string; isActive: boolean }[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [hasOpened, setHasOpened] = useState(false);
+  const openDrawer = () => { setHasOpened(true); setDrawerOpen(true); };
   const [activeSection, setActiveSection] = useState(sections[0]?.key ?? "");
   // 최초 열람 후 유지(mount-on-first-view) — 드로어 열 때 안 본 탭까지 즉시 fetch 하지 않게 방문한 섹션만 마운트.
   const [visited, setVisited] = useState<string[]>(() => (sections[0]?.key ? [sections[0].key] : []));
@@ -1291,7 +1293,7 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
         <MessageSquarePlus className="h-4 w-4 text-violet-500" />
         <h2 className="text-sm font-semibold">인터랙션</h2>
         <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-medium ${activeCount ? "bg-green-500/10 text-green-600 dark:text-green-400" : "bg-secondary text-muted-foreground"}`}>{activeCount ? `${activeCount}개 송출 중` : "대기"}</span>
-        <button type="button" onClick={() => setDrawerOpen(true)} aria-label="인터랙션 설정" className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+        <button type="button" onClick={openDrawer} aria-label="인터랙션 설정" className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
           <Settings className="h-4 w-4" />
         </button>
       </div>
@@ -1336,27 +1338,27 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
           </div>
         )}
       </div>
-      <button onClick={() => setDrawerOpen(true)} className="flex shrink-0 w-full items-center justify-between border-t border-border px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:px-5">
+      <button onClick={openDrawer} className="flex shrink-0 w-full items-center justify-between border-t border-border px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:px-5">
         <span>콘텐츠 관리 · 만들기 / 편집</span>
         <Settings className="h-4 w-4" />
       </button>
     </section>
 
-    {typeof document !== "undefined" && createPortal(
-      <AnimatePresence>
-      {drawerOpen && (
+    {typeof document !== "undefined" && hasOpened && createPortal(
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: drawerOpen ? 1 : 0 }} transition={{ duration: 0.15 }}
+        className={`fixed inset-0 z-50 flex bg-black/50 backdrop-blur-sm ${drawerOpen ? "" : "pointer-events-none"}`}
+        onClick={() => setDrawerOpen(false)}
+        aria-hidden={!drawerOpen}
+        inert={!drawerOpen}
+      >
         <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-50 flex bg-black/50 backdrop-blur-sm"
-          onClick={() => setDrawerOpen(false)}
+          ref={panelRef} tabIndex={-1}
+          initial={{ x: "100%" }} animate={{ x: drawerOpen ? 0 : "100%" }} transition={DRAWER_SPRING}
+          className="ml-auto flex h-full w-full max-w-lg flex-col bg-background shadow-2xl outline-none"
+          onClick={(e) => e.stopPropagation()}
+          role="dialog" aria-modal="true" aria-label="인터랙션 설정"
         >
-          <motion.div
-            ref={panelRef} tabIndex={-1}
-            initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={DRAWER_SPRING}
-            className="ml-auto flex h-full w-full max-w-lg flex-col bg-background shadow-2xl outline-none"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog" aria-modal="true" aria-label="인터랙션 설정"
-          >
             <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-4">
               <div className="flex items-center gap-2">
                 <Settings className="h-4 w-4 text-violet-500" />
@@ -1382,13 +1384,11 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
             </div>
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
               {sections.map((s) => (visited.includes(s.key) ? (
-                <div key={s.key} className={activeSection === s.key ? "" : "hidden"}>{s.node}</div>
+                <div key={s.key} className={activeSection === s.key ? "" : "hidden"}>{s.render(drawerOpen)}</div>
               ) : null))}
             </div>
           </motion.div>
-        </motion.div>
-      )}
-      </AnimatePresence>,
+        </motion.div>,
       document.body,
     )}
     </>
@@ -1638,19 +1638,20 @@ export default function LiveConsoleTab({
   );
 
   // 인터랙션 설정 드로어 섹션 — 화면에 뜨는 것(공지·팝업·투표·Tally)과 알림 발송을 한 곳에서 만들기/편집.
+  // render(open) — 드로어를 닫아도 패널을 마운트 유지(재조회 방지)하되, PollPanel 폴링은 open=false 면 tick=0 으로 멈춤.
   const interactionSections = [
-    { key: "announcements", label: "공지", icon: Megaphone, node: <AnnouncementsTab webinarId={webinarId} embedded /> },
-    { key: "popups", label: "팝업", icon: MessageSquarePlus, node: <PopupPanel webinarId={webinarId} /> },
+    { key: "announcements", label: "공지", icon: Megaphone, render: () => <AnnouncementsTab webinarId={webinarId} embedded /> },
+    { key: "popups", label: "팝업", icon: MessageSquarePlus, render: () => <PopupPanel webinarId={webinarId} /> },
     {
-      key: "polls", label: "투표", icon: BarChart3, node: (
+      key: "polls", label: "투표", icon: BarChart3, render: (open: boolean) => (
         <>
           <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">우하단에 떠 있는 실시간 투표예요. ON 상태 1개만 표시되고 집계는 자동으로 갱신돼요.</p>
-          <PollPanel webinarId={webinarId} tick={liveTick} />
+          <PollPanel webinarId={webinarId} tick={open ? liveTick : 0} />
         </>
       ),
     },
-    { key: "tally", label: "Tally", icon: Bell, node: <TallyPanel webinarId={webinarId} /> },
-    { key: "reminders", label: "알림", icon: Mail, node: <ReminderPanel webinarId={webinarId} /> },
+    { key: "tally", label: "Tally", icon: Bell, render: () => <TallyPanel webinarId={webinarId} /> },
+    { key: "reminders", label: "알림", icon: Mail, render: () => <ReminderPanel webinarId={webinarId} /> },
   ];
 
   const runningOrder = <RunningOrder sessions={webinar?.sessions ?? []} />;

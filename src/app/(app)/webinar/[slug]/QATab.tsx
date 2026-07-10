@@ -61,8 +61,12 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
         body: JSON.stringify({ status }),
       });
       if (!res.ok) { toast.error("상태 변경 실패"); return; }
-      // 답변완료·미채택이면 송출도 함께 종료(서버와 일치)
-      setQuestions((prev) => prev.map((q) => q.id === id ? { ...q, status, ...(status !== "pending" ? { onScreen: false } : {}) } : q));
+      // 답변완료·미채택이면 송출도 함께 종료(서버와 일치). 현재 필터에 안 맞으면 목록에서 바로 제거 — 대기 큐에서 사라져 클릭 결과가 즉시 보인다.
+      setQuestions((prev) => {
+        const next = prev.map((q) => q.id === id ? { ...q, status, ...(status !== "pending" ? { onScreen: false } : {}) } : q);
+        return filter === "all" ? next : next.filter((q) => q.status === filter);
+      });
+      toast.success(status === "answered" ? "답변 완료로 옮겼어요" : status === "dismissed" ? "미채택으로 옮겼어요" : "대기로 되돌렸어요");
     } finally { mutatingRef.current = false; }
   };
 
@@ -79,31 +83,9 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
     } finally { mutatingRef.current = false; }
   };
 
-  // 키보드 트리아지 — 목록에 마우스를 올린 동안만 활성(전역 방향키 가로채기 방지).
-  // ↑↓ 이동 · Enter 답변완료 · ⌫ 미채택
-  const [focusedId, setFocusedId] = useState<string | null>(null);
-  const [kbActive, setKbActive] = useState(false);
-  // 추천순 정렬(voteCount desc, 동점은 먼저 올라온 순) — 렌더와 키보드 트리아지가 같은 배열을 본다.
+  // 추천순 정렬(voteCount desc, 동점은 먼저 올라온 순).
   const ordered = [...questions].sort((a, b) => (b.voteCount - a.voteCount) || (a.createdAt < b.createdAt ? -1 : 1));
   const maxVote = ordered.reduce((m, q) => Math.max(m, q.voteCount), 0);
-  // 포커스는 순번이 아니라 질문 id 로 추적 — 라이브 득표로 재정렬돼도 대상이 바뀌지 않는다(-1=미포커스).
-  const focusIdx = ordered.findIndex((q) => q.id === focusedId);
-  useEffect(() => {
-    if (!kbActive || !ordered.length) return;
-    const onKey = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement;
-      const tag = el?.tagName;
-      // 텍스트 입력에는 절대 개입하지 않음. 버튼/링크는 Enter(네이티브 활성 키)만 양보하고 화살표 이동은 허용.
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable) return;
-      const cur = ordered.findIndex((q) => q.id === focusedId);
-      if (e.key === "ArrowDown") { e.preventDefault(); const n = cur < 0 ? 0 : Math.min(ordered.length - 1, cur + 1); setFocusedId(ordered[n]?.id ?? null); }
-      else if (e.key === "ArrowUp") { e.preventDefault(); const n = cur < 0 ? 0 : Math.max(0, cur - 1); setFocusedId(ordered[n]?.id ?? null); }
-      else if (e.key === "Enter") { if (tag === "BUTTON" || tag === "A") return; const q = ordered.find((x) => x.id === focusedId); if (q?.status === "pending") { e.preventDefault(); void updateStatus(q.id, "answered"); } }
-      else if (e.key === "Backspace") { const q = ordered.find((x) => x.id === focusedId); if (q?.status === "pending") { e.preventDefault(); void updateStatus(q.id, "dismissed"); } }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [kbActive, questions, focusedId]);
 
   const filters: { value: QAStatus | "all"; label: string }[] = [
     { value: "pending", label: "대기 중" },
@@ -113,7 +95,7 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
   ];
 
   return (
-    <div className={fillHeight ? "flex h-full min-h-0 flex-col gap-3" : embedded ? "space-y-4" : "p-4 sm:p-6 lg:p-8 space-y-4"} onMouseEnter={() => setKbActive(true)} onMouseLeave={() => setKbActive(false)}>
+    <div className={fillHeight ? "flex h-full min-h-0 flex-col gap-3" : embedded ? "space-y-4" : "p-4 sm:p-6 lg:p-8 space-y-4"}>
       <div className="relative flex shrink-0 items-center gap-1">
         {filters.map(({ value, label }) => {
           const active = filter === value;
@@ -136,13 +118,6 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
             </button>
           );
         })}
-        {questions.length > 0 && (
-          <span className="ml-auto hidden items-center gap-1.5 text-[11px] text-muted-foreground sm:inline-flex">
-            <kbd className="rounded border border-border bg-secondary px-1 py-0.5 text-[10px]">↑↓</kbd> 이동
-            <kbd className="rounded border border-border bg-secondary px-1 py-0.5 text-[10px]">↵</kbd> 답변
-            <kbd className="rounded border border-border bg-secondary px-1 py-0.5 text-[10px]">⌫</kbd> 미채택
-          </span>
-        )}
       </div>
 
       <div className={fillHeight ? "min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5" : ""}>
@@ -160,9 +135,8 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
       ) : (
         <div className="space-y-2">
           <AnimatePresence initial={false}>
-          {ordered.map((q, idx) => {
+          {ordered.map((q) => {
             const hot = q.voteCount > 0 && q.voteCount === maxVote;
-            const focused = idx === focusIdx && kbActive;
             return (
             <motion.div
               key={q.id}
@@ -171,7 +145,7 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, x: -8 }}
               transition={spring}
-              className={`flex gap-3 rounded-xl border bg-background p-3 transition-colors ${focused ? "border-violet-500 ring-2 ring-violet-500/30" : q.onScreen ? "border-green-500/40" : "border-border"}`}
+              className={`flex gap-3 rounded-xl border bg-background p-3 transition-colors ${q.onScreen ? "border-green-500/40 ring-2 ring-green-500/20" : "border-border"}`}
             >
               {/* 추천수 — 좌측 배지(정렬 키). 최다 득표는 강조 */}
               <div className={`flex w-11 shrink-0 flex-col items-center justify-center rounded-lg py-1.5 ${hot ? "bg-violet-500 text-white" : "bg-secondary text-foreground"}`}>
