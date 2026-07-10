@@ -12,6 +12,7 @@ import {
   Bell,
   ChevronDown,
   ClipboardList,
+  Clock,
   Eye,
   HelpCircle,
   ListChecks,
@@ -99,7 +100,9 @@ interface AdminPoll {
 
 interface WebinarForConsole {
   config: Record<string, unknown>;
-  sessions: { id: string }[];
+  liveStartAt?: string;
+  liveEndAt?: string;
+  sessions: { id: string; number: number; type: string; title: string; startTime: string; endTime: string }[];
   _count: { registrations: number };
 }
 
@@ -687,13 +690,18 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
                 transition={{ duration: 0.12 }}
                 className="flex items-start justify-between gap-3 rounded-xl border border-border p-2.5"
               >
-                <div className="min-w-0 text-xs">
-                  <span className={`mr-1.5 font-semibold ${m.isHost ? "text-red-500" : "text-foreground"}`}>
-                    {m.isHost && <span className="mr-1 rounded bg-red-500/10 px-1 py-0.5 text-[9px]">HOST</span>}
-                    {m.name}
+                <div className="flex min-w-0 items-start gap-2">
+                  <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${m.isHost ? "bg-red-500/10 text-red-500" : "bg-violet-500/10 text-violet-600 dark:text-violet-400"}`} aria-hidden>
+                    {m.name?.[0] ?? "?"}
                   </span>
-                  <span className="text-muted-foreground">{formatKst(m.createdAt, { hour: "2-digit", minute: "2-digit" })}</span>
-                  <p className="mt-0.5 break-words text-foreground">{m.message}</p>
+                  <div className="min-w-0 text-xs">
+                    <span className={`mr-1.5 font-semibold ${m.isHost ? "text-red-500" : "text-foreground"}`}>
+                      {m.isHost && <span className="mr-1 rounded bg-red-500/10 px-1 py-0.5 text-[9px]">HOST</span>}
+                      {m.name}
+                    </span>
+                    <span className="text-muted-foreground">{formatKst(m.createdAt, { hour: "2-digit", minute: "2-digit" })}</span>
+                    <p className="mt-0.5 break-words text-foreground">{m.message}</p>
+                  </div>
                 </div>
                 <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => remove(m)}
                   className="shrink-0 rounded-lg border border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500">
@@ -942,6 +950,63 @@ function ActivityFeed({ items }: { items: ActivityItem[] }) {
   );
 }
 
+// 현재 KST 분(자정 기준). 러닝오더 상태 판정용.
+function kstMinutes() { const d = new Date(); return ((d.getUTCHours() + 9) % 24) * 60 + d.getUTCMinutes(); }
+
+// 경과·종료까지 시계 — 라이브 중 초 단위 갱신
+function LiveClock({ startAt, endAt }: { startAt?: string; endAt?: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  const fmt = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); const mm = String(m).padStart(2, "0"), ss = String(s % 60).padStart(2, "0"); return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`; };
+  const start = startAt ? Date.parse(startAt) : NaN, end = endAt ? Date.parse(endAt) : NaN;
+  const elapsed = Number.isFinite(start) && now >= start ? fmt(now - start) : null;
+  const remain = Number.isFinite(end) && end > now ? fmt(end - now) : null;
+  if (!elapsed && !remain) return null;
+  return (
+    <span className="flex items-center gap-3 text-[11px] text-muted-foreground">
+      {elapsed && <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> 경과 <b className="font-semibold text-foreground tabular-nums">{elapsed}</b></span>}
+      {remain && <span>종료까지 <b className="font-semibold text-foreground tabular-nums">{remain}</b></span>}
+    </span>
+  );
+}
+
+// 러닝오더 — 세션 타임라인(현재 KST 시각으로 done/live/next 판정). 세션 시각은 "HH:MM" 문자열.
+function RunningOrder({ sessions }: { sessions: WebinarForConsole["sessions"] }) {
+  const [nowMin, setNowMin] = useState(() => kstMinutes());
+  useEffect(() => { const t = setInterval(() => setNowMin(kstMinutes()), 30000); return () => clearInterval(t); }, []);
+  if (!sessions.length) return null;
+  const toMin = (hhmm: string) => { const [h, m] = (hhmm || "").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+  const ordered = [...sessions].sort((a, b) => a.number - b.number);
+  const firstUpcoming = ordered.find((s) => toMin(s.startTime) > nowMin);
+  return (
+    <section className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="flex items-center gap-2 border-b border-border p-4 sm:px-5">
+        <ListChecks className="h-4 w-4 text-violet-500" />
+        <h2 className="text-sm font-semibold">러닝오더</h2>
+        <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">현재 {String(Math.floor(nowMin / 60)).padStart(2, "0")}:{String(nowMin % 60).padStart(2, "0")}</span>
+      </div>
+      <div className="divide-y divide-border/60">
+        {ordered.map((s) => {
+          const st = toMin(s.startTime), en = toMin(s.endTime);
+          const state = en <= nowMin ? "done" : st <= nowMin && nowMin < en ? "live" : s === firstUpcoming ? "next" : "upcoming";
+          return (
+            <div key={s.id} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
+              <span className={`h-2 w-2 shrink-0 rounded-full ${state === "live" ? "animate-pulse bg-green-500" : state === "next" ? "bg-violet-500" : state === "done" ? "bg-muted-foreground/30" : "bg-border"}`} />
+              <div className="min-w-0 flex-1">
+                <div className={`truncate text-[13px] ${state === "done" ? "text-muted-foreground" : "font-medium"}`}>{s.title}</div>
+                <div className="text-[11px] tabular-nums text-muted-foreground">{s.startTime} – {s.endTime}</div>
+              </div>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${state === "live" ? "bg-green-500/10 text-green-600 dark:text-green-400" : state === "next" ? "bg-violet-500/10 text-violet-600 dark:text-violet-400" : "bg-secondary text-muted-foreground"}`}>
+                {state === "live" ? "진행 중" : state === "next" ? (s.type === "qa" ? "다음 · Q&A" : "다음") : state === "done" ? "완료" : "예정"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export default function LiveConsoleTab({
   webinarId,
   webinar,
@@ -1168,6 +1233,8 @@ export default function LiveConsoleTab({
     </>
   );
 
+  const runningOrder = <RunningOrder sessions={webinar?.sessions ?? []} />;
+
   // 라이브 2행 좌우 — 480px 고정 높이, 헤더 고정 + 내부만 스크롤(fillHeight)
   const qaCard = (
     <section className="flex h-[70vh] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[480px]">
@@ -1267,6 +1334,7 @@ export default function LiveConsoleTab({
               <RefreshCw className="h-3.5 w-3.5" />
             </motion.button>
             <FreshBadge syncAt={syncAt} />
+            {status === "live" && <LiveClock startAt={webinar?.liveStartAt} endAt={webinar?.liveEndAt} />}
           </div>
           <div className="flex items-center gap-1 rounded-xl border border-border bg-background p-1">
             {overrideOptions.map((option) => {
@@ -1349,6 +1417,8 @@ export default function LiveConsoleTab({
             {chatCard}
           </div>
 
+          {runningOrder}
+
           {/* 발송·시청자·운영 로그 — 라이브 작업 영역 아래로 */}
           <GroupLabel>발송</GroupLabel>
           {sendGroup}
@@ -1360,6 +1430,7 @@ export default function LiveConsoleTab({
           {recapCard}
           {status === "ended" && <ViewerChart curve={curve} events={chartEvents} />}
           {checklist}
+          {runningOrder}
 
           {/* ── 화면에 띄우기 — 시청 화면 위에 뜨는 것. 한 번에 하나만(팝업 우선). ── */}
           <GroupLabel>화면에 띄우기 · 한 번에 하나만</GroupLabel>
