@@ -749,46 +749,29 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
 
   const inputCls = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
 
+  // 고정 메시지를 맨 위로(단일 활성). 나머지는 서버 순서(최근순) 유지.
+  const orderedMsgs = [...messages].sort((a, b) => Number(b.isPinned) - Number(a.isPinned));
+
   return (
-    <div className={fillHeight ? "flex h-full min-h-0 flex-col gap-3" : "space-y-4"}>
+    <div className={fillHeight ? "flex h-full min-h-0 flex-col" : "space-y-4"}>
       {!fillHeight && (
         <p className="text-[11px] leading-relaxed text-muted-foreground">
           시청자 채팅은 <b className="font-semibold text-foreground">만들기 → 라이브 페이지 → 참여 구성 → 채팅 탭 사용</b>을 켜야 시청 화면에 보여요. 여기선 운영자 발언과 메시지 삭제(모더레이션)를 할 수 있어요.
         </p>
       )}
-      <div className="flex shrink-0 gap-2">
-        <input
-          value={hostMsg}
-          onChange={(e) => setHostMsg(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) void sendHost(); }}
-          placeholder="운영자(HOST)로 메시지 보내기"
-          className={inputCls}
-        />
-        <motion.button whileTap={{ scale: 0.97 }} onClick={sendHost} disabled={!hostMsg.trim() || busy}
-          className="shrink-0 rounded-lg bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">
-          보내기
-        </motion.button>
-      </div>
-
-      <div className="flex shrink-0 items-center justify-between">
-        <p className="text-[11px] text-muted-foreground">최근 100개</p>
-        <button onClick={() => void fetchMessages()} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground">
-          <RefreshCw className="h-3 w-3" /> 새로고침
-        </button>
-      </div>
 
       {loading ? (
-        <div className={fillHeight ? "flex min-h-0 flex-1 items-center justify-center" : ""}>
+        <div className={fillHeight ? "flex min-h-0 flex-1 items-center justify-center" : "py-6 text-center"}>
           <p className="text-xs text-muted-foreground">불러오는 중…</p>
         </div>
       ) : messages.length === 0 ? (
-        <div className={fillHeight ? "flex min-h-0 flex-1 items-center justify-center" : ""}>
+        <div className={fillHeight ? "flex min-h-0 flex-1 items-center justify-center" : "py-6 text-center"}>
           <p className="text-xs text-muted-foreground">아직 채팅 메시지가 없어요.</p>
         </div>
       ) : (
-        <div className={`${fillHeight ? "min-h-0 flex-1 overscroll-contain" : "max-h-80"} space-y-1.5 overflow-y-auto`}>
+        <div className={`${fillHeight ? "min-h-0 flex-1" : "max-h-80"} space-y-0.5 overflow-y-auto overscroll-contain`}>
           <AnimatePresence initial={false}>
-            {messages.map((m) => (
+            {orderedMsgs.map((m) => (
               <motion.div
                 key={m.id}
                 layout
@@ -796,36 +779,34 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.12 }}
-                className={`flex items-start justify-between gap-3 rounded-xl border p-2.5 ${m.isPinned ? "border-violet-500/40 bg-violet-500/[0.04]" : "border-border"}`}
+                className={`group flex items-start gap-2.5 rounded-xl p-2 transition-colors ${m.isPinned ? "bg-violet-500/10" : "hover:bg-secondary/60"}`}
               >
-                <div className="flex min-w-0 items-start gap-2">
-                  <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${m.isHost ? "bg-red-500/10 text-red-500" : "bg-violet-500/10 text-violet-600 dark:text-violet-400"}`} aria-hidden>
-                    {m.name?.[0] ?? "?"}
-                  </span>
-                  <div className="min-w-0 text-xs">
-                    <span className={`mr-1.5 font-semibold ${m.isHost ? "text-red-500" : "text-foreground"}`}>
-                      {m.isHost && <span className="mr-1 rounded bg-red-500/10 px-1 py-0.5 text-[9px]">HOST</span>}
-                      {m.name}
-                    </span>
-                    <span className="text-muted-foreground">{formatKst(m.createdAt, { hour: "2-digit", minute: "2-digit" })}</span>
-                    {m.isPinned && <span className="ml-1 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-medium text-violet-500">📌 고정됨</span>}
-                    <p className="mt-0.5 break-words text-foreground">{m.message}</p>
+                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${m.isHost ? "bg-red-500/10 text-red-500" : "bg-violet-500/10 text-violet-600 dark:text-violet-400"}`} aria-hidden>
+                  {m.name?.[0] ?? "?"}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
+                    <span className={`font-semibold ${m.isHost ? "text-red-500" : "text-foreground"}`}>{m.name}</span>
+                    {m.isHost && <span className="rounded bg-red-500/10 px-1 py-0.5 text-[9px] font-bold text-red-500">HOST</span>}
+                    {m.isPinned && <span className="font-medium text-violet-500">📌 고정됨</span>}
+                    <span>{formatKst(m.createdAt, { hour: "2-digit", minute: "2-digit" })}</span>
                   </div>
+                  <p className="mt-0.5 break-words text-[12.5px] text-foreground">{m.message}</p>
                 </div>
-                <div className="flex shrink-0 items-center gap-0.5">
+                <div className="flex shrink-0 items-center gap-0.5 opacity-60 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
                   <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => togglePin(m)}
-                    className={`rounded-lg p-1.5 transition-colors ${m.isPinned ? "bg-violet-500/10 text-violet-500" : "text-muted-foreground hover:bg-violet-500/10 hover:text-violet-500"}`}
-                    title={m.isPinned ? "고정 해제" : "고정"}>
+                    className={`rounded-lg p-1.5 transition-colors ${m.isPinned ? "text-violet-500" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
+                    title={m.isPinned ? "고정 해제" : "고정"} aria-label={m.isPinned ? "고정 해제" : "메시지 고정"}>
                     <Pin className="h-3.5 w-3.5" />
                   </motion.button>
                   {!m.isHost && m.registrationId && (
                     <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => ban(m)}
-                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500" title="차단">
+                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500" title="차단" aria-label={`${m.name}님 차단`}>
                       <Ban className="h-3.5 w-3.5" />
                     </motion.button>
                   )}
                   <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => remove(m)}
-                    className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500" title="삭제">
+                    className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500" title="삭제" aria-label="메시지 삭제">
                     <Trash2 className="h-3.5 w-3.5" />
                   </motion.button>
                 </div>
@@ -835,8 +816,8 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
         </div>
       )}
 
-      {/* 모더레이션 — 천천히 모드·링크 자동 숨김 스위치 + 금지어 설정 버튼(공개 채팅 POST에 적용) */}
-      <div className="shrink-0 border-t border-border pt-3">
+      {/* 하단 클러스터 — 모더레이션 설정(천천히·링크·금지어) + 진행자 컴포저 */}
+      <div className="shrink-0 space-y-3 border-t border-border pt-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground">
           <label className="flex items-center gap-1.5">
             <Switch on={settings.slowSec > 0} onClick={toggleSlow} label="천천히 모드" />
@@ -854,13 +835,26 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
           {settings.bannedCount > 0 && <span>차단 {settings.bannedCount}명</span>}
         </div>
         {showBanned && (
-          <div className="mt-2 flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <input value={bannedInput} onChange={(e) => setBannedInput(e.target.value)} placeholder="금지어(쉼표로 구분, 2자 이상)"
               className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2 py-1 text-xs outline-none transition-colors focus:border-violet-400" />
             <motion.button whileTap={{ scale: 0.97 }} transition={spring} onClick={saveMod} disabled={savingMod}
               className="shrink-0 rounded-lg bg-violet-500 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">저장</motion.button>
           </div>
         )}
+        <div className="flex gap-2">
+          <input
+            value={hostMsg}
+            onChange={(e) => setHostMsg(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) void sendHost(); }}
+            placeholder="진행자(HOST)로 메시지 보내기…"
+            className={inputCls}
+          />
+          <motion.button whileTap={{ scale: 0.97 }} onClick={sendHost} disabled={!hostMsg.trim() || busy}
+            className="shrink-0 rounded-lg bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">
+            보내기
+          </motion.button>
+        </div>
       </div>
     </div>
   );
