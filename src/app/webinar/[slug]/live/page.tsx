@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import { use } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, CheckCircle2 } from "lucide-react";
@@ -406,23 +406,33 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     };
     let alive = true;
     (async () => {
-      try {
-        const res = await fetch(`/api/webinar/${slug}/preview`);
-        if (!alive) return;
-        if (!res.ok) { fallbackToClean(); return; }
-        const data = await res.json();
-        setWebinar(data.webinar);
-        if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
-        setPreviewVideoId(typeof data.youtubeId === "string" ? data.youtubeId : null);
-        setPreviewState(init);
-        setIsLoading(false);
-      } catch { if (alive) fallbackToClean(); }
+      // 인증 실패(401/403)는 즉시 폴백, 일시적 오류(5xx·네트워크)는 짧게 2회 재시도 후 폴백 —
+      // 소유자가 서버 블립 한 번에 소리없이 공개 등록 화면으로 튕겨나가지 않게.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const res = await fetch(`/api/webinar/${slug}/preview`);
+          if (!alive) return;
+          if (res.ok) {
+            const data = await res.json();
+            setWebinar(data.webinar);
+            if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
+            setPreviewVideoId(typeof data.youtubeId === "string" ? data.youtubeId : null);
+            setPreviewState(init);
+            setIsLoading(false);
+            return;
+          }
+          if (res.status === 401 || res.status === 403 || res.status === 404) break; // 권한 문제 — 재시도 무의미
+        } catch { /* 네트워크 블립 — 재시도 */ }
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+      }
+      if (alive) fallbackToClean();
     })();
     return () => { alive = false; };
   }, [slug]);
 
   // 미리보기 상태 → view/registrationId/videoId 강제. 부작용 이펙트는 isPreviewUrl 가드로 정지돼 있어 덮이지 않는다.
-  useEffect(() => {
+  // useLayoutEffect — 스위처 클릭 후 페인트 전에 view 를 확정해 이전 화면 1프레임 깜빡임을 없앤다.
+  useLayoutEffect(() => {
     if (!previewState) return;
     setView(previewState === "ended" ? "ended" : previewState === "registration" ? "signup" : "live");
     setRegistrationId(previewState === "live" ? "preview" : null);
@@ -767,7 +777,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               </button>
             ))}
           </div>
-          <span className="ml-auto hidden text-[11px] text-white/50 sm:inline">실제 전송·입장·집계는 되지 않아요</span>
+          <span className="ml-auto hidden text-[11px] text-white/50 sm:inline">실제 전송·입장·집계 없음 · 팝업·투표 등 라이브 푸시는 표시되지 않아요</span>
         </div>
       )}
 
