@@ -793,7 +793,7 @@ function ReminderPanel({ webinarId }: { webinarId: string }) {
   );
 }
 
-interface CurveData { points: { label: string; viewers: number }[]; peak: number; avg: number; hasData: boolean }
+interface CurveData { points: { label: string; viewers: number; entered: number; chat: number }[]; peak: number; avg: number; hasData: boolean; bucketMinutes?: number; range?: string }
 interface ActivityItem { id: string; action: string; label: string; at: string; actor: string | null }
 
 // tailwind 토큰(oklch)을 canvas 용 concrete 색으로 — 프로브 span 의 computed color 를 읽는다(테마 반영).
@@ -846,11 +846,37 @@ function Sparkline({ values }: { values: number[] }) {
   return <canvas ref={ref} className="h-full w-full" />;
 }
 
-// 동시 접속 추이 — analytics/attendance-curve 실데이터. 면적+선+피크+호버 크로스헤어.
-function ViewerChart({ curve, events = [] }: { curve: CurveData | null; events?: { min: number; label: string }[] }) {
+// 동시 접속 추이 — attendance-curve 실데이터. 동시·입장 라인 + 채팅 하단 막대 + 이벤트 마커 + 호버.
+const CHART_RANGES: { key: string; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "60m", label: "최근 60분" },
+  { key: "30m", label: "최근 30분" },
+];
+function ChartLegend() {
+  return (
+    <div className="flex items-center gap-2.5 text-[10px] text-muted-foreground">
+      <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-violet-500" />동시</span>
+      <span className="flex items-center gap-1"><span className="h-0.5 w-2.5 rounded bg-green-500" />입장</span>
+      <span className="flex items-center gap-1"><span className="h-2 w-1.5 rounded-sm bg-muted-foreground/40" />채팅</span>
+    </div>
+  );
+}
+function ChartRangeToggle({ range, onRangeChange }: { range: string; onRangeChange?: (r: string) => void }) {
+  return (
+    <div className="flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5">
+      {CHART_RANGES.map((rg) => (
+        <button key={rg.key} onClick={() => onRangeChange?.(rg.key)} disabled={!onRangeChange}
+          className={`rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors ${range === rg.key ? "bg-violet-500 text-white" : "text-muted-foreground hover:bg-secondary"}`}>
+          {rg.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+function ViewerChart({ curve, events = [], range = "all", onRangeChange }: { curve: CurveData | null; events?: { min: number; label: string }[]; range?: string; onRangeChange?: (r: string) => void }) {
   const ref = useRef<HTMLCanvasElement | null>(null);
   const [hover, setHover] = useState<number | null>(null);
-  const [tip, setTip] = useState<{ x: number; label: string; v: number } | null>(null);
+  const [tip, setTip] = useState<{ x: number; label: string; v: number; entered: number; chat: number } | null>(null);
   const pts = curve?.points ?? [];
   // 운영 이벤트(투표 발행·공지 등)를 가장 가까운(≤10분) 버킷에 매핑 — 추이와 액션 상관 표시
   const evByIdx = new Map<number, string[]>();
@@ -871,26 +897,34 @@ function ViewerChart({ curve, events = [] }: { curve: CurveData | null; events?:
       const W = Math.max(280, r.width || 600), H = Math.max(160, r.height || 220);
       cv.width = W * ratio; cv.height = H * ratio; ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       ctx.clearRect(0, 0, W, H);
-      const padL = 8, padR = 8, padT = 14, padB = 22;
+      const padL = 8, padR = 8, padT = 14, padB = 22, barBand = 16;
       const vals = pts.map((p) => p.viewers);
-      const yMax = Math.max(10, curve?.peak ?? Math.max(1, ...vals)) * 1.15;
+      const entered = pts.map((p) => p.entered ?? 0);
+      const chat = pts.map((p) => p.chat ?? 0);
+      const yMax = Math.max(10, curve?.peak ?? 0, ...entered) * 1.15;
+      const maxChat = Math.max(1, ...chat);
       const N = pts.length;
-      const ac = readColor("text-violet-500"), muted = readColor("text-muted-foreground"), gl = readColor("text-muted-foreground", 0.14);
+      const plotB = H - padB - barBand; // 라인 영역 바닥(하단 채팅 막대 위)
+      const ac = readColor("text-violet-500"), good = readColor("text-green-500"), muted = readColor("text-muted-foreground"), gl = readColor("text-muted-foreground", 0.14);
       const x = (i: number) => padL + (N <= 1 ? 0.5 : i / (N - 1)) * (W - padL - padR);
-      const y = (v: number) => padT + (1 - v / yMax) * (H - padT - padB);
+      const y = (v: number) => padT + (1 - v / yMax) * (plotB - padT);
       ctx.font = "10px sans-serif"; ctx.textBaseline = "middle";
       [0, 0.5, 1].forEach((f) => { const gv = Math.round(yMax * f), yy = y(gv); ctx.strokeStyle = gl as string; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(W - padR, yy); ctx.stroke(); ctx.fillStyle = muted as string; ctx.textAlign = "left"; ctx.fillText(gv >= 1000 ? (gv / 1000).toFixed(1) + "k" : String(gv), padL + 2, yy - 7); });
+      // 채팅 하단 막대(자체 스케일 — 동시/입장과 100배 차 나므로 별도 표현)
+      if (N) { const bw = Math.max(1.5, ((W - padL - padR) / N) * 0.5); ctx.fillStyle = readColor("text-muted-foreground", 0.35) as string; chat.forEach((c, i) => { if (c <= 0) return; const bh = (c / maxChat) * (barBand - 3); ctx.fillRect(x(i) - bw / 2, H - padB - bh, bw, bh); }); }
+      const linePath = (arr: number[]) => { ctx.beginPath(); arr.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v)))); };
       if (N >= 2) {
-        const grad = ctx.createLinearGradient(0, padT, 0, H - padB); grad.addColorStop(0, readColor("text-violet-500", 0.26) as string); grad.addColorStop(1, readColor("text-violet-500", 0) as string);
-        ctx.beginPath(); vals.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v)))); ctx.lineTo(x(N - 1), H - padB); ctx.lineTo(x(0), H - padB); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
-        ctx.beginPath(); vals.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v)))); ctx.strokeStyle = ac as string; ctx.lineWidth = 2.2; ctx.lineJoin = "round"; ctx.stroke();
+        const grad = ctx.createLinearGradient(0, padT, 0, plotB); grad.addColorStop(0, readColor("text-violet-500", 0.26) as string); grad.addColorStop(1, readColor("text-violet-500", 0) as string);
+        linePath(vals); ctx.lineTo(x(N - 1), plotB); ctx.lineTo(x(0), plotB); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+        ctx.setLineDash([4, 3]); linePath(entered); ctx.strokeStyle = good as string; ctx.lineWidth = 1.6; ctx.lineJoin = "round"; ctx.stroke(); ctx.setLineDash([]);
+        linePath(vals); ctx.strokeStyle = ac as string; ctx.lineWidth = 2.2; ctx.lineJoin = "round"; ctx.stroke();
         const ex = x(N - 1), ey = y(vals[N - 1]); ctx.beginPath(); ctx.arc(ex, ey, 3.6, 0, 7); ctx.fillStyle = ac as string; ctx.fill();
       }
-      // 운영 이벤트 마커 — 베이스라인의 작은 점(해당 버킷에 액션 발생)
-      evByIdx.forEach((_l, i) => { ctx.beginPath(); ctx.arc(x(i), H - padB, 2.6, 0, 7); ctx.fillStyle = ac as string; ctx.fill(); });
+      // 운영 이벤트 마커 — 라인 영역 바닥의 작은 점(해당 버킷에 액션 발생)
+      evByIdx.forEach((_l, i) => { ctx.beginPath(); ctx.arc(x(i), plotB, 2.6, 0, 7); ctx.fillStyle = ac as string; ctx.fill(); });
       ctx.fillStyle = muted as string; ctx.textBaseline = "alphabetic";
       if (N) { ctx.textAlign = "left"; ctx.fillText(pts[0].label, padL, H - 6); ctx.textAlign = "right"; ctx.fillText(pts[N - 1].label, W - padR, H - 6); }
-      if (hover != null && pts[hover]) { const hx = x(hover); ctx.strokeStyle = readColor("text-muted-foreground", 0.4) as string; ctx.setLineDash([3, 3]); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(hx, padT); ctx.lineTo(hx, H - padB); ctx.stroke(); ctx.setLineDash([]); ctx.beginPath(); ctx.arc(hx, y(vals[hover]), 3.4, 0, 7); ctx.fillStyle = ac as string; ctx.fill(); }
+      if (hover != null && pts[hover]) { const hx = x(hover); ctx.strokeStyle = readColor("text-muted-foreground", 0.4) as string; ctx.setLineDash([3, 3]); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(hx, padT); ctx.lineTo(hx, plotB); ctx.stroke(); ctx.setLineDash([]); ctx.beginPath(); ctx.arc(hx, y(vals[hover]), 3.4, 0, 7); ctx.fillStyle = ac as string; ctx.fill(); }
     };
     draw();
     const ro = new ResizeObserver(draw); ro.observe(cv);
@@ -901,24 +935,29 @@ function ViewerChart({ curve, events = [] }: { curve: CurveData | null; events?:
     const cv = ref.current; if (!cv || !pts.length) return;
     const r = cv.getBoundingClientRect(); const padL = 8, padR = 8, W = Math.max(280, r.width);
     let i = Math.round(((clientX - r.left - padL) / (W - padL - padR)) * (pts.length - 1));
-    i = Math.max(0, Math.min(pts.length - 1, i)); setHover(i); setTip({ x: padL + (pts.length <= 1 ? 0.5 : i / (pts.length - 1)) * (W - padL - padR), label: pts[i].label, v: pts[i].viewers });
+    i = Math.max(0, Math.min(pts.length - 1, i)); const p = pts[i];
+    setHover(i); setTip({ x: padL + (pts.length <= 1 ? 0.5 : i / (pts.length - 1)) * (W - padL - padR), label: p.label, v: p.viewers, entered: p.entered ?? 0, chat: p.chat ?? 0 });
   };
   if (!curve || !curve.hasData) {
     return (
       <section className="rounded-2xl border border-border bg-card">
-        <div className="flex items-center gap-2 border-b border-border px-4 py-3.5 sm:px-5"><BarChart3 className="h-4 w-4 text-violet-500" /><h2 className="text-sm font-semibold">동시 접속 추이</h2></div>
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3.5 sm:px-5"><BarChart3 className="h-4 w-4 text-violet-500" /><h2 className="text-sm font-semibold">동시 접속 추이</h2><div className="ml-auto"><ChartRangeToggle range={range} onRangeChange={onRangeChange} /></div></div>
         <div className="flex flex-col items-center gap-1.5 px-4 py-12 text-center">
           <p className="text-sm font-medium">아직 시청 데이터가 없어요</p>
-          <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">라이브가 시작되고 시청자가 입장하면 분 단위 동시 접속 추이가 여기 표시돼요.</p>
+          <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">라이브가 시작되고 시청자가 입장하면 분 단위 추이가 여기 표시돼요.</p>
         </div>
       </section>
     );
   }
   return (
     <section className="rounded-2xl border border-border bg-card">
-      <div className="flex items-center gap-2 border-b border-border px-4 py-3.5 sm:px-5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-3.5 sm:px-5">
         <BarChart3 className="h-4 w-4 text-violet-500" /><h2 className="text-sm font-semibold">동시 접속 추이</h2>
-        <span className="ml-auto text-[11px] text-muted-foreground">피크 <b className="font-semibold text-foreground tabular-nums">{curve.peak.toLocaleString()}</b> · 평균 <b className="font-semibold text-foreground tabular-nums">{curve.avg.toLocaleString()}</b></span>
+        <ChartLegend />
+        <div className="ml-auto flex items-center gap-3">
+          <span className="hidden text-[11px] text-muted-foreground sm:inline">피크 <b className="font-semibold text-foreground tabular-nums">{curve.peak.toLocaleString()}</b> · 평균 <b className="font-semibold text-foreground tabular-nums">{curve.avg.toLocaleString()}</b></span>
+          <ChartRangeToggle range={range} onRangeChange={onRangeChange} />
+        </div>
       </div>
       <div className="relative px-3 py-3" style={{ height: 240 }}>
         <canvas ref={ref} className="block h-full w-full cursor-crosshair" style={{ touchAction: "none" }}
@@ -926,7 +965,8 @@ function ViewerChart({ curve, events = [] }: { curve: CurveData | null; events?:
           onTouchStart={(e) => onMove(e.touches[0].clientX)} onTouchMove={(e) => onMove(e.touches[0].clientX)} />
         {tip && (
           <div className="pointer-events-none absolute top-2 -translate-x-1/2 rounded-lg bg-foreground px-2.5 py-1.5 text-[11px] leading-tight text-background shadow-lg" style={{ left: tip.x }}>
-            <div className="font-bold">{tip.label}</div><div className="tabular-nums">동시 {tip.v.toLocaleString()}명</div>
+            <div className="font-bold">{tip.label}</div>
+            <div className="tabular-nums">동시 {tip.v.toLocaleString()} · 입장 {tip.entered.toLocaleString()} · 채팅 {tip.chat.toLocaleString()}</div>
             {hover != null && evByIdx.get(hover)?.map((lb, k) => <div key={k} className="mt-0.5 opacity-80">● {lb}</div>)}
           </div>
         )}
@@ -1024,6 +1064,7 @@ export default function LiveConsoleTab({
   // 투표 집계·채팅 모더레이션 피드가 별도 타이머 없이 같은 주기로 갱신되게 한다.
   const [liveTick, setLiveTick] = useState(0);
   const [curve, setCurve] = useState<CurveData | null>(null);
+  const [curveRange, setCurveRange] = useState("all");
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [syncAt, setSyncAt] = useState<number>(() => Date.now());
   const statusRef = useRef<WebinarStatus>("registration");
@@ -1045,8 +1086,8 @@ export default function LiveConsoleTab({
 
   // 동시 접속 추이(차트·미니 스파크라인) + 운영 로그 — 대시보드와 같은 폴링 주기로 갱신
   const fetchCurve = useCallback(async () => {
-    try { const res = await fetch(`/api/webinars/${webinarId}/analytics/attendance-curve`); if (res.ok) setCurve(await res.json()); } catch { /* 다음 주기 재시도 */ }
-  }, [webinarId]);
+    try { const res = await fetch(`/api/webinars/${webinarId}/analytics/attendance-curve?range=${curveRange}`); if (res.ok) setCurve(await res.json()); } catch { /* 다음 주기 재시도 */ }
+  }, [webinarId, curveRange]);
   const fetchActivity = useCallback(async () => {
     try { const res = await fetch(`/api/webinars/${webinarId}/activity`); if (res.ok) setActivity((await res.json()).items ?? []); } catch { /* 다음 주기 재시도 */ }
   }, [webinarId]);
@@ -1404,7 +1445,7 @@ export default function LiveConsoleTab({
         <>
           {/* 라이브 1행: 동시 접속 추이(좌) + 화면에 띄우기 송출(우) */}
           <div className="grid items-start gap-4 lg:grid-cols-[1.4fr_1fr]">
-            <ViewerChart curve={curve} events={chartEvents} />
+            <ViewerChart curve={curve} events={chartEvents} range={curveRange} onRangeChange={setCurveRange} />
             <div className="space-y-3">
               <GroupLabel>화면에 띄우기 · 한 번에 하나만</GroupLabel>
               {pushGroup}
@@ -1428,7 +1469,7 @@ export default function LiveConsoleTab({
       ) : (
         <>
           {recapCard}
-          {status === "ended" && <ViewerChart curve={curve} events={chartEvents} />}
+          {status === "ended" && <ViewerChart curve={curve} events={chartEvents} range={curveRange} onRangeChange={setCurveRange} />}
           {checklist}
           {runningOrder}
 
