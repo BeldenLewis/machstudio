@@ -612,7 +612,8 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
   const [hostMsg, setHostMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [settings, setSettings] = useState<{ slowSec: number; bannedWords: string[]; bannedCount: number }>({ slowSec: 0, bannedWords: [], bannedCount: 0 });
+  const [settings, setSettings] = useState<{ chatEnabled: boolean; hideLinks: boolean; slowSec: number; bannedWords: string[]; bannedCount: number }>({ chatEnabled: false, hideLinks: true, slowSec: 0, bannedWords: [], bannedCount: 0 });
+  const [showBanned, setShowBanned] = useState(false);
   const [slowInput, setSlowInput] = useState("0");
   const [bannedInput, setBannedInput] = useState("");
   const [savingMod, setSavingMod] = useState(false);
@@ -630,7 +631,7 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
       if (gen !== reqIdRef.current) { setLoading(false); return; }
       setMessages(d.messages ?? []);
       if (d.settings) {
-        setSettings({ slowSec: d.settings.slowSec ?? 0, bannedWords: d.settings.bannedWords ?? [], bannedCount: d.settings.bannedCount ?? 0 });
+        setSettings({ chatEnabled: !!d.settings.chatEnabled, hideLinks: d.settings.hideLinks !== false, slowSec: d.settings.slowSec ?? 0, bannedWords: d.settings.bannedWords ?? [], bannedCount: d.settings.bannedCount ?? 0 });
         // 입력 버퍼는 최초 1회만 시드 — 폴링이 편집 중 값을 덮지 않게.
         if (!seededRef.current) { seededRef.current = true; setSlowInput(String(d.settings.slowSec ?? 0)); setBannedInput((d.settings.bannedWords ?? []).join(", ")); }
       }
@@ -715,10 +716,39 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
     } finally { setSavingMod(false); mutatingRef.current = false; }
   };
 
+  // 채팅 on/off · 천천히 모드 · 링크 자동 숨김 토글 — 설정 PATCH 재사용, 낙관적 반영.
+  const patchChat = async (body: Record<string, unknown>, apply: () => void) => {
+    mutatingRef.current = true; reqIdRef.current++;
+    try {
+      const res = await fetch(`/api/webinars/${webinarId}/chat`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!res.ok) { toast.error("변경에 실패했어요"); return; }
+      apply();
+    } finally { mutatingRef.current = false; }
+  };
+  const toggleChat = () => { const next = !settings.chatEnabled; void patchChat({ chatEnabled: next }, () => { setSettings((s) => ({ ...s, chatEnabled: next })); toast.success(next ? "시청자 채팅을 켰어요" : "시청자 채팅을 껐어요"); }); };
+  const toggleHideLinks = () => { const next = !settings.hideLinks; void patchChat({ hideLinks: next }, () => setSettings((s) => ({ ...s, hideLinks: next }))); };
+  const toggleSlow = () => { const next = settings.slowSec > 0 ? 0 : 10; void patchChat({ slowSec: next }, () => { setSettings((s) => ({ ...s, slowSec: next })); setSlowInput(String(next)); }); };
+
+  const Switch = ({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) => (
+    <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={onClick}
+      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-violet-500" : "border border-border bg-secondary"}`}>
+      <span className={`absolute top-[2px] h-[14px] w-[14px] rounded-full bg-white shadow transition-all ${on ? "left-[18px]" : "left-[3px]"}`} />
+    </button>
+  );
+
   const inputCls = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
 
   return (
     <div className={fillHeight ? "flex h-full min-h-0 flex-col gap-3" : "space-y-4"}>
+      {fillHeight && (
+        <div className="flex shrink-0 items-center justify-between">
+          <span className="text-[11px] font-medium text-muted-foreground">시청자 채팅 표시</span>
+          <div className="flex items-center gap-2">
+            <span className={`text-[11px] font-medium ${settings.chatEnabled ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>{settings.chatEnabled ? "켜짐" : "꺼짐"}</span>
+            <Switch on={settings.chatEnabled} onClick={toggleChat} label="시청자 채팅 켜기/끄기" />
+          </div>
+        </div>
+      )}
       {!fillHeight && (
         <p className="text-[11px] leading-relaxed text-muted-foreground">
           시청자 채팅은 <b className="font-semibold text-foreground">만들기 → 라이브 페이지 → 참여 구성 → 채팅 탭 사용</b>을 켜야 시청 화면에 보여요. 여기선 운영자 발언과 메시지 삭제(모더레이션)를 할 수 있어요.
@@ -803,19 +833,32 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
         </div>
       )}
 
-      {/* 모더레이션 설정 — 천천히 모드 · 금지어(공개 채팅 POST 라우트에서 적용) */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border pt-3 text-[11px]">
-        <label className="flex items-center gap-1.5 text-muted-foreground">
-          천천히 모드
-          <input type="number" min={0} max={300} value={slowInput} onChange={(e) => setSlowInput(e.target.value)}
-            className="w-14 rounded-lg border border-border bg-background px-2 py-1 text-xs outline-none transition-colors focus:border-violet-400" />
-          초
-        </label>
-        <input value={bannedInput} onChange={(e) => setBannedInput(e.target.value)} placeholder="금지어(쉼표로 구분)"
-          className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2 py-1 text-xs outline-none transition-colors focus:border-violet-400" />
-        <motion.button whileTap={{ scale: 0.97 }} transition={spring} onClick={saveMod} disabled={savingMod}
-          className="shrink-0 rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-50">저장</motion.button>
-        {settings.bannedCount > 0 && <span className="text-muted-foreground">차단 {settings.bannedCount}명</span>}
+      {/* 모더레이션 — 천천히 모드·링크 자동 숨김 스위치 + 금지어 설정 버튼(공개 채팅 POST에 적용) */}
+      <div className="shrink-0 border-t border-border pt-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground">
+          <label className="flex items-center gap-1.5">
+            <Switch on={settings.slowSec > 0} onClick={toggleSlow} label="천천히 모드" />
+            천천히 모드{settings.slowSec > 0 ? ` ${settings.slowSec}초` : ""}
+          </label>
+          <label className="flex items-center gap-1.5">
+            <Switch on={settings.hideLinks} onClick={toggleHideLinks} label="링크 자동 숨김" />
+            링크 자동 숨김
+          </label>
+          <button type="button" onClick={() => setShowBanned((v) => !v)}
+            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 font-medium text-foreground transition-colors hover:bg-secondary">
+            금지어 설정{settings.bannedWords.length > 0 ? ` (${settings.bannedWords.length})` : ""}
+            <ChevronDown className={`h-3 w-3 transition-transform ${showBanned ? "rotate-180" : ""}`} />
+          </button>
+          {settings.bannedCount > 0 && <span>차단 {settings.bannedCount}명</span>}
+        </div>
+        {showBanned && (
+          <div className="mt-2 flex items-center gap-2">
+            <input value={bannedInput} onChange={(e) => setBannedInput(e.target.value)} placeholder="금지어(쉼표로 구분, 2자 이상)"
+              className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2 py-1 text-xs outline-none transition-colors focus:border-violet-400" />
+            <motion.button whileTap={{ scale: 0.97 }} transition={spring} onClick={saveMod} disabled={savingMod}
+              className="shrink-0 rounded-lg bg-violet-500 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">저장</motion.button>
+          </div>
+        )}
       </div>
     </div>
   );

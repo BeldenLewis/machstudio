@@ -29,6 +29,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     select: { id: true, name: true, message: true, isHost: true, isPinned: true, registrationId: true, createdAt: true },
   });
   const settings = {
+    chatEnabled: (webinar.components as { chatEnabled?: boolean } | null)?.chatEnabled === true,
+    hideLinks: webinar.chatHideLinks !== false,
     slowSec: webinar.chatSlowSec ?? 0,
     bannedWords: webinar.chatBannedWords ?? [],
     bannedCount: (webinar.chatBannedRegIds ?? []).length,
@@ -77,13 +79,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!webinar) return NextResponse.json({ error: "접근 권한 없음" }, { status: 403 });
 
   const body = await request.json().catch(() => ({}));
-  const data: { chatSlowSec?: number; chatBannedWords?: string[] } = {};
+  const data: { chatSlowSec?: number; chatBannedWords?: string[]; chatHideLinks?: boolean; components?: object } = {};
   if (body.slowSec !== undefined) data.chatSlowSec = Math.max(0, Math.min(300, Number(body.slowSec) || 0));
   if (Array.isArray(body.bannedWords)) {
     // substring 매칭이라 1자 토큰은 과다 차단 위험 — 2자 이상만 저장(최대 40자·50개).
     data.chatBannedWords = (body.bannedWords as unknown[]).map((w) => String(w).trim().slice(0, 40)).filter((w) => w.length >= 2).slice(0, 50);
   }
-  const updated = await prisma.webinar.update({ where: { id }, data, select: { chatSlowSec: true, chatBannedWords: true } });
+  if (body.hideLinks !== undefined) data.chatHideLinks = Boolean(body.hideLinks);
+  // 채팅 on/off 는 components.chatEnabled(뷰어 게이팅과 동일 소스). 다른 컴포넌트 플래그 보존 병합.
+  if (body.chatEnabled !== undefined) {
+    const comp = (webinar.components ?? {}) as Record<string, unknown>;
+    data.components = { ...comp, chatEnabled: Boolean(body.chatEnabled) };
+  }
+  const updated = await prisma.webinar.update({ where: { id }, data: data as never, select: { chatSlowSec: true, chatBannedWords: true } });
 
   await logActivity({
     workspaceId: webinar.workspaceId,

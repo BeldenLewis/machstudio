@@ -85,10 +85,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const body = await request.json().catch(() => ({}));
   const rawMessage = String(body?.message ?? "").trim().slice(0, MAX_LEN);
   if (!rawMessage) return NextResponse.json({ error: "메시지를 입력해주세요" }, { status: 400, headers: CORS });
-  // 링크는 제거하고 통과(강한 거절 대신 차분한 UX). 단, 링크 외 내용이 없으면(링크만) 거절.
-  const withoutLinks = rawMessage.replace(LINK_RE, " ").replace(/\s+/g, " ").trim();
-  if (!withoutLinks) return NextResponse.json({ error: "링크만 있는 메시지는 보낼 수 없어요." }, { status: 400, headers: CORS });
-  const message = rawMessage.replace(LINK_RE, "[링크 제거됨]").trim();
+  // 링크 자동 숨김(운영자 토글, 기본 ON) — 켜져 있으면 링크 제거하고 통과. 단, 링크만 있으면 거절.
+  const hideLinks = webinar.chatHideLinks !== false;
+  if (hideLinks) {
+    const withoutLinks = rawMessage.replace(LINK_RE, " ").replace(/\s+/g, " ").trim();
+    if (!withoutLinks) return NextResponse.json({ error: "링크만 있는 메시지는 보낼 수 없어요." }, { status: 400, headers: CORS });
+  }
+  const message = hideLinks ? rawMessage.replace(LINK_RE, "[링크 제거됨]").trim() : rawMessage;
 
   // 금지어 — 운영자가 설정한 표현이 포함되면 거절(대소문자 무시). 전용 컬럼.
   const bannedWords = webinar.chatBannedWords ?? [];
