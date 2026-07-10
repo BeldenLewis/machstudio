@@ -1152,6 +1152,109 @@ function RunningOrder({ sessions }: { sessions: WebinarForConsole["sessions"] })
   );
 }
 
+// 화면에 띄우기 — 목업식 통합 송출 카드. 타입별 현재/활성 항목을 토글 행으로,
+// 활성 투표는 실시간 결과 프리뷰. 생성/편집은 하단 '콘텐츠 관리' 디스클로저(기존 CRUD 패널).
+function BroadcastCard({ webinarId, tick = 0, editors }: { webinarId: string; tick?: number; editors: ReactNode }) {
+  const [polls, setPolls] = useState<AdminPoll[]>([]);
+  const [anns, setAnns] = useState<{ id: string; message: string; isActive: boolean }[]>([]);
+  const [popups, setPopups] = useState<{ id: string; title: string; isActive: boolean }[]>([]);
+  const [tallies, setTallies] = useState<{ id: string; title: string; isActive: boolean }[]>([]);
+  const [showEditors, setShowEditors] = useState(false);
+  const mut = useRef(false);
+
+  const fetchAll = useCallback(async () => {
+    const safe = async (url: string, key: string) => { try { const r = await fetch(url); if (!r.ok) return []; return (await r.json())[key] ?? []; } catch { return []; } };
+    const [p, a, pu, t] = await Promise.all([
+      safe(`/api/webinars/${webinarId}/polls`, "polls"),
+      safe(`/api/webinars/${webinarId}/announcements`, "announcements"),
+      safe(`/api/webinars/${webinarId}/popups`, "popups"),
+      safe(`/api/webinars/${webinarId}/tally-pushes`, "tallyPushes"),
+    ]);
+    setPolls(p); setAnns(a); setPopups(pu); setTallies(t);
+  }, [webinarId]);
+  useEffect(() => { void fetchAll(); }, [fetchAll]);
+  useEffect(() => { if (tick > 0 && !mut.current) void fetchAll(); }, [tick, fetchAll]);
+
+  const patch = async (seg: string, id: string, isActive: boolean, name: string) => {
+    mut.current = true;
+    try {
+      const res = await fetch(`/api/webinars/${webinarId}/${seg}/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isActive }),
+      });
+      if (!res.ok) { toast.error(res.status === 409 ? "다른 항목이 방금 켜졌어요. 새로고침 후 다시 시도해주세요." : "변경에 실패했어요"); return; }
+      toast.success(isActive ? `${name} 송출 시작` : `${name} 송출 종료`);
+      await fetchAll();
+    } finally { mut.current = false; }
+  };
+
+  const activePoll = polls.find((p) => p.isActive) ?? null;
+  const rows = [
+    { seg: "polls", icon: BarChart3, tone: "bg-violet-500/10 text-violet-600 dark:text-violet-400", name: "실시간 투표", cur: activePoll ?? polls[0] ?? null, summary: (activePoll ?? polls[0])?.question ?? "등록된 투표 없음" },
+    { seg: "announcements", icon: Megaphone, tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400", name: "공지", cur: anns.find((a) => a.isActive) ?? anns[0] ?? null, summary: (anns.find((a) => a.isActive) ?? anns[0])?.message ?? "등록된 공지 없음" },
+    { seg: "popups", icon: MessageSquarePlus, tone: "bg-secondary text-muted-foreground", name: "팝업", cur: popups.find((p) => p.isActive) ?? popups[0] ?? null, summary: (popups.find((p) => p.isActive) ?? popups[0])?.title ?? "등록된 팝업 없음" },
+    { seg: "tally-pushes", icon: Bell, tone: "bg-secondary text-muted-foreground", name: "Tally 설문", cur: tallies.find((t) => t.isActive) ?? tallies[0] ?? null, summary: (tallies.find((t) => t.isActive) ?? tallies[0])?.title ?? "등록된 설문 없음" },
+  ] as const;
+  const activeCount = rows.filter((r) => r.cur && (r.cur as { isActive: boolean }).isActive).length;
+
+  return (
+    <section className="flex h-[70vh] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[480px]">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border p-4 sm:px-5">
+        <MessageSquarePlus className="h-4 w-4 text-violet-500" />
+        <h2 className="text-sm font-semibold">화면에 띄우기</h2>
+        <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-medium ${activeCount ? "bg-green-500/10 text-green-600 dark:text-green-400" : "bg-secondary text-muted-foreground"}`}>{activeCount ? `${activeCount}개 송출 중` : "대기"}</span>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+        {rows.map((r) => {
+          const cur = r.cur as { id: string; isActive: boolean } | null;
+          return (
+            <div key={r.seg} className="flex items-center gap-3 border-b border-border/60 py-3 last:border-0">
+              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${r.tone}`}><r.icon className="h-4 w-4" /></span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-medium">{r.name}</div>
+                <div className="truncate text-[11px] text-muted-foreground">{r.summary}</div>
+              </div>
+              {cur ? (
+                <button onClick={() => patch(r.seg, cur.id, !cur.isActive, r.name)} role="switch" aria-checked={cur.isActive} aria-label={`${r.name} 송출`}
+                  className={`relative h-[22px] w-[38px] shrink-0 rounded-full transition-colors ${cur.isActive ? "bg-violet-500" : "bg-secondary border border-border"}`}>
+                  <span className={`absolute top-[2px] h-[16px] w-[16px] rounded-full bg-white shadow transition-all ${cur.isActive ? "left-[18px]" : "left-[3px]"}`} />
+                </button>
+              ) : (
+                <span className="shrink-0 text-[10px] text-muted-foreground">아래에서 추가</span>
+              )}
+            </div>
+          );
+        })}
+
+        {activePoll && (
+          <div className="mt-3 rounded-xl border border-border bg-secondary/30 p-3">
+            <div className="text-xs font-semibold">{activePoll.question}</div>
+            <div className="mb-2 mt-0.5 text-[11px] text-muted-foreground">실시간 집계 · 응답 {activePoll.options.reduce((s, o) => s + o.voteCount, 0).toLocaleString()}표</div>
+            {(() => {
+              const total = activePoll.options.reduce((s, o) => s + o.voteCount, 0) || 1;
+              return activePoll.options.map((o) => {
+                const pct = Math.round((o.voteCount / total) * 100);
+                return (
+                  <div key={o.id} className="mb-1.5 last:mb-0">
+                    <div className="flex justify-between gap-2 text-[11px]"><span className="truncate">{o.label}</span><span className="shrink-0 tabular-nums text-muted-foreground">{o.voteCount}표 · {pct}%</span></div>
+                    <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-card"><div className="h-full rounded-full bg-violet-500" style={{ width: `${pct}%` }} /></div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        )}
+      </div>
+      <div className="shrink-0 border-t border-border">
+        <button onClick={() => setShowEditors((v) => !v)} className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary sm:px-5">
+          <span>콘텐츠 관리 · 만들기 / 편집</span>
+          <ChevronDown className={`h-4 w-4 transition-transform ${showEditors ? "rotate-180" : ""}`} />
+        </button>
+        {showEditors && <div className="max-h-[52vh] space-y-3 overflow-y-auto border-t border-border p-4 sm:p-5">{editors}</div>}
+      </div>
+    </section>
+  );
+}
+
 export default function LiveConsoleTab({
   webinarId,
   webinar,
@@ -1554,16 +1657,9 @@ export default function LiveConsoleTab({
             {runningOrder}
           </div>
 
-          {/* 라이브 2행: 화면에 띄우기 · Q&A 대기열 · 채팅 모더레이션 (높이 일치) */}
+          {/* 라이브 2행: 화면에 띄우기(통합 송출 카드) · Q&A 대기열 · 채팅 모더레이션 (높이 일치) */}
           <div className="grid gap-4 lg:grid-cols-3">
-            <section className="flex h-[70vh] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[480px]">
-              <div className="flex shrink-0 items-center gap-2 border-b border-border p-4 sm:px-5">
-                <MessageSquarePlus className="h-4 w-4 text-violet-500" />
-                <h2 className="text-sm font-semibold">화면에 띄우기</h2>
-                <span className="ml-auto text-[10px] text-muted-foreground">한 번에 하나만</span>
-              </div>
-              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 sm:p-5">{pushGroup}</div>
-            </section>
+            <BroadcastCard webinarId={webinarId} tick={liveTick} editors={pushGroup} />
             {qaCard}
             {chatCard}
           </div>
