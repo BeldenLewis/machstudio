@@ -41,7 +41,7 @@ export default function OperateTab({
   ];
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-4">
+    <div className="min-h-full bg-secondary p-4 dark:bg-transparent sm:p-6 lg:p-8 space-y-4">
       <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-background p-1">
         {items.map(({ id, label, icon: Icon }) => (
           <motion.button
