@@ -625,7 +625,7 @@ function Switch({ on, onClick, label }: { on: boolean; onClick: () => void; labe
   );
 }
 
-function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: string; tick?: number; fillHeight?: boolean }) {
+function ChatPanel({ webinarId, tick = 0, fillHeight = false, onEnabledChange }: { webinarId: string; tick?: number; fillHeight?: boolean; onEnabledChange?: (v: boolean) => void }) {
   const confirm = useConfirm();
   const [messages, setMessages] = useState<AdminChatMessage[]>([]);
   const [hostMsg, setHostMsg] = useState("");
@@ -651,6 +651,7 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
       setMessages(d.messages ?? []);
       if (d.settings) {
         setSettings({ chatEnabled: !!d.settings.chatEnabled, hideLinks: d.settings.hideLinks !== false, slowSec: d.settings.slowSec ?? 0, bannedWords: d.settings.bannedWords ?? [], bannedCount: d.settings.bannedCount ?? 0 });
+        onEnabledChange?.(!!d.settings.chatEnabled); // 헤더 켜짐/꺼짐 스위치를 폴링 값과 동기화(다른 창·설정탭 변경 반영)
         // 입력 버퍼는 최초 1회만 시드 — 폴링이 편집 중 값을 덮지 않게.
         if (!seededRef.current) { seededRef.current = true; setSlowInput(String(d.settings.slowSec ?? 0)); setBannedInput((d.settings.bannedWords ?? []).join(", ")); }
       }
@@ -965,9 +966,11 @@ function FreshBadge({ syncAt }: { syncAt: number }) {
   useEffect(() => { const t = setInterval(() => force((n) => n + 1), 1000); return () => clearInterval(t); }, []);
   const ago = Math.max(0, Math.round((Date.now() - syncAt) / 1000));
   const txt = ago < 5 ? "방금" : ago < 60 ? `${ago}초 전` : `${Math.floor(ago / 60)}분 전`;
+  // syncAt 은 성공 시에만 갱신 — 2분 넘게 갱신 없으면 폴링 실패로 보고 초록불 대신 주의 색·문구.
+  const stale = ago > 120;
   return (
     <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-      <span className="h-1.5 w-1.5 rounded-full bg-green-500" /> 실시간 · {txt} 갱신
+      <span className={`h-1.5 w-1.5 rounded-full ${stale ? "bg-amber-500" : "bg-green-500"}`} /> {stale ? `연결 확인 필요 · ${txt}` : `실시간 · ${txt} 갱신`}
     </span>
   );
 }
@@ -1707,7 +1710,7 @@ export default function LiveConsoleTab({
         </div>
       </div>
       <div className="min-h-0 flex-1 p-4 sm:p-5">
-        <ChatPanel webinarId={webinarId} tick={liveTick} fillHeight />
+        <ChatPanel webinarId={webinarId} tick={liveTick} fillHeight onEnabledChange={setChatOn} />
       </div>
     </section>
   );

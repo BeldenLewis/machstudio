@@ -39,9 +39,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const webinar = await authorize(id, user.id);
   if (!webinar) return NextResponse.json({ error: "접근 권한 없음" }, { status: 403 });
 
-  const { type, message } = await request.json();
+  const body = await request.json().catch(() => ({}));
+  // 입력 검증·상한 — 공지는 live-state 폴링으로 전 시청자에게 12초마다 전송되므로 초대형 텍스트 증폭을 막는다.
+  const message = String(body?.message ?? "").trim().slice(0, 2000);
+  if (!message) return NextResponse.json({ error: "공지 내용을 입력해주세요" }, { status: 400 });
+  const type = typeof body?.type === "string" ? body.type : "info";
   const announcement = await prisma.webinarAnnouncement.create({
-    data: { webinarId: id, type: type ?? "info", message, sentBy: user.id },
+    data: { webinarId: id, type, message, sentBy: user.id },
   });
 
   await logActivity({

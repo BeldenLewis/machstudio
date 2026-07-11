@@ -111,9 +111,9 @@ const sortLabels: Record<SortKey, string> = {
 };
 
 const headerAliases: Record<keyof RegistrationDraft, string[]> = {
-  name: ["이름", "성함", "name", "이름/성함"],
-  phone: ["연락처", "휴대폰", "전화", "전화번호", "phone", "mobile"],
-  email: ["이메일", "메일", "email"],
+  name: ["이름", "성함", "성명", "이름/성함", "참가자명", "고객명", "name", "fullname", "full name"],
+  phone: ["연락처", "휴대폰", "핸드폰", "전화", "전화번호", "휴대전화", "phone", "mobile", "tel"],
+  email: ["이메일", "이메일주소", "메일", "email", "e-mail", "mail"],
   company: ["회사", "소속", "기관", "회사명", "company"],
   department: ["부서", "department", "dept"],
   jobTitle: ["직함", "직책", "직급", "job", "position", "title"],
