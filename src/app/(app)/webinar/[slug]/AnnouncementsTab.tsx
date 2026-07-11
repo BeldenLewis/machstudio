@@ -57,17 +57,25 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
       setForm({ type: "info", message: "" });
       setShowCreate(false);
       fetchAnnouncements();
+    } catch {
+      toast.error("공지 생성에 실패했어요. 연결을 확인하고 다시 시도해주세요.");
     } finally {
       setIsCreating(false);
     }
   };
 
   const toggleActive = async (ann: Announcement) => {
-    const res = await fetch(`/api/webinars/${webinarId}/announcements/${ann.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isActive: !ann.isActive }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`/api/webinars/${webinarId}/announcements/${ann.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !ann.isActive }),
+      });
+    } catch {
+      toast.error("상태 변경에 실패했어요. 연결을 확인해주세요.");
+      return;
+    }
     if (!res.ok) { toast.error("상태 변경 실패"); return; }
     const nextActive = !ann.isActive;
     // 서버가 단일 활성(라디오)로 강제 — 하나를 켜면 나머지는 꺼진 것으로 로컬 상태도 맞춘다
@@ -227,6 +235,7 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
                       : "hover:bg-green-500/10 text-muted-foreground hover:text-green-600 dark:hover:text-green-400"
                   }`}
                   title={ann.isActive ? "표시 중지" : "라이브에 표시"}
+                  aria-label={ann.isActive ? "공지 표시 중지" : "공지를 라이브에 표시"}
                 >
                   {ann.isActive ? <Square className="w-4 h-4" /> : <Radio className="w-4 h-4" />}
                 </motion.button>
@@ -235,6 +244,8 @@ export default function AnnouncementsTab({ webinarId, embedded = false }: { webi
                   transition={spring}
                   onClick={() => handleDelete(ann)}
                   className="p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-500 text-muted-foreground transition-colors"
+                  aria-label="공지 삭제"
+                  title="공지 삭제"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </motion.button>

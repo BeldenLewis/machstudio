@@ -106,7 +106,8 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
           return (
             <button
               key={value}
-              onClick={(e) => { setFilter(value); e.currentTarget.blur(); }}
+              onClick={() => setFilter(value)}
+              aria-pressed={active}
               className={`relative z-10 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${
                 active ? "text-violet-500" : "text-muted-foreground hover:bg-secondary"
               }`}

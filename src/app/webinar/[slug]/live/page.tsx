@@ -454,7 +454,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   // 경량 /status 만 받아 정적 콘텐츠 재수신 egress 를 없앤다.
   useEffect(() => {
     if (isPreviewUrl()) return;
-    if (view === "live") return;
+    if (view === "live" || view === "ended") return; // 종료 후에도 30초 상태 폴링이 계속 돌던 것 중단
     const interval = setInterval(() => {
       if (document.hidden) return;
       void fetchStatus();

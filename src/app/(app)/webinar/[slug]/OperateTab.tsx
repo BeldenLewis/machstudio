@@ -48,6 +48,7 @@ export default function OperateTab({
           <motion.button
             key={id}
             onClick={() => setSection(id)}
+            aria-current={section === id ? "page" : undefined}
             whileHover={{ y: -1 }}
             whileTap={{ scale: 0.96 }}
             transition={spring}
