@@ -862,6 +862,7 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
 
 /* ── 알림 발송 패널 ("알림 받고 이어보기" 구독자에게) ── */
 function ReminderPanel({ webinarId }: { webinarId: string }) {
+  const confirm = useConfirm();
   const [count, setCount] = useState(0);
   const [emailReady, setEmailReady] = useState(false);
   const [form, setForm] = useState({ subject: "", message: "", url: "", buttonLabel: "" });
@@ -881,6 +882,8 @@ function ReminderPanel({ webinarId }: { webinarId: string }) {
 
   const send = async () => {
     if (!form.subject.trim() || !form.message.trim() || busy) return;
+    // 구독자 전원에게 즉시 발송되는 되돌릴 수 없는 동작 — 확인 후 진행.
+    if (!(await confirm({ title: `구독자 ${count}명에게 발송할까요?`, description: `제목: "${form.subject.trim()}" · 발송 후에는 취소할 수 없어요.`, confirmLabel: "발송" }))) return;
     setBusy(true);
     try {
       const res = await fetch(`/api/webinars/${webinarId}/reminders/send`, {

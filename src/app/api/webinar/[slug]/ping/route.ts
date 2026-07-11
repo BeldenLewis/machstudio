@@ -55,12 +55,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   let updatedCount = 0;
 
   if (event === "enter") {
-    updatedCount = (
-      await prisma.webinarRegistration.updateMany({
-        where: { id: registrationId, webinarId: webinar.id },
-        data: { enteredAt: now, isActive: true, lastPingAt: now, presencePingAt: now },
-      })
-    ).count;
+    // enteredAt 은 최초 입장 시각만 유지 — 새로고침/재입장이 덮어써 체류 시간이 리셋되지 않게 COALESCE.
+    updatedCount = await prisma.$executeRaw`
+      UPDATE "WebinarRegistration"
+      SET "enteredAt" = COALESCE("enteredAt", ${now}), "isActive" = true, "lastPingAt" = ${now}, "presencePingAt" = ${now}
+      WHERE "id" = ${registrationId} AND "webinarId" = ${webinar.id}
+    `;
   } else if (event === "leave") {
     // stayMinutes 는 enteredAt 기준 재계산 — 기존 조회+갱신 2쿼리를 단일 UPDATE 로.
     // (timestamp 컬럼은 UTC 저장이므로 epoch 연산이 정확하다)

@@ -154,7 +154,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
     return NextResponse.json({
       alreadyRegistered: true,
-      registration: { id: registration.id, name: registration.name, email: registration.email, phone: registration.phone },
+      // 식별자(email/phone)는 응답에 싣지 않는다 — 이메일만 알아도 재제출로 타인 전화번호를 알아내는 유출 차단.
+      registration: { id: registration.id, name: registration.name },
       ...(videoId ? { youtubeId: videoId } : {}),
     }, {
       headers: CORS_HEADERS,
@@ -180,7 +181,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     },
   });
 
-  return NextResponse.json({ registration: { id: registration.id, name: registration.name, email: registration.email, phone: registration.phone }, ...(videoId ? { youtubeId: videoId } : {}) }, {
+  return NextResponse.json({ registration: { id: registration.id, name: registration.name }, ...(videoId ? { youtubeId: videoId } : {}) }, {
     status: 201,
     headers: CORS_HEADERS,
   });

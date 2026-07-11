@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { sendEmailBatch, reminderEmailHtml, emailConfigured } from "@/lib/email";
+import { rateLimit } from "@/lib/ratelimit";
 
 async function authorize(webinarId: string, userId: string) {
   const webinar = await prisma.webinar.findUnique({ where: { id: webinarId } });
@@ -23,6 +24,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const webinar = await authorize(id, user.id);
   if (!webinar) return NextResponse.json({ error: "접근 권한 없음" }, { status: 403 });
+
+  // 중복 발송 방지 — 같은 웨비나에 60초 내 재발송 차단(더블클릭·재시도로 전 구독자에게 같은 메일이 다시 나가는 것 방지).
+  if (!rateLimit(`webinar-reminder-send:${id}`, { limit: 1, windowMs: 60_000 }).allowed) {
+    return NextResponse.json({ error: "방금 발송했어요. 60초 후 다시 시도할 수 있어요." }, { status: 429 });
+  }
 
   const body = await request.json();
   const subject = String(body.subject ?? "").trim().slice(0, 150);

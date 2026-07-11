@@ -154,6 +154,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!rows.length) {
     return NextResponse.json({ error: "등록할 데이터가 없습니다." }, { status: 400 });
   }
+  // 행 상한 — 초대형 임포트가 서버리스 타임아웃으로 부분 커밋되어 재시도 시 중복 생성되는 것을 방지.
+  if (rows.length > 5000) {
+    return NextResponse.json({ error: "한 번에 최대 5,000행까지 등록할 수 있어요. 파일을 나눠서 올려주세요." }, { status: 400 });
+  }
 
   const result = {
     created: 0,

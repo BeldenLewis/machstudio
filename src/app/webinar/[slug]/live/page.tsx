@@ -502,6 +502,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     return () => {
       if (pingRef.current) clearInterval(pingRef.current);
       window.removeEventListener("beforeunload", handleLeave);
+      // 라이브→종료 전환·SPA 이탈 등 beforeunload 가 안 뜨는 경로에서도 퇴장 기록(sendBeacon은 언로드에도 안전).
+      handleLeave();
     };
   }, [view, registrationId, slug]);
 
