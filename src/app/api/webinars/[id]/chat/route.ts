@@ -4,7 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 
 async function authorize(webinarId: string, userId: string) {
-  const webinar = await prisma.webinar.findUnique({ where: { id: webinarId } });
+  // tick 폴링 라우트 — theme/config 등 큰 JSON 을 매번 끌어오지 않게 사용하는 컬럼만 select.
+  const webinar = await prisma.webinar.findUnique({
+    where: { id: webinarId },
+    select: { id: true, workspaceId: true, components: true, chatHideLinks: true, chatSlowSec: true, chatBannedWords: true, chatBannedRegIds: true },
+  });
   if (!webinar) return null;
   const membership = await prisma.workspaceMember.findUnique({
     where: { userId_workspaceId: { userId, workspaceId: webinar.workspaceId } },

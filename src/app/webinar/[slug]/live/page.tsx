@@ -285,9 +285,11 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const fetchLiveState = useCallback(async (fullChat = false) => {
     try {
       const useChat = chatEnabled && activeTab === "chat" && !!registrationId;
+      const useQa = activeTab === "qa" && !!registrationId; // Q&A 탭 볼 때만 보드 100행 요청(egress 절감)
       const after = useChat && !fullChat ? chatCursorRef.current : null;
       const params = new URLSearchParams();
       if (registrationId) params.set("registrationId", registrationId);
+      if (useQa) params.set("qa", "1");
       if (useChat) {
         params.set("chat", "1");
         if (after) params.set("chatAfter", after);

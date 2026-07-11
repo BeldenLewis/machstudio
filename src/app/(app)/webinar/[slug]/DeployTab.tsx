@@ -154,7 +154,7 @@ export default function DeployTab({ webinarId }: { webinarId: string }) {
     const id = setInterval(() => {
       if (document.hidden) return;
       void fetchSites();
-    }, 10_000);
+    }, 30_000);
     return () => clearInterval(id);
   }, [fetchSites]);
 

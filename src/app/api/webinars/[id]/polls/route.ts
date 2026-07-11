@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 
 async function authorize(webinarId: string, userId: string) {
-  const webinar = await prisma.webinar.findUnique({ where: { id: webinarId } });
+  const webinar = await prisma.webinar.findUnique({ where: { id: webinarId }, select: { id: true, workspaceId: true } });
   if (!webinar) return null;
   const membership = await prisma.workspaceMember.findUnique({
     where: { userId_workspaceId: { userId, workspaceId: webinar.workspaceId } },

@@ -13,6 +13,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const url = new URL(request.url);
   const registrationId = url.searchParams.get("registrationId");
   const wantChat = url.searchParams.get("chat") === "1";
+  const wantQa = url.searchParams.get("qa") === "1"; // Q&A 탭 활성 시에만 100행 보드 전송(egress 절감)
   const chatAfterRaw = url.searchParams.get("chatAfter");
 
   const webinar = await prisma.webinar.findUnique({
@@ -35,7 +36,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       orderBy: { createdAt: "desc" },
       select: { id: true, type: true, message: true, createdAt: true },
     }),
-    registrationId
+    registrationId && wantQa
       ? prisma.webinarQA.findMany({
           where: { webinarId: wid, status: { not: "dismissed" } },
           orderBy: [{ voteCount: "desc" }, { createdAt: "asc" }],

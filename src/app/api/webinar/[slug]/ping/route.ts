@@ -29,7 +29,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       liveEndAt: true,
       signupDeadline: true,
       statusOverride: true,
-      components: true,
+      // components 는 ping 에서 미사용 — heartbeat 마다 JSON 컬럼을 끌어오지 않게 제외.
     },
   });
   if (!webinar) return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404 });
