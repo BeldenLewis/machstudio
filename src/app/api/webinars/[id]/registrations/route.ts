@@ -127,6 +127,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       orderBy: [{ [sortColumn]: sortDir }, { submittedAt: "desc" }],
       skip: (page - 1) * pageSize,
       take: pageSize,
+      // UI(RegistrantsTab)가 쓰는 필드만 — journey JSON·userAgent·UTM 12컬럼 등 미사용 컬럼 전송 방지(페이지당 최대 200행).
+      select: {
+        id: true, name: true, phone: true, email: true, company: true, department: true,
+        jobTitle: true, industry: true, agreeMarketing: true, agreePrivacy: true, memo: true,
+        stayMinutes: true, isActive: true, submittedAt: true, enteredAt: true, lastPingAt: true,
+      },
     }),
     prisma.webinarRegistration.count({ where }),
     prisma.webinarRegistration.count({ where: { webinarId: id } }),
