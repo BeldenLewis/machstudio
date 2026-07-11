@@ -282,7 +282,9 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   // 통합 라이브 폴링 — 공지·답변 Q&A·채팅·투표·팝업·Tally·상태를 한 번의 요청으로 받아 egress 절감.
   // 예전엔 announcements/qa/chat 3개 + LivePushLayer 자체 3개로 분산 폴링했다.
   // fullChat=true 면 채팅 전체 재동기화(모더레이션 삭제 반영), 아니면 커서 이후 증분만. 최근 100개 유지.
+  const liveReqRef = useRef(0); // 인플라이트 응답 펜스 — 늦게 온 전체 재동기화가 최신 상태(방금 보낸 채팅·커서)를 덮지 않게
   const fetchLiveState = useCallback(async (fullChat = false) => {
+    const gen = ++liveReqRef.current;
     try {
       const useChat = chatEnabled && activeTab === "chat" && !!registrationId;
       const useQa = activeTab === "qa" && !!registrationId; // Q&A 탭 볼 때만 보드 100행 요청(egress 절감)
@@ -298,6 +300,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       const res = await fetch(`/api/webinar/${slug}/live-state${qs ? `?${qs}` : ""}`);
       if (!res.ok) return;
       const data = (await res.json()) as LiveStateResponse;
+      if (gen !== liveReqRef.current) return; // 더 새로운 요청이 출발함 — 이 응답 폐기(방금 보낸 채팅·커서 보호)
 
       setAnnouncements(data.announcements ?? []);
       if (data.answeredQA) setAnsweredQA(data.answeredQA);
@@ -354,6 +357,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         const d = await res.json().catch(() => ({}));
         setChatError(d.error ?? "메시지 전송에 실패했어요. 잠시 후 다시 시도해주세요.");
       }
+    } catch {
+      setChatError("메시지 전송에 실패했어요. 연결 상태를 확인하고 다시 시도해주세요.");
     } finally {
       setIsSendingChat(false);
     }
@@ -547,6 +552,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
       // 라이브 중이면 바로 이동 — 클라이언트 시계 대신 서버 상태(status/serverNow)로 판정
       void fetchWebinar();
+    } catch {
+      setFormError("등록 중 오류가 났어요. 연결 상태를 확인하고 다시 시도해주세요.");
     } finally {
       setIsRegistering(false);
     }
@@ -599,6 +606,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         industry: registration.industry ?? prev.industry,
       }));
       setAuthValue("");
+    } catch {
+      setVerifyError("확인 중 오류가 났어요. 연결 상태를 확인하고 다시 시도해주세요.");
     } finally {
       setIsVerifying(false);
     }
@@ -657,6 +666,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           sessionNumber: selectedSession,
           name: form.name || null,
           company: form.company || null,
+          registrationId,
         }),
       });
       if (!res.ok) {
@@ -667,6 +677,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       setQuestion("");
       setQaSent(true);
       setTimeout(() => setQaSent(false), 3000);
+    } catch {
+      setQaError("질문 전송에 실패했어요. 연결 상태를 확인하고 다시 시도해주세요.");
     } finally {
       setIsSendingQA(false);
     }

@@ -611,7 +611,13 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
-    setBulkText(await file.text());
+    // 한국 Excel 은 CSV 를 기본 CP949(EUC-KR)로 저장 — UTF-8 로 읽어 대체문자(�)가 나오면 EUC-KR 로 재디코딩.
+    const buf = await file.arrayBuffer();
+    let text = new TextDecoder("utf-8", { fatal: false }).decode(buf);
+    if (text.includes("�")) {
+      try { text = new TextDecoder("euc-kr").decode(buf); } catch { /* euc-kr 미지원 환경 — utf-8 결과 유지 */ }
+    }
+    setBulkText(text);
     setShowBulk(true);
   };
 

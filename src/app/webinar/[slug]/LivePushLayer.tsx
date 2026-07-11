@@ -201,17 +201,19 @@ export default function LivePushLayer({
           style={{ background: "rgba(0,0,0,0.68)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}
           onClick={(e) => { if (e.target === e.currentTarget && popup.dismissible !== false) dismiss(); }}
         >
-          <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-[#1a1a1f] p-7 text-white shadow-2xl">
-            <div className="absolute inset-x-[18%] top-0 h-0.5 rounded-full" style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }} />
+          <div className="relative flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#1a1a1f] text-white shadow-2xl">
+            <div className="absolute inset-x-[18%] top-0 z-10 h-0.5 rounded-full" style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }} />
             {popup.dismissible !== false && (
               <button
                 onClick={dismiss}
                 aria-label="팝업 닫기"
-                className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-base text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+                className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-base text-white/60 transition-colors hover:bg-white/10 hover:text-white"
               >
                 ×
               </button>
             )}
+            {/* 콘텐츠만 스크롤 — 긴 내용도 닫기(×)·CTA 가 잘리지 않게(모바일). ×·상단바는 고정. */}
+            <div className="min-h-0 overflow-y-auto p-7">
             <h2 className="mb-2 pr-9 text-lg font-bold leading-snug">{popup.title}</h2>
             {popup.message && <p className="mb-5 whitespace-pre-wrap text-sm leading-relaxed text-white/70">{popup.message}</p>}
             <div className="space-y-2">
@@ -248,6 +250,7 @@ export default function LivePushLayer({
             {popup.dismissible !== false && (
               <p className="mt-3 text-center text-[11px] text-white/40">닫으면 이 팝업은 다시 표시되지 않아요.</p>
             )}
+            </div>
           </div>
         </div>
       )}

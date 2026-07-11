@@ -49,7 +49,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   }
 
   const body = await request.json();
-  const { question, sessionNumber, name, company, phone, email } = body;
+  const { question, sessionNumber, name, company, phone, email, registrationId } = body;
 
   // 허니팟 — 봇 차단. 200 으로 응답.
   const honeypot = (body?._hp ?? body?.honeypot ?? body?.website) as string | undefined;
@@ -71,12 +71,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const phoneValue = phone?.trim().slice(0, 200) || null;
   const emailValue = email?.trim().slice(0, 200) || null;
 
+  // 검증된 등록자면 등록명으로 표시 — 새로고침으로 form 이 비어도 질문이 익명 처리되지 않게(chat POST 와 동일 원칙).
+  let displayName = nameValue;
+  if (registrationId) {
+    const reg = await prisma.webinarRegistration.findFirst({ where: { id: String(registrationId), webinarId: webinar.id }, select: { name: true } });
+    if (reg?.name) displayName = reg.name;
+  }
+
   const qa = await prisma.webinarQA.create({
     data: {
       webinarId: webinar.id,
       question: questionValue,
       sessionNumber: sessionNumber ?? null,
-      name: nameValue,
+      name: displayName,
       company: companyValue,
       phone: phoneValue,
       email: emailValue,
