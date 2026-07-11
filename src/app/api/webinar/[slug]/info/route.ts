@@ -43,6 +43,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       webinar: { ...webinar, config },
       status: statusInfo.status,
       entryOpen: statusInfo.entryOpen,
+      canRegister: statusInfo.canRegister,
       serverNow: new Date().toISOString(),
     },
     { headers: { "Access-Control-Allow-Origin": "*" } },

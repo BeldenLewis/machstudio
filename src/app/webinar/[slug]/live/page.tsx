@@ -193,6 +193,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [customFields, setCustomFields] = useState<Record<string, string | boolean>>({});
   const [isRegistering, setIsRegistering] = useState(false);
   const [registered, setRegistered] = useState(false);
+  const [canRegister, setCanRegister] = useState(true); // 서버 상태머신 판정 — 마감(upcoming) 시 폼 대신 안내
   const [formError, setFormError] = useState("");
 
   // Q&A 상태
@@ -247,6 +248,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       // 서버 상태머신 판정 사용 — statusOverride(운영 콘솔 수동 전환)·입장오픈 윈도 반영
       const status: string = data.status;
       const entryOpen: boolean = data.entryOpen;
+      if (typeof data.canRegister === "boolean") setCanRegister(data.canRegister);
       setIsTrulyLive(status === "live"); // 입장오픈(라이브 전) 창에선 false → LIVE 칩 대신 '곧 시작'
       const requestedView = new URLSearchParams(window.location.search).get("view");
       if (requestedView === "signup" && status !== "ended") setView("signup");
@@ -267,6 +269,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       const data = await res.json();
       const status: string = data.status;
       const entryOpen: boolean = data.entryOpen;
+      if (typeof data.canRegister === "boolean") setCanRegister(data.canRegister);
       if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
       setIsTrulyLive(status === "live");
       const requestedView = new URLSearchParams(window.location.search).get("view");
@@ -982,6 +985,11 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
                     캘린더에 추가하기
                   </motion.a>
                 )}
+              </div>
+            ) : !canRegister ? (
+              <div className="py-10 text-center">
+                <h2 className="text-lg font-semibold mb-1">등록이 마감되었어요</h2>
+                <p className="text-sm opacity-60">사전 등록 기간이 종료됐어요.<br />시작 시각에 맞춰 다시 방문해 주세요.</p>
               </div>
             ) : (
               <>

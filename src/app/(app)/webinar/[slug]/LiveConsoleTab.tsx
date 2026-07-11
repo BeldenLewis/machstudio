@@ -1143,7 +1143,6 @@ function ActivityFeed({ items }: { items: ActivityItem[] }) {
 }
 
 // 현재 KST 분(자정 기준). 러닝오더 상태 판정용.
-function kstMinutes() { const d = new Date(); return ((d.getUTCHours() + 9) % 24) * 60 + d.getUTCMinutes(); }
 
 // 경과·종료까지 시계 — 라이브 중 초 단위 갱신
 function LiveClock({ startAt, endAt }: { startAt?: string; endAt?: string }) {
@@ -1162,25 +1161,40 @@ function LiveClock({ startAt, endAt }: { startAt?: string; endAt?: string }) {
   );
 }
 
-// 러닝오더 — 세션 타임라인(현재 KST 시각으로 done/live/next 판정). 세션 시각은 "HH:MM" 문자열.
-function RunningOrder({ sessions }: { sessions: WebinarForConsole["sessions"] }) {
-  const [nowMin, setNowMin] = useState(() => kstMinutes());
-  useEffect(() => { const t = setInterval(() => setNowMin(kstMinutes()), 30000); return () => clearInterval(t); }, []);
+// 러닝오더 — 세션 타임라인. 세션 시각("HH:MM")을 웨비나의 KST 캘린더 날짜에 앵커링해 절대시각으로 done/live/next 판정
+// (KST 고정 +9, DST 없음). 이로써 자정 넘김·전날/다음날에도 상태가 정확하다.
+function RunningOrder({ sessions, liveStartAt }: { sessions: WebinarForConsole["sessions"]; liveStartAt?: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(t); }, []);
   if (!sessions.length) return null;
-  const toMin = (hhmm: string) => { const [h, m] = (hhmm || "").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
-  const ordered = [...sessions].sort((a, b) => a.number - b.number);
-  const firstUpcoming = ordered.find((s) => toMin(s.startTime) > nowMin);
+  const KST = 9 * 3_600_000;
+  const base = liveStartAt ? new Date(liveStartAt) : null;
+  const kst = base && !Number.isNaN(base.getTime()) ? new Date(base.getTime() + KST) : null;
+  // 웨비나 KST 날짜 + HH:MM → 절대(UTC) ms. liveStartAt 없으면 판정 불가(전부 예정 처리).
+  const absOf = (hhmm: string): number | null => {
+    if (!kst) return null;
+    const [h, m] = (hhmm || "").split(":").map(Number);
+    return Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate(), h || 0, m || 0) - KST;
+  };
+  const ordered = [...sessions].sort((a, b) => a.number - b.number).map((s) => {
+    const st = absOf(s.startTime);
+    let en = absOf(s.endTime);
+    if (st != null && en != null && en <= st) en += 86_400_000; // 종료가 시작보다 이르면 자정 넘김 세션
+    return { s, st, en };
+  });
+  const firstUpcoming = ordered.find((x) => x.st != null && x.st > now)?.s;
+  const nowKst = new Date(now + KST);
+  const nowLabel = `${String(nowKst.getUTCHours()).padStart(2, "0")}:${String(nowKst.getUTCMinutes()).padStart(2, "0")}`;
   return (
     <section className="overflow-hidden rounded-2xl border border-border bg-card">
       <div className="flex items-center gap-2 border-b border-border p-4 sm:px-5">
         <ListChecks className="h-4 w-4 text-violet-500" />
         <h2 className="text-sm font-semibold">러닝오더</h2>
-        <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">현재 {String(Math.floor(nowMin / 60)).padStart(2, "0")}:{String(nowMin % 60).padStart(2, "0")}</span>
+        <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">현재 {nowLabel}</span>
       </div>
       <div className="divide-y divide-border/60">
-        {ordered.map((s) => {
-          const st = toMin(s.startTime), en = toMin(s.endTime);
-          const state = en <= nowMin ? "done" : st <= nowMin && nowMin < en ? "live" : s === firstUpcoming ? "next" : "upcoming";
+        {ordered.map(({ s, st, en }) => {
+          const state = st == null || en == null ? "upcoming" : en <= now ? "done" : st <= now ? "live" : s === firstUpcoming ? "next" : "upcoming";
           return (
             <div key={s.id} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
               <span className={`h-2 w-2 shrink-0 rounded-full ${state === "live" ? "animate-pulse bg-green-500" : state === "next" ? "bg-violet-500" : state === "done" ? "bg-muted-foreground/30" : "bg-border"}`} />
@@ -1663,7 +1677,7 @@ export default function LiveConsoleTab({
     { key: "reminders", label: "알림", icon: Mail, render: () => <ReminderPanel webinarId={webinarId} /> },
   ];
 
-  const runningOrder = <RunningOrder sessions={webinar?.sessions ?? []} />;
+  const runningOrder = <RunningOrder sessions={webinar?.sessions ?? []} liveStartAt={webinar?.liveStartAt} />;
 
   // 라이브 2행 좌우 — 480px 고정 높이, 헤더 고정 + 내부만 스크롤(fillHeight)
   const qaCard = (
