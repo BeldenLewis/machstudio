@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { rateLimit, rateLimitPeek } from "@/lib/ratelimit";
+import { rateLimitAsync, rateLimitPeekAsync } from "@/lib/ratelimit";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
 import { maskName } from "@/lib/mask";
 
@@ -63,7 +63,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
     request.headers.get("x-real-ip") ??
     "unknown";
-  const rl = rateLimit(`webinar-chat:${slug}:${ip}`, { limit: 15, windowMs: 60_000 });
+  const rl = await rateLimitAsync(`webinar-chat:${slug}:${ip}`, { limit: 15, windowMs: 60_000 });
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "메시지를 너무 자주 보내고 있어요. 잠시 후 다시 시도해주세요." },
@@ -131,7 +131,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   // 도배 방지 — 3건/10초는 peek 로 선검사만 하고, 모든 검사 통과 후 create 직전에 실제 기록(거절 요청이 토큰을 소모하지 않게).
   const regKey = `webinar-chat-reg:${webinar.id}:${registrationId}`;
-  if (rateLimitPeek(regKey, { limit: 3, windowMs: 10_000 }).blocked) {
+  if ((await rateLimitPeekAsync(regKey, { limit: 3, windowMs: 10_000 })).blocked) {
     return NextResponse.json(
       { error: "메시지를 너무 자주 보내고 있어요. 잠시 후 다시 시도해주세요." },
       { status: 429, headers: { ...CORS, "Retry-After": "10" } },
@@ -152,7 +152,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     return NextResponse.json({ error: `천천히 모드예요. ${wait}초 후 다시 보낼 수 있어요.` }, { status: 429, headers: { ...CORS, "Retry-After": String(wait) } });
   }
   // 모든 검사 통과 — 이제 3/10초 버킷에 실제 기록.
-  rateLimit(regKey, { limit: 3, windowMs: 10_000 });
+  await rateLimitAsync(regKey, { limit: 3, windowMs: 10_000 });
 
   const created = await prisma.webinarChatMessage.create({
     data: { webinarId: webinar.id, registrationId, name: name.slice(0, 60), message, isHost: false },

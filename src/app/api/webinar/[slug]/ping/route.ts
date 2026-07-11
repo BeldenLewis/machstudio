@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
-import { rateLimit } from "@/lib/ratelimit";
+import { rateLimitAsync } from "@/lib/ratelimit";
 
 const CORS_HEADERS = { "Access-Control-Allow-Origin": "*" };
 
@@ -17,7 +17,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
     request.headers.get("x-real-ip") ??
     "unknown";
-  if (!rateLimit(`webinar-ping:${ip}`, { limit: 120, windowMs: 60_000 }).allowed) {
+  if (!(await rateLimitAsync(`webinar-ping:${ip}`, { limit: 120, windowMs: 60_000 })).allowed) {
     return new NextResponse(null, { status: 429, headers: CORS_HEADERS });
   }
 

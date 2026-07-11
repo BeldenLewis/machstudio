@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { rateLimit } from "@/lib/ratelimit";
+import { rateLimitAsync } from "@/lib/ratelimit";
 
 const CORS = { "Access-Control-Allow-Origin": "*" };
 
@@ -22,7 +22,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
     request.headers.get("x-real-ip") ??
     "unknown";
-  const rl = rateLimit(`webinar-reminder:${slug}:${ip}`, { limit: 10, windowMs: 60_000 });
+  const rl = await rateLimitAsync(`webinar-reminder:${slug}:${ip}`, { limit: 10, windowMs: 60_000 });
   if (!rl.allowed) return NextResponse.json({ error: "요청이 너무 잦아요." }, { status: 429, headers: CORS });
 
   const webinar = await prisma.webinar.findUnique({ where: { slug }, select: { id: true } });
@@ -52,7 +52,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ s
     request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
     request.headers.get("x-real-ip") ??
     "unknown";
-  const rl = rateLimit(`webinar-reminder:${slug}:${ip}`, { limit: 10, windowMs: 60_000 });
+  const rl = await rateLimitAsync(`webinar-reminder:${slug}:${ip}`, { limit: 10, windowMs: 60_000 });
   if (!rl.allowed) return NextResponse.json({ error: "요청이 너무 잦아요." }, { status: 429, headers: CORS });
 
   const webinar = await prisma.webinar.findUnique({ where: { slug }, select: { id: true } });

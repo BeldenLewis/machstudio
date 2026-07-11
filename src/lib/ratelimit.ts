@@ -79,3 +79,23 @@ export async function rateLimitAsync(
     return memoryRateLimit(key, opts);
   }
 }
+
+// 기록 없이 현재 차단 여부만 확인 (Redis 비동기) — rateLimitAsync 와 동일한 윈도 키를 GET 으로 조회.
+// peek→검사→record(rateLimitAsync) 패턴(verify 미스·chat 3/10초)이 서버리스에서도 인스턴스 간 일관되게 동작.
+export async function rateLimitPeekAsync(
+  key: string,
+  opts: { limit: number; windowMs: number },
+): Promise<{ blocked: boolean }> {
+  if (!useRedis) return rateLimitPeek(key, opts);
+  try {
+    const windowKey = `rl:${key}:${Math.floor(Date.now() / opts.windowMs)}`;
+    const res = await fetch(`${REDIS_URL}/get/${encodeURIComponent(windowKey)}`, {
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+    });
+    const data = await res.json();
+    const count = Number(data?.result ?? 0);
+    return { blocked: count >= opts.limit };
+  } catch {
+    return rateLimitPeek(key, opts);
+  }
+}

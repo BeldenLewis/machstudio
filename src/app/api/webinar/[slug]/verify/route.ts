@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { rateLimit, rateLimitPeek } from "@/lib/ratelimit";
+import { rateLimitAsync, rateLimitPeekAsync } from "@/lib/ratelimit";
 
 // found=false 전용 한도 — 미스만 기록해 5분에 5회 넘는 실패 조회를 차단 (명단 enumeration 방지).
 // 성공 조회는 미스 버킷에 기록하지 않으므로 정상 참가자의 오타 1~2회는 영향 없음.
@@ -24,7 +24,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
     request.headers.get("x-real-ip") ??
     "unknown";
-  const rl = rateLimit(`verify:${slug}:${ip}`, { limit: 10, windowMs: 60_000 });
+  const rl = await rateLimitAsync(`verify:${slug}:${ip}`, { limit: 10, windowMs: 60_000 });
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "요청이 너무 잦아요. 잠시 후 다시 시도해주세요." },
@@ -39,7 +39,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   }
 
   // 미스 한도 초과 상태면 조회 자체를 막는다 (found 여부 노출 차단)
-  if (rateLimitPeek(`verify-miss:${slug}:${ip}`, MISS_LIMIT).blocked) {
+  if ((await rateLimitPeekAsync(`verify-miss:${slug}:${ip}`, MISS_LIMIT)).blocked) {
     return NextResponse.json(
       { error: "확인 실패가 반복됐어요. 잠시 후 다시 시도해주세요." },
       { status: 429, headers: { "Retry-After": "300", "Access-Control-Allow-Origin": "*" } },
@@ -78,7 +78,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   // 미스만 기록 — 다음 요청부터 peek 이 차단 판정에 사용
   if (!registration) {
-    rateLimit(`verify-miss:${slug}:${ip}`, MISS_LIMIT);
+    await rateLimitAsync(`verify-miss:${slug}:${ip}`, MISS_LIMIT);
   }
 
   // 인증 통과자에게만 영상 ID 전달 (공개 /info 에서는 제거됨)
