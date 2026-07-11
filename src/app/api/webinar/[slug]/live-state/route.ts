@@ -14,6 +14,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const registrationId = url.searchParams.get("registrationId");
   const wantChat = url.searchParams.get("chat") === "1";
   const wantQa = url.searchParams.get("qa") === "1"; // Q&A 탭 활성 시에만 100행 보드 전송(egress 절감)
+  const needVideo = url.searchParams.get("needVideo") === "1"; // 영상 미확보 클라이언트만 — 유효 등록자 검증 후 youtubeId 복구
   const chatAfterRaw = url.searchParams.get("chatAfter");
 
   const webinar = await prisma.webinar.findUnique({
@@ -113,12 +114,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     ? { id: pinnedRow.id, name: pinnedRow.isHost ? pinnedRow.name : maskName(pinnedRow.name), message: pinnedRow.message, isHost: pinnedRow.isHost, createdAt: pinnedRow.createdAt }
     : null;
 
+  // 영상 복구 — needVideo(클라이언트 영상 미확보) + 유효 등록자일 때만 config.youtubeId 전달.
+  // 등록 시점엔 영상이 없다가 이후 운영자가 설정/교체하면 라이브 중 자동 반영. 상시 폴링엔 config 를 싣지 않는다.
+  let youtubeId: string | null = null;
+  if (needVideo && registrationId) {
+    const reg = await prisma.webinarRegistration.findFirst({ where: { id: registrationId, webinarId: wid }, select: { id: true } });
+    if (reg) {
+      const w = await prisma.webinar.findUnique({ where: { id: wid }, select: { config: true } });
+      const yt = (w?.config as Record<string, unknown> | null)?.youtubeId;
+      youtubeId = typeof yt === "string" ? yt : null;
+    }
+  }
+
   return NextResponse.json(
     {
       status: statusInfo.status,
       entryOpen: statusInfo.entryOpen,
       serverNow: new Date().toISOString(),
       chatEnabled,
+      youtubeId,
       announcements,
       answeredQA,
       chat,

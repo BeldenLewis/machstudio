@@ -68,6 +68,7 @@ interface LiveStateResponse {
   entryOpen: boolean;
   serverNow: string;
   chatEnabled?: boolean;
+  youtubeId?: string | null;
   announcements: Announcement[];
   answeredQA?: AnsweredQA[];
   chat?: { messages: ChatMessage[] };
@@ -288,9 +289,11 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     try {
       const useChat = chatEnabled && activeTab === "chat" && !!registrationId;
       const useQa = activeTab === "qa" && !!registrationId; // Q&A 탭 볼 때만 보드 100행 요청(egress 절감)
+      const needVideo = !!registrationId && !videoId; // 영상 미확보 시에만 복구 요청(등록 후 영상이 설정/교체된 경우)
       const after = useChat && !fullChat ? chatCursorRef.current : null;
       const params = new URLSearchParams();
       if (registrationId) params.set("registrationId", registrationId);
+      if (needVideo) params.set("needVideo", "1");
       if (useQa) params.set("qa", "1");
       if (useChat) {
         params.set("chat", "1");
@@ -301,6 +304,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       if (!res.ok) return;
       const data = (await res.json()) as LiveStateResponse;
       if (gen !== liveReqRef.current) return; // 더 새로운 요청이 출발함 — 이 응답 폐기(방금 보낸 채팅·커서 보호)
+      if (typeof data.youtubeId === "string" && !videoId) setVideoId(data.youtubeId); // 라이브 중 영상 복구(등록 후 설정된 경우)
 
       setAnnouncements(data.announcements ?? []);
       if (data.answeredQA) setAnsweredQA(data.answeredQA);
@@ -336,7 +340,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     } catch {
       /* 폴링 중 일시적 네트워크 오류는 다음 주기에 재시도 */
     }
-  }, [slug, registrationId, chatEnabled, activeTab]);
+  }, [slug, registrationId, chatEnabled, activeTab, videoId]);
 
   const handleSendChat = async () => {
     if (isPreviewUrl()) return;
