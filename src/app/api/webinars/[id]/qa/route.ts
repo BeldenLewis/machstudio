@@ -21,7 +21,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const questions = await prisma.webinarQA.findMany({
     where: { webinarId: id, ...(status ? { status } : {}) },
-    orderBy: { createdAt: "desc" },
+    // 추천순 우선 — take 상한(200) 안에 득표 높은 오래된 질문이 최신순에 밀려 누락되지 않게(QATab 도 추천순 표시).
+    orderBy: [{ voteCount: "desc" }, { createdAt: "desc" }],
     // UI(QATab)가 쓰는 필드만 — 전 컬럼(PII 포함) 전송 방지. 라이브 15초 tick 마다 재조회되므로 egress 직결.
     select: { id: true, question: true, sessionNumber: true, status: true, name: true, company: true, voteCount: true, onScreen: true, createdAt: true },
     take: 200,

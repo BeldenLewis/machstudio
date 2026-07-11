@@ -287,12 +287,13 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   // 예전엔 announcements/qa/chat 3개 + LivePushLayer 자체 3개로 분산 폴링했다.
   // fullChat=true 면 채팅 전체 재동기화(모더레이션 삭제 반영), 아니면 커서 이후 증분만. 최근 100개 유지.
   const liveReqRef = useRef(0); // 인플라이트 응답 펜스 — 늦게 온 전체 재동기화가 최신 상태(방금 보낸 채팅·커서)를 덮지 않게
+  const videoCheckedRef = useRef(false); // 영상 복구는 최초 1회만 요청 — 영상 없는 웨비나에서 매 폴 config 조회하는 egress 회귀 방지
   const fetchLiveState = useCallback(async (fullChat = false) => {
     const gen = ++liveReqRef.current;
     try {
       const useChat = chatEnabled && activeTab === "chat" && !!registrationId;
       const useQa = activeTab === "qa" && !!registrationId; // Q&A 탭 볼 때만 보드 100행 요청(egress 절감)
-      const needVideo = !!registrationId && !videoId; // 영상 미확보 시에만 복구 요청(등록 후 영상이 설정/교체된 경우)
+      const needVideo = !!registrationId && !videoId && !videoCheckedRef.current; // 미확보 + 아직 미조회일 때만(1회) 복구 요청
       const after = useChat && !fullChat ? chatCursorRef.current : null;
       const params = new URLSearchParams();
       if (registrationId) params.set("registrationId", registrationId);
@@ -307,6 +308,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       if (!res.ok) return;
       const data = (await res.json()) as LiveStateResponse;
       if (gen !== liveReqRef.current) return; // 더 새로운 요청이 출발함 — 이 응답 폐기(방금 보낸 채팅·커서 보호)
+      if (needVideo) videoCheckedRef.current = true; // 1회 조회 완료 — 영상 유무와 무관하게 재요청 중단(egress)
       if (typeof data.youtubeId === "string" && !videoId) setVideoId(data.youtubeId); // 라이브 중 영상 복구(등록 후 설정된 경우)
 
       setAnnouncements(data.announcements ?? []);

@@ -429,8 +429,10 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
       // 중첩 대화상자(공용 confirm: role="dialog" aria-modal)가 열려 있으면 그쪽이 포커스를 관리 —
       // 이 문서 레벨 트랩이 confirm 의 포커스를 배경 드로어로 뺏지 않게 바로 양보.
       const activeEl = document.activeElement as HTMLElement | null;
+      // 우리 모달(dialogRef 패널을 감싸는 오버레이)이 아닌 다른 모달(중첩 confirm)에 포커스가 있을 때만 양보.
+      // dialogRef 는 내부 패널이고 role=dialog 는 오버레이라 단순 !== 비교는 우리 트랩까지 꺼버렸다.
       const nestedModal = activeEl?.closest('[role="dialog"],[role="alertdialog"],[aria-modal="true"]');
-      if (nestedModal && nestedModal !== dialogRef.current) return;
+      if (nestedModal && dialogRef.current && !nestedModal.contains(dialogRef.current)) return;
 
       const focusables = getFocusable();
       if (!focusables.length) {
