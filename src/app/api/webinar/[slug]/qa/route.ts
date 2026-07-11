@@ -71,12 +71,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const phoneValue = phone?.trim().slice(0, 200) || null;
   const emailValue = email?.trim().slice(0, 200) || null;
 
-  // 검증된 등록자면 등록명으로 표시 — 새로고침으로 form 이 비어도 질문이 익명 처리되지 않게(chat POST 와 동일 원칙).
-  let displayName = nameValue;
-  if (registrationId) {
-    const reg = await prisma.webinarRegistration.findFirst({ where: { id: String(registrationId), webinarId: webinar.id }, select: { name: true } });
-    if (reg?.name) displayName = reg.name;
+  // 등록 후 입장한 시청자만 질문 가능 — 익명 스팸·타인 PII 주입 차단(채팅·투표와 동일 정책). 표시명은 등록명 우선.
+  const reg = registrationId
+    ? await prisma.webinarRegistration.findFirst({ where: { id: String(registrationId), webinarId: webinar.id }, select: { name: true } })
+    : null;
+  if (!reg) {
+    return NextResponse.json({ error: "등록 후 입장한 시청자만 질문할 수 있어요." }, { status: 403, headers: { "Access-Control-Allow-Origin": "*" } });
   }
+  const displayName = reg.name || nameValue;
 
   const qa = await prisma.webinarQA.create({
     data: {

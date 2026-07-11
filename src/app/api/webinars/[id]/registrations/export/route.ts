@@ -34,6 +34,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     where: { userId_workspaceId: { userId: user.id, workspaceId: webinar.workspaceId } },
   });
   if (!membership) return NextResponse.json({ error: "접근 권한 없음" }, { status: 403 });
+  // 전체 명단(PII) 내보내기 — 웨비나 삭제·대량삭제에 준해 관리자 이상만(MEMBER 차단). 멤버 내보내기가 필요하면 이 가드를 완화하세요.
+  if (membership.role === "MEMBER") return NextResponse.json({ error: "명단 내보내기 권한이 없어요. 관리자에게 문의하세요." }, { status: 403 });
 
   // ?ids=a,b,c 가 있으면 선택 등록자만 내보낸다(없으면 전체) — 이 웨비나 스코프 유지
   const idsParam = new URL(request.url).searchParams.get("ids");

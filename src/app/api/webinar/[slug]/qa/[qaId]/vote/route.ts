@@ -32,6 +32,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const reg = await prisma.webinarRegistration.findFirst({ where: { id: rawRegId, webinarId: webinar.id }, select: { id: true } });
     registrationId = reg ? reg.id : null;
   }
+  // 등록 후 입장한 시청자만 추천 가능 — 익명(null) 표는 등록자당 1표 유니크로 디둡되지 않아 중복 추천 우회가 되므로 차단.
+  if (!registrationId) {
+    return NextResponse.json({ error: "등록 후 입장한 시청자만 추천할 수 있어요." }, { status: 403, headers: CORS });
+  }
 
   // 질문이 이 웨비나 소속이며 미채택이 아닌지 확인
   const qa = await prisma.webinarQA.findFirst({

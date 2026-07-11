@@ -15,6 +15,8 @@ async function authorize(webinarId: string) {
     where: { userId_workspaceId: { userId: user.id, workspaceId: webinar.workspaceId } },
   });
   if (!membership) return { error: NextResponse.json({ error: "접근 권한 없음" }, { status: 403 }) } as const;
+  // 파괴적 대량 작업 — 웨비나 삭제와 동일하게 관리자 이상만(MEMBER 차단).
+  if (membership.role === "MEMBER") return { error: NextResponse.json({ error: "일괄 삭제 권한이 없어요. 관리자에게 문의하세요." }, { status: 403 }) } as const;
   return { error: null, workspaceId: webinar.workspaceId, userId: user.id } as const;
 }
 
