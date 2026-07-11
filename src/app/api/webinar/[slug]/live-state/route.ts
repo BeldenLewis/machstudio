@@ -114,6 +114,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     ? { id: pinnedRow.id, name: pinnedRow.isHost ? pinnedRow.name : maskName(pinnedRow.name), message: pinnedRow.message, isHost: pinnedRow.isHost, createdAt: pinnedRow.createdAt }
     : null;
 
+  // 실시간 동시 시청자 수 — 라이브 중에만(사회적 증거 배지). isActive 단일 인덱스 count(어드민 대시보드와 동일 기준).
+  const viewerCount = statusInfo.status === "live"
+    ? await prisma.webinarRegistration.count({ where: { webinarId: wid, isActive: true } })
+    : null;
+
   // 영상 복구 — needVideo(클라이언트 영상 미확보) + 유효 등록자일 때만 config.youtubeId 전달.
   // 등록 시점엔 영상이 없다가 이후 운영자가 설정/교체하면 라이브 중 자동 반영. 상시 폴링엔 config 를 싣지 않는다.
   let youtubeId: string | null = null;
@@ -133,6 +138,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       serverNow: new Date().toISOString(),
       chatEnabled,
       youtubeId,
+      viewerCount,
       announcements,
       answeredQA,
       chat,

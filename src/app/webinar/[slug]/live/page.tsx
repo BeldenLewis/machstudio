@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, CheckCircle2 } from "lucide-react";
 import LivePushLayer, { type LivePopup, type LiveTallyPush, type LivePoll } from "../LivePushLayer";
 import LiveContentStk from "../LiveContentStk";
+import PreLiveWaiting from "../PreLiveWaiting";
 import { formatKst } from "@/lib/datetime";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
@@ -69,6 +70,7 @@ interface LiveStateResponse {
   serverNow: string;
   chatEnabled?: boolean;
   youtubeId?: string | null;
+  viewerCount?: number | null;
   announcements: Announcement[];
   answeredQA?: AnsweredQA[];
   chat?: { messages: ChatMessage[] };
@@ -158,6 +160,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [pushedQuestion, setPushedQuestion] = useState<{ id: string; question: string; name: string | null } | null>(null);
   const [pinnedMessage, setPinnedMessage] = useState<{ id: string; name: string; message: string; isHost: boolean } | null>(null);
   const [serverNowMs, setServerNowMs] = useState<number | undefined>(undefined);
+  const [viewerCount, setViewerCount] = useState<number | null>(null); // 실시간 동시 시청자 수(라이브)
   const [isTrulyLive, setIsTrulyLive] = useState(false); // status === "live" (입장오픈 전 창과 구분)
   // 채팅 상태
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -175,6 +178,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [pushPoll, setPushPoll] = useState<LivePoll | null>(null);
   // 알림 구독 ("알림 받고 이어보기")
   const [notifySubscribed, setNotifySubscribed] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
   const [notifyError, setNotifyError] = useState("");
   const [notifyPending, setNotifyPending] = useState(false);
   const [registrationId, setRegistrationId] = useState<string | null>(null);
@@ -310,6 +314,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       if (gen !== liveReqRef.current) return; // 더 새로운 요청이 출발함 — 이 응답 폐기(방금 보낸 채팅·커서 보호)
       if (needVideo) videoCheckedRef.current = true; // 1회 조회 완료 — 영상 유무와 무관하게 재요청 중단(egress)
       if (typeof data.youtubeId === "string" && !videoId) setVideoId(data.youtubeId); // 라이브 중 영상 복구(등록 후 설정된 경우)
+      setViewerCount(data.viewerCount ?? null);
 
       setAnnouncements(data.announcements ?? []);
       if (data.answeredQA) setAnsweredQA(data.answeredQA);
@@ -720,6 +725,19 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const visibleFields = registrationForm.fields;
   const inputStyle = { border: "1px solid rgba(255,255,255,0.1)", borderRadius: `calc(${radius} * 0.6)`, color: text };
   const calendarUrl = typeof webinar.config?.calendarUrl === "string" ? webinar.config.calendarUrl : "";
+
+  const handleShare = async () => {
+    const url = typeof window !== "undefined" ? `${window.location.origin}/webinar/${slug}/live` : "";
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({ title: webinar?.name ?? "웨비나", url });
+      } else if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(url);
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 2000);
+      }
+    } catch { /* 공유 취소·미지원 무시 */ }
+  };
   const surveyUrl = typeof webinar.config?.surveyUrl === "string" ? webinar.config.surveyUrl : "";
 
   const renderRegistrationField = (field: RegistrationField) => {
@@ -879,6 +897,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           youtubeId={videoId}
           serverNowMs={serverNowMs}
           isLive={isTrulyLive}
+          viewerCount={viewerCount}
           chatEnabled={chatEnabled}
           onTabChange={setActiveTab}
           qa={{
@@ -952,8 +971,42 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           </div>
         )}
 
-        {/* 뷰: 사전등록 */}
-        {view === "signup" && (
+        {/* 뷰: 사전등록 — 등록/재방문자는 대기 화면(카운트다운·아젠다), 신규 방문자는 등록 폼 */}
+        {view === "signup" && ((registered || registrationId) ? (
+          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} className="space-y-5">
+            <PreLiveWaiting
+              webinar={{ name: webinar.name, description: webinar.description ?? null, liveStartAt: webinar.liveStartAt, sessions: webinar.sessions }}
+              accent={accent}
+              text={text}
+              surface={surface}
+              targetIso={webinar.liveStartAt}
+              serverNowMs={serverNowMs}
+              registered
+              onCalendar={calendarUrl ? () => window.open(calendarUrl, "_blank", "noopener,noreferrer") : undefined}
+            />
+            {/* 알림 옵트인 + 공유 — 재방문 유도·유입 확대 */}
+            <div className="mx-auto flex max-w-md flex-wrap items-center justify-center gap-2.5 px-4">
+              <button
+                type="button"
+                onClick={handleNotifyToggle}
+                disabled={notifyPending}
+                className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-opacity disabled:opacity-50"
+                style={{ border: `1px solid ${accent}`, color: notifySubscribed ? "#fff" : accent, backgroundColor: notifySubscribed ? accent : "transparent" }}
+              >
+                {notifySubscribed ? "알림 받는 중 ✓" : "🔔 알림 받고 이어보기"}
+              </button>
+              <button
+                type="button"
+                onClick={handleShare}
+                className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium opacity-80 transition-opacity hover:opacity-100"
+                style={{ border: `1px solid ${text}33`, color: text }}
+              >
+                {shareCopied ? "링크 복사됨 ✓" : "공유하기"}
+              </button>
+            </div>
+            {notifyError && <p className="text-center text-xs text-red-400">{notifyError}</p>}
+          </motion.div>
+        ) : (
           <motion.div
             style={{ backgroundColor: surface, borderRadius: radius }}
             className="p-6 md:p-8"
@@ -961,34 +1014,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.15 }}
           >
-            {registered ? (
-              <div className="text-center py-8">
-                <motion.div
-                  className="w-12 h-12 mx-auto mb-3"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={spring}
-                >
-                  <CheckCircle2 className="w-12 h-12" style={{ color: accent }} />
-                </motion.div>
-                <h3 className="text-lg font-semibold mb-1">사전 등록 완료!</h3>
-                <p className="text-sm opacity-60">웨비나 시작 시 이 페이지를 다시 방문하시면 라이브를 시청하실 수 있어요.</p>
-                {calendarUrl && (
-                  <motion.a
-                    href={calendarUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-block mt-4 px-4 py-2 text-sm font-medium"
-                    style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)` }}
-                    whileHover={{ y: -1 }}
-                    whileTap={{ scale: 0.96 }}
-                    transition={spring}
-                  >
-                    캘린더에 추가하기
-                  </motion.a>
-                )}
-              </div>
-            ) : !canRegister ? (
+            {!canRegister ? (
               <div className="py-10 text-center">
                 <h2 className="text-lg font-semibold mb-1">등록이 마감되었어요</h2>
                 <p className="text-sm opacity-60">사전 등록 기간이 종료됐어요.<br />시작 시각에 맞춰 다시 방문해 주세요.</p>
@@ -1045,7 +1071,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               </>
             )}
           </motion.div>
-        )}
+        ))}
 
         {/* 뷰: 라이브 */}
         {view === "live" && !registrationId && (

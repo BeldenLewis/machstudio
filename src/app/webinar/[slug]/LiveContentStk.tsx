@@ -163,6 +163,7 @@ const WATCH_CSS = `
 .stk-live .lv-top { display:flex; align-items:center; gap:14px; padding:10px 4px 18px; }
 .stk-live .lv-livepill { display:inline-flex; align-items:center; gap:7px; padding:5px 11px; border-radius:999px; background:color-mix(in srgb,var(--live) 14%,transparent); color:var(--live); font-weight:800; font-size:12px; letter-spacing:0.04em; }
 .stk-live .lv-livepill i { width:7px; height:7px; border-radius:50%; background:var(--live); animation:lvPulse 1.6s infinite; }
+.stk-live .lv-viewers { display:inline-flex; align-items:center; gap:5px; padding:5px 10px; border-radius:999px; background:color-mix(in srgb,var(--sub) 13%,transparent); color:var(--sub); font-weight:750; font-size:12px; font-variant-numeric:tabular-nums; }
 .stk-live .lv-soonpill { display:inline-flex; align-items:center; gap:7px; padding:5px 11px; border-radius:999px; background:var(--key-dim); color:var(--key); border:1px solid var(--key-border); font-weight:800; font-size:12px; letter-spacing:0.04em; }
 @keyframes lvPulse { 0%,100%{ box-shadow:0 0 0 0 color-mix(in srgb,var(--live) 55%,transparent);} 60%{ box-shadow:0 0 0 6px transparent; } }
 .stk-live .lv-evname { font-weight:750; font-size:15px; letter-spacing:-0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--text); }
@@ -308,6 +309,7 @@ export default function LiveContentStk({
   serverNowMs,
   chatEnabled = false,
   isLive = true,
+  viewerCount,
   qa,
   chat,
   onTabChange,
@@ -321,6 +323,7 @@ export default function LiveContentStk({
   serverNowMs?: number;
   chatEnabled?: boolean;
   isLive?: boolean;
+  viewerCount?: number | null;
   qa: QAProps;
   chat?: ChatProps;
   onTabChange?: (tab: string) => void;
@@ -485,6 +488,9 @@ export default function LiveContentStk({
           {isLive
             ? <span className="lv-livepill"><i />LIVE</span>
             : <span className="lv-soonpill">곧 시작</span>}
+          {isLive && typeof viewerCount === "number" && viewerCount > 0 && (
+            <span className="lv-viewers">👁 {viewerCount.toLocaleString()}명</span>
+          )}
           <span className="lv-evname">{webinar.name}</span>
           <span className="lv-sp" />
           <motion.button whileTap={{ scale: 0.96 }} transition={spring} className="lv-share" onClick={handleShare}>
