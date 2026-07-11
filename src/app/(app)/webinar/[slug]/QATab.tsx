@@ -30,8 +30,11 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
   const [filter, setFilter] = useState<QAStatus | "all">("pending");
   // 진행 중 mutation 동안 사일런트 tick 폴링이 낙관적 갱신을 덮어쓰지 않게 가드(PollPanel editIdRef 패턴).
   const mutatingRef = useRef(false);
+  // 인플라이트 응답 펜스 — mutation 시작 전 출발한 tick fetch 가 뒤늦게 도착해 낙관적 변경을 되돌리지 않게.
+  const reqIdRef = useRef(0);
 
   const fetchQA = useCallback(async (silent = false) => {
+    const gen = ++reqIdRef.current;
     if (!silent) setIsLoading(true);
     setLoadError(false);
     try {
@@ -40,6 +43,7 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
       const res = await fetch(`/api/webinars/${webinarId}/qa?${params}`);
       if (!res.ok) { setLoadError(true); return; }
       const data = await res.json();
+      if (gen !== reqIdRef.current) return; // 더 새로운 요청/뮤테이션이 발생 — 이 응답 폐기
       setQuestions(data.questions ?? []);
     } catch {
       setLoadError(true);
@@ -53,7 +57,7 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
   useEffect(() => { if (tick > 0 && !mutatingRef.current) void fetchQA(true); }, [tick, fetchQA]);
 
   const updateStatus = async (id: string, status: QAStatus) => {
-    mutatingRef.current = true;
+    mutatingRef.current = true; reqIdRef.current++;
     try {
       const res = await fetch(`/api/webinars/${webinarId}/qa/${id}`, {
         method: "PATCH",
@@ -72,7 +76,7 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
 
   // 화면에 띄우기 — 웨비나당 1개만(단일 활성). 켜면 나머지는 자동으로 꺼진다.
   const setOnScreen = async (id: string, onScreen: boolean) => {
-    mutatingRef.current = true;
+    mutatingRef.current = true; reqIdRef.current++;
     try {
       const res = await fetch(`/api/webinars/${webinarId}/qa/${id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ onScreen }),

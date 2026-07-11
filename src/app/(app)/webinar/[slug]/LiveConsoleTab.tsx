@@ -683,8 +683,13 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false }: { webinarId: str
 
   const remove = async (m: AdminChatMessage) => {
     if (!(await confirm({ title: "메시지를 삭제할까요?", description: `"${m.message.slice(0, 40)}"`, confirmLabel: "삭제", tone: "danger" }))) return;
-    const res = await fetch(`/api/webinars/${webinarId}/chat/${m.id}`, { method: "DELETE" });
-    if (res.ok) { toast.success("삭제했어요"); setMessages((prev) => prev.filter((x) => x.id !== m.id)); }
+    // 다른 mutation 과 동일한 펜스 — 삭제 직후 늦게 온 폴링이 지운 메시지를 되살리지 않게.
+    mutatingRef.current = true; reqIdRef.current++;
+    try {
+      const res = await fetch(`/api/webinars/${webinarId}/chat/${m.id}`, { method: "DELETE" });
+      if (res.ok) { toast.success("삭제했어요"); setMessages((prev) => prev.filter((x) => x.id !== m.id)); }
+      else toast.error("삭제에 실패했어요");
+    } finally { mutatingRef.current = false; }
   };
 
   // 고정 — 웨비나당 1개(켜면 나머지 고정 해제).
@@ -1255,7 +1260,8 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.preventDefault(); setDrawerOpen(false); return; }
       if (e.key === "Tab" && panelRef.current) {
-        const f = panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE);
+        // 보이는(display:none 아닌) 요소만 경계로 — 숨긴 섹션(비활성 탭)의 요소를 first/last 로 잡으면 focus() 실패로 트랩이 샌다.
+        const f = Array.from(panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.offsetParent !== null);
         if (f.length === 0) { e.preventDefault(); panelRef.current.focus(); return; }
         const first = f[0], last = f[f.length - 1];
         if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
@@ -1454,9 +1460,9 @@ export default function LiveConsoleTab({
 
   // 적응형 폴링 — 라이브 15초 / 평시 90초, 탭 숨김 시 건너뜀
   useEffect(() => {
-    void fetchDashboard(); void fetchCurve(); void fetchActivity();
     let timer: ReturnType<typeof setTimeout>;
     let ticks = 0;
+    let cancelled = false;
     const schedule = () => {
       timer = setTimeout(async () => {
         if (!document.hidden) {
@@ -1470,8 +1476,14 @@ export default function LiveConsoleTab({
         schedule();
       }, statusRef.current === "live" ? 15_000 : 90_000);
     };
-    schedule();
-    return () => clearTimeout(timer);
+    // 초기 조회로 statusRef 를 먼저 확정한 뒤 스케줄 — 라이브인데 첫 주기가 90초로 잡히던 레이스 방지.
+    void (async () => {
+      await fetchDashboard();
+      if (cancelled) return;
+      void fetchCurve(); void fetchActivity();
+      schedule();
+    })();
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [fetchDashboard, fetchCurve, fetchActivity]);
 
   const setOverride = async (value: WebinarStatus | null) => {

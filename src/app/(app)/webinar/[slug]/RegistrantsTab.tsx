@@ -426,6 +426,11 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
         return;
       }
       if (event.key !== "Tab") return;
+      // 중첩 대화상자(공용 confirm: role="dialog" aria-modal)가 열려 있으면 그쪽이 포커스를 관리 —
+      // 이 문서 레벨 트랩이 confirm 의 포커스를 배경 드로어로 뺏지 않게 바로 양보.
+      const activeEl = document.activeElement as HTMLElement | null;
+      const nestedModal = activeEl?.closest('[role="dialog"],[role="alertdialog"],[aria-modal="true"]');
+      if (nestedModal && nestedModal !== dialogRef.current) return;
 
       const focusables = getFocusable();
       if (!focusables.length) {
@@ -466,6 +471,8 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
 
   const parsedBulk = useMemo(() => parseBulkText(bulkText), [bulkText]);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  // 마지막 페이지의 마지막 항목을 지우면 page 가 범위를 벗어나 가짜 '등록자 없음' 빈 화면에 갇힌다 — 범위 밖이면 마지막 페이지로 당김.
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
 
   const handleSort = (key: SortKey) => {
     setPage(1);

@@ -82,7 +82,9 @@ export function resolveWebinarStatus(webinar: WebinarStatusInput, now: Date = ne
   const status = isOverridden ? (webinar.statusOverride as WebinarStatusOverride) : auto;
 
   const entryOpenAt = new Date(liveStartAt.getTime() - getEntryOpenBeforeMinutes(webinar.components) * 60_000);
-  const entryOpen = status === "live" || (status !== "ended" && t >= entryOpenAt.getTime());
+  // 수동 override 가 있으면 시간 기반 입장오픈을 적용하지 않는다 — 운영자가 'registration'으로 되돌리면
+  // (예: 종료 후 재개·테스트 후 복귀) 시각이 이미 지났어도 등록 화면을 유지해야 한다. override='live'는 첫 절로 열림.
+  const entryOpen = status === "live" || (!isOverridden && status !== "ended" && t >= entryOpenAt.getTime());
 
   // live 중 등록: allowLiveRegistration 이 명시돼 있으면 그 값, 없으면 기존 동작 보존
   // (기존 register 라우트는 signupDeadline 만 비교 — 마감 전이면 라이브 중에도 허용이었다)
