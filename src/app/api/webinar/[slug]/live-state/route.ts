@@ -14,13 +14,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const registrationId = url.searchParams.get("registrationId");
   const wantChat = url.searchParams.get("chat") === "1";
   const wantQa = url.searchParams.get("qa") === "1"; // Q&A 탭 활성 시에만 100행 보드 전송(egress 절감)
-  const needVideo = url.searchParams.get("needVideo") === "1"; // 영상 미확보 클라이언트만 — 유효 등록자 검증 후 youtubeId 복구
   const chatAfterRaw = url.searchParams.get("chatAfter");
 
   const webinar = await prisma.webinar.findUnique({
     where: { slug },
     select: {
-      id: true, statusOverride: true, liveStartAt: true, liveEndAt: true, signupDeadline: true, components: true,
+      id: true, statusOverride: true, liveStartAt: true, liveEndAt: true, signupDeadline: true, components: true, config: true,
     },
   });
   if (!webinar) return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404, headers: CORS });
@@ -119,14 +118,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     ? await prisma.webinarRegistration.count({ where: { webinarId: wid, isActive: true } })
     : null;
 
-  // 영상 복구 — needVideo(클라이언트 영상 미확보) + 유효 등록자일 때만 config.youtubeId 전달.
-  // 등록 시점엔 영상이 없다가 이후 운영자가 설정/교체하면 라이브 중 자동 반영. 상시 폴링엔 config 를 싣지 않는다.
+  // 영상 동기화 — 유효 등록자에게만 현재 설정을 전달한다.
+  // 최초 입장 뒤 운영자가 주소를 교체하거나 비워도 다음 상태 폴에서 시청 화면이 같은 값으로 갱신된다.
   let youtubeId: string | null = null;
-  if (needVideo && registrationId) {
+  if (registrationId) {
     const reg = await prisma.webinarRegistration.findFirst({ where: { id: registrationId, webinarId: wid }, select: { id: true } });
     if (reg) {
-      const w = await prisma.webinar.findUnique({ where: { id: wid }, select: { config: true } });
-      const yt = (w?.config as Record<string, unknown> | null)?.youtubeId;
+      const yt = (webinar.config as Record<string, unknown> | null)?.youtubeId;
       youtubeId = typeof yt === "string" ? yt : null;
     }
   }

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Clock, Edit3, Loader2, Plus, Save, Trash2, X } from "lucide-react";
+import { Clock, Edit3, ImagePlus, Link2, Loader2, Plus, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useUndoableDelete } from "@/components/ui/use-undoable-delete";
+import { SPEAKER_PHOTO_ACCEPT, validateSpeakerPhoto } from "@/lib/webinar-speaker-photo";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -64,12 +65,40 @@ function toForm(session: WebinarSession): SessionForm {
 }
 
 function SessionFormFields({
+  webinarId,
   form,
   setForm,
 }: {
+  webinarId: string;
   form: SessionForm;
   setForm: Dispatch<SetStateAction<SessionForm>>;
 }) {
+  const [photoSource, setPhotoSource] = useState<"upload" | "url">("upload");
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadPhoto = async (file: File) => {
+    const validationError = validateSpeakerPhoto(file);
+    if (validationError) { toast.error(validationError); return; }
+
+    setIsUploading(true);
+    try {
+      const body = new FormData();
+      body.set("file", file);
+      const res = await fetch(`/api/webinars/${webinarId}/speaker-photo`, { method: "POST", body });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || typeof data?.url !== "string") {
+        toast.error(data?.error ?? "사진 업로드에 실패했어요.");
+        return;
+      }
+      setForm((f) => ({ ...f, speakerPhotoUrl: data.url }));
+      toast.success("연사 사진을 올렸어요");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   return (
     <div className="grid grid-cols-12 gap-3">
       <div className="col-span-4 sm:col-span-2">
@@ -143,14 +172,44 @@ function SessionFormFields({
         />
       </div>
       <div className="col-span-12">
-        <label className="text-xs text-muted-foreground mb-1 block">연사 사진 URL (선택)</label>
-        <input
-          type="url"
-          value={form.speakerPhotoUrl}
-          onChange={(e) => setForm((f) => ({ ...f, speakerPhotoUrl: e.target.value }))}
-          placeholder="https://... (라이브 페이지 아젠다에 원형 사진으로 표시돼요)"
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
-        />
+        <label className="text-xs text-muted-foreground mb-1.5 block">연사 사진 (선택)</label>
+        <div className="flex items-center gap-1 mb-2" role="group" aria-label="연사 사진 입력 방식">
+          <button type="button" onClick={() => setPhotoSource("upload")}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors ${photoSource === "upload" ? "bg-violet-500 text-white" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
+            <ImagePlus className="w-3.5 h-3.5" />파일 업로드
+          </button>
+          <button type="button" onClick={() => setPhotoSource("url")}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors ${photoSource === "url" ? "bg-violet-500 text-white" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
+            <Link2 className="w-3.5 h-3.5" />URL 입력
+          </button>
+        </div>
+        {photoSource === "upload" ? (
+          <div className="flex items-center gap-3 rounded-xl border border-dashed border-border bg-secondary/20 px-3 py-2.5">
+            {form.speakerPhotoUrl && (
+              // 외부 URL도 지원하므로 Next Image 최적화 도메인 제한을 적용하지 않는다.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={form.speakerPhotoUrl} alt="선택한 연사 사진 미리보기" className="w-9 h-9 rounded-full object-cover border border-border" />
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium">JPG, PNG, WebP, GIF · 최대 5MB</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">올린 사진은 라이브 아젠다의 연사 프로필로 표시돼요.</p>
+            </div>
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading}
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-secondary disabled:opacity-50">
+              {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5" />}
+              {isUploading ? "업로드 중" : form.speakerPhotoUrl ? "사진 변경" : "사진 선택"}
+            </button>
+            <input ref={fileInputRef} type="file" accept={SPEAKER_PHOTO_ACCEPT} className="sr-only" onChange={(e) => {
+              const file = e.currentTarget.files?.[0];
+              if (file) void uploadPhoto(file);
+            }} />
+          </div>
+        ) : (
+          <input type="url" value={form.speakerPhotoUrl}
+            onChange={(e) => setForm((f) => ({ ...f, speakerPhotoUrl: e.target.value }))}
+            placeholder="https://... (라이브 페이지 아젠다에 원형 사진으로 표시돼요)"
+            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
+        )}
       </div>
     </div>
   );
@@ -305,7 +364,7 @@ export default function SessionsTab({
           className="overflow-hidden"
         >
           <div className="p-4 rounded-2xl border border-violet-400/30 bg-violet-500/5 space-y-3">
-            <SessionFormFields form={createForm} setForm={setCreateForm} />
+            <SessionFormFields webinarId={webinarId} form={createForm} setForm={setCreateForm} />
             <div className="flex gap-2">
               <motion.button
                 whileHover={{ y: -1 }}
@@ -355,7 +414,7 @@ export default function SessionsTab({
             >
               {editingId === session.id ? (
                 <div className="space-y-3">
-                  <SessionFormFields form={editForm} setForm={setEditForm} />
+                  <SessionFormFields webinarId={webinarId} form={editForm} setForm={setEditForm} />
                   <div className="flex gap-2">
                     <motion.button
                       whileHover={{ y: -1 }}

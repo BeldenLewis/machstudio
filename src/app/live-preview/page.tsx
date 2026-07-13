@@ -206,6 +206,7 @@ export default function LivePreviewPage() {
       {state === "entry" && (
         <EntryVerify
           webinar={webinarData} accent={t.accent} text={t.text} surface={t.surface}
+          targetIso={real?.liveStartAt ?? target} serverNowMs={previewNowMs} isLive
           authMethod={authMethod} authValue={authValue} verifyError="" isVerifying={false}
           onAuthMethod={setAuthMethod} onAuthValueChange={setAuthValue} onVerify={() => {}} onGoSignup={() => {}}
           live={live} viewerCount={1284}

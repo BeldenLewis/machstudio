@@ -1,21 +1,20 @@
 "use client";
 
-import { useMemo } from "react";
 import { motion } from "framer-motion";
-import { Lock, ArrowRight } from "lucide-react";
-import { buildStkCss } from "./LiveContentStk";
+import { ArrowRight, Lock } from "lucide-react";
+import PreLiveWaiting from "./PreLiveWaiting";
 import type { LivePageConfig } from "@/lib/webinar-config";
 
 /**
- * 라이브 중 · 미인증 입장 확인 화면.
- * accent 앰비언트 위 단일 포커스 카드 — 시청자수(FOMO)·전화/이메일 세그먼트·입장. STK 토큰 구동.
+ * 입장 확인은 대기 화면과 같은 히어로·아젠다·안내를 사용한다.
+ * 입장 오픈 시간에는 카운트다운 아래에서 미리 확인할 수 있고, 라이브가 시작되면
+ * 동일한 자리에 인증 카드가 올라와 다음 행동이 분명해진다.
  */
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
 const EXTRA_CSS = `
-.stk-live .ev-wrap { position:relative; min-height:56vh; display:flex; align-items:center; justify-content:center; padding:24px 8px 48px; }
-.stk-live .ev-card { position:relative; z-index:1; width:100%; max-width:440px; background:var(--card); border-radius:var(--radius-lg); box-shadow:var(--card-shadow); padding:34px 32px; text-align:center; }
-.stk-live .ev-now { display:inline-flex; align-items:center; gap:8px; font-size:12.5px; font-weight:650; color:#12B76A; background:color-mix(in srgb,#12B76A 13%,transparent); padding:6px 13px; border-radius:999px; margin-bottom:22px; }
+.stk-live .ev-card { width:100%; background:var(--card); border-radius:var(--radius-lg); box-shadow:var(--card-shadow); padding:28px; text-align:center; }
+.stk-live .ev-now { display:inline-flex; align-items:center; gap:8px; font-size:12.5px; font-weight:650; color:#12B76A; background:color-mix(in srgb,#12B76A 13%,transparent); padding:6px 13px; border-radius:999px; margin-bottom:18px; }
 .stk-live .ev-now .d { width:7px; height:7px; border-radius:50%; background:currentColor; animation:evBreathe 2.2s ease-in-out infinite; }
 @keyframes evBreathe { 0%,100%{ opacity:1; } 55%{ opacity:.5; } }
 .stk-live .ev-now b { font-variant-numeric:tabular-nums; margin:0 1px; }
@@ -39,11 +38,26 @@ const EXTRA_CSS = `
 .stk-live .ev-ghost b { color:var(--key); }
 `;
 
+interface Session {
+  id: string;
+  number: number;
+  type?: string;
+  title: string;
+  speaker: string | null;
+  speakerPhotoUrl?: string | null;
+  description?: string | null;
+  startTime: string;
+  endTime: string;
+}
+
 interface EntryVerifyProps {
-  webinar: { name: string; description: string | null };
+  webinar: { name: string; description: string | null; liveStartAt: string; sessions: Session[] };
   accent: string;
   text: string;
   surface: string;
+  targetIso: string;
+  serverNowMs?: number;
+  isLive: boolean;
   authMethod: "phone" | "email";
   authValue: string;
   verifyError: string;
@@ -54,62 +68,72 @@ interface EntryVerifyProps {
   onGoSignup: () => void;
   live: LivePageConfig;
   viewerCount?: number;
+  hasCalendar?: boolean;
+  onCalendar?: () => void;
+  onShare?: () => void;
+  shareCopied?: boolean;
+  onNotify?: () => void;
+  notify?: { subscribed: boolean; pending: boolean; error: string };
 }
 
 export default function EntryVerify({
-  webinar, accent, text, surface,
+  webinar, accent, text, surface, targetIso, serverNowMs, isLive,
   authMethod, authValue, verifyError, isVerifying,
   onAuthMethod, onAuthValueChange, onVerify, onGoSignup,
-  live, viewerCount,
+  live, viewerCount, hasCalendar, onCalendar, onShare, shareCopied, onNotify, notify,
 }: EntryVerifyProps) {
-  const css = useMemo(() => buildStkCss(accent || "#6D28D9", text || "#141320", surface || "#FFFFFF") + EXTRA_CSS, [accent, text, surface]);
   const showViewers = live.entry.viewerCount && (viewerCount ?? 0) > 0;
+  const entryCard = (
+    <div className="ev-card">
+      {showViewers && (
+        <span className="ev-now"><span className="d" />지금 <b>{(viewerCount ?? 0).toLocaleString()}명</b>이 함께 보고 있어요</span>
+      )}
+      <h2 className="ev-title">웨비나에 입장하기</h2>
+      <p className="ev-sub">사전등록한 전화번호 또는 이메일만 입력하면<br />바로 시청 화면으로 이동해요.</p>
+
+      <div className="ev-seg">
+        <span className={`ev-knob ${authMethod === "email" ? "email" : ""}`} />
+        {(["phone", "email"] as const).map((method) => (
+          <button key={method} type="button" onClick={() => onAuthMethod(method)} className={`ev-seg-btn ${authMethod === method ? "on" : ""}`}>
+            {method === "phone" ? "전화번호" : "이메일"}
+          </button>
+        ))}
+      </div>
+
+      <input type={authMethod === "phone" ? "tel" : "email"} value={authValue}
+        onChange={(e) => onAuthValueChange(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") onVerify(); }}
+        placeholder={authMethod === "phone" ? "010 1234 5678" : "name@company.com"} className="ev-input"
+        aria-label={authMethod === "phone" ? "전화번호" : "이메일"} />
+      {verifyError && <p className="ev-err">{verifyError}</p>}
+
+      <motion.button whileTap={{ scale: 0.97 }} transition={spring} onClick={onVerify} disabled={isVerifying} className="ev-primary">
+        {isVerifying ? "확인 중…" : <>웨비나 입장하기 <ArrowRight /></>}
+      </motion.button>
+      <div className="ev-trust"><Lock /> 등록 정보 확인용으로만 쓰이고 저장되지 않아요</div>
+      <button type="button" onClick={onGoSignup} className="ev-ghost">아직 등록 전이신가요? <b>사전등록하기 →</b></button>
+    </div>
+  );
 
   return (
-    <div className="stk-live">
-      <style dangerouslySetInnerHTML={{ __html: css }} />
-      <div className="live-inner" style={{ paddingTop: 32, paddingBottom: 32 }}>
-        <div className="live-hero" style={{ marginBottom: 8 }}>
-          <span className="live-badge"><span className="live-dot" />LIVE</span>
-          <h1 className="live-title">{webinar.name}</h1>
-        </div>
-
-        <div className="ev-wrap">
-          <div className="ev-card">
-            {showViewers && (
-              <span className="ev-now"><span className="d" />지금 <b>{(viewerCount ?? 0).toLocaleString()}명</b>이 함께 보고 있어요</span>
-            )}
-            <h2 className="ev-title">웨비나에 입장하기</h2>
-            <p className="ev-sub">사전등록한 전화번호 또는 이메일만 입력하면<br />바로 시청 화면으로 이동해요.</p>
-
-            <div className="ev-seg">
-              <span className={`ev-knob ${authMethod === "email" ? "email" : ""}`} />
-              {(["phone", "email"] as const).map((m) => (
-                <button key={m} type="button" onClick={() => onAuthMethod(m)} className={`ev-seg-btn ${authMethod === m ? "on" : ""}`}>
-                  {m === "phone" ? "전화번호" : "이메일"}
-                </button>
-              ))}
-            </div>
-
-            <input
-              type={authMethod === "phone" ? "tel" : "email"}
-              value={authValue}
-              onChange={(e) => onAuthValueChange(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") onVerify(); }}
-              placeholder={authMethod === "phone" ? "010 1234 5678" : "name@company.com"}
-              className="ev-input"
-              aria-label={authMethod === "phone" ? "전화번호" : "이메일"}
-            />
-            {verifyError && <p className="ev-err">{verifyError}</p>}
-
-            <motion.button whileTap={{ scale: 0.97 }} transition={spring} onClick={onVerify} disabled={isVerifying} className="ev-primary">
-              {isVerifying ? "확인 중…" : <>웨비나 입장하기 <ArrowRight /></>}
-            </motion.button>
-            <div className="ev-trust"><Lock /> 등록 정보 확인용으로만 쓰이고 저장되지 않아요</div>
-            <button type="button" onClick={onGoSignup} className="ev-ghost">아직 등록 전이신가요? <b>사전등록하기 →</b></button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <>
+      <style dangerouslySetInnerHTML={{ __html: EXTRA_CSS }} />
+      <PreLiveWaiting
+        webinar={webinar}
+        accent={accent}
+        text={text}
+        surface={surface}
+        targetIso={targetIso}
+        serverNowMs={serverNowMs}
+        live={live}
+        hasCalendar={hasCalendar}
+        onCalendar={onCalendar}
+        onShare={onShare}
+        shareCopied={shareCopied}
+        onNotify={onNotify}
+        notify={notify}
+        centerAction={entryCard}
+        replaceCountdown={isLive}
+      />
+    </>
   );
 }

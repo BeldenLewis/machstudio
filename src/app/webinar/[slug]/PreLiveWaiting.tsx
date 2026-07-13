@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { CalendarPlus, Share2, Bell } from "lucide-react";
 import { buildStkCss } from "./LiveContentStk";
@@ -25,6 +25,8 @@ const EXTRA_CSS = `
 .stk-live .cd-live { text-align:center; font-size:22px; font-weight:850; color:var(--key); }
 .stk-live .plw-when { margin-top:20px; font-size:14px; color:var(--muted); text-align:center; }
 .stk-live .plw-when b { color:var(--text); font-weight:700; }
+.stk-live .plw-center-action { width:100%; max-width:440px; margin:6px auto 0; }
+.stk-live .plw-entry-panel { width:100%; max-width:440px; margin:26px auto 0; }
 .stk-live .plw-ctas { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:26px; }
 .stk-live .plw-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; height:46px; padding:0 20px; border:0; border-radius:var(--radius-sm); font:inherit; font-size:14px; font-weight:700; cursor:pointer; background:var(--card); color:var(--text); box-shadow:var(--btn-shadow); transition:transform .16s ease, box-shadow .16s ease, opacity .16s ease; }
 .stk-live .plw-btn:hover { transform:translateY(-2px); box-shadow:var(--btn-shadow-hover); }
@@ -92,6 +94,10 @@ interface PreLiveWaitingProps {
   shareCopied?: boolean;
   onNotify?: () => void;
   notify?: { subscribed: boolean; pending: boolean; error: string };
+  /** 입장 확인처럼 카운트다운과 같은 레이아웃을 공유하는 화면의 주요 행동 카드. */
+  centerAction?: ReactNode;
+  /** 수동 라이브 전환도 카운트다운 대신 주요 행동 카드를 보여준다. */
+  replaceCountdown?: boolean;
 }
 
 function diffParts(ms: number) {
@@ -103,7 +109,7 @@ const AV_COLORS = ["#6D28D9", "#0EA5E9", "#F97316", "#10B981", "#E11D48"];
 
 export default function PreLiveWaiting({
   webinar, accent, text, surface, targetIso, serverNowMs, registered = true,
-  live, registrantCount, hasCalendar, onCalendar, onShare, shareCopied, onNotify, notify,
+  live, registrantCount, hasCalendar, onCalendar, onShare, shareCopied, onNotify, notify, centerAction, replaceCountdown = false,
 }: PreLiveWaitingProps) {
   const css = useMemo(() => buildStkCss(accent || "#6D28D9", text || "#141320", surface || "#FFFFFF") + EXTRA_CSS, [accent, text, surface]);
   const targetMs = useMemo(() => new Date(targetIso).getTime(), [targetIso]);
@@ -129,6 +135,7 @@ export default function PreLiveWaiting({
   const showNotify = live.waiting.notify && !!onNotify;
   const showAgenda = live.waiting.agenda && webinar.sessions.length > 0;
   const showSocial = live.waiting.social && (registrantCount ?? 0) > 0;
+  const showCenterAction = Boolean(centerAction) && (started || replaceCountdown);
 
   return (
     <div className="stk-live">
@@ -142,6 +149,8 @@ export default function PreLiveWaiting({
 
         {!mounted ? (
           <div style={{ minHeight: 120 }} />
+        ) : showCenterAction ? (
+          <div className="plw-center-action">{centerAction}</div>
         ) : started ? (
           <p className="cd-live">곧 시작합니다 — 잠시만 기다려주세요</p>
         ) : (
@@ -159,6 +168,8 @@ export default function PreLiveWaiting({
             </p>
           </>
         )}
+
+        {mounted && centerAction && !showCenterAction && <div className="plw-entry-panel">{centerAction}</div>}
 
         {(showCalendar || showShare || showNotify) && (
           <div className="plw-ctas">
