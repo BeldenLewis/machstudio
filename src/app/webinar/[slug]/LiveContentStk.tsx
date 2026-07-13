@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import { getYouTubeVideoId } from "@/lib/youtube";
 import { CheckCircle2, Send, Share2 } from "lucide-react";
 import { formatKst, kstDateString } from "@/lib/datetime";
 
@@ -339,7 +340,8 @@ export default function LiveContentStk({
   );
 
   const config = (webinar.config ?? {}) as Record<string, unknown>;
-  const youtubeId = youtubeIdProp || (typeof config.youtubeId === "string" ? config.youtubeId : "");
+  // 기존에 공유 링크가 저장된 웨비나도 즉시 재생되도록, 렌더 직전에 embed용 ID로 정규화한다.
+  const youtubeId = getYouTubeVideoId(youtubeIdProp || (typeof config.youtubeId === "string" ? config.youtubeId : ""));
   const live = (config.livePage ?? {}) as LivePageConfig;
   // CTA 카드 여러 장 — 신규 ctas[] 우선, 없으면 레거시 단일 cta. 내용 있는 카드만.
   const ctaList: CtaCard[] = (Array.isArray(live.ctas) ? live.ctas : live.cta ? [live.cta] : [])

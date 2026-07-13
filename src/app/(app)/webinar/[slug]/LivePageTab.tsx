@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { normalizeLivePageConfig, type LivePageConfig, type LiveResource, type LiveNextWebinar } from "@/lib/webinar-config";
 import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
+import { getYouTubeVideoId } from "@/lib/youtube";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -111,6 +112,7 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
     ...(webinar.theme as Partial<Theme>),
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const youtubeVideoId = getYouTubeVideoId(form.youtubeId);
 
   // 라이브 페이지 화면(대기·입장·종료) 섹션 on/off + 자료·다음웨비나 데이터
   const [screens, setScreens] = useState(() => normalizeLivePageConfig(webinar.config));
@@ -170,7 +172,7 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
         body: JSON.stringify({
           config: {
             ...(webinar.config ?? {}),
-            youtubeId: form.youtubeId.trim() || null,
+            youtubeId: youtubeVideoId,
             calendarUrl: form.calendarUrl.trim() || null,
             surveyUrl: form.surveyUrl.trim() || null,
             livePage: buildLivePage(),
@@ -236,10 +238,15 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
               <p className="mt-1 text-xs text-muted-foreground">시청 화면에 재생될 라이브 방송 소스예요.</p>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">YouTube 영상 ID</label>
-              <input type="text" placeholder="예: dQw4w9WgXcQ" value={form.youtubeId}
+              <label className="text-xs text-muted-foreground mb-1 block">YouTube 공유 링크 또는 영상 ID</label>
+              <input type="text" placeholder="예: https://youtu.be/dQw4w9WgXcQ" value={form.youtubeId}
                 onChange={(e) => setForm((f) => ({ ...f, youtubeId: e.target.value }))}
-                className={`${inputCls} font-mono`} />
+                className={`${inputCls} font-mono ${form.youtubeId.trim() && !youtubeVideoId ? "border-red-400 focus:border-red-400" : ""}`} />
+              <p className={`mt-1 text-[11px] ${form.youtubeId.trim() && !youtubeVideoId ? "text-red-500" : "text-muted-foreground"}`}>
+                {form.youtubeId.trim() && !youtubeVideoId
+                  ? "YouTube 공유 링크 또는 11자리 영상 ID를 입력해 주세요."
+                  : "공유 링크를 그대로 붙여 넣어도 자동으로 영상 ID로 저장돼요."}
+              </p>
             </div>
           </section>
 
