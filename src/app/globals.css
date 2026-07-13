@@ -108,6 +108,10 @@
   --radius: 0.625rem;
   /* 라이브 콘솔 카드 마감 — 목업(90c8cc88) 소프트 섀도우(라이트) */
   --shadow-card: 0 1px 2px rgba(20, 20, 25, 0.04), 0 6px 20px -12px rgba(20, 20, 25, 0.1);
+  /* 분석 차트 시리즈 — 테마 대응(라이트): 동시=네이비 / 누적입장=그린 / 채팅=뮤트 */
+  --chart-viewers: oklch(0.45 0.1 252);
+  --chart-entered: oklch(0.55 0.13 150);
+  --chart-chat: oklch(0.72 0.03 252);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -152,6 +156,10 @@
   --sidebar-ring: oklch(0.556 0 0);
   /* 다크에서는 더 깊고 넓은 섀도우 */
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -14px rgba(0, 0, 0, 0.6);
+  /* 분석 차트 시리즈 — 다크에서는 라이트닝 */
+  --chart-viewers: oklch(0.68 0.12 252);
+  --chart-entered: oklch(0.72 0.18 150);
+  --chart-chat: oklch(0.6 0.03 252);
 }
 
 @layer base {

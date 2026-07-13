@@ -188,6 +188,18 @@ export default function LivePushLayer({
     } catch { /* 투표 전송 실패는 무시 (다음 시도 가능) */ }
   };
 
+  // CTA/팝업 버튼 클릭 비콘 — 클릭률·리드 스코어링 집계용. 실패는 조용히 무시(사용자 흐름 방해 금지).
+  const trackCta = (popupId: string, kind: string) => {
+    try {
+      void fetch(`/api/webinar/${slug}/cta-click`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ popupId, registrationId, kind }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch { /* noop */ }
+  };
+
   const primaryIsTally = !!popup && popup.integrationType === "tally" && !!popup.tallyFormId;
   const pollTotal = activePoll ? activePoll.options.reduce((s, o) => s + o.voteCount, 0) : 0;
 
@@ -219,7 +231,7 @@ export default function LivePushLayer({
             <div className="space-y-2">
               {popup.buttonLabel && (primaryIsTally ? (
                 <button
-                  onClick={() => openTally(popup.tallyFormId!, { layout: popup.tallyLayout, width: popup.tallyWidth, autoClose: popup.tallyAutoClose, emojiText: popup.tallyEmojiText, emojiAnimation: popup.tallyEmojiAnimation }, registrationId)}
+                  onClick={() => { trackCta(popup.id, "tally"); openTally(popup.tallyFormId!, { layout: popup.tallyLayout, width: popup.tallyWidth, autoClose: popup.tallyAutoClose, emojiText: popup.tallyEmojiText, emojiAnimation: popup.tallyEmojiAnimation }, registrationId); }}
                   className="flex w-full items-center justify-center rounded-xl px-4 py-3 text-sm font-bold text-white transition-transform hover:-translate-y-px"
                   style={{ background: accent }}
                 >
@@ -230,6 +242,7 @@ export default function LivePushLayer({
                   href={popup.buttonUrl}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() => trackCta(popup.id, "cta")}
                   className="flex w-full items-center justify-center rounded-xl px-4 py-3 text-sm font-bold text-white transition-transform hover:-translate-y-px"
                   style={{ background: accent }}
                 >
@@ -241,6 +254,7 @@ export default function LivePushLayer({
                   href={popup.secondaryUrl}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() => trackCta(popup.id, "cta_secondary")}
                   className="flex w-full items-center justify-center rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-white/10"
                 >
                   {popup.secondaryLabel}

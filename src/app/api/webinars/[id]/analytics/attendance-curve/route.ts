@@ -85,7 +85,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const avg = points.length ? Math.round(points.reduce((sum, p) => sum + p.viewers, 0) / points.length) : 0;
 
   return NextResponse.json(
-    { points, peak, avg, bucketMinutes: Math.round(bucketSeconds / 60), hasData: points.length > 0, range: range ?? "all" },
+    { points, peak, avg, bucketMinutes: Math.round(bucketSeconds / 60), fromMs: from.getTime(), bucketMs: bucketSeconds * 1000, hasData: points.length > 0, range: range ?? "all" },
     { headers: { "Cache-Control": "private, max-age=60" } },
   );
 }

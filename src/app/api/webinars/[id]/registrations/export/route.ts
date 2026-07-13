@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { normalizeRegistrationForm } from "@/lib/webinar-config";
+import { assembleWebinarEngagement, SEGMENT_LABEL } from "@/lib/webinar-scoring";
 
 // memo 는 JSON 문자열({ memo, customFields }) 또는 평문일 수 있다 (register 라우트 참조)
 function parseMemo(memo: string | null): { note: string; customFields: Record<string, unknown> } {
@@ -46,6 +47,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     orderBy: { submittedAt: "desc" },
   });
 
+  // 참여 점수·세그먼트 — 명단과 함께 리드 퀄리티를 내보낸다(캡 적용 체류 기반)
+  const engagement = await assembleWebinarEngagement(id, { liveStartAt: webinar.liveStartAt, liveEndAt: webinar.liveEndAt });
+  const scoreMap = new Map(engagement.rows.map((r) => [r.registrationId, r]));
+
   // 커스텀 필드 컬럼 — 등록폼 정의 순서(시스템 필드 제외) 그대로 헤더에 편입
   const customFieldDefs = normalizeRegistrationForm(webinar.config, { includeDisabled: true }).fields
     .filter((f) => !f.system);
@@ -55,9 +60,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     ...customFieldDefs.map((f) => f.label),
     "사전질문",
     "UTM소스", "UTM매체", "UTM캠페인", "최초UTM소스", "최초UTM매체", "유입경로(referrer)",
+    "참여점수", "세그먼트",
   ];
   const rows = registrations.map((r) => {
     const { note, customFields } = parseMemo(r.memo);
+    const sc = scoreMap.get(r.id);
     return [
       r.name,
       r.phone ?? "",
@@ -81,6 +88,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       r.firstUtmSource ?? "",
       r.firstUtmMedium ?? "",
       r.referrer ?? "",
+      sc ? String(sc.score) : "",
+      sc ? (sc.entered ? SEGMENT_LABEL[sc.segment] : SEGMENT_LABEL.noShow) : "",
     ];
   });
 

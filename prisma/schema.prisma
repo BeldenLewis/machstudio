@@ -520,6 +520,7 @@ model Webinar {
   embedSites         WebinarEmbedSite[]
   attendanceSegments WebinarAttendanceSegment[]
   visitStats         WebinarVisitStat[]
+  popupClicks        WebinarPopupClick[]
 
   @@index([projectId, createdAt(sort: Desc)])
   @@index([workspaceId])
@@ -672,9 +673,27 @@ model WebinarPopup {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+  webinar Webinar             @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+  clicks  WebinarPopupClick[]
 
   @@index([webinarId, isActive])
+}
+
+// 라이브 중 CTA/팝업 버튼 클릭 이벤트 — 클릭률·리드 스코어링 집계용(신규 수집).
+// popupId 는 팝업 삭제 후에도 총 클릭수 보존 위해 SetNull. registrationId 는 검증된 시청자만 신뢰.
+model WebinarPopupClick {
+  id             String   @id @default(cuid())
+  webinarId      String
+  popupId        String?
+  registrationId String?
+  kind           String   @default("cta") // cta | tally | cta_secondary
+  createdAt      DateTime @default(now())
+
+  webinar Webinar       @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+  popup   WebinarPopup? @relation(fields: [popupId], references: [id], onDelete: SetNull)
+
+  @@index([webinarId, createdAt])
+  @@index([popupId])
 }
 
 // 아임웹 등 외부 사이트 단위 부착 지점 — 로더 /w/{id} 가 이 레코드로 해석된다.
