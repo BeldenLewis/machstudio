@@ -28,8 +28,14 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ko" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="ko" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
+        {/* 프리-페인트 테마 적용 — 저장된 선택(mach_theme)을 렌더 전에 반영해 깜빡임(FOUC) 방지 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem('mach_theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}`,
+          }}
+        />
         <MotionProvider>{children}</MotionProvider>
         <Toaster
           position="top-center"

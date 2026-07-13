@@ -11,6 +11,8 @@ import { useEffect, useMemo, useState } from "react";
 import LiveContentStk from "@/app/webinar/[slug]/LiveContentStk";
 import EntryVerify from "@/app/webinar/[slug]/EntryVerify";
 import PreLiveWaiting from "@/app/webinar/[slug]/PreLiveWaiting";
+import EndedScreen from "@/app/webinar/[slug]/EndedScreen";
+import { normalizeLivePageConfig } from "@/lib/webinar-config";
 
 type State = "waiting" | "entry" | "live" | "ended";
 type ThemeKey = "dark" | "light";
@@ -76,6 +78,12 @@ export default function LivePreviewPage() {
   const [themeKey, setThemeKey] = useState<ThemeKey>("dark");
   const [real, setReal] = useState<RealWebinar | null>(null);
 
+  // ?state= 로 초기 화면 지정 — 만들기의 대기/라이브/종료 메뉴에서 해당 화면을 바로 연다
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get("state");
+    if (s === "waiting" || s === "entry" || s === "live" || s === "ended") setState(s);
+  }, []);
+
   // ?slug= 가 있으면 그 웨비나의 실제 저장 구성을 공개 /info 로 불러와 미리보기(없으면 목업 유지)
   useEffect(() => {
     const slug = new URLSearchParams(window.location.search).get("slug");
@@ -106,7 +114,8 @@ export default function LivePreviewPage() {
             : [],
         });
         setChatOn(comps.chatEnabled === true);
-        setState("live"); // 실제 데이터 로드 시 라이브 시청 레이아웃부터 보여준다
+        // ?state= 로 화면을 지정하지 않았을 때만 라이브 시청 레이아웃을 기본으로
+        if (!new URLSearchParams(window.location.search).get("state")) setState("live");
       } catch { /* 무시 — 목업으로 폴백 */ }
     })();
     return () => { cancelled = true; };
@@ -114,6 +123,7 @@ export default function LivePreviewPage() {
 
   // 미리보기 대상 — 실제 웨비나가 로드됐으면 그것, 아니면 목업
   const webinarData = real ?? MOCK;
+  const live = normalizeLivePageConfig(webinarData.config);
   const t = real?.theme
     ? {
         bg: real.theme.bgColor ?? THEMES.dark.bg,
@@ -191,13 +201,14 @@ export default function LivePreviewPage() {
       </div>
 
       {state === "waiting" && (
-        <PreLiveWaiting webinar={webinarData} accent={t.accent} text={t.text} surface={t.surface} targetIso={real?.liveStartAt ?? target} registered onCalendar={() => {}} />
+        <PreLiveWaiting webinar={webinarData} accent={t.accent} text={t.text} surface={t.surface} targetIso={real?.liveStartAt ?? target} registered live={live} hasCalendar onCalendar={() => {}} onShare={() => {}} onNotify={() => {}} notify={{ subscribed: false, pending: false, error: "" }} />
       )}
       {state === "entry" && (
         <EntryVerify
           webinar={webinarData} accent={t.accent} text={t.text} surface={t.surface}
           authMethod={authMethod} authValue={authValue} verifyError="" isVerifying={false}
           onAuthMethod={setAuthMethod} onAuthValueChange={setAuthValue} onVerify={() => {}} onGoSignup={() => {}}
+          live={live} viewerCount={1284}
         />
       )}
       {state === "live" && (
@@ -210,10 +221,11 @@ export default function LivePreviewPage() {
         />
       )}
       {state === "ended" && (
-        <div style={{ maxWidth: 480, margin: "0 auto", padding: "120px 24px", textAlign: "center" }}>
-          <p style={{ fontSize: 22, fontWeight: 800 }}>웨비나가 종료됐어요</p>
-          <p style={{ opacity: 0.6, marginTop: 8 }}>(종료 화면은 아직 개선 전 — 이번 라운드 대상 아님)</p>
-        </div>
+        <EndedScreen
+          webinar={webinarData} accent={t.accent} text={t.text} surface={t.surface}
+          live={live} surveyUrl={((webinarData.config as Record<string, unknown>)?.surveyUrl as string) || undefined}
+          onReplay={() => {}} onShare={() => {}}
+        />
       )}
     </div>
   );

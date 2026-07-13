@@ -1358,10 +1358,6 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
           </div>
         )}
       </div>
-      <button onClick={openDrawer} className="flex shrink-0 w-full items-center justify-between border-t border-border px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:px-5">
-        <span>콘텐츠 관리 · 만들기 / 편집</span>
-        <Settings className="h-4 w-4" />
-      </button>
     </section>
 
     {typeof document !== "undefined" && hasOpened && createPortal(

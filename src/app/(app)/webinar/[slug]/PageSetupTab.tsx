@@ -2,7 +2,7 @@
 
 import { type ElementType } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FileText, ListChecks, MonitorPlay, SlidersHorizontal } from "lucide-react";
+import { FileText, ListChecks, MonitorPlay, SlidersHorizontal, Hourglass, Flag } from "lucide-react";
 import BasicInfoTab from "./BasicInfoTab";
 import RegistrationFormTab from "./RegistrationFormTab";
 import SessionsTab from "./SessionsTab";
@@ -34,14 +34,20 @@ interface Webinar {
   sessions: WebinarSession[];
 }
 
-type PageSetupSection = "general" | "registration" | "sessions" | "livepage";
+type PageSetupSection = "general" | "registration" | "sessions" | "waiting" | "livepage" | "ended";
 
 const sections: { id: PageSetupSection; label: string; desc: string; icon: ElementType }[] = [
   { id: "general", label: "기본 정보", desc: "웨비나 이름·설명·일정과 삭제를 관리합니다.", icon: SlidersHorizontal },
   { id: "registration", label: "등록", desc: "사전등록에서 수집할 항목과 동의 문구를 설정합니다.", icon: FileText },
   { id: "sessions", label: "세션", desc: "라이브 페이지에 표시될 아젠다와 시간표를 정리합니다.", icon: ListChecks },
-  { id: "livepage", label: "라이브 페이지", desc: "시청 화면의 영상·콘텐츠·CTA·참여·디자인을 한 곳에서 꾸밉니다.", icon: MonitorPlay },
+  { id: "waiting", label: "대기 화면", desc: "라이브 전 등록자가 보는 화면 — 카운트다운·아젠다·알림을 구성합니다.", icon: Hourglass },
+  { id: "livepage", label: "라이브 페이지", desc: "시청 화면의 영상·콘텐츠·CTA·참여와 입장 화면·디자인을 꾸밉니다.", icon: MonitorPlay },
+  { id: "ended", label: "종료 화면", desc: "방송 후 화면 — 다시보기·설문·자료·다음 웨비나를 구성합니다.", icon: Flag },
 ];
+
+// 대기/라이브/종료는 하나의 LivePageTab 인스턴스를 공유(전환 시 언마운트 없이 section 만 교체) —
+// livePage 설정이 통째로 저장되므로 인스턴스를 쪼개면 입력 중 데이터가 유실된다.
+const LIVE_GROUP: PageSetupSection[] = ["waiting", "livepage", "ended"];
 
 export default function PageSetupTab({
   webinar,
@@ -127,7 +133,7 @@ export default function PageSetupTab({
         <div className="min-h-0 flex-1 lg:overflow-hidden">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
-              key={section}
+              key={LIVE_GROUP.includes(section) ? "livepage-group" : section}
               initial={{ opacity: 0, x: 12 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -12 }}
@@ -149,9 +155,14 @@ export default function PageSetupTab({
                   <SessionsTab webinarId={webinar.id} sessions={webinar.sessions} onUpdate={onUpdate} />
                 </div>
               )}
-              {section === "livepage" && (
+              {LIVE_GROUP.includes(section) && (
                 <div className="lg:h-full overflow-auto">
-                  <LivePageTab webinar={webinar} slug={webinar.slug} onSilentUpdate={onSilentUpdate} />
+                  <LivePageTab
+                    webinar={webinar}
+                    slug={webinar.slug}
+                    section={section === "livepage" ? "live" : (section as "waiting" | "ended")}
+                    onSilentUpdate={onSilentUpdate}
+                  />
                 </div>
               )}
             </motion.div>

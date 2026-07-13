@@ -104,6 +104,8 @@ export default function LivePushLayer({
   slug,
   registrationId,
   accentColor,
+  surfaceColor,
+  textColor,
   popup: incomingPopup,
   tally: incomingTally,
   poll: incomingPoll,
@@ -111,6 +113,8 @@ export default function LivePushLayer({
   slug: string;
   registrationId: string | null;
   accentColor?: string;
+  surfaceColor?: string;
+  textColor?: string;
   popup: LivePopup | null;
   tally: LiveTallyPush | null;
   poll: LivePoll | null;
@@ -121,6 +125,10 @@ export default function LivePushLayer({
   const [voted, setVoted] = useState(false);
   const openedTallyRef = useRef<Set<string>>(new Set());
   const accent = accentColor || "#6d28d9";
+  // 팝업/투표 카드도 테마(표면·텍스트)를 따르게 — 없으면 기존 다크 폴백
+  const surface = surfaceColor || "#1a1a1f";
+  const text = textColor || "#ffffff";
+  const soft = (pct: number) => `color-mix(in srgb, ${text} ${pct}%, transparent)`;
 
   // 팝업 — 닫음(dismissible + updatedAt 키) 기억을 반영. 수정/재ON 시 updatedAt 이 바뀌어 다시 노출.
   useEffect(() => {
@@ -269,13 +277,17 @@ export default function LivePushLayer({
         </div>
       )}
 
-      {/* 실시간 투표 토스트 — 우하단. 팝업 모달이 떠 있을 땐 숨김(팝업 우선), 닫히면 다시 노출 */}
+      {/* 실시간 투표 토스트 — 우하단. 팝업 모달이 떠 있을 땐 숨김(팝업 우선), 닫히면 다시 노출. 색은 테마 구동. */}
       {activePoll && !popup && (
-        <div className="fixed bottom-4 right-4 z-[60] w-[320px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-white/10 bg-[#1a1a1f]/95 p-4 text-white shadow-2xl backdrop-blur">
+        <div
+          className="fixed bottom-4 right-4 z-[60] w-[320px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl p-4 shadow-2xl backdrop-blur"
+          style={{ background: surface, color: text, border: `1px solid ${soft(12)}` }}
+        >
           <button
             onClick={dismissPoll}
             aria-label="투표 닫기"
-            className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-lg text-white/50 transition-colors hover:bg-white/10 hover:text-white"
+            className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-lg transition-colors"
+            style={{ color: soft(50) }}
           >
             ×
           </button>
@@ -293,18 +305,19 @@ export default function LivePushLayer({
                   type="button"
                   onClick={() => castVote(o.id)}
                   disabled={voted}
-                  className="relative w-full overflow-hidden rounded-xl border border-white/12 px-3 py-2.5 text-left text-[13.5px] font-medium transition-colors enabled:hover:border-white/30 disabled:cursor-default"
+                  className="relative w-full overflow-hidden rounded-xl px-3 py-2.5 text-left text-[13.5px] font-medium transition-colors disabled:cursor-default"
+                  style={{ border: `1px solid ${soft(14)}` }}
                 >
                   <span className="absolute inset-y-0 left-0 transition-all duration-500" style={{ width: voted ? `${pct}%` : 0, background: `color-mix(in srgb, ${accent} 26%, transparent)` }} />
                   <span className="relative flex items-center justify-between gap-2">
                     <span className="truncate">{o.label}</span>
-                    {voted && <span className="tabular-nums text-white/70">{pct}%</span>}
+                    {voted && <span className="tabular-nums" style={{ color: soft(65) }}>{pct}%</span>}
                   </span>
                 </button>
               );
             })}
           </div>
-          <p className="mt-2 text-[11px] text-white/45">{voted ? "참여해주셔서 감사합니다" : "탭해서 투표에 참여하세요"}</p>
+          <p className="mt-2 text-[11px]" style={{ color: soft(45) }}>{voted ? "참여해주셔서 감사합니다" : "탭해서 투표에 참여하세요"}</p>
         </div>
       )}
     </>

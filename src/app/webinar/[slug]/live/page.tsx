@@ -7,7 +7,10 @@ import { Loader2, CheckCircle2 } from "lucide-react";
 import LivePushLayer, { type LivePopup, type LiveTallyPush, type LivePoll } from "../LivePushLayer";
 import LiveContentStk from "../LiveContentStk";
 import PreLiveWaiting from "../PreLiveWaiting";
+import EntryVerify from "../EntryVerify";
+import EndedScreen from "../EndedScreen";
 import { formatKst } from "@/lib/datetime";
+import { normalizeLivePageConfig } from "@/lib/webinar-config";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -458,7 +461,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     if (!previewState) return;
     setView(previewState === "ended" ? "ended" : previewState === "registration" ? "signup" : "live");
     setRegistrationId(previewState === "live" ? "preview" : null);
-    setRegistered(false);
+    // 미리보기 "대기화면"은 리디자인된 대기 화면(PreLiveWaiting)을 보여준다(등록자 관점). 신규 방문자 등록 폼은 등록폼 탭에서 미리보기.
+    setRegistered(previewState === "registration");
     setVideoId(previewState === "live" ? previewVideoId : null);
     setIsTrulyLive(previewState === "live");
   }, [previewState, previewVideoId]);
@@ -739,6 +743,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     } catch { /* 공유 취소·미지원 무시 */ }
   };
   const surveyUrl = typeof webinar.config?.surveyUrl === "string" ? webinar.config.surveyUrl : "";
+  const live = normalizeLivePageConfig(webinar.config);
 
   const renderRegistrationField = (field: RegistrationField) => {
     const commonLabel = `${field.label}${field.required ? " *" : ""}`;
@@ -830,6 +835,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         slug={slug}
         registrationId={registrationId}
         accentColor={accent}
+        surfaceColor={surface}
+        textColor={text}
         popup={view === "live" && registrationId ? pushPopup : null}
         tally={view === "live" && registrationId ? pushTally : null}
         poll={view === "live" && registrationId ? pushPoll : null}
@@ -925,7 +932,9 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           notifyState={{ subscribed: notifySubscribed, onToggle: handleNotifyToggle, error: notifyError, pending: notifyPending }}
         />
       ) : (
-      <div className="max-w-4xl mx-auto px-4 py-12">
+      <div className={view === "signup" && !registered && !registrationId ? "max-w-4xl mx-auto px-4 py-12" : ""}>
+        {/* 히어로·세션 — 신규 방문자 등록 화면에서만(리디자인된 대기/입장/종료는 자체 히어로 보유) */}
+        {view === "signup" && !registered && !registrationId && (<>
         {/* 헤더 */}
         <div className="text-center mb-10">
           <div
@@ -937,7 +946,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             </svg>
           </div>
           <h1 className="text-2xl md:text-3xl font-bold mb-2">{webinar.name}</h1>
-          {webinar.description && <p className="opacity-60 text-sm">{webinar.description}</p>}
+          {webinar.description && <p className="opacity-60 text-sm whitespace-pre-wrap">{webinar.description}</p>}
           <p className="opacity-50 text-xs mt-2">
             {formatKst(webinar.liveStartAt, { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}
             {" ~ "}
@@ -970,6 +979,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             ))}
           </div>
         )}
+        </>)}
 
         {/* 뷰: 사전등록 — 등록/재방문자는 대기 화면(카운트다운·아젠다), 신규 방문자는 등록 폼 */}
         {view === "signup" && ((registered || registrationId) ? (
@@ -982,29 +992,14 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               targetIso={webinar.liveStartAt}
               serverNowMs={serverNowMs}
               registered
+              live={live}
+              hasCalendar={!!calendarUrl}
               onCalendar={calendarUrl ? () => window.open(calendarUrl, "_blank", "noopener,noreferrer") : undefined}
+              onShare={handleShare}
+              shareCopied={shareCopied}
+              onNotify={handleNotifyToggle}
+              notify={{ subscribed: notifySubscribed, pending: notifyPending, error: notifyError }}
             />
-            {/* 알림 옵트인 + 공유 — 재방문 유도·유입 확대 */}
-            <div className="mx-auto flex max-w-md flex-wrap items-center justify-center gap-2.5 px-4">
-              <button
-                type="button"
-                onClick={handleNotifyToggle}
-                disabled={notifyPending}
-                className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-opacity disabled:opacity-50"
-                style={{ border: `1px solid ${accent}`, color: notifySubscribed ? "#fff" : accent, backgroundColor: notifySubscribed ? accent : "transparent" }}
-              >
-                {notifySubscribed ? "알림 받는 중 ✓" : "🔔 알림 받고 이어보기"}
-              </button>
-              <button
-                type="button"
-                onClick={handleShare}
-                className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium opacity-80 transition-opacity hover:opacity-100"
-                style={{ border: `1px solid ${text}33`, color: text }}
-              >
-                {shareCopied ? "링크 복사됨 ✓" : "공유하기"}
-              </button>
-            </div>
-            {notifyError && <p className="text-center text-xs text-red-400">{notifyError}</p>}
           </motion.div>
         ) : (
           <motion.div
@@ -1075,114 +1070,39 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
         {/* 뷰: 라이브 */}
         {view === "live" && !registrationId && (
-          <motion.div
-            style={{ backgroundColor: surface, borderRadius: radius }}
-            className="p-6 md:p-8"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.15 }}
-          >
-            <div className="max-w-md mx-auto">
-              <h2 className="text-lg font-semibold mb-2">입장 확인</h2>
-              <p className="text-sm opacity-60 mb-5">사전등록 시 입력한 전화번호 또는 이메일로 입장할 수 있습니다.</p>
-
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                {(["phone", "email"] as const).map((method) => (
-                  <motion.button
-                    key={method}
-                    type="button"
-                    onClick={() => {
-                      setAuthMethod(method);
-                      setAuthValue("");
-                      setVerifyError("");
-                    }}
-                    className="relative px-3 py-2 text-sm font-medium"
-                    whileTap={{ scale: 0.96 }}
-                    transition={spring}
-                    style={{
-                      borderRadius: `calc(${radius} * 0.6)`,
-                      backgroundColor: authMethod === method ? "transparent" : "rgba(255,255,255,0.08)",
-                      color: text,
-                    }}
-                  >
-                    {authMethod === method && (
-                      <motion.span
-                        layoutId="entry-auth-seg"
-                        className="absolute inset-0"
-                        style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)`, zIndex: 0 }}
-                        transition={spring}
-                      />
-                    )}
-                    <span className="relative" style={{ zIndex: 1 }}>
-                      {method === "phone" ? "전화번호" : "이메일"}
-                    </span>
-                  </motion.button>
-                ))}
-              </div>
-
-              <input
-                type={authMethod === "phone" ? "tel" : "email"}
-                value={authValue}
-                onChange={(e) => setAuthValue(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") void handleVerifyEntry(); }}
-                placeholder={authMethod === "phone" ? "01012345678" : "name@company.com"}
-                className="w-full px-3 py-3 text-sm bg-transparent focus:outline-none"
-                style={inputStyle}
-              />
-
-              {verifyError && <p className="text-xs mt-2 text-red-400">{verifyError}</p>}
-
-              <motion.button
-                onClick={handleVerifyEntry}
-                disabled={isVerifying}
-                className="w-full mt-4 py-3 font-semibold text-white transition-opacity disabled:opacity-40"
-                style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)` }}
-                whileHover={{ y: -1 }}
-                whileTap={{ scale: 0.96 }}
-                transition={spring}
-              >
-                {isVerifying ? "확인 중..." : "웨비나 입장하기"}
-              </motion.button>
-
-              <motion.button
-                type="button"
-                onClick={() => (previewMode ? setPreviewState("registration") : setView("signup"))}
-                className="w-full mt-3 py-2 text-sm opacity-60 hover:opacity-100 transition-opacity"
-                whileTap={{ scale: 0.96 }}
-                transition={spring}
-              >
-                아직 등록하지 않았다면 사전등록하기
-              </motion.button>
-            </div>
-          </motion.div>
+          <EntryVerify
+            webinar={{ name: webinar.name, description: webinar.description ?? null }}
+            accent={accent}
+            text={text}
+            surface={surface}
+            authMethod={authMethod}
+            authValue={authValue}
+            verifyError={verifyError}
+            isVerifying={isVerifying}
+            onAuthMethod={(m) => { setAuthMethod(m); setAuthValue(""); setVerifyError(""); }}
+            onAuthValueChange={setAuthValue}
+            onVerify={handleVerifyEntry}
+            onGoSignup={() => (previewMode ? setPreviewState("registration") : setView("signup"))}
+            live={live}
+            viewerCount={viewerCount ?? undefined}
+          />
         )}
 
         {/* 뷰: 종료 */}
         {view === "ended" && (
-          <motion.div
-            className="text-center py-12"
-            style={{ backgroundColor: surface, borderRadius: radius }}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.15 }}
-          >
-            <p className="text-lg font-semibold mb-2">웨비나가 종료됐어요</p>
-            <p className="text-sm opacity-50">참여해주셔서 감사합니다.</p>
-            {surveyUrl && (
-              <motion.a
-                href={surveyUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block mt-5 px-5 py-2.5 font-medium text-sm"
-                style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)` }}
-                whileHover={{ y: -1 }}
-                whileTap={{ scale: 0.96 }}
-                transition={spring}
-              >
-                만족도 조사 참여하기
-              </motion.a>
-            )}
-          </motion.div>
+          <EndedScreen
+            webinar={{ name: webinar.name, description: webinar.description ?? null }}
+            accent={accent}
+            text={text}
+            surface={surface}
+            live={live}
+            surveyUrl={surveyUrl || undefined}
+            onReplay={handleNotifyToggle}
+            replayRequested={notifySubscribed}
+            replayPending={notifyPending}
+            onShare={handleShare}
+            shareCopied={shareCopied}
+          />
         )}
       </div>
       )}

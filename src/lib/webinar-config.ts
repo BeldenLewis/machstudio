@@ -28,6 +28,60 @@ export interface WebinarRegistrationFormConfig {
 
 const FIELD_TYPES: readonly WebinarFieldType[] = ["text", "email", "tel", "select", "checkbox"];
 
+// ── 라이브 페이지 화면(대기·입장·종료) 구성 — 섹션별 on/off + 자료·넥스트 데이터 ──
+// config.livePage 에 저장(JSON blob, 마이그레이션 불필요). 데이터가 없으면 토글이 켜져 있어도 뷰어에서 자동 숨김.
+export interface LiveResource { title: string; meta: string; url: string }
+export interface LiveNextWebinar { title: string; when: string; url: string }
+
+export interface LivePageConfig {
+  waiting: { agenda: boolean; social: boolean; calendar: boolean; share: boolean; notify: boolean };
+  entry: { viewerCount: boolean };
+  ended: { replay: boolean; survey: boolean; resources: boolean; nextWebinar: boolean; share: boolean };
+  resources: LiveResource[];
+  nextWebinar: LiveNextWebinar | null;
+}
+
+export function normalizeLivePageConfig(config: unknown): LivePageConfig {
+  const c = config && typeof config === "object" && !Array.isArray(config) ? (config as Record<string, unknown>) : {};
+  const lp = c.livePage && typeof c.livePage === "object" ? (c.livePage as Record<string, unknown>) : {};
+  const obj = (v: unknown) => (v && typeof v === "object" ? (v as Record<string, unknown>) : {});
+  const bool = (v: unknown, def: boolean) => (typeof v === "boolean" ? v : def);
+  const w = obj(lp.waiting), e = obj(lp.entry), en = obj(lp.ended);
+
+  const resources: LiveResource[] = Array.isArray(lp.resources)
+    ? (lp.resources as unknown[])
+        .map((r) => obj(r))
+        .filter((r) => typeof r.url === "string" && (r.url as string).trim())
+        .map((r) => ({ title: String(r.title ?? "자료"), meta: String(r.meta ?? ""), url: String(r.url) }))
+    : [];
+
+  const nwRaw = obj(lp.nextWebinar);
+  const nextWebinar: LiveNextWebinar | null =
+    typeof nwRaw.title === "string" && (nwRaw.title as string).trim()
+      ? { title: String(nwRaw.title), when: String(nwRaw.when ?? ""), url: String(nwRaw.url ?? "") }
+      : null;
+
+  return {
+    waiting: {
+      agenda: bool(w.agenda, true),
+      social: bool(w.social, true),
+      calendar: bool(w.calendar, true),
+      share: bool(w.share, true),
+      notify: bool(w.notify, true),
+    },
+    entry: { viewerCount: bool(e.viewerCount, true) },
+    ended: {
+      replay: bool(en.replay, true),
+      survey: bool(en.survey, true),
+      resources: bool(en.resources, false), // 자료는 파일이 없을 수 있어 기본 OFF
+      nextWebinar: bool(en.nextWebinar, false), // 다음 웨비나 없을 수 있어 기본 OFF
+      share: bool(en.share, true),
+    },
+    resources,
+    nextWebinar,
+  };
+}
+
 export const DEFAULT_REGISTRATION_FIELDS: WebinarRegistrationField[] = [
   { id: "name", key: "name", label: "이름", type: "text", placeholder: "홍길동", required: true, enabled: true, options: [], system: true },
   { id: "phone", key: "phone", label: "연락처", type: "tel", placeholder: "010-0000-0000", required: false, enabled: true, options: [], system: true },

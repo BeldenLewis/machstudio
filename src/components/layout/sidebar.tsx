@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { WorkspaceSettingsModal } from "@/components/workspace/workspace-settings-modal";
 import { ProfileSettingsModal } from "@/components/user/profile-settings-modal";
 import { NotificationPanel } from "@/components/notifications/notification-panel";
-import WhatsNewPanel from "@/components/WhatsNewPanel";
+import ThemeToggle from "@/components/layout/theme-toggle";
 import ApiTokensModal from "@/components/settings/ApiTokensModal";
 import NotificationPrefsModal from "@/components/settings/NotificationPrefsModal";
 import { ApiTokenIcon, NotificationSettingsIcon } from "@/components/settings/settings-icons";
@@ -547,7 +547,7 @@ export function Sidebar() {
         )}
         <div className="flex items-center gap-1">
           <NotificationPanel />
-          <WhatsNewPanel />
+          <ThemeToggle />
         </div>
       </div>
 

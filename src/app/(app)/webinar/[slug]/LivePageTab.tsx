@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
+import { normalizeLivePageConfig, type LivePageConfig, type LiveResource, type LiveNextWebinar } from "@/lib/webinar-config";
 import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
@@ -75,10 +76,14 @@ interface Webinar {
   components?: Record<string, unknown> | null;
 }
 
+export type LivePageSection = "waiting" | "live" | "ended";
+
 const inputCls = "w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors";
 
-// 만들기 › 라이브 페이지 — 영상·콘텐츠·CTA·알림·참여·디자인을 한 곳에서 편집(단일 저장).
-export default function LivePageTab({ webinar, slug, onSilentUpdate }: { webinar: Webinar; slug: string; onSilentUpdate: () => void }) {
+// 만들기 › 대기/라이브/종료 화면 편집.
+// ⚠️ 세 메뉴가 하나의 인스턴스를 공유한다(PageSetupTab 그룹 키) — livePage 를 통째로 재구성해 저장하므로
+// 상태를 쪼개면 다른 화면 데이터가 유실된다. 렌더만 section 으로 게이트.
+export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: { webinar: Webinar; slug: string; section: LivePageSection; onSilentUpdate: () => void }) {
   const livePage = (webinar.config?.livePage ?? {}) as Record<string, unknown>;
   const notify = (livePage.notify ?? {}) as Record<string, unknown>;
   const components = (webinar.components ?? {}) as Record<string, unknown>;
@@ -106,6 +111,13 @@ export default function LivePageTab({ webinar, slug, onSilentUpdate }: { webinar
     ...(webinar.theme as Partial<Theme>),
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // 라이브 페이지 화면(대기·입장·종료) 섹션 on/off + 자료·다음웨비나 데이터
+  const [screens, setScreens] = useState(() => normalizeLivePageConfig(webinar.config));
+  const [resources, setResources] = useState<LiveResource[]>(() => normalizeLivePageConfig(webinar.config).resources);
+  const [nextWeb, setNextWeb] = useState<LiveNextWebinar>(() => normalizeLivePageConfig(webinar.config).nextWebinar ?? { title: "", when: "", url: "" });
+  const setW = (k: keyof LivePageConfig["waiting"], v: boolean) => setScreens((s) => ({ ...s, waiting: { ...s.waiting, [k]: v } }));
+  const setEn = (k: keyof LivePageConfig["ended"], v: boolean) => setScreens((s) => ({ ...s, ended: { ...s.ended, [k]: v } }));
 
   const updateCta = (i: number, patch: Partial<CtaFormCard>) =>
     setCtaCards((prev) => prev.map((c, j) => (j === i ? { ...c, ...patch } : c)));
@@ -138,6 +150,13 @@ export default function LivePageTab({ webinar, slug, onSilentUpdate }: { webinar
     if (form.lpNotice.trim()) lp.notice = form.lpNotice.trim();
     if (ctas.length) lp.ctas = ctas;
     lp.notify = notifyObj;
+    // 화면 구성 — 섹션 on/off + 자료·다음웨비나 (뷰어는 normalizeLivePageConfig 로 읽음)
+    lp.waiting = screens.waiting;
+    lp.entry = screens.entry;
+    lp.ended = screens.ended;
+    const res = resources.filter((r) => r.url.trim());
+    if (res.length) lp.resources = res.map((r) => ({ title: r.title.trim() || "자료", meta: r.meta.trim(), url: r.url.trim() }));
+    if (nextWeb.title.trim()) lp.nextWebinar = { title: nextWeb.title.trim(), when: nextWeb.when.trim(), url: nextWeb.url.trim() };
     return lp;
   };
 
@@ -166,7 +185,7 @@ export default function LivePageTab({ webinar, slug, onSilentUpdate }: { webinar
       return true;
     } catch { return false; }
   };
-  const { state: saveState, retry } = useAutosave({ form, ctaCards, theme }, save);
+  const { state: saveState, retry } = useAutosave({ form, ctaCards, theme, screens, resources, nextWeb }, save);
 
   const colorFields: { key: keyof Theme; label: string }[] = [
     { key: "accentColor", label: "키 컬러" },
@@ -175,206 +194,308 @@ export default function LivePageTab({ webinar, slug, onSilentUpdate }: { webinar
     { key: "textColor", label: "텍스트 컬러" },
   ];
 
+  const previewState = section === "live" ? "live" : section;
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-2xl space-y-8">
-      {/* 영상 */}
-      <section className="space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold">영상</h3>
-          <p className="mt-1 text-xs text-muted-foreground">시청 화면에 재생될 라이브 방송 소스예요.</p>
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">YouTube 영상 ID</label>
-          <input type="text" placeholder="예: dQw4w9WgXcQ" value={form.youtubeId}
-            onChange={(e) => setForm((f) => ({ ...f, youtubeId: e.target.value }))}
-            className={`${inputCls} font-mono`} />
-        </div>
-      </section>
-
-      {/* 콘텐츠 */}
-      <section className="space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold">콘텐츠</h3>
-          <p className="mt-1 text-xs text-muted-foreground">시청 화면의 정보·안내 문구와 링크예요. 비워두면 표시되지 않아요.</p>
-        </div>
-        <div className="space-y-3">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">문의처 (정보 카드)</label>
-            <input type="text" placeholder="예: STK 운영사무국" value={form.lpContact}
-              onChange={(e) => setForm((f) => ({ ...f, lpContact: e.target.value }))} className={inputCls} />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">안내 문구 (하단 노티스)</label>
-            <textarea rows={2} placeholder="비워두면 기본 안내 문구가 표시돼요." value={form.lpNotice}
-              onChange={(e) => setForm((f) => ({ ...f, lpNotice: e.target.value }))} className={`${inputCls} resize-none`} />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* ══════════ 대기 화면 ══════════ */}
+      {section === "waiting" && (
+        <>
+          <section className="space-y-3">
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">캘린더 추가 URL</label>
-              <input type="url" placeholder="https://calendar.google.com/..." value={form.calendarUrl}
-                onChange={(e) => setForm((f) => ({ ...f, calendarUrl: e.target.value }))} className={inputCls} />
+              <h3 className="text-sm font-semibold">화면 구성</h3>
+              <p className="mt-1 text-xs text-muted-foreground">대기 화면에 보여줄 요소예요. 데이터가 없으면 켜져 있어도 자동으로 숨겨져요.</p>
+            </div>
+            <div className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-2.5">
+              <Toggle label="세션 순서(아젠다)" checked={screens.waiting.agenda} onChange={(v) => setW("agenda", v)} desc="세션 탭에 등록한 시간표가 타임라인으로 표시돼요" />
+              <Toggle label="등록자 수(사회적 증거)" checked={screens.waiting.social} onChange={(v) => setW("social", v)} />
+              <Toggle label="캘린더에 추가" checked={screens.waiting.calendar} onChange={(v) => setW("calendar", v)} desc="아래 캘린더 URL이 있을 때만 표시" />
+              <Toggle label="초대 공유" checked={screens.waiting.share} onChange={(v) => setW("share", v)} />
+              <Toggle label="시작 알림 받기" checked={screens.waiting.notify} onChange={(v) => setW("notify", v)} desc="이메일 등록자에게 시작 리마인더를 보낼 수 있어요" />
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold">캘린더</h3>
+              <p className="mt-1 text-xs text-muted-foreground">&ldquo;캘린더에 추가&rdquo; 버튼이 여는 링크예요.</p>
+            </div>
+            <input type="url" placeholder="https://calendar.google.com/..." value={form.calendarUrl}
+              onChange={(e) => setForm((f) => ({ ...f, calendarUrl: e.target.value }))} className={inputCls} />
+          </section>
+        </>
+      )}
+
+      {/* ══════════ 라이브 페이지 (시청 + 입장) ══════════ */}
+      {section === "live" && (
+        <>
+          {/* 영상 */}
+          <section className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold">영상</h3>
+              <p className="mt-1 text-xs text-muted-foreground">시청 화면에 재생될 라이브 방송 소스예요.</p>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">만족도 조사 URL</label>
-              <input type="url" placeholder="https://tally.so/..." value={form.surveyUrl}
-                onChange={(e) => setForm((f) => ({ ...f, surveyUrl: e.target.value }))} className={inputCls} />
+              <label className="text-xs text-muted-foreground mb-1 block">YouTube 영상 ID</label>
+              <input type="text" placeholder="예: dQw4w9WgXcQ" value={form.youtubeId}
+                onChange={(e) => setForm((f) => ({ ...f, youtubeId: e.target.value }))}
+                className={`${inputCls} font-mono`} />
             </div>
-          </div>
-        </div>
+          </section>
 
-        {/* 자료 받기 카드 (CTA) — 여러 장 */}
-        <div className="space-y-3 pt-1">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-muted-foreground">자료 받기 카드 (CTA)</p>
-            <span className="text-[11px] text-muted-foreground/70">시청 화면 하단에 표시돼요</span>
-          </div>
-          {ctaCards.length === 0 && (
-            <p className="rounded-xl border border-dashed border-border p-3 text-xs text-muted-foreground">아직 CTA 카드가 없어요. 아래 버튼으로 추가하세요.</p>
-          )}
-          <AnimatePresence initial={false}>
-            {ctaCards.map((card, i) => (
-              <motion.div key={card.id} layout initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-                className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-muted-foreground">카드 {i + 1}</p>
-                  <button type="button" onClick={() => setCtaCards((prev) => prev.filter((_, j) => j !== i))}
-                    className="text-[11px] text-muted-foreground transition-colors hover:text-red-500">카드 삭제</button>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <input type="text" placeholder="상단 라벨 (예: 세션 자료)" value={card.eyebrow} onChange={(e) => updateCta(i, { eyebrow: e.target.value })} className={inputCls} />
-                  <input type="text" placeholder="제목 (예: 발표 자료·템플릿 받기)" value={card.title} onChange={(e) => updateCta(i, { title: e.target.value })} className={inputCls} />
-                </div>
-                <textarea rows={2} placeholder="설명" value={card.description} onChange={(e) => updateCta(i, { description: e.target.value })} className={`${inputCls} resize-none`} />
-                <textarea rows={2} placeholder="혜택 목록 — 한 줄에 하나씩 (선택)" value={card.benefits} onChange={(e) => updateCta(i, { benefits: e.target.value })} className={`${inputCls} resize-none`} />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <input type="text" placeholder="메인 버튼 라벨 (예: 자료 받기)" value={card.primaryLabel} onChange={(e) => updateCta(i, { primaryLabel: e.target.value })} className={inputCls} />
-                  <input type="url" placeholder="메인 버튼 URL" value={card.primaryUrl} onChange={(e) => updateCta(i, { primaryUrl: e.target.value })} className={inputCls} />
-                  <input type="text" placeholder="보조 버튼 라벨 (선택)" value={card.secondaryLabel} onChange={(e) => updateCta(i, { secondaryLabel: e.target.value })} className={inputCls} />
-                  <input type="url" placeholder="보조 버튼 URL (선택)" value={card.secondaryUrl} onChange={(e) => updateCta(i, { secondaryUrl: e.target.value })} className={inputCls} />
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-          <motion.button type="button" whileTap={{ scale: 0.98 }} transition={spring}
-            onClick={() => setCtaCards((prev) => [...prev, { ...EMPTY_CTA, id: crypto.randomUUID() }])}
-            className="w-full rounded-xl border border-dashed border-border py-2.5 text-xs font-medium text-violet-500 transition-colors hover:bg-violet-500/5">
-            + CTA 카드 추가
-          </motion.button>
-        </div>
-
-        {/* 알림 받고 이어보기 카드 */}
-        <div className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3">
-          <Toggle
-            checked={form.notifyEnabled}
-            onChange={(v) => setForm((f) => ({ ...f, notifyEnabled: v }))}
-            label="알림 받고 이어보기 카드 표시"
-            desc="시청 화면 하단에 다음 세션 알림·다시보기 안내 카드를 보여줘요."
-          />
-          {form.notifyEnabled && (
-            <div className="space-y-3 pt-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input type="text" placeholder="상단 라벨 (예: 다음 세션 · 20:20)" value={form.notifyKicker}
-                  onChange={(e) => setForm((f) => ({ ...f, notifyKicker: e.target.value }))} className={inputCls} />
-                <input type="text" placeholder="제목 (예: 알림 받고 이어보기)" value={form.notifyTitle}
-                  onChange={(e) => setForm((f) => ({ ...f, notifyTitle: e.target.value }))} className={inputCls} />
-              </div>
-              <textarea rows={2} placeholder="설명 (비워두면 기본 문구)" value={form.notifyDescription}
-                onChange={(e) => setForm((f) => ({ ...f, notifyDescription: e.target.value }))} className={`${inputCls} resize-none`} />
-              <input type="text" placeholder="스위치 문구 (예: 세션 시작 알림 받기)" value={form.notifySwitchLabel}
-                onChange={(e) => setForm((f) => ({ ...f, notifySwitchLabel: e.target.value }))} className={inputCls} />
+          {/* 콘텐츠 */}
+          <section className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold">콘텐츠</h3>
+              <p className="mt-1 text-xs text-muted-foreground">시청 화면의 정보·안내 문구예요. 비워두면 표시되지 않아요.</p>
             </div>
-          )}
-        </div>
-      </section>
-
-      {/* 참여 구성 */}
-      <section className="space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold">참여 구성</h3>
-          <p className="mt-1 text-xs text-muted-foreground">시청 화면 참여 박스(Q&amp;A·채팅·세션) 구성이에요.</p>
-        </div>
-        <div className="rounded-2xl border border-border bg-secondary/20 p-4">
-          <Toggle
-            checked={form.chatEnabled}
-            onChange={(v) => setForm((f) => ({ ...f, chatEnabled: v }))}
-            label="채팅 탭 사용"
-            desc="끄면 참여 박스에서 채팅 탭이 사라져요. 라이브 중 메시지 관리는 운영 → 라이브 콘솔 → 실시간 채팅에서."
-          />
-        </div>
-      </section>
-
-      {/* 디자인 */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold">디자인</h3>
-          <p className="mt-1 text-xs text-muted-foreground">시청·등록 페이지의 색상·폰트·톤이에요.</p>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {colorFields.map(({ key, label }) => (
-            <div key={key} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-background">
-              <div className="relative">
-                <div className="w-9 h-9 rounded-lg border border-border/50 cursor-pointer" style={{ backgroundColor: theme[key] as string }} />
-                <input type="color" value={theme[key] as string} onChange={(e) => setTheme((t) => ({ ...t, [key]: e.target.value }))}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">문의처 (정보 카드)</label>
+                <input type="text" placeholder="예: STK 운영사무국" value={form.lpContact}
+                  onChange={(e) => setForm((f) => ({ ...f, lpContact: e.target.value }))} className={inputCls} />
               </div>
               <div>
-                <p className="text-xs font-medium">{label}</p>
-                <p className="text-xs text-muted-foreground font-mono">{theme[key] as string}</p>
+                <label className="text-xs text-muted-foreground mb-1 block">안내 문구 (하단 노티스)</label>
+                <textarea rows={2} placeholder="비워두면 기본 안내 문구가 표시돼요." value={form.lpNotice}
+                  onChange={(e) => setForm((f) => ({ ...f, lpNotice: e.target.value }))} className={`${inputCls} resize-none`} />
               </div>
             </div>
-          ))}
-        </div>
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">폰트</p>
-          <div className="flex flex-wrap gap-2">
-            {FONTS.map((font) => (
-              <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }} transition={spring} key={font}
-                onClick={() => setTheme((t) => ({ ...t, font }))}
-                className={`px-3 py-2 rounded-xl border text-sm transition-colors ${theme.font === font ? "border-violet-500 bg-violet-500/10 text-violet-500" : "border-border hover:bg-secondary text-muted-foreground"}`}
-                style={{ fontFamily: font }}>
-                {font}
-              </motion.button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <button onClick={() => setShowAdvanced(!showAdvanced)} className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5">
-            <motion.span animate={{ rotate: showAdvanced ? 90 : 0 }} transition={{ duration: 0.15 }} className="inline-block">▶</motion.span>
-            테두리 둥글기 {showAdvanced ? "접기" : "펼치기"}
-          </button>
-          {showAdvanced && (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mt-3">
-              <div className="flex gap-2">
-                {RADIUS_OPTIONS.map(({ value, label }) => (
-                  <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }} transition={spring} key={value}
-                    onClick={() => setTheme((t) => ({ ...t, borderRadius: value }))}
-                    className={`px-3 py-2 rounded-xl border text-sm transition-colors ${theme.borderRadius === value ? "border-violet-500 bg-violet-500/10 text-violet-500" : "border-border hover:bg-secondary text-muted-foreground"}`}>
-                    {label}
+          </section>
+
+          {/* 입장 화면 */}
+          <section className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold">입장 화면</h3>
+              <p className="mt-1 text-xs text-muted-foreground">라이브 중 미인증 방문자가 보는 입장 확인 화면이에요.</p>
+            </div>
+            <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+              <Toggle label="실시간 시청자 수" checked={screens.entry.viewerCount} onChange={(v) => setScreens((s) => ({ ...s, entry: { viewerCount: v } }))}
+                desc="'지금 N명이 함께 보고 있어요' — 입장을 유도하는 사회적 증거예요" />
+            </div>
+          </section>
+
+          {/* 자료 받기 카드 (CTA) — 여러 장 */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold">자료 받기 카드 (CTA)</h3>
+                <p className="mt-1 text-xs text-muted-foreground">시청 화면 하단에 표시돼요.</p>
+              </div>
+            </div>
+            {ctaCards.length === 0 && (
+              <p className="rounded-xl border border-dashed border-border p-3 text-xs text-muted-foreground">아직 CTA 카드가 없어요. 아래 버튼으로 추가하세요.</p>
+            )}
+            <AnimatePresence initial={false}>
+              {ctaCards.map((card, i) => (
+                <motion.div key={card.id} layout initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+                  className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-muted-foreground">카드 {i + 1}</p>
+                    <button type="button" onClick={() => setCtaCards((prev) => prev.filter((_, j) => j !== i))}
+                      className="text-[11px] text-muted-foreground transition-colors hover:text-red-500">카드 삭제</button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input type="text" placeholder="상단 라벨 (예: 세션 자료)" value={card.eyebrow} onChange={(e) => updateCta(i, { eyebrow: e.target.value })} className={inputCls} />
+                    <input type="text" placeholder="제목 (예: 발표 자료·템플릿 받기)" value={card.title} onChange={(e) => updateCta(i, { title: e.target.value })} className={inputCls} />
+                  </div>
+                  <textarea rows={2} placeholder="설명" value={card.description} onChange={(e) => updateCta(i, { description: e.target.value })} className={`${inputCls} resize-none`} />
+                  <textarea rows={2} placeholder="혜택 목록 — 한 줄에 하나씩 (선택)" value={card.benefits} onChange={(e) => updateCta(i, { benefits: e.target.value })} className={`${inputCls} resize-none`} />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input type="text" placeholder="메인 버튼 라벨 (예: 자료 받기)" value={card.primaryLabel} onChange={(e) => updateCta(i, { primaryLabel: e.target.value })} className={inputCls} />
+                    <input type="url" placeholder="메인 버튼 URL" value={card.primaryUrl} onChange={(e) => updateCta(i, { primaryUrl: e.target.value })} className={inputCls} />
+                    <input type="text" placeholder="보조 버튼 라벨 (선택)" value={card.secondaryLabel} onChange={(e) => updateCta(i, { secondaryLabel: e.target.value })} className={inputCls} />
+                    <input type="url" placeholder="보조 버튼 URL (선택)" value={card.secondaryUrl} onChange={(e) => updateCta(i, { secondaryUrl: e.target.value })} className={inputCls} />
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+            <motion.button type="button" whileTap={{ scale: 0.98 }} transition={spring}
+              onClick={() => setCtaCards((prev) => [...prev, { ...EMPTY_CTA, id: crypto.randomUUID() }])}
+              className="w-full rounded-xl border border-dashed border-border py-2.5 text-xs font-medium text-violet-500 transition-colors hover:bg-violet-500/5">
+              + CTA 카드 추가
+            </motion.button>
+          </section>
+
+          {/* 알림 받고 이어보기 카드 */}
+          <section className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3">
+            <Toggle
+              checked={form.notifyEnabled}
+              onChange={(v) => setForm((f) => ({ ...f, notifyEnabled: v }))}
+              label="알림 받고 이어보기 카드 표시"
+              desc="시청 화면 하단에 다음 세션 알림·다시보기 안내 카드를 보여줘요."
+            />
+            {form.notifyEnabled && (
+              <div className="space-y-3 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input type="text" placeholder="상단 라벨 (예: 다음 세션 · 20:20)" value={form.notifyKicker}
+                    onChange={(e) => setForm((f) => ({ ...f, notifyKicker: e.target.value }))} className={inputCls} />
+                  <input type="text" placeholder="제목 (예: 알림 받고 이어보기)" value={form.notifyTitle}
+                    onChange={(e) => setForm((f) => ({ ...f, notifyTitle: e.target.value }))} className={inputCls} />
+                </div>
+                <textarea rows={2} placeholder="설명 (비워두면 기본 문구)" value={form.notifyDescription}
+                  onChange={(e) => setForm((f) => ({ ...f, notifyDescription: e.target.value }))} className={`${inputCls} resize-none`} />
+                <input type="text" placeholder="스위치 문구 (예: 세션 시작 알림 받기)" value={form.notifySwitchLabel}
+                  onChange={(e) => setForm((f) => ({ ...f, notifySwitchLabel: e.target.value }))} className={inputCls} />
+              </div>
+            )}
+          </section>
+
+          {/* 참여 구성 */}
+          <section className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold">참여 구성</h3>
+              <p className="mt-1 text-xs text-muted-foreground">시청 화면 참여 박스(Q&amp;A·채팅·세션) 구성이에요.</p>
+            </div>
+            <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+              <Toggle
+                checked={form.chatEnabled}
+                onChange={(v) => setForm((f) => ({ ...f, chatEnabled: v }))}
+                label="채팅 탭 사용"
+                desc="끄면 참여 박스에서 채팅 탭이 사라져요. 라이브 중 메시지 관리는 운영 → 라이브 콘솔 → 실시간 채팅에서."
+              />
+            </div>
+          </section>
+
+          {/* 디자인 */}
+          <section className="space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold">디자인</h3>
+              <p className="mt-1 text-xs text-muted-foreground">색상·폰트·톤 — 대기·입장·종료 화면과 등록 페이지에 공통 적용돼요.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {colorFields.map(({ key, label }) => (
+                <div key={key} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-background">
+                  <div className="relative">
+                    <div className="w-9 h-9 rounded-lg border border-border/50 cursor-pointer" style={{ backgroundColor: theme[key] as string }} />
+                    <input type="color" value={theme[key] as string} onChange={(e) => setTheme((t) => ({ ...t, [key]: e.target.value }))}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium">{label}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{theme[key] as string}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">폰트</p>
+              <div className="flex flex-wrap gap-2">
+                {FONTS.map((font) => (
+                  <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }} transition={spring} key={font}
+                    onClick={() => setTheme((t) => ({ ...t, font }))}
+                    className={`px-3 py-2 rounded-xl border text-sm transition-colors ${theme.font === font ? "border-violet-500 bg-violet-500/10 text-violet-500" : "border-border hover:bg-secondary text-muted-foreground"}`}
+                    style={{ fontFamily: font }}>
+                    {font}
                   </motion.button>
                 ))}
               </div>
-            </motion.div>
+            </div>
+            <div>
+              <button onClick={() => setShowAdvanced(!showAdvanced)} className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5">
+                <motion.span animate={{ rotate: showAdvanced ? 90 : 0 }} transition={{ duration: 0.15 }} className="inline-block">▶</motion.span>
+                테두리 둥글기 {showAdvanced ? "접기" : "펼치기"}
+              </button>
+              {showAdvanced && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mt-3">
+                  <div className="flex gap-2">
+                    {RADIUS_OPTIONS.map(({ value, label }) => (
+                      <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }} transition={spring} key={value}
+                        onClick={() => setTheme((t) => ({ ...t, borderRadius: value }))}
+                        className={`px-3 py-2 rounded-xl border text-sm transition-colors ${theme.borderRadius === value ? "border-violet-500 bg-violet-500/10 text-violet-500" : "border-border hover:bg-secondary text-muted-foreground"}`}>
+                        {label}
+                      </motion.button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">미리보기</p>
+              <div className="rounded-2xl p-6 space-y-3" style={{ backgroundColor: theme.bgColor, fontFamily: theme.font, borderRadius: theme.borderRadius }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs font-bold"
+                  style={{ backgroundColor: theme.accentColor, borderRadius: theme.borderRadius ? `calc(${theme.borderRadius} * 0.6)` : undefined }}>W</div>
+                <p className="font-semibold" style={{ color: theme.textColor }}>웨비나 제목 예시</p>
+                <p className="text-sm opacity-70" style={{ color: theme.textColor }}>웨비나 설명 텍스트가 여기에 표시돼요</p>
+                <button className="px-4 py-2 text-sm font-medium text-white"
+                  style={{ backgroundColor: theme.accentColor, borderRadius: theme.borderRadius ? `calc(${theme.borderRadius} * 0.7)` : "8px" }}>사전 등록하기</button>
+              </div>
+            </div>
+          </section>
+        </>
+      )}
+
+      {/* ══════════ 종료 화면 ══════════ */}
+      {section === "ended" && (
+        <>
+          <section className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold">화면 구성</h3>
+              <p className="mt-1 text-xs text-muted-foreground">종료 화면에 보여줄 요소예요. 데이터가 없으면 켜져 있어도 자동으로 숨겨져요.</p>
+            </div>
+            <div className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-2.5">
+              <Toggle label="다시보기 신청" checked={screens.ended.replay} onChange={(v) => setEn("replay", v)} desc="신청자는 알림 수신 목록에 담겨요 — 다시보기 링크를 이메일로 보내세요" />
+              <Toggle label="만족도 설문" checked={screens.ended.survey} onChange={(v) => setEn("survey", v)} desc="아래 설문 URL이 있을 때만 표시" />
+              <Toggle label="자료 다운로드" checked={screens.ended.resources} onChange={(v) => setEn("resources", v)} desc="아래 자료를 1개 이상 추가해야 표시" />
+              <Toggle label="다음 웨비나" checked={screens.ended.nextWebinar} onChange={(v) => setEn("nextWebinar", v)} desc="아래 제목을 입력해야 표시" />
+              <Toggle label="공유" checked={screens.ended.share} onChange={(v) => setEn("share", v)} />
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold">만족도 설문</h3>
+              <p className="mt-1 text-xs text-muted-foreground">&ldquo;설문 참여하기&rdquo; 버튼이 여는 링크예요.</p>
+            </div>
+            <input type="url" placeholder="https://tally.so/..." value={form.surveyUrl}
+              onChange={(e) => setForm((f) => ({ ...f, surveyUrl: e.target.value }))} className={inputCls} />
+          </section>
+
+          {screens.ended.resources && (
+            <section className="space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold">받아가세요 · 자료</h3>
+                <p className="mt-1 text-xs text-muted-foreground">종료 화면에서 다운로드 리스트로 표시돼요.</p>
+              </div>
+              {resources.map((r, i) => (
+                <div key={i} className="rounded-xl border border-border p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-muted-foreground">자료 {i + 1}</span>
+                    <button type="button" onClick={() => setResources((p) => p.filter((_, j) => j !== i))} className="text-[11px] text-muted-foreground transition-colors hover:text-red-500">삭제</button>
+                  </div>
+                  <input className={inputCls} placeholder="제목 (예: 발표자료)" value={r.title} onChange={(e) => setResources((p) => p.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))} />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input className={inputCls} placeholder="설명 (예: PDF · 4.2MB)" value={r.meta} onChange={(e) => setResources((p) => p.map((x, j) => (j === i ? { ...x, meta: e.target.value } : x)))} />
+                    <input className={inputCls} type="url" placeholder="다운로드 URL" value={r.url} onChange={(e) => setResources((p) => p.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)))} />
+                  </div>
+                </div>
+              ))}
+              <button type="button" onClick={() => setResources((p) => [...p, { title: "", meta: "", url: "" }])} className="w-full rounded-xl border border-dashed border-border py-2 text-xs font-medium text-violet-500 transition-colors hover:bg-violet-500/5">+ 자료 추가</button>
+            </section>
           )}
-        </div>
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">미리보기</p>
-          <div className="rounded-2xl p-6 space-y-3" style={{ backgroundColor: theme.bgColor, fontFamily: theme.font, borderRadius: theme.borderRadius }}>
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs font-bold"
-              style={{ backgroundColor: theme.accentColor, borderRadius: theme.borderRadius ? `calc(${theme.borderRadius} * 0.6)` : undefined }}>W</div>
-            <p className="font-semibold" style={{ color: theme.textColor }}>웨비나 제목 예시</p>
-            <p className="text-sm opacity-70" style={{ color: theme.textColor }}>웨비나 설명 텍스트가 여기에 표시돼요</p>
-            <button className="px-4 py-2 text-sm font-medium text-white"
-              style={{ backgroundColor: theme.accentColor, borderRadius: theme.borderRadius ? `calc(${theme.borderRadius} * 0.7)` : "8px" }}>사전 등록하기</button>
-          </div>
-        </div>
-      </section>
+
+          {screens.ended.nextWebinar && (
+            <section className="space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold">다음 웨비나</h3>
+                <p className="mt-1 text-xs text-muted-foreground">종료 화면 하단에 사전등록 티저로 표시돼요.</p>
+              </div>
+              <input className={inputCls} placeholder="제목 (예: 미국 아마존 입점 A to Z)" value={nextWeb.title} onChange={(e) => setNextWeb((n) => ({ ...n, title: e.target.value }))} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input className={inputCls} placeholder="일시 (예: 8월 21일 오후 2시)" value={nextWeb.when} onChange={(e) => setNextWeb((n) => ({ ...n, when: e.target.value }))} />
+                <input className={inputCls} type="url" placeholder="사전등록 URL" value={nextWeb.url} onChange={(e) => setNextWeb((n) => ({ ...n, url: e.target.value }))} />
+              </div>
+            </section>
+          )}
+        </>
+      )}
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-4">
         <AutosaveIndicator state={saveState} onRetry={retry} />
-        <a href={`/live-preview?slug=${encodeURIComponent(slug)}`} target="_blank" rel="noopener noreferrer"
-          title="저장된 내용 기준으로 새 탭에서 라이브 시청 화면을 미리봅니다 (영상은 보안상 미표시)"
+        <a href={`/live-preview?slug=${encodeURIComponent(slug)}&state=${previewState}`} target="_blank" rel="noopener noreferrer"
+          title="저장된 내용 기준으로 새 탭에서 이 화면을 미리봅니다 (영상은 보안상 미표시)"
           className="ml-auto text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1.5">
-          미리보기 ↗
+          이 화면 미리보기 ↗
         </a>
       </div>
     </div>
