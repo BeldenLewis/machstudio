@@ -1,6 +1,15 @@
 // Rate limiter — Upstash Redis(있으면) / 메모리(없으면) 폴백
 // 환경변수: UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN
 
+/** 레이트리밋 키용 클라이언트 IP — 프록시 헤더 우선순위의 단일 정의 (라우트마다 복사하지 말 것) */
+export function getClientIp(request: Request): string {
+  return (
+    request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+    request.headers.get("x-real-ip") ??
+    "unknown"
+  );
+}
+
 interface Bucket { hits: number[] }
 const buckets = new Map<string, Bucket>();
 const MAX_KEYS = 5000;

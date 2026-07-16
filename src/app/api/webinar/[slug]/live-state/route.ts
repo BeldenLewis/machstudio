@@ -30,7 +30,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const wid = webinar.id;
 
   // 동시 병렬 조회 — 필요할 때만 (Q&A/채팅은 게이팅)
-  const [announcements, qaRows, pollRow, popupRow, tallyRow, chatRows, pushedRow, pinnedRow] = await Promise.all([
+  const [announcements, qaRows, pollRow, popupRow, tallyRow, surveyRow, chatRows, pushedRow, pinnedRow] = await Promise.all([
     prisma.webinarAnnouncement.findMany({
       where: { webinarId: wid, isActive: true },
       orderBy: { createdAt: "desc" },
@@ -66,6 +66,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         id: true, title: true, formId: true, emojiText: true, emojiAnimation: true,
         layout: true, width: true, autoClose: true, showOnce: true, doNotShowAfterSubmit: true, updatedAt: true,
       },
+    }),
+    // 자체 설문 푸시 — 발행 중(isActive)이고 응답 수집 중(isOpen)인 것만.
+    // questions 는 폴 페이로드에 싣지 않는다(매 폴 중복 전송 방지) — 모달이 공개 GET 으로 1회 로드.
+    prisma.webinarSurvey.findFirst({
+      where: { webinarId: wid, isActive: true, isOpen: true },
+      select: { id: true, title: true, pushedAt: true },
     }),
     wantChat && chatEnabled && registrationId
       ? (() => {
@@ -143,6 +149,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       poll: pollRow ?? null,
       popup: popupRow ?? null,
       tally: tallyRow ?? null,
+      survey: surveyRow ?? null,
       pushedQuestion,
       pinnedMessage,
     },

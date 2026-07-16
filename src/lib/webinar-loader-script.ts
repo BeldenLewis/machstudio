@@ -22,6 +22,7 @@
  * 정규식 백슬래시 이스케이프 사고를 피하기 위해 글로브 매칭은 indexOf 워크로 구현.
  */
 import { ATTRIBUTION_CORE_JS } from "./attribution-core";
+import { PHONE_MIN_DIGITS, PHONE_MAX_DIGITS, EMAIL_REGEX } from "./webinar-config";
 
 export function buildWebinarLoaderScript({ siteId, baseUrl }: { siteId: string; baseUrl: string }): string {
   return `(function() {
@@ -405,6 +406,12 @@ ${ATTRIBUTION_CORE_JS}
     var formEl = document.createElement("form");
     formEl.noValidate = true;
     var inputs = {};
+    var dupFlags = {}; /* 연락처/이메일 실시간 중복 확인 결과 — true 면 제출 버튼을 막는다 */
+    var submitBtn; /* 아래에서 생성 — updateSubmitState 는 클로저로 참조(생성 이후에만 호출됨) */
+    function updateSubmitState() {
+      if (!submitBtn) return;
+      submitBtn.disabled = !!(dupFlags.phone || dupFlags.email);
+    }
 
     for (var i = 0; i < fields.length; i++) {
       (function(field) {
@@ -442,31 +449,128 @@ ${ATTRIBUTION_CORE_JS}
             input = document.createElement("input");
             input.className = "mw-input";
             input.type = field.type === "tel" ? "tel" : field.type === "email" ? "email" : "text";
-            input.placeholder = field.placeholder || "";
+            /* placeholder 는 저장된 값 그대로 — 하이픈 제거는 입력 '값'에만 적용 */
+            input.placeholder = field.placeholder || (field.type === "tel" ? "01012345678" : "");
+            if (field.type === "tel") {
+              input.inputMode = "numeric";
+              input.addEventListener("input", function() {
+                var digits = input.value.replace(/[^0-9]/g, "");
+                if (input.value !== digits) input.value = digits;
+              });
+            }
           }
           input.setAttribute("data-mw-key", field.key);
           wrap.appendChild(input);
           inputs[field.key] = { el: input, field: field };
+
+          /* 연락처·이메일 실시간 중복 확인 — 입력이 유효해지면 디바운스 후 조회 */
+          if (field.key === "phone" || field.key === "email") {
+            var dupNote = el("div", "mw-dup");
+            dupNote.style.cssText = "display:none;margin-top:4px;font-size:11px;color:#b45309;";
+            wrap.appendChild(dupNote);
+            var dupTimer = null;
+            var dupSeq = 0; /* 이전 값의 늦은 응답이 지워진 필드에 경고를 세우지 않게 하는 시퀀스 가드 */
+            input.addEventListener("input", function() {
+              if (dupTimer) clearTimeout(dupTimer);
+              var mySeq = ++dupSeq;
+              dupNote.style.display = "none";
+              dupFlags[field.key] = false;
+              updateSubmitState();
+              var raw = String(input.value || "");
+              var val = field.key === "phone" ? raw.replace(/[^0-9]/g, "") : raw.trim().toLowerCase();
+              var ready = field.key === "phone"
+                ? (val.length >= ${PHONE_MIN_DIGITS} && val.length <= ${PHONE_MAX_DIGITS})
+                : ${EMAIL_REGEX}.test(val);
+              if (!ready) return;
+              dupTimer = setTimeout(function() {
+                var payload = {};
+                payload[field.key] = val;
+                fetch(BASE + "/api/webinar/" + CFG.slug + "/register/check", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(payload)
+                }).then(function(r) { return r.ok ? r.json() : null; }).then(function(d) {
+                  if (mySeq !== dupSeq) return; /* 그 사이 입력이 바뀜 — 스테일 응답 폐기 */
+                  var exists = !!(d && d.exists && d.exists[field.key]);
+                  dupFlags[field.key] = exists;
+                  updateSubmitState();
+                  if (exists) {
+                    dupNote.textContent = "이미 사전등록된 " + (field.key === "phone" ? "연락처" : "이메일") + "예요. 웨비나 당일 이 정보로 바로 입장할 수 있어요.";
+                    dupNote.style.display = "block";
+                  }
+                }).catch(function() {});
+              }, 600);
+            });
+          }
         }
         formEl.appendChild(wrap);
       })(fields[i]);
+    }
+
+    /* 동의 약관 전문 팝업 — 본문이 설정된 경우 동의 문구 텍스트 클릭으로 연다 */
+    function openTerms(title, body, onAgree) {
+      var ov = document.createElement("div");
+      ov.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;";
+      var tCard = document.createElement("div");
+      tCard.style.cssText = "background:#fff;color:#111;max-width:520px;width:100%;max-height:70vh;border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,.28);padding:20px;display:flex;flex-direction:column;font-size:14px;";
+      var th = document.createElement("div");
+      th.textContent = title;
+      th.style.cssText = "font-weight:700;margin-bottom:10px;";
+      var tb = document.createElement("div");
+      tb.textContent = body;
+      tb.style.cssText = "white-space:pre-wrap;overflow:auto;flex:1;line-height:1.6;color:#444;";
+      var row = document.createElement("div");
+      row.style.cssText = "display:flex;gap:8px;margin-top:14px;";
+      var closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.textContent = "닫기";
+      closeBtn.style.cssText = "flex:1;padding:10px;border:1px solid rgba(0,0,0,.15);border-radius:10px;background:#fff;color:#333;font:inherit;cursor:pointer;";
+      var agreeBtn = document.createElement("button");
+      agreeBtn.type = "button";
+      agreeBtn.textContent = "동의합니다";
+      agreeBtn.style.cssText = "flex:1;padding:10px;border:0;border-radius:10px;background:#111;color:#fff;font:inherit;font-weight:700;cursor:pointer;";
+      function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+      closeBtn.addEventListener("click", close);
+      agreeBtn.addEventListener("click", function() { onAgree(); close(); });
+      ov.addEventListener("click", function(e) { if (e.target === ov) close(); });
+      row.appendChild(closeBtn);
+      row.appendChild(agreeBtn);
+      tCard.appendChild(th);
+      tCard.appendChild(tb);
+      tCard.appendChild(row);
+      ov.appendChild(tCard);
+      document.body.appendChild(ov);
+    }
+    function consentSpan(text, body, cb) {
+      var span = el("span", "", text);
+      if (body) {
+        span.style.cssText = "text-decoration:underline;text-underline-offset:2px;cursor:pointer;";
+        span.addEventListener("click", function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          openTerms(text, body, function() { cb.checked = true; });
+        });
+      }
+      return span;
     }
 
     /* 개인정보/마케팅 동의 */
     var privacyLab = el("label", "mw-check");
     var privacyCb = document.createElement("input");
     privacyCb.type = "checkbox";
+    privacyCb.checked = form.privacyDefaultChecked === true;
     privacyCb.setAttribute("data-mw-key", "__privacy");
     privacyLab.appendChild(privacyCb);
-    privacyLab.appendChild(el("span", "", form.privacyText || "[필수] 개인정보 수집 및 이용에 동의합니다"));
+    privacyLab.appendChild(consentSpan(form.privacyText || "[필수] 개인정보 수집 및 이용에 동의합니다", form.privacyBody || "", privacyCb));
     formEl.appendChild(privacyLab);
 
     var mktLab = el("label", "mw-check");
     var mktCb = document.createElement("input");
     mktCb.type = "checkbox";
+    mktCb.checked = form.marketingDefaultChecked === true;
     mktCb.setAttribute("data-mw-key", "__marketing");
     mktLab.appendChild(mktCb);
-    mktLab.appendChild(el("span", "", form.marketingText || "[선택] 마케팅 정보 수신에 동의합니다"));
+    mktLab.appendChild(consentSpan(form.marketingText || "[선택] 마케팅 정보 수신에 동의합니다", form.marketingBody || "", mktCb));
     formEl.appendChild(mktLab);
 
     /* 허니팟 — 화면 밖 배치, 봇만 채운다 */
@@ -479,9 +583,10 @@ ${ATTRIBUTION_CORE_JS}
     hp.style.cssText = "position:absolute;left:-9999px;top:-9999px;height:1px;width:1px;opacity:0;";
     formEl.appendChild(hp);
 
-    var submitBtn = el("button", "mw-btn mw-btn-primary mw-submit", form.submitLabel || "사전 등록하기");
+    submitBtn = el("button", "mw-btn mw-btn-primary mw-submit", form.submitLabel || "사전 등록하기");
     submitBtn.type = "submit";
     formEl.appendChild(submitBtn);
+    updateSubmitState(); /* 프리필 등으로 이미 dupFlags 가 채워져 있었을 수 있으니 생성 직후 한 번 반영 */
 
     var msg = el("div", "mw-msg");
     formEl.appendChild(msg);
@@ -496,6 +601,10 @@ ${ATTRIBUTION_CORE_JS}
       if (submitBtn.disabled) return;
 
       if (!privacyCb.checked) { showMsg("error", "개인정보 수집 및 이용에 동의해주세요."); return; }
+      if (dupFlags.phone || dupFlags.email) {
+        showMsg("error", "이미 사전등록된 " + (dupFlags.phone ? "연락처" : "이메일") + "예요. 웨비나 당일 이 정보로 바로 입장할 수 있어요.");
+        return;
+      }
 
       var systemBody = {};
       var customBody = {};
@@ -531,16 +640,15 @@ ${ATTRIBUTION_CORE_JS}
       }).then(function(result) {
         if (!result.ok) {
           showMsg("error", (result.data && result.data.error) || "등록에 실패했어요. 잠시 후 다시 시도해주세요.");
-          submitBtn.disabled = false;
+          /* 서버가 뒤늦게 중복을 판정한 경우(디바운스 레이스) — dupFlags 에도 반영해 계속 막는다 */
+          if (result.data && result.data.duplicateField) dupFlags[result.data.duplicateField] = true;
           submitBtn.textContent = form.submitLabel || "사전 등록하기";
+          updateSubmitState();
           return;
         }
         var c = (CFG.components || {});
         var fw = c.formWidget || {};
-        var successText = result.data && result.data.alreadyRegistered
-          ? "이미 등록되어 있어요. 웨비나 당일 등록하신 연락처/이메일로 입장하실 수 있어요."
-          : (fw.successMessage || "사전등록이 완료되었습니다! 웨비나 당일 등록하신 연락처/이메일로 입장하실 수 있어요.");
-        showMsg("success", successText);
+        showMsg("success", fw.successMessage || "사전등록이 완료되었습니다! 웨비나 당일 등록하신 연락처/이메일로 입장하실 수 있어요.");
         formEl.querySelectorAll("input, select, button").forEach(function(node) { node.disabled = true; });
         submitBtn.textContent = "등록 완료";
         if (opts && opts.onSuccess) opts.onSuccess();

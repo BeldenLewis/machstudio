@@ -4,13 +4,13 @@ import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react
 import { use } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, CheckCircle2 } from "lucide-react";
-import LivePushLayer, { type LivePopup, type LiveTallyPush, type LivePoll } from "../LivePushLayer";
+import LivePushLayer, { type LivePopup, type LiveTallyPush, type LivePoll, type LiveSurveyPush } from "../LivePushLayer";
 import LiveContentStk from "../LiveContentStk";
 import PreLiveWaiting from "../PreLiveWaiting";
 import EntryVerify from "../EntryVerify";
 import EndedScreen from "../EndedScreen";
 import { formatKst } from "@/lib/datetime";
-import { normalizeLivePageConfig } from "@/lib/webinar-config";
+import { normalizeLivePageConfig, normalizeRegistrationForm, isValidPhone, isValidEmail, type WebinarRegistrationField } from "@/lib/webinar-config";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -80,74 +80,16 @@ interface LiveStateResponse {
   poll: LivePoll | null;
   popup: LivePopup | null;
   tally: LiveTallyPush | null;
+  survey?: LiveSurveyPush | null;
   pushedQuestion?: { id: string; question: string; name: string | null } | null;
   pinnedMessage?: { id: string; name: string; message: string; isHost: boolean; createdAt: string } | null;
 }
 
 type PageView = "signup" | "live" | "ended";
-type FieldType = "text" | "email" | "tel" | "select" | "checkbox";
 type AuthMethod = "phone" | "email";
 
-interface RegistrationField {
-  id?: string;
-  key: string;
-  label: string;
-  type: FieldType;
-  placeholder?: string;
-  required: boolean;
-  enabled: boolean;
-  options?: string[];
-  system?: boolean;
-}
-
-interface RegistrationFormConfig {
-  fields: RegistrationField[];
-  privacyText: string;
-  marketingText: string;
-  submitLabel: string;
-}
-
-const defaultRegistrationFields: RegistrationField[] = [
-  { id: "name", key: "name", label: "이름", type: "text", placeholder: "홍길동", required: true, enabled: true, system: true },
-  { id: "phone", key: "phone", label: "연락처", type: "tel", placeholder: "010-0000-0000", required: false, enabled: true, system: true },
-  { id: "email", key: "email", label: "이메일", type: "email", placeholder: "hong@example.com", required: false, enabled: true, system: true },
-  { id: "company", key: "company", label: "회사명", type: "text", placeholder: "", required: false, enabled: true, system: true },
-  { id: "department", key: "department", label: "부서", type: "text", placeholder: "", required: false, enabled: true, system: true },
-  { id: "jobTitle", key: "jobTitle", label: "직함", type: "text", placeholder: "", required: false, enabled: true, system: true },
-  { id: "industry", key: "industry", label: "업종", type: "text", placeholder: "", required: false, enabled: true, system: true },
-];
-
-function normalizeRegistrationForm(config: Record<string, unknown>): RegistrationFormConfig {
-  const raw = config.registrationForm as Partial<RegistrationFormConfig> | undefined;
-  const savedFields = Array.isArray(raw?.fields) ? raw.fields : [];
-  const merged = defaultRegistrationFields.map((field) => ({
-    ...field,
-    ...savedFields.find((item) => item?.key === field.key),
-    id: field.id,
-    key: field.key,
-    system: true,
-  }));
-  const customFields = savedFields
-    .filter((item) => item && !defaultRegistrationFields.some((field) => field.key === item.key))
-    .map((item) => ({
-      id: String(item.id ?? item.key),
-      key: String(item.key),
-      label: String(item.label ?? item.key),
-      type: (["text", "email", "tel", "select", "checkbox"].includes(String(item.type)) ? item.type : "text") as FieldType,
-      placeholder: String(item.placeholder ?? ""),
-      required: Boolean(item.required),
-      enabled: item.enabled !== false,
-      options: Array.isArray(item.options) ? item.options.map(String) : [],
-      system: false,
-    }));
-
-  return {
-    fields: [...merged, ...customFields].filter((field) => field.enabled !== false),
-    privacyText: raw?.privacyText ?? "[필수] 개인정보 수집 및 이용에 동의합니다",
-    marketingText: raw?.marketingText ?? "[선택] 마케팅 정보 수신에 동의합니다",
-    submitLabel: raw?.submitLabel ?? "사전 등록하기",
-  };
-}
+// 등록 폼 정규화는 @/lib/webinar-config 단일 정의 사용 (필드 순서·placeholder 포함)
+type RegistrationField = WebinarRegistrationField;
 
 export default function LivePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
@@ -179,6 +121,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [pushPopup, setPushPopup] = useState<LivePopup | null>(null);
   const [pushTally, setPushTally] = useState<LiveTallyPush | null>(null);
   const [pushPoll, setPushPoll] = useState<LivePoll | null>(null);
+  const [pushSurvey, setPushSurvey] = useState<LiveSurveyPush | null>(null);
   // 알림 구독 ("알림 받고 이어보기")
   const [notifySubscribed, setNotifySubscribed] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
@@ -202,6 +145,14 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [registered, setRegistered] = useState(false);
   const [canRegister, setCanRegister] = useState(true); // 서버 상태머신 판정 — 마감(upcoming) 시 폼 대신 안내
   const [formError, setFormError] = useState("");
+  // 실시간 중복 확인 — 연락처/이메일 입력 시 디바운스 후 기존 등록 여부 표시
+  const [dupCheck, setDupCheck] = useState<{ phone: boolean; email: boolean }>({ phone: false, email: false });
+  const dupSeqRef = useRef(0);
+  const consentDefaultsAppliedRef = useRef(false);
+  // 종료 화면에 연결된 자체 설문 (/info 가 내려줌) — 있으면 외부 surveyUrl 보다 우선
+  const [endedSurvey, setEndedSurvey] = useState<{ id: string; title: string } | null>(null);
+  // 동의 약관 전문 팝업 — 동의 문구 텍스트 클릭 시 (본문이 설정된 경우에만)
+  const [termsModal, setTermsModal] = useState<{ kind: "privacy" | "marketing"; title: string; body: string } | null>(null);
 
   // Q&A 상태
   const [question, setQuestion] = useState("");
@@ -250,6 +201,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       if (!res.ok) return;
       const data = await res.json();
       setWebinar(data.webinar);
+      setEndedSurvey(data.endedSurvey ?? null);
       if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
 
       // 서버 상태머신 판정 사용 — statusOverride(운영 콘솔 수동 전환)·입장오픈 윈도 반영
@@ -324,6 +276,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       setPushPopup(data.popup ?? null);
       setPushTally(data.tally ?? null);
       setPushPoll(data.poll ?? null);
+      setPushSurvey(data.survey ?? null);
       if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
       setIsTrulyLive(data.status === "live");
       // 채팅 on/off 를 라이브 중에도 반영 — 호스트가 세션 중 토글하면 다음 폴에서 탭 노출/숨김이 갱신됨
@@ -414,6 +367,19 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     fetchWebinar();
   }, [fetchWebinar]);
 
+  // 동의 체크박스 기본값 — 웨비나 설정에 따라 폼 진입 시 1회만 적용(이후 사용자가 직접 만진 값을 덮어쓰지 않는다)
+  useEffect(() => {
+    if (!webinar || consentDefaultsAppliedRef.current) return;
+    consentDefaultsAppliedRef.current = true;
+    const rf = normalizeRegistrationForm(webinar.config ?? {});
+    if (!rf.privacyDefaultChecked && !rf.marketingDefaultChecked) return;
+    setForm((f) => ({
+      ...f,
+      agreePrivacy: f.agreePrivacy || rf.privacyDefaultChecked,
+      agreeMarketing: f.agreeMarketing || rf.marketingDefaultChecked,
+    }));
+  }, [webinar]);
+
   // 미리보기 진입 — ?preview 있으면 소유자 인증 후 데이터 로드. 실패(비소유자·비로그인) 시 조용히 폴백(일반 뷰).
   useEffect(() => {
     if (!isPreviewUrl()) return;
@@ -438,6 +404,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             const data = await res.json();
             if (!alive) return; // json 파싱 대기 중 slug 변경/언마운트 — stale 데이터로 새 상태를 덮지 않게
             setWebinar(data.webinar);
+            setEndedSurvey(data.endedSurvey ?? null); // 미리보기도 실제 시청자와 같은 종료 화면 설문을 보도록
             if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
             setPreviewVideoId(typeof data.youtubeId === "string" ? data.youtubeId : null);
             setPreviewState(init);
@@ -530,6 +497,37 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     };
   }, [view, registrationId, slug]);
 
+  // 실시간 중복 확인 — 유효한 연락처/이메일이 입력되면 디바운스 후 기존 등록 여부 조회.
+  // 미리보기·등록완료 상태에선 호출하지 않고, 실패는 무시(제출 시 서버가 최종 판정).
+  useEffect(() => {
+    if (isPreviewUrl() || registered) return;
+    // 시퀀스는 매 실행마다 올린다 — 필드를 비운 뒤 도착하는 이전 값의 응답이 빈 필드에 경고를 세우지 않게
+    const seq = ++dupSeqRef.current;
+    const phone = form.phone.replace(/[^0-9]/g, "");
+    const email = form.email.trim().toLowerCase();
+    const phoneReady = isValidPhone(phone);
+    const emailReady = isValidEmail(email);
+    if (!phoneReady) setDupCheck((d) => (d.phone ? { ...d, phone: false } : d));
+    if (!emailReady) setDupCheck((d) => (d.email ? { ...d, email: false } : d));
+    if (!phoneReady && !emailReady) return;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/webinar/${slug}/register/check`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...(phoneReady ? { phone } : {}), ...(emailReady ? { email } : {}) }),
+        });
+        if (!res.ok || seq !== dupSeqRef.current) return;
+        const data = await res.json();
+        setDupCheck({
+          phone: phoneReady && Boolean(data?.exists?.phone),
+          email: emailReady && Boolean(data?.exists?.email),
+        });
+      } catch { /* 네트워크 오류 무시 */ }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [form.phone, form.email, slug, registered]);
+
   const handleRegister = async () => {
     if (isPreviewUrl()) return;
     setFormError("");
@@ -537,7 +535,6 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       setFormError(registrationForm.privacyText || "개인정보 수집 및 이용 동의가 필요합니다.");
       return;
     }
-
     for (const field of registrationForm.fields) {
       if (!field.required) continue;
       const value = field.system
@@ -560,6 +557,10 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       const data = await res.json();
       if (!res.ok) {
         setFormError(data.error ?? "등록에 실패했어요. 다시 시도해주세요.");
+        // 서버가 중복을 판정한 경우(디바운스 경합·check 레이트리밋 등) — 인라인 필드 경고에도 반영
+        if (data.duplicateField === "phone" || data.duplicateField === "email") {
+          setDupCheck((d) => ({ ...d, [data.duplicateField as "phone" | "email"]: true }));
+        }
         return;
       }
       setRegistrationId(data.registration.id);
@@ -578,7 +579,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const handleVerifyEntry = async () => {
     if (isPreviewUrl()) return;
     const value = authMethod === "phone" ? authValue.replace(/[^0-9]/g, "") : authValue.trim().toLowerCase();
-    if (!value || (authMethod === "phone" && value.length < 10) || (authMethod === "email" && !value.includes("@"))) {
+    if (!value || (authMethod === "phone" && !isValidPhone(value)) || (authMethod === "email" && !isValidEmail(value))) {
       setVerifyError(authMethod === "phone" ? "올바른 연락처를 입력해주세요." : "올바른 이메일을 입력해주세요.");
       return;
     }
@@ -740,7 +741,10 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       }
     } catch { /* 공유 취소·미지원 무시 */ }
   };
-  const surveyUrl = typeof webinar.config?.surveyUrl === "string" ? webinar.config.surveyUrl : "";
+  // 자체 설문(종료 화면 연결)이 있으면 우선, 없으면 외부 설문 URL(Tally 등) 폴백
+  const surveyUrl = endedSurvey
+    ? `/webinar/${slug}/survey/${endedSurvey.id}?src=ended`
+    : typeof webinar.config?.surveyUrl === "string" ? webinar.config.surveyUrl : "";
   const live = normalizeLivePageConfig(webinar.config);
 
   const renderRegistrationField = (field: RegistrationField) => {
@@ -787,14 +791,32 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             ))}
           </select>
         ) : (
-          <input
-            type={field.type}
-            value={String(value)}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder={field.placeholder}
-            className="w-full px-3 py-2.5 text-sm bg-transparent focus:outline-none"
-            style={inputStyle}
-          />
+          <>
+            <input
+              type={field.type}
+              inputMode={field.type === "tel" ? "numeric" : undefined}
+              value={String(value)}
+              onChange={(e) => setValue(field.type === "tel" ? e.target.value.replace(/[^0-9]/g, "") : e.target.value)}
+              placeholder={field.placeholder}
+              className="w-full px-3 py-2.5 text-sm bg-transparent focus:outline-none"
+              style={inputStyle}
+            />
+            {field.system && ((field.key === "phone" && dupCheck.phone) || (field.key === "email" && dupCheck.email)) && (
+              <p className="text-[11px] mt-1.5" style={{ color: "#f59e0b" }}>
+                이미 사전등록된 {field.key === "phone" ? "연락처" : "이메일"}예요 — 웨비나 당일 이 정보로 바로 입장할 수 있어요.
+                {isTrulyLive && !previewMode && (
+                  <button
+                    type="button"
+                    onClick={() => setView("live")}
+                    className="ml-1.5 underline underline-offset-2 font-medium"
+                    style={{ color: accent }}
+                  >
+                    지금 입장하기
+                  </button>
+                )}
+              </p>
+            )}
+          </>
         )}
       </div>
     );
@@ -838,6 +860,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         popup={view === "live" && registrationId ? pushPopup : null}
         tally={view === "live" && registrationId ? pushTally : null}
         poll={view === "live" && registrationId ? pushPoll : null}
+        survey={view === "live" && registrationId ? pushSurvey : null}
       />
 
       {/* 공지 배너 */}
@@ -1024,25 +1047,32 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
                   </div>
 
                   <div className="space-y-2 pt-1">
-                    <label className="flex items-start gap-2.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={form.agreePrivacy}
-                        onChange={(e) => setForm((f) => ({ ...f, agreePrivacy: e.target.checked }))}
-                        className="mt-0.5"
-                        style={{ accentColor: accent }}
-                      />
-                      <span className="text-xs opacity-60">{registrationForm.privacyText}</span>
-                    </label>
-                    <label className="flex items-start gap-2.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={form.agreeMarketing}
-                        onChange={(e) => setForm((f) => ({ ...f, agreeMarketing: e.target.checked }))}
-                        style={{ accentColor: accent }}
-                      />
-                      <span className="text-xs opacity-60">{registrationForm.marketingText}</span>
-                    </label>
+                    {([
+                      { kind: "privacy" as const, text: registrationForm.privacyText, body: registrationForm.privacyBody, checked: form.agreePrivacy, set: (v: boolean) => setForm((f) => ({ ...f, agreePrivacy: v })) },
+                      { kind: "marketing" as const, text: registrationForm.marketingText, body: registrationForm.marketingBody, checked: form.agreeMarketing, set: (v: boolean) => setForm((f) => ({ ...f, agreeMarketing: v })) },
+                    ]).map((consent) => (
+                      <label key={consent.kind} className="flex items-start gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={consent.checked}
+                          onChange={(e) => consent.set(e.target.checked)}
+                          className="mt-0.5"
+                          style={{ accentColor: accent }}
+                        />
+                        {consent.body ? (
+                          // 본문이 설정돼 있으면 텍스트 클릭 = 약관 팝업 (체크 토글은 체크박스에서만)
+                          <button
+                            type="button"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setTermsModal({ kind: consent.kind, title: consent.text, body: consent.body }); }}
+                            className="text-xs opacity-60 text-left underline underline-offset-2 decoration-from-font hover:opacity-90 transition-opacity"
+                          >
+                            {consent.text}
+                          </button>
+                        ) : (
+                          <span className="text-xs opacity-60">{consent.text}</span>
+                        )}
+                      </label>
+                    ))}
                   </div>
 
                   {formError && (
@@ -1051,7 +1081,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
                   <motion.button
                     onClick={handleRegister}
-                    disabled={isRegistering}
+                    disabled={isRegistering || dupCheck.phone || dupCheck.email}
                     className="w-full py-3 font-semibold text-white transition-opacity disabled:opacity-40"
                     style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)` }}
                     whileHover={{ y: -1 }}
@@ -1081,7 +1111,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             verifyError={verifyError}
             isVerifying={isVerifying}
             onAuthMethod={(m) => { setAuthMethod(m); setAuthValue(""); setVerifyError(""); }}
-            onAuthValueChange={setAuthValue}
+            onAuthValueChange={(v) => setAuthValue(authMethod === "phone" ? v.replace(/[^0-9]/g, "") : v)}
             onVerify={handleVerifyEntry}
             onGoSignup={() => (previewMode ? setPreviewState("registration") : setView("signup"))}
             live={live}
@@ -1112,6 +1142,53 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           />
         )}
       </div>
+      )}
+
+      {/* 동의 약관 전문 팝업 — 닫힘은 즉시 언마운트(느려진 exit 애니메이션이 투명 오버레이로 남아 클릭을 막는 것 방지) */}
+      {termsModal && (
+          <motion.div
+            className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            <div className="absolute inset-0 bg-black/60" onClick={() => setTermsModal(null)} />
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={spring}
+              role="dialog"
+              aria-modal="true"
+              aria-label={termsModal.title}
+              className="relative w-full max-w-lg p-6 shadow-2xl"
+              style={{ backgroundColor: surface, color: text, borderRadius: radius }}
+            >
+              <h3 className="text-base font-semibold">{termsModal.title}</h3>
+              <div className="mt-3 max-h-[55vh] overflow-y-auto text-sm leading-relaxed opacity-75 whitespace-pre-wrap">
+                {termsModal.body}
+              </div>
+              <div className="mt-5 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTermsModal(null)}
+                  className="flex-1 py-2.5 text-sm font-medium opacity-70 hover:opacity-100 transition-opacity"
+                  style={{ borderRadius: `calc(${radius} * 0.6)`, boxShadow: "inset 0 0 0 1px rgba(128,128,128,0.35)" }}
+                >
+                  닫기
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForm((f) => (termsModal.kind === "privacy" ? { ...f, agreePrivacy: true } : { ...f, agreeMarketing: true }));
+                    setTermsModal(null);
+                  }}
+                  className="flex-1 py-2.5 text-sm font-semibold text-white"
+                  style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)` }}
+                >
+                  동의합니다
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
       )}
     </div>
   );

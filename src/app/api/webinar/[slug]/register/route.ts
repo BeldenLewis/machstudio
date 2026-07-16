@@ -2,23 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimitAsync } from "@/lib/ratelimit";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
-import { normalizeRegistrationForm } from "@/lib/webinar-config";
+import { normalizeRegistrationForm, normalizePhone, normalizeEmail, isValidPhone, isValidEmail } from "@/lib/webinar-config";
 import { parseUtmEnvelope } from "@/lib/webinar-attribution";
 
 const CORS_HEADERS = { "Access-Control-Allow-Origin": "*" };
 
 function clean(value: unknown) {
   const text = String(value ?? "").trim();
-  return text || null;
-}
-
-function normalizePhone(value: unknown) {
-  const text = String(value ?? "").replace(/[^0-9]/g, "");
-  return text || null;
-}
-
-function normalizeEmail(value: unknown) {
-  const text = String(value ?? "").trim().toLowerCase();
   return text || null;
 }
 
@@ -80,6 +70,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (!normalizedPhone && !normalizedEmail) {
     return NextResponse.json({ error: "입장 확인을 위해 연락처 또는 이메일 중 하나를 입력해주세요" }, { status: 400, headers: CORS_HEADERS });
   }
+  // 형식 검증 — 클라이언트 중복확인(check)과 같은 규칙. 서버에 규칙이 없으면 중복확인이 영영 잡지 못하는
+  // 등록(예: 16자리 번호)이 생긴다.
+  if (normalizedPhone && !isValidPhone(normalizedPhone)) {
+    return NextResponse.json({ error: "올바른 연락처를 입력해주세요" }, { status: 400, headers: CORS_HEADERS });
+  }
+  if (normalizedEmail && !isValidEmail(normalizedEmail)) {
+    return NextResponse.json({ error: "올바른 이메일을 입력해주세요" }, { status: 400, headers: CORS_HEADERS });
+  }
 
   const memoPayload = {
     ...(memo?.trim() ? { memo: memo.trim() } : {}),
@@ -126,40 +124,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   });
 
   if (duplicate) {
-    // 재제출은 프로필 필드만 보강할 수 있고, 매칭된 기존 레코드의 식별자(phone/email)는
-    // 절대 변경/탈취할 수 없다 — 소유권 증명이 없으므로 연락처는 항상 기존 값을 유지한다.
-    // (예: 이메일만 알아도 피해자 전화번호를 덮어써 verify-by-phone 로 사칭하는 것을 차단)
-    const cleanCompany = clean(company);
-    const cleanDepartment = clean(department);
-    const cleanJobTitle = clean(jobTitle);
-    const cleanIndustry = clean(industry);
-    const registration = await prisma.webinarRegistration.update({
-      where: { id: duplicate.id },
-      data: {
-        // 식별자(phone/email)는 갱신하지 않음 — 기존 레코드 값 보존.
-        // 비식별 프로필 필드만, 그리고 값이 제공된 경우에만 갱신한다.
-        ...(name?.trim() ? { name: name.trim() } : {}),
-        ...(cleanCompany !== null ? { company: cleanCompany } : {}),
-        ...(cleanDepartment !== null ? { department: cleanDepartment } : {}),
-        ...(cleanJobTitle !== null ? { jobTitle: cleanJobTitle } : {}),
-        ...(cleanIndustry !== null ? { industry: cleanIndustry } : {}),
-        agreeMarketing: Boolean(agreeMarketing),
-        // 재등록 시 기존 동의를 다운그레이드하지 않음 — 명시적으로 동의한 경우에만 갱신
-        ...(agreePrivacy === true ? { agreePrivacy: true } : {}),
-        memo: Object.keys(memoPayload).length ? JSON.stringify(memoPayload, null, 2) : duplicate.memo,
-        // 재등록 시 기존 어트리뷰션은 보존 — 비어 있을 때만 채운다
-        ...(utm && !duplicate.utmSource && !duplicate.firstUtmSource ? utmData : {}),
-      },
-    });
+    // 중복 제출은 차단한다(새 등록 생성 금지) — 단, 재제출이 담은 "업그레이드-안전" 신호는 보존:
+    // - 동의: 명시적으로 체크한 경우에만 true 로 승격(다운그레이드 없음)
+    // - 어트리뷰션: 기존 레코드가 비어 있을 때만 백필 (재방문 캠페인 성과 유실 방지)
+    // 프로필 필드(회사·직함 등)는 소유권 증명이 없으므로 덮어쓰지 않는다.
+    const upgrades: Record<string, unknown> = {};
+    if (agreeMarketing === true && !duplicate.agreeMarketing) upgrades.agreeMarketing = true;
+    if (agreePrivacy === true && !duplicate.agreePrivacy) upgrades.agreePrivacy = true;
+    if (utm && !duplicate.utmSource && !duplicate.firstUtmSource) Object.assign(upgrades, utmData);
+    if (Object.keys(upgrades).length > 0) {
+      await prisma.webinarRegistration.update({ where: { id: duplicate.id }, data: upgrades }).catch(() => {
+        /* 보존 실패는 차단 응답을 막지 않는다 */
+      });
+    }
 
-    return NextResponse.json({
-      alreadyRegistered: true,
-      // 식별자(email/phone)는 응답에 싣지 않는다 — 이메일만 알아도 재제출로 타인 전화번호를 알아내는 유출 차단.
-      registration: { id: registration.id, name: registration.name },
-      ...(videoId ? { youtubeId: videoId } : {}),
-    }, {
-      headers: CORS_HEADERS,
-    });
+    const dupField = normalizedPhone && duplicate.phone === normalizedPhone ? "연락처" : "이메일";
+    return NextResponse.json(
+      {
+        error: `이미 사전등록된 ${dupField}예요. 웨비나 당일 이 ${dupField}로 바로 입장할 수 있어요.`,
+        duplicateField: dupField === "연락처" ? "phone" : "email",
+        alreadyRegistered: true,
+      },
+      { status: 409, headers: CORS_HEADERS },
+    );
   }
 
   const registration = await prisma.webinarRegistration.create({

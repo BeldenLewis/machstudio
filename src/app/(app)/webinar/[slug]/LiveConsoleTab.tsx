@@ -13,6 +13,7 @@ import {
   BarChart3,
   Bell,
   ChevronDown,
+  ClipboardCheck,
   ClipboardList,
   Clock,
   Eye,
@@ -306,6 +307,56 @@ function PopupPanel({ webinarId }: { webinarId: string }) {
           </AnimatePresence>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── 자체 설문 푸시 패널 — 설문 작성은 만들기 → 설문, 콘솔에선 발행/중지만 ── */
+function SurveyPushPanel({ webinarId }: { webinarId: string }) {
+  const [surveys, setSurveys] = useState<{ id: string; title: string; isActive: boolean; isOpen: boolean; questions?: unknown[]; _count?: { responses: number } }[]>([]);
+
+  const fetchSurveys = useCallback(async () => {
+    const res = await fetch(`/api/webinars/${webinarId}/surveys`);
+    if (res.ok) setSurveys((await res.json()).surveys ?? []);
+  }, [webinarId]);
+  useEffect(() => { void fetchSurveys(); }, [fetchSurveys]);
+
+  const toggle = async (s: { id: string; title: string; isActive: boolean }) => {
+    const res = await fetch(`/api/webinars/${webinarId}/surveys/${s.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive: !s.isActive }),
+    });
+    if (!res.ok) {
+      toast.error(res.status === 409 ? "다른 설문이 방금 발행됐어요. 새로고침 후 다시 시도해주세요." : "변경에 실패했어요");
+      return;
+    }
+    toast.success(s.isActive ? "설문 발행을 중지했어요" : "시청자 화면에 설문이 표시돼요");
+    void fetchSurveys();
+  };
+
+  return (
+    <div className="space-y-2">
+      {surveys.length === 0 ? (
+        <p className="text-xs text-muted-foreground">아직 설문이 없어요. 만들기 → 설문에서 먼저 만들어주세요.</p>
+      ) : (
+        surveys.map((s) => (
+          <div key={s.id} className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${s.isActive ? "border-green-500/40 bg-green-500/[0.06]" : "border-border"}`}>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">
+                {s.isActive && <span className="mr-1.5 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-green-600 dark:text-green-400">송출 중</span>}
+                {s.title}
+              </p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">응답 {s._count?.responses ?? 0}건{!s.isOpen && " · 마감됨"}</p>
+            </div>
+            <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => toggle(s)} disabled={!s.isOpen && !s.isActive}
+              className={`shrink-0 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-40 ${s.isActive ? "border-border text-muted-foreground hover:bg-secondary" : "border-green-500/40 text-green-600 dark:text-green-400 hover:bg-green-500/10"}`}>
+              {s.isActive ? "발행 중지" : "발행"}
+            </motion.button>
+          </div>
+        ))
+      )}
+      <p className="text-[11px] text-muted-foreground">발행하면 시청자 화면에 설문 모달이 떠요. 문항 편집·결과는 만들기 → 설문 / 분석 탭에서.</p>
     </div>
   );
 }
@@ -1595,6 +1646,9 @@ export default function LiveConsoleTab({
 
   const sendGroup = (
     <>
+      <Section title="설문 푸시" icon={ClipboardCheck}>
+        <SurveyPushPanel webinarId={webinarId} />
+      </Section>
       <Section title="Tally 설문 푸시" icon={Bell}>
         <TallyPanel webinarId={webinarId} />
       </Section>
@@ -1672,6 +1726,7 @@ export default function LiveConsoleTab({
         </>
       ),
     },
+    { key: "surveys", label: "설문", icon: ClipboardCheck, render: () => <SurveyPushPanel webinarId={webinarId} /> },
     { key: "tally", label: "Tally", icon: Bell, render: () => <TallyPanel webinarId={webinarId} /> },
     { key: "reminders", label: "알림", icon: Mail, render: () => <ReminderPanel webinarId={webinarId} /> },
   ];

@@ -100,9 +100,9 @@ export default function EntryVerify({
         ))}
       </div>
 
-      <input type={authMethod === "phone" ? "tel" : "email"} value={authValue}
+      <input type={authMethod === "phone" ? "tel" : "email"} inputMode={authMethod === "phone" ? "numeric" : undefined} value={authValue}
         onChange={(e) => onAuthValueChange(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") onVerify(); }}
-        placeholder={authMethod === "phone" ? "010 1234 5678" : "name@company.com"} className="ev-input"
+        placeholder={authMethod === "phone" ? "01012345678" : "name@company.com"} className="ev-input"
         aria-label={authMethod === "phone" ? "전화번호" : "이메일"} />
       {verifyError && <p className="ev-err">{verifyError}</p>}
 

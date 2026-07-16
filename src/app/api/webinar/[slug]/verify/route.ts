@@ -1,20 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimitAsync, rateLimitPeekAsync } from "@/lib/ratelimit";
+import { normalizePhone, normalizeEmail } from "@/lib/webinar-config";
 
 // found=false 전용 한도 — 미스만 기록해 5분에 5회 넘는 실패 조회를 차단 (명단 enumeration 방지).
 // 성공 조회는 미스 버킷에 기록하지 않으므로 정상 참가자의 오타 1~2회는 영향 없음.
 const MISS_LIMIT = { limit: 5, windowMs: 300_000 };
-
-function normalizePhone(value: unknown) {
-  const text = String(value ?? "").replace(/[^0-9]/g, "");
-  return text || null;
-}
-
-function normalizeEmail(value: unknown) {
-  const text = String(value ?? "").trim().toLowerCase();
-  return text || null;
-}
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

@@ -23,10 +23,40 @@ export interface WebinarRegistrationFormConfig {
   fields: WebinarRegistrationField[];
   privacyText: string;
   marketingText: string;
+  /** 동의 문구 클릭 시 팝업으로 보여줄 약관 전문 — 비어 있으면 팝업 없음 */
+  privacyBody: string;
+  marketingBody: string;
+  /** 폼 진입 시 동의 체크박스를 기본으로 체크해둘지 — 사용자가 직접 만지면 그 값이 우선한다 */
+  privacyDefaultChecked: boolean;
+  marketingDefaultChecked: boolean;
   submitLabel: string;
 }
 
 const FIELD_TYPES: readonly WebinarFieldType[] = ["text", "email", "tel", "select", "checkbox"];
+
+// ── 연락처 정규화·유효성 — 등록/중복확인/입장확인/임베드 로더의 단일 규칙 ──
+// 레이어마다 임계값이 달라지는 드리프트 방지: 규칙 변경은 반드시 여기서만.
+export const PHONE_MIN_DIGITS = 10;
+export const PHONE_MAX_DIGITS = 15;
+export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function normalizePhone(value: unknown): string | null {
+  const digits = String(value ?? "").replace(/[^0-9]/g, "");
+  return digits || null;
+}
+
+export function normalizeEmail(value: unknown): string | null {
+  const text = String(value ?? "").trim().toLowerCase();
+  return text || null;
+}
+
+export function isValidPhone(digits: string): boolean {
+  return digits.length >= PHONE_MIN_DIGITS && digits.length <= PHONE_MAX_DIGITS;
+}
+
+export function isValidEmail(email: string): boolean {
+  return EMAIL_REGEX.test(email) && email.length <= 320;
+}
 
 // ── 라이브 페이지 화면(대기·입장·종료) 구성 — 섹션별 on/off + 자료·넥스트 데이터 ──
 // config.livePage 에 저장(JSON blob, 마이그레이션 불필요). 데이터가 없으면 토글이 켜져 있어도 뷰어에서 자동 숨김.
@@ -84,7 +114,7 @@ export function normalizeLivePageConfig(config: unknown): LivePageConfig {
 
 export const DEFAULT_REGISTRATION_FIELDS: WebinarRegistrationField[] = [
   { id: "name", key: "name", label: "이름", type: "text", placeholder: "홍길동", required: true, enabled: true, options: [], system: true },
-  { id: "phone", key: "phone", label: "연락처", type: "tel", placeholder: "010-0000-0000", required: false, enabled: true, options: [], system: true },
+  { id: "phone", key: "phone", label: "연락처", type: "tel", placeholder: "01012345678", required: false, enabled: true, options: [], system: true },
   { id: "email", key: "email", label: "이메일", type: "email", placeholder: "hong@example.com", required: false, enabled: true, options: [], system: true },
   { id: "company", key: "company", label: "회사명", type: "text", placeholder: "", required: false, enabled: true, options: [], system: true },
   { id: "department", key: "department", label: "부서", type: "text", placeholder: "", required: false, enabled: true, options: [], system: true },
@@ -134,12 +164,31 @@ export function normalizeRegistrationForm(
       system: false,
     } satisfies WebinarRegistrationField));
 
-  const fields = [...merged, ...customFields];
+  // 레거시 기본 placeholder 만 새 기본 예시로 교체 — "01000000000" 은 옛 기본값("010-0000-0000")이
+  // 과거 읽기시점 정규화로 손상돼 재저장된 값(전부 0이라 실제 안내 문구일 수 없음).
+  // 커스텀 안내 문구는 어드민이 정한 그대로 보존한다 — 하이픈 제거는 입력 '값'에만 적용되는 규칙이다.
+  const fields = [...merged, ...customFields].map((field) =>
+    field.key === "phone" && (field.placeholder === "010-0000-0000" || field.placeholder === "01000000000")
+      ? { ...field, placeholder: "01012345678" }
+      : field,
+  );
+
+  // 저장된 배열 순서를 존중(어드민에서 드래그로 변경). 저장에 없는 필드는 기본 순서대로 뒤에.
+  const savedOrder = new Map(savedFields.map((item, index) => [item?.key, index]));
+  fields.sort(
+    (a, b) =>
+      ((savedOrder.get(a.key) as number | undefined) ?? Number.MAX_SAFE_INTEGER) -
+      ((savedOrder.get(b.key) as number | undefined) ?? Number.MAX_SAFE_INTEGER),
+  );
 
   return {
     fields: opts?.includeDisabled ? fields : fields.filter((field) => field.enabled !== false),
     privacyText: typeof raw?.privacyText === "string" ? raw.privacyText : "[필수] 개인정보 수집 및 이용에 동의합니다",
     marketingText: typeof raw?.marketingText === "string" ? raw.marketingText : "[선택] 마케팅 정보 수신에 동의합니다",
+    privacyBody: typeof raw?.privacyBody === "string" ? raw.privacyBody : "",
+    marketingBody: typeof raw?.marketingBody === "string" ? raw.marketingBody : "",
+    privacyDefaultChecked: raw?.privacyDefaultChecked === true,
+    marketingDefaultChecked: raw?.marketingDefaultChecked === true,
     submitLabel: typeof raw?.submitLabel === "string" ? raw.submitLabel : "사전 등록하기",
   };
 }

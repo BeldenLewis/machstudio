@@ -197,6 +197,141 @@ function SectionCard({ children, className = "" }: { children: ReactNode; classN
   );
 }
 
+/* ── 설문 결과 — 자체 설문(WebinarSurvey)의 문항별 집계. 설문이 없으면 섹션 자체를 숨긴다. ── */
+interface SurveyQuestionResult {
+  id: string;
+  type: "rating" | "single" | "multiple" | "text" | "nps";
+  title: string;
+  count: number;
+  avg?: number | null;
+  nps?: number | null;
+  dist?: Record<number, number>;
+  options?: Record<string, number>;
+  texts?: string[];
+}
+interface SurveyResultData {
+  survey: { id: string; title: string };
+  totalResponses: number;
+  linkedResponses: number;
+  bySource: Record<string, number>;
+  results: SurveyQuestionResult[];
+}
+const SOURCE_LABELS: Record<string, string> = { ended: "종료 화면", live: "라이브 푸시", link: "링크" };
+
+function ResultBar({ label, count, total }: { label: string; count: number; total: number }) {
+  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+  return (
+    <div className="relative overflow-hidden rounded-lg border border-border/60 px-3 py-1.5">
+      <span className="absolute inset-y-0 left-0 bg-violet-500/15 transition-all" style={{ width: `${pct}%` }} />
+      <span className="relative flex items-center justify-between gap-2 text-xs">
+        <span className="truncate">{label}</span>
+        <span className="shrink-0 tabular-nums text-muted-foreground">{count}표 · {pct}%</span>
+      </span>
+    </div>
+  );
+}
+
+function SurveyResultsSection({ webinarId }: { webinarId: string }) {
+  const [data, setData] = useState<SurveyResultData[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/webinars/${webinarId}/surveys`);
+        if (!res.ok) { if (!cancelled) setData([]); return; }
+        const list = ((await res.json()).surveys ?? []) as { id: string }[];
+        const all = await Promise.all(
+          list.map(async (s) => {
+            const r = await fetch(`/api/webinars/${webinarId}/surveys/${s.id}/results`);
+            return r.ok ? ((await r.json()) as SurveyResultData) : null;
+          }),
+        );
+        if (!cancelled) setData(all.filter((d): d is SurveyResultData => d !== null));
+      } catch { if (!cancelled) setData([]); }
+    })();
+    return () => { cancelled = true; };
+  }, [webinarId]);
+
+  if (!data || data.length === 0) return null;
+
+  return (
+    <>
+      {data.map((d) => (
+        <SectionCard key={d.survey.id}>
+          <div className="mb-4">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold"><BarChart3 className="h-4 w-4 text-violet-500" /> 설문 결과 — {d.survey.title}</h3>
+            <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+              응답 {d.totalResponses}건 · 등록자 연결 {d.linkedResponses}건
+              {Object.entries(d.bySource).length > 0 && (
+                <> · {Object.entries(d.bySource).map(([k, v]) => `${SOURCE_LABELS[k] ?? k} ${v}`).join(" / ")}</>
+              )}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            {d.results.map((q) => (
+              <div key={q.id} className="min-w-0">
+                <p className="mb-2 text-[13px] font-medium leading-snug">{q.title} <span className="text-[11px] text-muted-foreground tabular-nums">({q.count}명)</span></p>
+
+                {q.type === "rating" && (
+                  <div className="flex items-center gap-3">
+                    <p className="text-2xl font-semibold tabular-nums">{q.avg != null ? q.avg.toFixed(1) : "-"}<span className="ml-0.5 text-sm text-amber-500">★</span></p>
+                    <div className="flex-1 space-y-1">
+                      {[5, 4, 3, 2, 1].map((n) => (
+                        <ResultBar key={n} label={`${n}점`} count={q.dist?.[n] ?? 0} total={q.count} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {q.type === "nps" && (
+                  <div className="flex items-center gap-3">
+                    <div className="shrink-0 text-center">
+                      <p className="text-2xl font-semibold tabular-nums">{q.nps ?? "-"}</p>
+                      <p className="text-[10px] text-muted-foreground">NPS</p>
+                    </div>
+                    <div className="flex flex-1 items-end gap-0.5" aria-label="0~10 분포">
+                      {Array.from({ length: 11 }, (_, n) => {
+                        const c = q.dist?.[n] ?? 0;
+                        const max = Math.max(1, ...Object.values(q.dist ?? {}));
+                        return (
+                          <div key={n} className="flex flex-1 flex-col items-center gap-0.5" title={`${n}점 · ${c}명`}>
+                            <div className={`w-full rounded-sm ${n >= 9 ? "bg-green-500/70" : n <= 6 ? "bg-red-400/60" : "bg-secondary"}`} style={{ height: `${6 + (c / max) * 40}px` }} />
+                            <span className="text-[9px] text-muted-foreground tabular-nums">{n}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {(q.type === "single" || q.type === "multiple") && (
+                  <div className="space-y-1">
+                    {Object.entries(q.options ?? {}).map(([opt, c]) => (
+                      <ResultBar key={opt} label={opt} count={c} total={q.count} />
+                    ))}
+                  </div>
+                )}
+
+                {q.type === "text" && (
+                  <div className="space-y-1.5">
+                    {(q.texts ?? []).slice(0, 5).map((t, i) => (
+                      <p key={i} className="rounded-lg bg-secondary/50 px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap">{t}</p>
+                    ))}
+                    {(q.texts?.length ?? 0) > 5 && <p className="text-[11px] text-muted-foreground">외 {(q.texts?.length ?? 0) - 5}건</p>}
+                    {(q.texts?.length ?? 0) === 0 && <p className="text-xs text-muted-foreground">아직 답변이 없어요.</p>}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      ))}
+    </>
+  );
+}
+
 /* ── 요약 KPI 카드 ── */
 function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "green" }) {
   return (
@@ -525,6 +660,9 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
           </div>
         </div>
       </SectionCard>
+
+      {/* 설문 결과 — 자체 설문이 있을 때만 표시 */}
+      <SurveyResultsSection webinarId={webinarId} />
 
       {/* 리드 스코어링 */}
       <SectionCard>

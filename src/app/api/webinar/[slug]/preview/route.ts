@@ -38,6 +38,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
   if (!membership) return NextResponse.json({ error: "접근 권한 없음" }, { status: 403 });
 
   const statusInfo = resolveWebinarStatus(webinar);
+
+  // /info 와 동일 — 종료 화면에 연결된 자체 설문. 미리보기가 실제 시청자와 같은 화면을 보도록.
+  const endedSurvey = await prisma.webinarSurvey.findFirst({
+    where: { webinarId: webinar.id, showOnEnded: true, isOpen: true },
+    select: { id: true, title: true },
+  });
+
   const rawConfig = (webinar.config ?? {}) as Record<string, unknown>;
   // /info 와 동일한 allowlist — 민감 키가 새어나가지 않게.
   const config: Record<string, unknown> = {
@@ -65,6 +72,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
       config,
     },
     youtubeId,
+    endedSurvey,
     status: statusInfo.status,
     entryOpen: statusInfo.entryOpen,
     serverNow: new Date().toISOString(),

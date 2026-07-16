@@ -122,6 +122,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ siteId:
       fields: registrationForm.fields,
       privacyText: registrationForm.privacyText,
       marketingText: registrationForm.marketingText,
+      privacyBody: registrationForm.privacyBody,
+      marketingBody: registrationForm.marketingBody,
+      privacyDefaultChecked: registrationForm.privacyDefaultChecked,
+      marketingDefaultChecked: registrationForm.marketingDefaultChecked,
       submitLabel: registrationForm.submitLabel,
     },
     links: {

@@ -9,14 +9,14 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String    @id @default(cuid())
+  email        String    @unique
   name         String?
   avatarUrl    String?
-  isSuperAdmin Boolean  @default(false)
+  isSuperAdmin Boolean   @default(false)
   lastActiveAt DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   memberships          WorkspaceMember[]
   utmLinks             UTMLink[]
@@ -326,18 +326,18 @@ model ActivityLog {
 }
 
 model Dashboard {
-  id           String   @id @default(cuid())
-  projectId    String
-  workspaceId  String
-  name         String
-  description  String?
-  sortOrder    Int      @default(0)
-  isDefault    Boolean  @default(false)
+  id                String   @id @default(cuid())
+  projectId         String
+  workspaceId       String
+  name              String
+  description       String?
+  sortOrder         Int      @default(0)
+  isDefault         Boolean  @default(false)
   shareToken        String?  @unique
   shareEnabled      Boolean  @default(false)
   sharePasswordHash String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -485,26 +485,26 @@ model ShortLink {
 }
 
 model Webinar {
-  id             String   @id @default(cuid())
-  workspaceId    String
-  projectId      String
-  name           String
-  slug           String   @unique
-  description    String?
-  liveStartAt    DateTime
-  liveEndAt      DateTime
-  signupDeadline DateTime
-  theme          Json // { accentColor, bgColor, surfaceColor, textColor, font, borderRadius, bgEffect }
-  config         Json // { youtubeId, calendarUrl, surveyUrl, etc. }
-  statusOverride String? // 수동 상태 오버라이드: "registration" | "live" | "ended" | null(일정 기반 자동)
-  components     Json? // 임베드 컴포넌트 설정 { heroButton, banner, formWidget, allowLiveRegistration, entryOpenBeforeMinutes, endedMode }
+  id               String   @id @default(cuid())
+  workspaceId      String
+  projectId        String
+  name             String
+  slug             String   @unique
+  description      String?
+  liveStartAt      DateTime
+  liveEndAt        DateTime
+  signupDeadline   DateTime
+  theme            Json // { accentColor, bgColor, surfaceColor, textColor, font, borderRadius, bgEffect }
+  config           Json // { youtubeId, calendarUrl, surveyUrl, etc. }
+  statusOverride   String? // 수동 상태 오버라이드: "registration" | "live" | "ended" | null(일정 기반 자동)
+  components       Json? // 임베드 컴포넌트 설정 { heroButton, banner, formWidget, allowLiveRegistration, entryOpenBeforeMinutes, endedMode }
   // 채팅 모더레이션 — 전용 컬럼(components 블롭이 설정탭 저장으로 덮어써지는 것 방지). 천천히모드 초·금지어·차단 등록자.
   chatSlowSec      Int      @default(0)
   chatBannedWords  String[] @default([])
   chatBannedRegIds String[] @default([])
   chatHideLinks    Boolean  @default(true) // 링크 자동 숨김(공개 POST에서 링크 제거) — 운영자 토글
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   workspace          Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project            Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -517,14 +517,15 @@ model Webinar {
   chatMessages       WebinarChatMessage[]
   reminders          WebinarReminder[]
   tallyPushes        WebinarTallyPush[]
+  surveys            WebinarSurvey[]
   embedSites         WebinarEmbedSite[]
   attendanceSegments WebinarAttendanceSegment[]
   visitStats         WebinarVisitStat[]
   popupClicks        WebinarPopupClick[]
+  // slug 는 @unique 가 이미 인덱스를 만들므로 별도 @@index 불필요 (중복 제거)
 
   @@index([projectId, createdAt(sort: Desc)])
   @@index([workspaceId])
-  // slug 는 @unique 가 이미 인덱스를 만들므로 별도 @@index 불필요 (중복 제거)
 }
 
 model WebinarSession {
@@ -852,4 +853,44 @@ model WebinarTallyPush {
   webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
 
   @@index([webinarId, isActive])
+}
+
+// ── 자체 설문 — 종료 화면·라이브 푸시·독립 링크에서 응답 수집 ──
+// questions 는 JSON: [{ id, type: 'rating'|'single'|'multiple'|'text'|'nps', title, required, options[] }]
+// isActive = 라이브 푸시 활성(웨비나당 1개 — 부분 유니크 인덱스는 db execute 로 적용, P2002→409 처리)
+model WebinarSurvey {
+  id          String    @id @default(cuid())
+  webinarId   String
+  title       String
+  description String?
+  questions   Json      @default("[]")
+  isOpen      Boolean   @default(true) // 응답 수집 여부 (마감 시 false)
+  showOnEnded Boolean   @default(false) // 종료 화면 만족도 설문 카드에 연결
+  isActive    Boolean   @default(false) // 라이브 푸시 중
+  pushedAt    DateTime? // 마지막 발행 시각 — 시청자 재노출 키(편집으로 바뀌는 updatedAt 과 분리)
+  sentBy      String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  webinar   Webinar                 @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+  responses WebinarSurveyResponse[]
+
+  @@index([webinarId, isActive])
+  @@index([webinarId, showOnEnded])
+}
+
+model WebinarSurveyResponse {
+  id             String   @id @default(cuid())
+  surveyId       String
+  webinarId      String
+  registrationId String? // 등록자 응답이면 연결 — NULL(익명 링크 응답)은 중복 허용
+  answers        Json // { questionId: number | string | string[] }
+  source         String? // 'ended' | 'live' | 'link'
+  submittedAt    DateTime @default(now())
+
+  survey WebinarSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@unique([surveyId, registrationId])
+  @@index([webinarId])
+  @@index([surveyId, submittedAt])
 }

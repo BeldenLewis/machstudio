@@ -7,6 +7,8 @@
 // - Tally: 공식 embed.js 를 지연 로드, hiddenFields 로 응답자 식별(registrationId) 전달
 
 import { useEffect, useRef, useState } from "react";
+import SurveyForm, { SURVEY_FORM_CSS } from "./SurveyForm";
+import type { SurveyAnswers, SurveyQuestion } from "@/lib/webinar-survey";
 
 export interface LivePopup {
   id: string;
@@ -55,9 +57,24 @@ export interface LivePoll {
   options: LivePollOption[];
 }
 
+// live-state 폴 페이로드 — 문항은 싣지 않는다(매 폴 중복 전송 방지). 모달이 공개 GET 으로 1회 로드.
+export interface LiveSurveyPush {
+  id: string;
+  title: string;
+  pushedAt: string | null; // 재노출 키 — 발행 시에만 갱신(편집으로 바뀌는 updatedAt 과 분리)
+}
+
+interface ActiveSurveyData extends LiveSurveyPush {
+  description: string | null;
+  questions: SurveyQuestion[];
+}
+
 interface TallyWindow extends Window {
   Tally?: { openPopup: (formId: string, options?: Record<string, unknown>) => void };
 }
+
+// 소유자 미리보기 여부 — 미리보기에서는 새 부작용(응답 전송)을 내지 않는다 (live/page.tsx 와 동일 기준)
+const isPreviewUrl = () => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("preview");
 
 function sessionGet(key: string): boolean {
   try { return !!sessionStorage.getItem(key); } catch { return false; }
@@ -109,6 +126,7 @@ export default function LivePushLayer({
   popup: incomingPopup,
   tally: incomingTally,
   poll: incomingPoll,
+  survey: incomingSurvey,
 }: {
   slug: string;
   registrationId: string | null;
@@ -118,11 +136,17 @@ export default function LivePushLayer({
   popup: LivePopup | null;
   tally: LiveTallyPush | null;
   poll: LivePoll | null;
+  survey?: LiveSurveyPush | null;
 }) {
   // 표시 상태 — props(통합 폴링 결과)를 받아 세션 기억(닫음/투표)을 반영해 실제 노출 여부를 정한다.
   const [popup, setPopup] = useState<LivePopup | null>(null);
   const [activePoll, setActivePoll] = useState<LivePoll | null>(null);
   const [voted, setVoted] = useState(false);
+  const [activeSurvey, setActiveSurvey] = useState<ActiveSurveyData | null>(null);
+  const [surveySubmitting, setSurveySubmitting] = useState(false);
+  const [surveyDone, setSurveyDone] = useState(false);
+  const [surveyError, setSurveyError] = useState("");
+  const surveyFetchRef = useRef<string | null>(null); // 문항 로드 중/완료된 키 — 폴마다 재요청 방지
   const openedTallyRef = useRef<Set<string>>(new Set());
   const accent = accentColor || "#6d28d9";
   // 팝업/투표 카드도 테마(표면·텍스트)를 따르게 — 없으면 기존 다크 폴백
@@ -140,6 +164,41 @@ export default function LivePushLayer({
       setPopup(null);
     }
   }, [incomingPopup]);
+
+  // 설문 푸시 — 닫음/제출(pushedAt 키) 기억. 재발행 시에만 다시 노출(라이브 중 문항 편집은 재노출하지 않음).
+  // 문항은 폴 페이로드에 없으므로 공개 GET 으로 1회 로드한다.
+  const surveyKey = (s: { id: string; pushedAt: string | null }) => `mach_survey_${s.id}_${s.pushedAt ?? "0"}`;
+  useEffect(() => {
+    if (surveyDone) return; // 감사 화면 표시 중 — 타임아웃이 닫는다(폴 갱신이 조기 언마운트하지 않게)
+    if (!incomingSurvey || sessionGet(surveyKey(incomingSurvey))) {
+      surveyFetchRef.current = null;
+      setActiveSurvey(null);
+      return;
+    }
+    const key = surveyKey(incomingSurvey);
+    if (activeSurvey && surveyKey(activeSurvey) === key) return; // 입력 중 리셋 방지
+    if (surveyFetchRef.current === key) return; // 로드 진행 중
+    surveyFetchRef.current = key;
+    (async () => {
+      try {
+        const res = await fetch(`/api/webinar/${slug}/survey/${incomingSurvey.id}`);
+        if (surveyFetchRef.current !== key) return; // 그 사이 닫힘/변경 — 이 응답은 폐기
+        if (!res.ok) {
+          surveyFetchRef.current = null; // 일시 실패가 영구 잠금이 되지 않게 — 다음 폴에서 재시도
+          return;
+        }
+        const data = await res.json();
+        if (!data?.survey?.isOpen || !Array.isArray(data.survey.questions) || data.survey.questions.length === 0) {
+          surveyFetchRef.current = null; // 마감/문항 없음 — 상태가 바뀌면 다음 폴에서 다시 판단
+          return;
+        }
+        setSurveyError("");
+        setActiveSurvey({ ...incomingSurvey, description: data.survey.description ?? null, questions: data.survey.questions });
+      } catch {
+        if (surveyFetchRef.current === key) surveyFetchRef.current = null; // 다음 폴에서 재시도
+      }
+    })();
+  }, [incomingSurvey, activeSurvey, surveyDone, slug]);
 
   // 실시간 투표 — 닫음(updatedAt 키)·투표 여부는 세션 기억. 프롭이 갱신되면 득표수도 함께 갱신.
   useEffect(() => {
@@ -180,6 +239,42 @@ export default function LivePushLayer({
     setActivePoll(null);
   };
 
+  const dismissSurvey = () => {
+    if (!activeSurvey) return;
+    sessionSet(surveyKey(activeSurvey));
+    surveyFetchRef.current = null;
+    setActiveSurvey(null);
+  };
+
+  const submitSurvey = async (answers: SurveyAnswers) => {
+    if (!activeSurvey || isPreviewUrl()) return; // 미리보기(소유자)에서는 응답을 전송하지 않는다
+    setSurveySubmitting(true);
+    setSurveyError("");
+    try {
+      const res = await fetch(`/api/webinar/${slug}/survey/${activeSurvey.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers, registrationId: registrationId ?? undefined, source: "live" }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setSurveyError(data.error ?? "제출에 실패했어요. 잠시 후 다시 시도해주세요.");
+        return;
+      }
+      sessionSet(surveyKey(activeSurvey));
+      setSurveyDone(true);
+      setTimeout(() => {
+        setActiveSurvey(null);
+        setSurveyDone(false); // 다음 발행에서 이펙트가 다시 동작하도록 리셋
+        surveyFetchRef.current = null;
+      }, 2200);
+    } catch {
+      setSurveyError("네트워크 오류가 발생했어요. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setSurveySubmitting(false);
+    }
+  };
+
   const castVote = async (optionId: string) => {
     if (!activePoll || voted) return;
     try {
@@ -211,7 +306,7 @@ export default function LivePushLayer({
   const primaryIsTally = !!popup && popup.integrationType === "tally" && !!popup.tallyFormId;
   const pollTotal = activePoll ? activePoll.options.reduce((s, o) => s + o.voteCount, 0) : 0;
 
-  if (!popup && !activePoll) return null;
+  if (!popup && !activePoll && !activeSurvey) return null;
 
   return (
     <>
@@ -272,6 +367,57 @@ export default function LivePushLayer({
             {popup.dismissible !== false && (
               <p className="mt-3 text-center text-[11px] text-white/40">닫으면 이 팝업은 다시 표시되지 않아요.</p>
             )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 설문 푸시 모달 — 팝업 모달이 떠 있을 땐 보류(팝업 우선). SurveyForm(STK 토큰) 재사용. */}
+      {activeSurvey && !popup && (
+        <div
+          className="stk-live fixed inset-0 z-[65] flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(5px)", WebkitBackdropFilter: "blur(5px)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) dismissSurvey(); }}
+        >
+          <style dangerouslySetInnerHTML={{ __html: SURVEY_FORM_CSS }} />
+          <div
+            className="relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl shadow-2xl"
+            style={{ background: surface, color: text }}
+            role="dialog"
+            aria-modal="true"
+            aria-label={activeSurvey.title}
+          >
+            <button
+              onClick={dismissSurvey}
+              aria-label="설문 닫기"
+              className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg text-base transition-colors"
+              style={{ color: soft(50), background: soft(6) }}
+            >
+              ×
+            </button>
+            <div className="min-h-0 overflow-y-auto p-7">
+              {surveyDone ? (
+                <div className="py-10 text-center">
+                  <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full" style={{ background: "color-mix(in srgb,#12B76A 14%,transparent)", color: "#12B76A" }}>✓</div>
+                  <p className="text-lg font-bold">소중한 의견 감사합니다</p>
+                </div>
+              ) : (
+                <>
+                  <div className="mb-1 flex items-center gap-1.5 text-[11px] font-bold" style={{ color: accent }}>
+                    <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: accent }} />
+                    실시간 설문
+                  </div>
+                  <h2 className="mb-1 pr-9 text-lg font-bold leading-snug">{activeSurvey.title}</h2>
+                  {activeSurvey.description && (
+                    <p className="mb-4 whitespace-pre-wrap text-sm leading-relaxed" style={{ color: soft(65) }}>{activeSurvey.description}</p>
+                  )}
+                  <div className="pt-2">
+                    <SurveyForm questions={activeSurvey.questions} submitting={surveySubmitting} onSubmit={submitSurvey} />
+                  </div>
+                  {surveyError && <p className="mt-3 text-[13px] text-red-400" role="alert">{surveyError}</p>}
+                  <p className="mt-3 text-center text-[11px]" style={{ color: soft(40) }}>닫으면 이 설문은 다시 표시되지 않아요.</p>
+                </>
+              )}
             </div>
           </div>
         </div>

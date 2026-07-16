@@ -5,18 +5,40 @@ This version has breaking changes — APIs, conventions, and file structure may 
 <!-- END:nextjs-agent-rules -->
 
 <!-- BEGIN:product-design-rules -->
-# Product UI Principle: Calm Hierarchy First
+# Product UI Principles
 
-Apply this to every future product/admin UI change in this repository.
+모든 제품 UI 작업에 적용한다. 원칙은 페이지가 아니라 **영역(zone) 단위**로 적용한다 — 한 페이지 안에 읽는 영역과 고치는 영역이 섞이는 게 보통이다(예: 등록 탭 = 인라인 편집기[고치는] + 미리보기[읽는]). 영역마다 해당 절의 원칙을 따로 적용할 것.
 
-- Prioritize visual hierarchy, order, spacing, and cognitive ease before adding more visible controls.
-- A page should guide the eye naturally: headline first, short explanation second, primary action third, details afterward.
-- When there is a lot to show, show it smaller and quieter. Do not give every metric, list, button, and setting the same visual weight.
-- Keep the first screen focused on the user's next decision. Move reference data, repeated controls, and destructive actions lower, smaller, or behind disclosure.
-- Use whitespace as structure. Prefer fewer, clearer sections over dense dashboards packed with same-weight cards.
-- Buttons should become visible when the user understands why they need them. Avoid making action-heavy rows the default reading experience.
-- Add microinteraction animation to product UI by default. Use subtle motion for hover, press, focus, expand/collapse, loading, success, and state transitions so the interface feels responsive and understandable.
-- Keep motion calm and purposeful: short durations, small distance/scale changes, no distracting decorative movement, and respect reduced-motion preferences when adding custom animation.
-- Complex operational pages should feel premium by being easy to scan, not by showing everything at once.
-- Before finishing frontend work, review whether a tired user can understand where to look first without reading every label.
+**판별 질문 (모호할 때 이 두 개로 끝낸다):**
+1. **"이 값은 여기서 읽히는가, 고쳐지는가?"** → 고쳐진다면 절대 접기/모달/별도 페이지 뒤에 숨기지 않는다. 읽힌다면 요약 먼저, 디테일은 접어도 된다.
+2. **"얼마나 자주 쓰이고, 잘못 누르면 얼마나 위험한가?"** → 노출 정도 = 사용 빈도 × 값 확인 필요성. 고빈도 편집 값은 항상 보이게, 저빈도 긴 세부는 가까운 확장으로, 위험한 저빈도 액션(삭제·전체발송 등)은 화면 종류와 무관하게 멀리·작게·확인 단계 뒤에.
+
+## 1. 읽는 영역 (대시보드 · 분석 · 목록) — Calm Hierarchy
+- 시선 흐름: 헤드라인 → 짧은 설명 → 주요 액션 → 디테일. 모든 지표·카드에 같은 시각적 무게를 주지 않는다.
+- 첫 화면은 다음 결정에 집중. 참고 데이터는 아래로, 작게, 또는 디스클로저 뒤로. 여백이 구조다.
+- 점검: 피곤한 사용자가 라벨을 다 읽지 않고도 어디부터 볼지 아는가.
+
+## 2. 고치는 영역 (설정 · 폼 빌더 · 콘텐츠 편집) — Direct Manipulation
+- 편집 가능한 값은 항상 보이고 **그 자리에서 바로 수정**된다. 반복 항목은 테이블형 인라인 편집(한 행 = 한 항목, 열 = 속성)이 기본.
+- 자동저장 + 인접 실시간 미리보기. 순서가 의미 있으면 드래그 핸들.
+- 점검: 값 하나를 바꾸는 데 몇 클릭인가 — 인라인이면 0클릭(바로 타이핑)이어야 한다.
+
+## 3. 다루는 영역 (라이브 콘솔 · 운영) — 손에 잡히는 컨트롤
+- 라이브 중 자주 쓰는 조작은 1클릭 거리. 시청자에게 노출되거나 파괴적인 동작만 확인 단계.
+- 상태(온에어·발행중·대기)는 색+형태로 즉시 구분. 프리미엄함은 "다 보여주기"가 아니라 "훑기 쉬움"에서 나온다.
+
+## 4. 공개 페이지 (등록 · 대기 · 시청 · 종료 — 시청자용)
+- 테마는 STK 토큰(buildStkCss)에서 파생 — 색 하드코딩 금지, accent/text/surface 기반.
+- 화면당 주 행동은 하나(등록/입장/다시보기 신청). 나머지는 보조 위계로.
+- 섹션은 "config 토글 ON + 실제 데이터 있음" 이중 게이트 — 빈 껍데기를 시청자에게 노출하지 않는다.
+- 새 부작용(추적·전송)은 isPreviewUrl 가드 필수. 모바일 폭에서 확인 후 마감.
+
+## 공통
+- 마이크로인터랙션 기본 적용: hover/press/focus/전환/로딩/성공에 짧고 절제된 모션. 장식적 움직임 금지, reduced-motion 존중.
+- 카드·버튼·활성 컨트롤은 외곽선 대신 그림자 마감.
+- 입력은 소스에서 정규화(예: 전화번호는 하이픈 없이 숫자만) — 안내 문구가 아니라 입력 시점에 강제.
+- 검증·중복확인 피드백은 해당 필드 바로 아래 인라인으로, 제출 전에.
+- 사용자 텍스트(설명 등)는 줄바꿈을 보존해 표시.
+- 이 원칙에서 벗어나는 선택을 할 땐 작업 요약에 이유를 한 줄 남긴다.
+- **이 문서는 하한선이지 천장이 아니다.** 원칙 준수는 최소 조건이고, 더 나은 구조·기능·디자인이 보이면 원칙에 없다는 이유로 접지 말고 제안할 것. "원칙에 맞음"과 "잘 만듦"은 다른 문제다.
 <!-- END:product-design-rules -->

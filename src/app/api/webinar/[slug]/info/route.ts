@@ -28,6 +28,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   // 상태머신 단일 판정 — 라이브 페이지가 운영 콘솔의 statusOverride·입장오픈 윈도를 반영하도록.
   const statusInfo = resolveWebinarStatus(webinar);
 
+  // 종료 화면에 연결된 자체 설문 — 있으면 외부 surveyUrl 보다 우선한다 (id/title 만 공개)
+  const endedSurvey = await prisma.webinarSurvey.findFirst({
+    where: { webinarId: webinar.id, showOnEnded: true, isOpen: true },
+    select: { id: true, title: true },
+  });
+
   // config 는 뷰어가 실제로 쓰는 키만 allowlist 로 노출 — youtubeId(입장 verify 시 전달) 및
   // 향후 추가될 수 있는 민감 키(토큰·내부 URL 등)가 실수로 공개되지 않도록 blocklist 대신 allowlist.
   const rawConfig = (webinar.config ?? {}) as Record<string, unknown>;
@@ -41,6 +47,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   return NextResponse.json(
     {
       webinar: { ...webinar, config },
+      endedSurvey,
       status: statusInfo.status,
       entryOpen: statusInfo.entryOpen,
       canRegister: statusInfo.canRegister,
