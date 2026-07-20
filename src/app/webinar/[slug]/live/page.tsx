@@ -17,6 +17,16 @@ const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 // 소유자 미리보기 진입 여부 — ?preview 파라미터. 이 tab 에선 폴링·ping·제출 등 모든 부작용을 정지시킨다.
 const isPreviewUrl = () => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("preview");
 
+// 상태 폴링(fetchStatus)은 URL 의 ?view 만 보고 화면을 정한다 — state 로만 바꾼 화면은
+// 다음 폴에서 되돌아간다. "등록하러 가기" 같은 사용자의 명시적 이동은 여기에 남겨야 유지된다.
+function setViewParam(value: "signup" | null) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (value) url.searchParams.set("view", value);
+  else url.searchParams.delete("view");
+  window.history.replaceState(null, "", url.toString());
+}
+
 interface WebinarSession {
   id: string;
   number: number;
@@ -566,6 +576,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       setRegistrationId(data.registration.id);
       if (typeof data.youtubeId === "string") setVideoId(data.youtubeId);
       setRegistered(true);
+      // 등록을 마쳤으면 signup 고정을 푼다 — 안 풀면 입장이 열려 있어도 대기 화면에 머문다.
+      setViewParam(null);
 
       // 라이브 중이면 바로 이동 — 클라이언트 시계 대신 서버 상태(status/serverNow)로 판정
       void fetchWebinar();
@@ -1035,6 +1047,15 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               <div className="py-10 text-center">
                 <h2 className="text-lg font-semibold mb-1">등록이 마감되었어요</h2>
                 <p className="text-sm opacity-60">사전 등록 기간이 종료됐어요.<br />시작 시각에 맞춰 다시 방문해 주세요.</p>
+                {/* 폼을 채우는 동안 마감됐을 수 있다 — 이미 등록한 사람이 여기 갇히지 않게 돌아갈 길을 둔다. */}
+                <button
+                  type="button"
+                  onClick={() => { setViewParam(null); void fetchStatus(); }}
+                  className="mt-5 text-sm underline underline-offset-4 opacity-70 transition-opacity hover:opacity-100"
+                  style={{ minHeight: 44 }}
+                >
+                  이미 등록하셨나요? 입장 확인으로 돌아가기
+                </button>
               </div>
             ) : (
               <>
@@ -1114,7 +1135,14 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             onAuthMethod={(m) => { setAuthMethod(m); setAuthValue(""); setVerifyError(""); }}
             onAuthValueChange={(v) => setAuthValue(authMethod === "phone" ? v.replace(/[^0-9]/g, "") : v)}
             onVerify={handleVerifyEntry}
-            onGoSignup={() => (previewMode ? setPreviewState("registration") : setView("signup"))}
+            canRegister={canRegister}
+            onGoSignup={() => {
+              if (previewMode) { setPreviewState("registration"); return; }
+              // URL 에 의도를 남기지 않으면 30초 뒤 상태 폴링이 입장 확인 화면으로 되돌려
+              // 입력하던 등록 정보가 사라진다.
+              setViewParam("signup");
+              setView("signup");
+            }}
             live={live}
             viewerCount={viewerCount ?? undefined}
             hasCalendar={!!calendarUrl}
