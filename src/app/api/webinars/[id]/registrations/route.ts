@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { normalizeSurveyQuestions } from "@/lib/webinar-survey";
 
 type DuplicateMode = "skip" | "include" | "update";
 
@@ -86,7 +87,8 @@ async function findDuplicate(webinarId: string, phone: string | null, email: str
       webinarId,
       OR: [
         ...(phone ? [{ phone }] : []),
-        ...(email ? [{ email }] : []),
+        // 공개 등록 경로와 동일하게, 과거 대문자 포함 이메일도 중복으로 취급한다.
+        ...(email ? [{ email: { equals: email, mode: "insensitive" as const } }] : []),
       ],
     },
     orderBy: { submittedAt: "asc" },
@@ -121,7 +123,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     } : {}),
   };
 
-  const [registrations, total, registered, entered, active] = await Promise.all([
+  const [registrations, total, registered, entered, active, surveys, surveyParticipants] = await Promise.all([
     prisma.webinarRegistration.findMany({
       where,
       orderBy: [{ [sortColumn]: sortDir }, { submittedAt: "desc" }],
@@ -138,10 +140,39 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     prisma.webinarRegistration.count({ where: { webinarId: id } }),
     prisma.webinarRegistration.count({ where: { webinarId: id, enteredAt: { not: null } } }),
     prisma.webinarRegistration.count({ where: { webinarId: id, isActive: true } }),
+    // 목록에는 설문별 참여 현황과 답변 라벨이 필요하다. 응답은 현재 페이지 등록자만 뒤에서
+    // 가져와 페이징당 전송량을 제한하고, 설문 정의는 작으므로 한 번에 함께 보낸다.
+    prisma.webinarSurvey.findMany({
+      where: { webinarId: id },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, title: true, questions: true },
+    }),
+    prisma.webinarSurveyResponse.groupBy({
+      by: ["registrationId"],
+      where: { webinarId: id, registrationId: { not: null } },
+    }),
   ]);
 
+  const registrationIds = registrations.map((registration) => registration.id);
+  const surveyResponses = registrationIds.length
+    ? await prisma.webinarSurveyResponse.findMany({
+        where: { webinarId: id, registrationId: { in: registrationIds } },
+        orderBy: { submittedAt: "desc" },
+        select: { surveyId: true, registrationId: true, answers: true, source: true, submittedAt: true },
+      })
+    : [];
+
   // stats 는 검색 필터와 무관한 전체 집계(요약 카드용). total 은 검색 반영 페이지네이션용.
-  return NextResponse.json({ registrations, total, stats: { registered, entered, active } });
+  return NextResponse.json({
+    registrations,
+    total,
+    stats: { registered, entered, active, surveyResponded: surveyParticipants.length },
+    surveys: surveys.map((survey) => ({
+      ...survey,
+      questions: normalizeSurveyQuestions(survey.questions),
+    })),
+    surveyResponses,
+  });
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {

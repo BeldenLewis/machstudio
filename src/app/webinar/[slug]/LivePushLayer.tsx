@@ -7,6 +7,7 @@
 // - Tally: 공식 embed.js 를 지연 로드, hiddenFields 로 응답자 식별(registrationId) 전달
 
 import { useEffect, useRef, useState } from "react";
+import { ArrowRight, BarChart3, Bell, ClipboardCheck, ExternalLink, Megaphone, MessageSquarePlus, X } from "lucide-react";
 import SurveyForm, { SURVEY_FORM_CSS } from "./SurveyForm";
 import type { SurveyAnswers, SurveyQuestion } from "@/lib/webinar-survey";
 
@@ -55,6 +56,12 @@ export interface LivePoll {
   question: string;
   updatedAt: string;
   options: LivePollOption[];
+}
+
+export interface LiveAnnouncement {
+  id: string;
+  type: string;
+  message: string;
 }
 
 // live-state 폴 페이로드 — 문항은 싣지 않는다(매 폴 중복 전송 방지). 모달이 공개 GET 으로 1회 로드.
@@ -127,6 +134,7 @@ export default function LivePushLayer({
   tally: incomingTally,
   poll: incomingPoll,
   survey: incomingSurvey,
+  announcements = [],
 }: {
   slug: string;
   registrationId: string | null;
@@ -137,6 +145,7 @@ export default function LivePushLayer({
   tally: LiveTallyPush | null;
   poll: LivePoll | null;
   survey?: LiveSurveyPush | null;
+  announcements?: LiveAnnouncement[];
 }) {
   // 표시 상태 — props(통합 폴링 결과)를 받아 세션 기억(닫음/투표)을 반영해 실제 노출 여부를 정한다.
   const [popup, setPopup] = useState<LivePopup | null>(null);
@@ -146,6 +155,10 @@ export default function LivePushLayer({
   const [surveySubmitting, setSurveySubmitting] = useState(false);
   const [surveyDone, setSurveyDone] = useState(false);
   const [surveyError, setSurveyError] = useState("");
+  const [popupReopenKey, setPopupReopenKey] = useState<string | null>(null);
+  const [pollReopenKey, setPollReopenKey] = useState<string | null>(null);
+  const [surveyReopenKey, setSurveyReopenKey] = useState<string | null>(null);
+  const [inboxOpen, setInboxOpen] = useState(false);
   const surveyFetchRef = useRef<string | null>(null); // 문항 로드 중/완료된 키 — 폴마다 재요청 방지
   const openedTallyRef = useRef<Set<string>>(new Set());
   const accent = accentColor || "#6d28d9";
@@ -158,19 +171,22 @@ export default function LivePushLayer({
   useEffect(() => {
     if (incomingPopup) {
       const key = `mach_popup_${incomingPopup.id}_${incomingPopup.updatedAt}`;
-      const dismissed = incomingPopup.dismissible !== false && sessionGet(key);
+      const dismissed = incomingPopup.dismissible !== false && sessionGet(key) && popupReopenKey !== key;
       setPopup(dismissed ? null : incomingPopup);
     } else {
+      setPopupReopenKey(null);
       setPopup(null);
     }
-  }, [incomingPopup]);
+  }, [incomingPopup, popupReopenKey]);
 
   // 설문 푸시 — 닫음/제출(pushedAt 키) 기억. 재발행 시에만 다시 노출(라이브 중 문항 편집은 재노출하지 않음).
+  // 닫은 설문도 우하단 알림함에서 다시 열 수 있도록, 수동 열기만 닫음 기억을 일시적으로 우선한다.
   // 문항은 폴 페이로드에 없으므로 공개 GET 으로 1회 로드한다.
   const surveyKey = (s: { id: string; pushedAt: string | null }) => `mach_survey_${s.id}_${s.pushedAt ?? "0"}`;
+  const surveySubmittedKey = (s: { id: string; pushedAt: string | null }) => `mach_survey_submitted_${s.id}_${s.pushedAt ?? "0"}`;
   useEffect(() => {
     if (surveyDone) return; // 감사 화면 표시 중 — 타임아웃이 닫는다(폴 갱신이 조기 언마운트하지 않게)
-    if (!incomingSurvey || sessionGet(surveyKey(incomingSurvey))) {
+    if (!incomingSurvey || (sessionGet(surveyKey(incomingSurvey)) && surveyReopenKey !== surveyKey(incomingSurvey))) {
       surveyFetchRef.current = null;
       setActiveSurvey(null);
       return;
@@ -198,17 +214,19 @@ export default function LivePushLayer({
         if (surveyFetchRef.current === key) surveyFetchRef.current = null; // 다음 폴에서 재시도
       }
     })();
-  }, [incomingSurvey, activeSurvey, surveyDone, slug]);
+  }, [incomingSurvey, activeSurvey, surveyDone, surveyReopenKey, slug]);
 
   // 실시간 투표 — 닫음(updatedAt 키)·투표 여부는 세션 기억. 프롭이 갱신되면 득표수도 함께 갱신.
   useEffect(() => {
-    if (incomingPoll && !sessionGet(`mach_pollclosed_${incomingPoll.id}_${incomingPoll.updatedAt}`)) {
+    const key = incomingPoll ? `mach_pollclosed_${incomingPoll.id}_${incomingPoll.updatedAt}` : null;
+    if (incomingPoll && (!sessionGet(key!) || pollReopenKey === key)) {
       setActivePoll(incomingPoll);
       setVoted(sessionGet(`mach_pollvote_${incomingPoll.id}`));
     } else {
+      if (!incomingPoll) setPollReopenKey(null);
       setActivePoll(null);
     }
-  }, [incomingPoll]);
+  }, [incomingPoll, pollReopenKey]);
 
   // 단독 Tally 자동 오픈 — 한 번만(키 기억). 팝업 모달이 (닫히지 않고) 뜰 상황이면 보류하고,
   // 닫히면 다음 틱에 이 이펙트가 재실행되어 그때 연다(팝업 우선, z-index 겹침 방지).
@@ -230,20 +248,48 @@ export default function LivePushLayer({
   const dismiss = () => {
     if (!popup) return;
     sessionSet(`mach_popup_${popup.id}_${popup.updatedAt}`);
+    setPopupReopenKey(null);
     setPopup(null);
   };
 
   const dismissPoll = () => {
     if (!activePoll) return;
     sessionSet(`mach_pollclosed_${activePoll.id}_${activePoll.updatedAt}`);
+    setPollReopenKey(null);
     setActivePoll(null);
   };
 
   const dismissSurvey = () => {
     if (!activeSurvey) return;
     sessionSet(surveyKey(activeSurvey));
+    setSurveyReopenKey(null);
     surveyFetchRef.current = null;
     setActiveSurvey(null);
+  };
+
+  const reopenSurvey = (survey: LiveSurveyPush) => {
+    setSurveyDone(false);
+    setSurveyError("");
+    setSurveyReopenKey(surveyKey(survey));
+    setInboxOpen(false);
+  };
+
+  const reopenPoll = (poll: LivePoll) => {
+    setVoted(sessionGet(`mach_pollvote_${poll.id}`));
+    setPollReopenKey(`mach_pollclosed_${poll.id}_${poll.updatedAt}`);
+    setActivePoll(poll);
+    setInboxOpen(false);
+  };
+
+  const reopenPopup = (popupToOpen: LivePopup) => {
+    setPopupReopenKey(`mach_popup_${popupToOpen.id}_${popupToOpen.updatedAt}`);
+    setPopup(popupToOpen);
+    setInboxOpen(false);
+  };
+
+  const reopenTally = (tallyToOpen: LiveTallyPush) => {
+    setInboxOpen(false);
+    openTally(tallyToOpen.formId, tallyToOpen, registrationId);
   };
 
   const submitSurvey = async (answers: SurveyAnswers) => {
@@ -262,6 +308,8 @@ export default function LivePushLayer({
         return;
       }
       sessionSet(surveyKey(activeSurvey));
+      sessionSet(surveySubmittedKey(activeSurvey));
+      setSurveyReopenKey(null);
       setSurveyDone(true);
       setTimeout(() => {
         setActiveSurvey(null);
@@ -305,8 +353,21 @@ export default function LivePushLayer({
 
   const primaryIsTally = !!popup && popup.integrationType === "tally" && !!popup.tallyFormId;
   const pollTotal = activePoll ? activePoll.options.reduce((s, o) => s + o.voteCount, 0) : 0;
-
-  if (!popup && !activePoll && !activeSurvey) return null;
+  const surveyCompleted = incomingSurvey ? sessionGet(surveySubmittedKey(incomingSurvey)) : false;
+  const interactionCount = announcements.length
+    + (incomingPopup ? 1 : 0)
+    + (incomingTally ? 1 : 0)
+    + (incomingPoll ? 1 : 0)
+    + (incomingSurvey && !surveyCompleted ? 1 : 0);
+  const showInbox = interactionCount > 0 && !popup && !activePoll && !activeSurvey;
+  const showSurveyNudge = Boolean(
+    incomingSurvey
+    && !surveyCompleted
+    && sessionGet(surveyKey(incomingSurvey))
+    && !activeSurvey
+    && !popup
+    && !activePoll,
+  );
 
   return (
     <>
@@ -316,13 +377,17 @@ export default function LivePushLayer({
           style={{ background: "rgba(0,0,0,0.68)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}
           onClick={(e) => { if (e.target === e.currentTarget && popup.dismissible !== false) dismiss(); }}
         >
-          <div className="relative flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#1a1a1f] text-white shadow-2xl">
+          <div
+            className="relative flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-2xl shadow-2xl"
+            style={{ background: surface, color: text, border: `1px solid ${soft(12)}` }}
+          >
             <div className="absolute inset-x-[18%] top-0 z-10 h-0.5 rounded-full" style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }} />
             {popup.dismissible !== false && (
               <button
                 onClick={dismiss}
                 aria-label="팝업 닫기"
-                className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-base text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+                className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg text-base transition-opacity hover:opacity-80"
+                style={{ background: soft(7), color: soft(55), border: `1px solid ${soft(12)}` }}
               >
                 ×
               </button>
@@ -330,7 +395,7 @@ export default function LivePushLayer({
             {/* 콘텐츠만 스크롤 — 긴 내용도 닫기(×)·CTA 가 잘리지 않게(모바일). ×·상단바는 고정. */}
             <div className="min-h-0 overflow-y-auto p-7">
             <h2 className="mb-2 pr-9 text-lg font-bold leading-snug">{popup.title}</h2>
-            {popup.message && <p className="mb-5 whitespace-pre-wrap text-sm leading-relaxed text-white/70">{popup.message}</p>}
+            {popup.message && <p className="mb-5 whitespace-pre-wrap text-sm leading-relaxed" style={{ color: soft(68) }}>{popup.message}</p>}
             <div className="space-y-2">
               {popup.buttonLabel && (primaryIsTally ? (
                 <button
@@ -358,14 +423,15 @@ export default function LivePushLayer({
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => trackCta(popup.id, "cta_secondary")}
-                  className="flex w-full items-center justify-center rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-white/10"
+                  className="flex w-full items-center justify-center rounded-xl px-4 py-3 text-sm font-bold transition-opacity hover:opacity-80"
+                  style={{ background: soft(6), color: text, border: `1px solid ${soft(15)}` }}
                 >
                   {popup.secondaryLabel}
                 </a>
               )}
             </div>
             {popup.dismissible !== false && (
-              <p className="mt-3 text-center text-[11px] text-white/40">닫으면 이 팝업은 다시 표시되지 않아요.</p>
+              <p className="mt-3 text-center text-[11px]" style={{ color: soft(42) }}>닫으면 이 팝업은 다시 표시되지 않아요.</p>
             )}
             </div>
           </div>
@@ -464,6 +530,95 @@ export default function LivePushLayer({
             })}
           </div>
           <p className="mt-2 text-[11px]" style={{ color: soft(45) }}>{voted ? "참여해주셔서 감사합니다" : "탭해서 투표에 참여하세요"}</p>
+        </div>
+      )}
+
+      {/* 닫힌 라이브 인터랙션을 다시 여는 공용 알림함. 활성 송출이 종료되면 live-state 에서 빠져 자동으로 사라진다. */}
+      {showInbox && (
+        <div className="fixed bottom-4 right-4 z-[55] flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2">
+          {showSurveyNudge && incomingSurvey && !inboxOpen && (
+            <button
+              type="button"
+              onClick={() => reopenSurvey(incomingSurvey)}
+              className="w-[min(320px,calc(100vw-2rem))] rounded-2xl p-3 text-left shadow-xl transition-transform hover:-translate-y-0.5"
+              style={{ background: surface, color: text, border: `1px solid ${soft(14)}` }}
+            >
+              <span className="flex items-start gap-2.5">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl" style={{ background: `color-mix(in srgb, ${accent} 18%, transparent)`, color: accent }}><ClipboardCheck className="h-4 w-4" /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-semibold leading-snug">더 나은 웨비나를 위해<br />만족도 설문에 참여해주세요.</span>
+                  <span className="mt-1 block truncate text-[11px]" style={{ color: soft(58) }}>{incomingSurvey.title}</span>
+                </span>
+              </span>
+              <span className="mt-3 flex h-8 items-center justify-center gap-1.5 rounded-lg text-[12px] font-bold" style={{ background: `color-mix(in srgb, ${accent} 14%, transparent)`, color: accent }}>
+                설문 참여하기 <ArrowRight className="h-3.5 w-3.5" />
+              </span>
+            </button>
+          )}
+
+          {inboxOpen && (
+            <section
+              aria-label="라이브 알림"
+              className="w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-2xl shadow-2xl"
+              style={{ background: surface, color: text, border: `1px solid ${soft(14)}` }}
+            >
+              <div className="flex items-center gap-2 border-b px-4 py-3" style={{ borderColor: soft(12) }}>
+                <Bell className="h-4 w-4" style={{ color: accent }} />
+                <h2 className="text-sm font-bold">라이브 알림</h2>
+                <span className="ml-auto text-[11px]" style={{ color: soft(55) }}>{interactionCount}개</span>
+                <button type="button" onClick={() => setInboxOpen(false)} aria-label="라이브 알림 닫기" className="grid h-7 w-7 place-items-center rounded-lg transition-colors hover:bg-white/10" style={{ color: soft(55) }}><X className="h-4 w-4" /></button>
+              </div>
+              <div className="max-h-[min(60vh,420px)] space-y-1 overflow-y-auto p-2">
+                {announcements.map((announcement) => (
+                  <div key={`announcement-${announcement.id}`} className="rounded-xl px-3 py-2.5" style={{ background: soft(5) }}>
+                    <div className="mb-1 flex items-center gap-1.5 text-[10px] font-bold" style={{ color: accent }}><Megaphone className="h-3.5 w-3.5" />공지</div>
+                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed" style={{ color: soft(84) }}>{announcement.message}</p>
+                  </div>
+                ))}
+                {incomingPoll && (
+                  <button type="button" onClick={() => reopenPoll(incomingPoll)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/5">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl" style={{ background: `color-mix(in srgb, ${accent} 18%, transparent)`, color: accent }}><BarChart3 className="h-4 w-4" /></span>
+                    <span className="min-w-0 flex-1"><span className="block text-[10px] font-bold" style={{ color: accent }}>실시간 투표</span><span className="mt-0.5 block truncate text-[13px] font-medium">{incomingPoll.question}</span></span>
+                    <ExternalLink className="h-4 w-4 shrink-0" style={{ color: soft(45) }} />
+                  </button>
+                )}
+                {incomingSurvey && !surveyCompleted && (
+                  <button type="button" onClick={() => reopenSurvey(incomingSurvey)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/5">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl" style={{ background: `color-mix(in srgb, ${accent} 18%, transparent)`, color: accent }}><ClipboardCheck className="h-4 w-4" /></span>
+                    <span className="min-w-0 flex-1"><span className="block text-[10px] font-bold" style={{ color: accent }}>만족도 설문</span><span className="mt-0.5 block truncate text-[13px] font-medium">{incomingSurvey.title}</span><span className="mt-0.5 block text-[11px]" style={{ color: soft(58) }}>더 나은 웨비나를 위해 의견을 들려주세요.</span></span>
+                    <ExternalLink className="h-4 w-4 shrink-0" style={{ color: soft(45) }} />
+                  </button>
+                )}
+                {incomingPopup && (
+                  <button type="button" onClick={() => reopenPopup(incomingPopup)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/5">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl" style={{ background: `color-mix(in srgb, ${accent} 18%, transparent)`, color: accent }}><MessageSquarePlus className="h-4 w-4" /></span>
+                    <span className="min-w-0 flex-1"><span className="block text-[10px] font-bold" style={{ color: accent }}>팝업</span><span className="mt-0.5 block truncate text-[13px] font-medium">{incomingPopup.title}</span></span>
+                    <ExternalLink className="h-4 w-4 shrink-0" style={{ color: soft(45) }} />
+                  </button>
+                )}
+                {incomingTally && (
+                  <button type="button" onClick={() => reopenTally(incomingTally)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/5">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl" style={{ background: `color-mix(in srgb, ${accent} 18%, transparent)`, color: accent }}><Bell className="h-4 w-4" /></span>
+                    <span className="min-w-0 flex-1"><span className="block text-[10px] font-bold" style={{ color: accent }}>외부 설문</span><span className="mt-0.5 block truncate text-[13px] font-medium">{incomingTally.title}</span></span>
+                    <ExternalLink className="h-4 w-4 shrink-0" style={{ color: soft(45) }} />
+                  </button>
+                )}
+              </div>
+            </section>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setInboxOpen((open) => !open)}
+            aria-expanded={inboxOpen}
+            aria-label={`라이브 알림 ${interactionCount}개 다시 확인`}
+            className="flex h-11 items-center gap-2 rounded-full px-4 text-sm font-bold shadow-xl transition-transform hover:-translate-y-0.5"
+            style={{ background: accent, color: "#fff" }}
+          >
+            <Bell className="h-4 w-4" />
+            알림
+            <span className="grid h-5 min-w-5 place-items-center rounded-full px-1 text-[10px]" style={{ background: "rgba(255,255,255,0.22)" }}>{interactionCount}</span>
+          </button>
         </div>
       )}
     </>

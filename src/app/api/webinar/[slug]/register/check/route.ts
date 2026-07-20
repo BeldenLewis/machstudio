@@ -37,7 +37,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       ? prisma.webinarRegistration.findFirst({ where: { webinarId: webinar.id, phone }, select: { id: true } })
       : Promise.resolve(null),
     emailValid
-      ? prisma.webinarRegistration.findFirst({ where: { webinarId: webinar.id, email }, select: { id: true } })
+      // 과거 등록 건에는 대문자가 섞인 이메일이 남아 있을 수 있다. 입력값은 소문자로
+      // 정규화하지만, 조회까지 완전 일치로 하면 그 등록 건을 놓치므로 비교도 대소문자를 무시한다.
+      ? prisma.webinarRegistration.findFirst({
+          where: { webinarId: webinar.id, email: { equals: email, mode: "insensitive" } },
+          select: { id: true },
+        })
       : Promise.resolve(null),
   ]);
 
