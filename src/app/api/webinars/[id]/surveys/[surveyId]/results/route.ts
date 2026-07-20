@@ -81,7 +81,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         } else if (q.type === "single" || q.type === "multiple") {
           acc.count += 1;
           const arr = Array.isArray(v) ? v : [v];
-          arr.forEach((o) => { const s = String(o); if (s in acc.options) acc.options[s] += 1; });
+          // 응답 후 선택지 문구를 바꾸거나 지우면 기존 응답이 어느 항목에도 안 잡혀
+          // "응답 20건인데 막대 합은 12건"처럼 보인다 → 별도 버킷으로 남긴다.
+          arr.forEach((o) => {
+            const s = String(o);
+            if (s in acc.options) acc.options[s] += 1;
+            else acc.options[`${s} (삭제된 선택지)`] = (acc.options[`${s} (삭제된 선택지)`] ?? 0) + 1;
+          });
         } else {
           acc.count += 1;
           if (acc.texts.length < 50) acc.texts.push(String(v));

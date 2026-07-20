@@ -56,11 +56,8 @@ export default function BasicInfoTab({ webinar, onSilentUpdate }: { webinar: Web
           liveStartAt: kstDateTimeLocalToIso(form.liveStartAt),
           liveEndAt: kstDateTimeLocalToIso(form.liveEndAt),
           signupDeadline: kstDateTimeLocalToIso(form.signupDeadline),
-          // 다른 components 키(chatEnabled 등)는 보존
-          components: {
-            ...(webinar.components ?? {}),
-            allowLiveRegistration: form.closeRegOnLive ? false : null,
-          },
+          // 이 탭이 소유한 키만 보낸다 — 다른 키(chatEnabled 등)는 서버가 병합으로 보존한다.
+          components: { allowLiveRegistration: form.closeRegOnLive ? false : null },
         }),
       });
       if (!res.ok) { toast.error("자동 저장 실패 — 잠시 후 다시 시도돼요", { id: "autosave-error" }); return false; }

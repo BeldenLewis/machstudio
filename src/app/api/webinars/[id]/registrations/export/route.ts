@@ -42,9 +42,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const idsParam = new URL(request.url).searchParams.get("ids");
   const ids = idsParam ? idsParam.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 1000) : null;
 
+  // CSV 에 쓰는 컬럼만 — select 없이 전 컬럼을 끌어오면 대형 JSON 까지 실려 egress 낭비다.
   const registrations = await prisma.webinarRegistration.findMany({
     where: { webinarId: id, ...(ids && ids.length ? { id: { in: ids } } : {}) },
     orderBy: { submittedAt: "desc" },
+    select: {
+      id: true, name: true, phone: true, email: true, company: true, department: true,
+      jobTitle: true, industry: true, agreeMarketing: true, submittedAt: true, enteredAt: true,
+      memo: true, utmSource: true, utmMedium: true, utmCampaign: true,
+      firstUtmSource: true, firstUtmMedium: true, referrer: true,
+    },
   });
 
   // 참여 점수·세그먼트 — 명단과 함께 리드 퀄리티를 내보낸다(캡 적용 체류 기반)
@@ -74,7 +81,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       r.jobTitle ?? "",
       r.industry ?? "",
       r.agreeMarketing ? "Y" : "N",
-      String(r.stayMinutes),
+      // 참여점수와 같은 소스(실제 시청 구간 합)를 쓴다 — DB 원본 stayMinutes 는
+      // leave 이벤트를 못 받은 시청자(탭 강제종료 등)에게 0 으로 남아 한 행 안에서 값이 어긋난다.
+      String(sc?.watchMinutes ?? 0),
       new Date(r.submittedAt).toLocaleString("ko-KR"),
       r.enteredAt ? new Date(r.enteredAt).toLocaleString("ko-KR") : "",
       ...customFieldDefs.map((f) => {

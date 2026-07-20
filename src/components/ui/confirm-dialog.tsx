@@ -38,6 +38,10 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
   const confirm = useCallback<ConfirmFn>((opts) => {
+    // 이전 확인이 아직 열려 있는데 새로 호출되면 앞선 promise 가 영영 안 풀린다(호출부가 멈춤).
+    // 새 확인으로 대체되는 것이므로 이전 건은 취소(false)로 닫는다.
+    resolverRef.current?.(false);
+    resolverRef.current = null;
     previousFocusRef.current = (document.activeElement as HTMLElement) ?? null;
     setOptions(opts);
     return new Promise<boolean>((resolve) => { resolverRef.current = resolve; });

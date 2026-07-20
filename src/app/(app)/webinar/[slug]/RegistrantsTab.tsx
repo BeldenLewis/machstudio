@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatKst } from "@/lib/datetime";
+import type { SurveyQuestion } from "@/lib/webinar-survey";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { InlineError } from "@/components/ui/inline-error";
 
@@ -64,6 +65,21 @@ interface Registration {
   submittedAt: string;
   enteredAt: string | null;
   lastPingAt: string | null;
+  surveyResponses: SurveyResponse[];
+}
+
+interface Survey {
+  id: string;
+  title: string;
+  questions: SurveyQuestion[];
+}
+
+interface SurveyResponse {
+  surveyId: string;
+  registrationId: string;
+  answers: Record<string, unknown>;
+  source: string | null;
+  submittedAt: string;
 }
 
 interface RegistrationDraft {
@@ -240,6 +256,11 @@ function formatDateShort(value: string | null) {
   return formatKst(value, { month: "2-digit", day: "2-digit" });
 }
 
+function formatSurveyAnswer(question: SurveyQuestion, answer: unknown) {
+  const value = Array.isArray(answer) ? answer.join(", ") : String(answer);
+  return question.type === "rating" || question.type === "nps" ? `${value}점` : value;
+}
+
 function SortHeader({
   label,
   sortKey,
@@ -275,7 +296,8 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
   const confirm = useConfirm();
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [total, setTotal] = useState(0);
-  const [stats, setStats] = useState<{ registered: number; entered: number; active: number } | null>(null);
+  const [stats, setStats] = useState<{ registered: number; entered: number; active: number; surveyResponded: number } | null>(null);
+  const [surveys, setSurveys] = useState<Survey[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [page, setPage] = useState(1);
@@ -315,10 +337,21 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
       const res = await fetch(`/api/webinars/${webinarId}/registrations?${params}`);
       if (!res.ok) { setLoadError(true); return; }
       const data = await res.json();
-      const rows: Registration[] = data.registrations ?? [];
+      const responsesByRegistration = new Map<string, SurveyResponse[]>();
+      for (const response of data.surveyResponses ?? []) {
+        if (!response.registrationId) continue;
+        const current = responsesByRegistration.get(response.registrationId) ?? [];
+        current.push(response);
+        responsesByRegistration.set(response.registrationId, current);
+      }
+      const rows: Registration[] = (data.registrations ?? []).map((registration: Omit<Registration, "surveyResponses">) => ({
+        ...registration,
+        surveyResponses: responsesByRegistration.get(registration.id) ?? [],
+      }));
       setRegistrations(rows);
       setTotal(data.total ?? 0);
       if (data.stats) setStats(data.stats);
+      setSurveys(data.surveys ?? []);
       // 선택은 항상 현재 보이는 목록으로 한정 — 새로고침으로 사라진(다른 페이지로 밀린/삭제된) 행은
       // 선택에서 자동 제거해, 보이지 않는 행이 선택된 채 일괄 삭제되는 일을 막는다.
       setSelectedIds((prev) => {
@@ -379,7 +412,12 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
     const ids = [...selectedIds];
     if (!ids.length) return;
     const res = await fetch(`/api/webinars/${webinarId}/registrations/export?ids=${encodeURIComponent(ids.join(","))}`);
-    if (!res.ok) { toast.error("내보내기 실패"); return; }
+    // 403(권한 없음) 등 서버가 알려준 사유를 그대로 보여준다 — "실패"만 뜨면 원인을 알 수 없다.
+    if (!res.ok) {
+      const msg = await res.json().then((d) => d?.error).catch(() => null);
+      toast.error(msg || "내보내기 실패");
+      return;
+    }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -488,7 +526,12 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
 
   const handleExport = async () => {
     const res = await fetch(`/api/webinars/${webinarId}/registrations/export`);
-    if (!res.ok) { toast.error("내보내기 실패"); return; }
+    // 403(권한 없음) 등 서버가 알려준 사유를 그대로 보여준다 — "실패"만 뜨면 원인을 알 수 없다.
+    if (!res.ok) {
+      const msg = await res.json().then((d) => d?.error).catch(() => null);
+      toast.error(msg || "내보내기 실패");
+      return;
+    }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -611,7 +654,9 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
         return;
       }
       toast.success("등록자 정보가 저장됐어요");
-      setSelectedRegistration(data.registration);
+      // 등록 정보 PATCH 응답에는 설문 응답을 싣지 않는다. 상세 패널을 열어 둔 채 저장해도
+      // 이미 불러온 설문 답변이 사라지지 않도록 그대로 보존한다.
+      setSelectedRegistration((previous) => previous ? { ...data.registration, surveyResponses: previous.surveyResponses } : data.registration);
       await fetchRegistrations();
     } finally {
       setIsSaving(false);
@@ -644,7 +689,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
       </div>
 
       {stats && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className={`grid grid-cols-2 gap-3 ${surveys.length ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
           <div className="rounded-2xl border border-border bg-card p-4">
             <div className="text-[11px] text-muted-foreground">사전 등록</div>
             <div className="mt-1 text-2xl font-semibold tabular-nums">{stats.registered.toLocaleString()}</div>
@@ -662,6 +707,13 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
             <div className="text-[11px] text-muted-foreground">미입장</div>
             <div className="mt-1 text-2xl font-semibold tabular-nums">{Math.max(0, stats.registered - stats.entered).toLocaleString()}</div>
           </div>
+          {surveys.length > 0 && (
+            <div className="rounded-2xl border border-border bg-card p-4">
+              <div className="text-[11px] text-muted-foreground">설문 참여</div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums text-violet-600 dark:text-violet-400">{stats.surveyResponded.toLocaleString()}</div>
+              <div className="mt-1.5 text-[11px] text-muted-foreground">참여율 {stats.registered > 0 ? Math.round((stats.surveyResponded / stats.registered) * 100) : 0}%</div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1009,6 +1061,56 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                 <p>체류: {selectedRegistration.enteredAt ? `${selectedRegistration.stayMinutes}분` : "-"}</p>
               </div>
 
+              {surveys.length > 0 && (
+                <section className="space-y-2.5 border-t border-border pt-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-semibold">설문 응답</h4>
+                      <p className="mt-1 text-xs text-muted-foreground">등록 정보와 연결된 답변만 표시합니다.</p>
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-medium ${selectedRegistration.surveyResponses.length === 0 ? "bg-secondary text-muted-foreground" : "bg-violet-500/10 text-violet-600 dark:text-violet-400"}`}>
+                      {selectedRegistration.surveyResponses.length}/{surveys.length} 응답
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {surveys.map((survey) => {
+                      const response = selectedRegistration.surveyResponses.find((item) => item.surveyId === survey.id);
+                      return (
+                        <div key={survey.id} className="rounded-xl border border-border bg-secondary/20 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <p className="min-w-0 text-xs font-medium leading-relaxed">{survey.title}</p>
+                            {response ? (
+                              <span className="shrink-0 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] text-green-600 dark:text-green-400">응답</span>
+                            ) : (
+                              <span className="shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">미응답</span>
+                            )}
+                          </div>
+
+                          {response && (
+                            <>
+                              <p className="mt-1 text-[11px] text-muted-foreground">{formatDate(response.submittedAt)} 제출</p>
+                              <dl className="mt-3 space-y-2 border-t border-border/70 pt-3">
+                                {survey.questions.map((question) => {
+                                  const answer = response.answers?.[question.id];
+                                  if (answer === undefined || answer === null || answer === "" || (Array.isArray(answer) && answer.length === 0)) return null;
+                                  return (
+                                    <div key={question.id} className="space-y-0.5">
+                                      <dt className="text-[11px] text-muted-foreground">{question.title}</dt>
+                                      <dd className="whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">{formatSurveyAnswer(question, answer)}</dd>
+                                    </div>
+                                  );
+                                })}
+                              </dl>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
               <div className="flex gap-2 border-t border-border pt-4">
                 <motion.button
                   whileHover={{ y: -1 }}
@@ -1098,6 +1200,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="직함" sortKey="jobTitle" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="업종" sortKey="industry" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="마케팅" sortKey="agreeMarketing" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
+                    {surveys.length > 0 && <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">설문</th>}
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="체류" sortKey="stayMinutes" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="최초 입장" sortKey="enteredAt" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="등록일" sortKey="submittedAt" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
@@ -1140,6 +1243,18 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">-</span>
                         )}
                       </td>
+                      {surveys.length > 0 && (
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => openRegistrationDetail(r)}
+                            className={`rounded-full px-1.5 py-0.5 text-[10px] transition-colors hover:brightness-95 ${r.surveyResponses.length === 0 ? "bg-secondary text-muted-foreground" : r.surveyResponses.length === surveys.length ? "bg-green-500/10 text-green-600 dark:text-green-400" : "bg-violet-500/10 text-violet-600 dark:text-violet-400"}`}
+                            title="설문 응답 보기"
+                          >
+                            {r.surveyResponses.length === 0 ? "미응답" : r.surveyResponses.length === surveys.length ? "응답 완료" : `${r.surveyResponses.length}/${surveys.length} 응답`}
+                          </button>
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                         {r.enteredAt ? `${r.stayMinutes}분` : "-"}
                       </td>

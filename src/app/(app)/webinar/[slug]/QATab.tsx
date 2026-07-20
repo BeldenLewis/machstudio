@@ -81,7 +81,14 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
       const res = await fetch(`/api/webinars/${webinarId}/qa/${id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ onScreen }),
       });
-      if (!res.ok) { toast.error(onScreen ? "송출하지 못했어요" : "송출을 끄지 못했어요"); return; }
+      if (!res.ok) {
+        // 409 = 다른 질문이 방금 송출됨(단일 활성). 사유를 알려주고 목록을 맞춘다.
+        toast.error(res.status === 409
+          ? "다른 질문이 방금 송출됐어요. 목록을 새로고침했어요."
+          : onScreen ? "송출하지 못했어요" : "송출을 끄지 못했어요");
+        await fetchQA(true);
+        return;
+      }
       setQuestions((prev) => prev.map((q) => q.id === id ? { ...q, onScreen } : (onScreen ? { ...q, onScreen: false } : q)));
       if (onScreen) toast.success("시청 화면에 띄웠어요");
     } finally { mutatingRef.current = false; }

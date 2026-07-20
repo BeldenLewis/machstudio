@@ -89,15 +89,28 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         COUNT(*) FILTER (WHERE "eff" >= 30) AS "stay30",
         COUNT(*) FILTER (WHERE "eff" >= 60) AS "stay60"
       FROM (
+        -- 실제 시청 구간(WebinarAttendanceSegment) 합이 있으면 그것을 쓴다.
+        -- "입장~마지막활동" 스팬은 중간 이탈까지 시청으로 세어 평균·30/60분 체류를 부풀린다.
+        -- 구간 기록이 없는 과거 데이터만 기존 스팬 방식으로 폴백.
         SELECT LEAST(
-          GREATEST(
-            COALESCE("stayMinutes", 0),
-            FLOOR(EXTRACT(EPOCH FROM (COALESCE("lastPingAt", now()) - "enteredAt")) / 60)
+          COALESCE(
+            seg."minutes",
+            GREATEST(
+              COALESCE(r."stayMinutes", 0),
+              FLOOR(EXTRACT(EPOCH FROM (COALESCE(r."lastPingAt", now()) - r."enteredAt")) / 60)
+            )
           ),
           ${capMinutes}::int
         ) AS "eff"
-        FROM "WebinarRegistration"
-        WHERE "enteredAt" IS NOT NULL AND "webinarId" = ${id}
+        FROM "WebinarRegistration" r
+        LEFT JOIN (
+          SELECT "registrationId",
+                 FLOOR(SUM(EXTRACT(EPOCH FROM ("endedAt" - "startedAt"))) / 60)::int AS "minutes"
+            FROM "WebinarAttendanceSegment"
+           WHERE "webinarId" = ${id}
+           GROUP BY "registrationId"
+        ) seg ON seg."registrationId" = r."id"
+        WHERE r."enteredAt" IS NOT NULL AND r."webinarId" = ${id}
       ) sub
     `,
     prisma.webinarRegistration.findMany({
