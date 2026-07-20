@@ -29,7 +29,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   });
   // 어드민 편집기도 정규화된 형태만 받도록 — 드리프트된 JSON(비배열 등)으로 설문 탭이 죽지 않게
   return NextResponse.json({
-    surveys: surveys.map((s) => ({ ...s, questions: normalizeSurveyQuestions(s.questions, { keepEmptyTitles: true }) })),
+    surveys: surveys.map((s) => ({ ...s, questions: normalizeSurveyQuestions(s.questions, { includeHidden: true }) })),
   });
 }
 
@@ -50,7 +50,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       webinarId: id,
       title,
       description: String(body?.description ?? "").trim() || null,
-      questions: normalizeSurveyQuestions(body?.questions, { keepEmptyTitles: true }) as unknown as Prisma.InputJsonValue,
+      questions: normalizeSurveyQuestions(body?.questions, { includeHidden: true }) as unknown as Prisma.InputJsonValue,
       sentBy: user.id,
     },
     include: { _count: { select: { responses: true } } },

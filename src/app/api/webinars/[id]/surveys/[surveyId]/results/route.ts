@@ -23,7 +23,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   });
   if (!survey) return NextResponse.json({ error: "없는 설문이에요" }, { status: 404 });
 
-  const questions = normalizeSurveyQuestions(survey.questions);
+  // 결과 집계도 어드민 화면이다 — 나중에 제목·선택지를 비운 문항의 응답까지 집계에 남긴다.
+  const questions = normalizeSurveyQuestions(survey.questions, { includeHidden: true });
 
   // 문항별 누적기 — 응답을 전부 메모리에 들지 않고 청크 단위로 스트리밍 집계한다.
   interface Acc { count: number; sum: number; dist: Record<number, number>; options: Record<string, number>; texts: string[]; promoters: number; detractors: number }

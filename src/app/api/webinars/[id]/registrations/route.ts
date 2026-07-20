@@ -169,7 +169,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     stats: { registered, entered, active, surveyResponded: surveyParticipants.length },
     surveys: surveys.map((survey) => ({
       ...survey,
-      questions: normalizeSurveyQuestions(survey.questions),
+      // 어드민 명단은 수집된 답변을 다 보여줘야 한다 — 제목이 비거나 선택지가 지워진
+      // 문항을 정의에서 빼면 그 답변이 화면에서 조용히 사라진다.
+      questions: normalizeSurveyQuestions(survey.questions, { includeHidden: true }),
     })),
     surveyResponses,
   });
