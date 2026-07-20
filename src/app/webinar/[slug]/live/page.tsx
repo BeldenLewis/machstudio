@@ -850,7 +850,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         </div>
       )}
 
-      {/* 팝업·Tally·투표 푸시 — 운영 콘솔에서 ON 한 항목이 시청 중 화면에 뜬다 (통합 폴링 결과 전달) */}
+      {/* 활성 인터랙션(팝업·투표·설문·공지 등) — 닫은 항목은 우하단 알림함에서 다시 연다. */}
       <LivePushLayer
         slug={slug}
         registrationId={registrationId}
@@ -861,6 +861,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         tally={view === "live" && registrationId ? pushTally : null}
         poll={view === "live" && registrationId ? pushPoll : null}
         survey={view === "live" && registrationId ? pushSurvey : null}
+        announcements={view === "live" && registrationId ? announcements : []}
       />
 
       {/* 공지 배너 */}

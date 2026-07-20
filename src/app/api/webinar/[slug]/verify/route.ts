@@ -59,7 +59,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const where =
     type === "phone"
       ? { webinarId: webinar.id, phone: normalizedValue }
-      : { webinarId: webinar.id, email: normalizedValue };
+      // 중복 확인·등록 차단과 같은 기준. 기존 대문자 포함 이메일도 입장 확인이 가능해야 한다.
+      : { webinarId: webinar.id, email: { equals: normalizedValue, mode: "insensitive" as const } };
 
   // 입장 확인엔 이름만 있으면 충분 — PII(email/phone/company/department/jobTitle/industry) 미반환
   const registration = await prisma.webinarRegistration.findFirst({

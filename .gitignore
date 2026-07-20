@@ -54,3 +54,9 @@ next-env.d.ts
 
 # Sentry Config File
 .env.sentry-build-plugin
+
+# Locally-installed agent skills (npx skills add) — 로컬 도구, 커밋 제외
+.agents/
+
+# Agent skills lockfile (로컬 설치 목록)
+skills-lock.json
