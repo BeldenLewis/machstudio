@@ -154,6 +154,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [isRegistering, setIsRegistering] = useState(false);
   const [registered, setRegistered] = useState(false);
   const [canRegister, setCanRegister] = useState(true); // 서버 상태머신 판정 — 마감(upcoming) 시 폼 대신 안내
+  const [regModalOpen, setRegModalOpen] = useState(false); // 대기 화면의 사전등록 폼 모달
   const [formError, setFormError] = useState("");
   // 실시간 중복 확인 — 연락처/이메일 입력 시 디바운스 후 기존 등록 여부 표시
   const [dupCheck, setDupCheck] = useState<{ phone: boolean; email: boolean }>({ phone: false, email: false });
@@ -442,6 +443,19 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     setIsTrulyLive(previewState === "live");
   }, [previewState, previewVideoId]);
 
+  // 등록 모달 — Esc 로 닫고, 열려 있는 동안 뒤 배경이 스크롤되지 않게 잠근다.
+  useEffect(() => {
+    if (!regModalOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setRegModalOpen(false); };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [regModalOpen]);
+
   // 라이브 전(사전등록·입장 대기) 상태 폴링 — 서버 status 가 live 로 바뀌면 fetchStatus 가
   // view/isTrulyLive/serverNowMs 를 갱신해 대기 중이던 시청자가 자동 전환된다. (30초, 탭 비활성 시 스킵)
   // 경량 /status 만 받아 정적 콘텐츠 재수신 egress 를 없앤다.
@@ -576,6 +590,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       setRegistrationId(data.registration.id);
       if (typeof data.youtubeId === "string") setVideoId(data.youtubeId);
       setRegistered(true);
+      setRegModalOpen(false); // 등록 완료 — 모달을 닫고 대기 화면(등록자용)으로 돌아간다
       // 등록을 마쳤으면 signup 고정을 푼다 — 안 풀면 입장이 열려 있어도 대기 화면에 머문다.
       setViewParam(null);
 
@@ -998,14 +1013,14 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
                     <>
                       <h2 className="text-base font-bold">아직 등록하지 않으셨나요?</h2>
                       <p className="mt-1 text-sm opacity-60">사전등록하면 시작 전에 알려드리고, 바로 입장할 수 있어요.</p>
-                      {/* 네이티브 앵커 — JS 스크롤에 의존하지 않아 어떤 브라우저에서도 폼으로 이동한다. */}
-                      <a
-                        href="#signup-form"
+                      <button
+                        type="button"
+                        onClick={() => setRegModalOpen(true)}
                         className="mt-4 flex w-full items-center justify-center font-bold text-white transition-opacity hover:opacity-90"
                         style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)`, minHeight: 48 }}
                       >
                         사전등록하기 →
-                      </a>
+                      </button>
                     </>
                   ) : (
                     <>
@@ -1019,16 +1034,32 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           </motion.div>
         )}
 
-        {/* 등록 폼 — 미등록 방문자에게만, 대기 화면 아래에 이어 붙인다. */}
-        {view === "signup" && !hasRegistration && canRegister && (
-          <div id="signup-form" className="mx-auto max-w-2xl px-4 pb-16">
+        {/* 등록 폼 모달 — 대기 화면의 "사전등록하기"로 연다. 대기 화면 자체는 그대로 두고 위에 띄운다. */}
+        {view === "signup" && !hasRegistration && canRegister && regModalOpen && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+            style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}
+            onClick={(e) => { if (e.target === e.currentTarget) setRegModalOpen(false); }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="사전 등록"
+          >
             <motion.div
               style={{ backgroundColor: surface, borderRadius: radius }}
-              className="p-6 md:p-8"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.15 }}
+              // 내용만 스크롤 — 긴 폼에서도 닫기(×)와 제출 버튼이 잘리지 않게(모바일).
+              className="relative max-h-[88vh] w-full max-w-2xl overflow-y-auto p-6 md:p-8"
+              initial={{ opacity: 0, y: 8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.18 }}
             >
+              <button
+                type="button"
+                onClick={() => setRegModalOpen(false)}
+                aria-label="닫기"
+                className="absolute right-4 top-4 z-10 grid h-11 w-11 place-items-center rounded-lg text-xl leading-none opacity-50 transition-opacity hover:opacity-100"
+              >
+                ×
+              </button>
               <>
                 <h2 className="text-lg font-semibold mb-1">사전 등록</h2>
                 <p className="text-xs opacity-50 mb-5">
