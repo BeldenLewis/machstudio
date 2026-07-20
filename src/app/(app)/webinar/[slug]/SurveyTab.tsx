@@ -27,7 +27,8 @@ interface AdminSurvey {
   _count?: { responses: number };
 }
 
-const DEFAULT_QUESTIONS: SurveyQuestion[] = [
+// 호출 시점마다 새 id 를 만든다 — 모듈 스코프에서 1회 평가하면 한 세션에서 만든 설문들이 문항 id 를 공유한다.
+const buildDefaultQuestions = (): SurveyQuestion[] => [
   { id: crypto.randomUUID(), type: "rating", title: "오늘 웨비나는 전반적으로 어떠셨나요?", required: true, options: [] },
   { id: crypto.randomUUID(), type: "single", title: "가장 도움이 된 세션은 무엇인가요?", required: false, options: ["세션 1", "세션 2", "세션 3"] },
   { id: crypto.randomUUID(), type: "nps", title: "동료에게 이 웨비나를 추천하시겠어요?", required: false, options: [] },
@@ -48,6 +49,14 @@ function QuestionRow({
     setQuestions((qs) => qs.map((item) => (item.id === q.id ? { ...item, ...next } : item)));
   const hasOptions = q.type === "single" || q.type === "multiple";
 
+  // 선택지 입력은 raw 문자열을 보관한다 — options 배열을 그대로 value 로 쓰면
+  // 개행이 파싱 단계에서 제거돼 타이핑으로 줄을 늘릴 수 없다(붙여넣기만 가능해짐).
+  const [optRaw, setOptRaw] = useState(() => q.options.join("\n"));
+  const onOptChange = (v: string) => {
+    setOptRaw(v);
+    patch({ options: v.split("\n").map((s) => s.trim()).filter(Boolean) });
+  };
+
   return (
     <Reorder.Item value={q} dragListener={false} dragControls={dragControls} layout className="rounded-xl border border-border bg-background px-2 py-2">
       <div className={ROW_GRID}>
@@ -66,7 +75,7 @@ function QuestionRow({
           ))}
         </select>
         <Switch checked={q.required} onChange={(v) => patch({ required: v })} label={`${q.title || "문항"} 필수`} />
-        <button type="button" onClick={onRemove} aria-label="문항 삭제" className="p-1 rounded-md text-muted-foreground/50 hover:text-red-500 transition-colors justify-self-center">
+        <button type="button" onClick={onRemove} aria-label="문항 삭제" className="grid min-h-[36px] min-w-[36px] place-items-center rounded-md text-muted-foreground/50 transition-colors hover:text-red-500 justify-self-center">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -74,11 +83,17 @@ function QuestionRow({
         <div className="mt-2 ml-8 mr-1">
           <textarea
             rows={2}
-            value={q.options.join("\n")}
-            onChange={(e) => patch({ options: e.target.value.split("\n").map((v) => v.trim()).filter(Boolean) })}
+            value={optRaw}
+            onChange={(e) => onOptChange(e.target.value)}
             placeholder={"선택지 — 한 줄에 하나씩"}
+            aria-label={`${q.title || "문항"} 선택지`}
             className={`${inputCls} resize-none`}
           />
+          {q.options.length === 0 && (
+            <p className="mt-1 text-[11px] text-amber-600">
+              선택지가 없으면 응답 화면에 표시되지 않아요{q.required ? " — 필수 문항이라 제출도 막혀요" : ""}.
+            </p>
+          )}
         </div>
       )}
     </Reorder.Item>
@@ -177,6 +192,11 @@ function SurveyEditor({
       {questions.some((q) => !q.title.trim()) && (
         <p className="text-[11px] text-muted-foreground/70">제목이 빈 문항은 저장은 되지만 응답 화면에는 표시되지 않아요.</p>
       )}
+      {(survey._count?.responses ?? 0) > 0 && (
+        <p className="text-[11px] text-amber-600">
+          이미 {survey._count?.responses}건이 응답했어요 — 문항을 지우거나 선택지 문구를 바꾸면 기존 응답이 결과 집계에서 빠져요.
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-3">
         <label className="flex items-center gap-2 text-xs text-muted-foreground select-none">
@@ -217,7 +237,7 @@ export default function SurveyTab({ webinarId, slug }: { webinarId: string; slug
       const res = await fetch(`/api/webinars/${webinarId}/surveys`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "만족도 설문", questions: DEFAULT_QUESTIONS }),
+        body: JSON.stringify({ title: "만족도 설문", questions: buildDefaultQuestions() }),
       });
       if (!res.ok) { toast.error("설문 생성에 실패했어요"); return; }
       const data = await res.json();

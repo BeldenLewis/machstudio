@@ -29,19 +29,30 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!announcement) return NextResponse.json({ error: "공지를 찾지 못했어요" }, { status: 404 });
 
   // 라이브 페이지는 공지 1건(가장 최근)만 노출한다 — 여러 개를 켜면 관리자 표시와 시청자 화면이 어긋난다.
-  // 하나를 켤 때 같은 웨비나의 나머지 공지는 자동으로 끄는 단일 활성(라디오) 규칙으로 상태를 일치시킨다.
-  const [updated] = await prisma.$transaction([
-    prisma.webinarAnnouncement.update({
-      where: { id: announcement.id },
-      data: { ...(body.isActive !== undefined && { isActive: body.isActive }), ...(body.message !== undefined && { message: body.message }) },
-    }),
-    ...(body.isActive === true
-      ? [prisma.webinarAnnouncement.updateMany({
-          where: { webinarId: id, id: { not: announcement.id }, isActive: true },
-          data: { isActive: false },
-        })]
-      : []),
-  ]);
+  // 다른 푸시들과 같은 규약: 나머지를 먼저 끈 뒤 대상을 켠다(부분 유니크 인덱스와 순서가 맞아야 한다).
+  let updated;
+  try {
+    const ops = [
+      ...(body.isActive === true
+        ? [prisma.webinarAnnouncement.updateMany({
+            where: { webinarId: id, id: { not: announcement.id }, isActive: true },
+            data: { isActive: false },
+          })]
+        : []),
+      prisma.webinarAnnouncement.update({
+        where: { id: announcement.id },
+        data: { ...(body.isActive !== undefined && { isActive: body.isActive }), ...(body.message !== undefined && { message: body.message }) },
+      }),
+    ];
+    const results = await prisma.$transaction(ops);
+    updated = results[results.length - 1] as Awaited<ReturnType<typeof prisma.webinarAnnouncement.update>>;
+  } catch (e) {
+    // 부분 유니크 인덱스(웨비나당 활성 1개) 위반 — 동시에 다른 공지가 켜진 경우. 500 대신 409.
+    if (e && typeof e === "object" && (e as { code?: string }).code === "P2002") {
+      return NextResponse.json({ error: "다른 공지가 방금 켜졌어요. 새로고침 후 다시 시도해주세요." }, { status: 409 });
+    }
+    throw e;
+  }
 
   await logActivity({
     workspaceId: webinar.workspaceId,

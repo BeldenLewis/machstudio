@@ -82,7 +82,7 @@ export async function assembleWebinarEngagement(
   const liveMinutes = Math.max(1, Math.floor((live.liveEndAt.getTime() - live.liveStartAt.getTime()) / 60000));
   const capMinutes = Math.max(0, Math.floor((Math.min(now, live.liveEndAt.getTime()) - live.liveStartAt.getTime()) / 60000));
 
-  const [regs, chatG, pollG, qaAskG, qaVoteG, ctaG] = await Promise.all([
+  const [regs, chatG, pollG, qaAskG, qaVoteG, ctaG, segG] = await Promise.all([
     prisma.webinarRegistration.findMany({
       where: { webinarId },
       select: { id: true, name: true, company: true, enteredAt: true, stayMinutes: true, lastPingAt: true, agreeMarketing: true },
@@ -92,6 +92,14 @@ export async function assembleWebinarEngagement(
     prisma.webinarQA.groupBy({ by: ["registrationId"], where: { webinarId, registrationId: { not: null } }, _count: { _all: true } }),
     prisma.webinarQAVote.groupBy({ by: ["registrationId"], where: { registrationId: { not: null }, qa: { webinarId } }, _count: { _all: true } }),
     prisma.webinarPopupClick.groupBy({ by: ["registrationId"], where: { webinarId, registrationId: { not: null } }, _count: { _all: true } }),
+    // 실제 시청 구간 합 — "입장~마지막활동" 스팬은 중간 이탈(자리비움)까지 시청으로 세어 과대집계된다.
+    prisma.$queryRaw<{ registrationId: string; minutes: number }[]>`
+      SELECT "registrationId",
+             FLOOR(SUM(EXTRACT(EPOCH FROM ("endedAt" - "startedAt"))) / 60)::int AS "minutes"
+        FROM "WebinarAttendanceSegment"
+       WHERE "webinarId" = ${webinarId}
+       GROUP BY "registrationId"
+    `,
   ]);
 
   const chatMap = countMap(chatG);
@@ -100,11 +108,18 @@ export async function assembleWebinarEngagement(
   const qaVoteMap = countMap(qaVoteG);
   const ctaMap = countMap(ctaG);
 
+  const segMap = new Map<string, number>();
+  for (const s of segG) segMap.set(s.registrationId, Number(s.minutes) || 0);
+
   const rows: ScoredRow[] = regs.map((r) => {
     const entered = !!r.enteredAt;
-    const effRaw = entered
-      ? Math.max(r.stayMinutes ?? 0, Math.floor(((r.lastPingAt?.getTime() ?? now) - (r.enteredAt as Date).getTime()) / 60000))
-      : 0;
+    // 우선순위: 실제 시청 구간 합 → (구간 기록이 없는 과거 데이터만) 입장~마지막활동 스팬.
+    const segMinutes = segMap.get(r.id);
+    const effRaw = !entered
+      ? 0
+      : segMinutes !== undefined
+        ? segMinutes
+        : Math.max(r.stayMinutes ?? 0, Math.floor(((r.lastPingAt?.getTime() ?? now) - (r.enteredAt as Date).getTime()) / 60000));
     const watchMinutes = Math.min(capMinutes, Math.max(0, effRaw));
     const chat = chatMap.get(r.id) ?? 0;
     const pollVotes = pollMap.get(r.id) ?? 0;

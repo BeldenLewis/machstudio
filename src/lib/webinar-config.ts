@@ -182,7 +182,10 @@ export function normalizeRegistrationForm(
   );
 
   return {
-    fields: opts?.includeDisabled ? fields : fields.filter((field) => field.enabled !== false),
+    // 공개 화면에서는 비활성 필드와 "옵션 0개 드롭다운"(그릴 수 없어 필수면 등록을 막는다)을 제외한다.
+    fields: opts?.includeDisabled
+      ? fields
+      : fields.filter((field) => field.enabled !== false && !(field.type === "select" && !(field.options ?? []).length)),
     privacyText: typeof raw?.privacyText === "string" ? raw.privacyText : "[필수] 개인정보 수집 및 이용에 동의합니다",
     marketingText: typeof raw?.marketingText === "string" ? raw.marketingText : "[선택] 마케팅 정보 수신에 동의합니다",
     privacyBody: typeof raw?.privacyBody === "string" ? raw.privacyBody : "",

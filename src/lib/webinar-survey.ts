@@ -38,7 +38,11 @@ export function normalizeSurveyQuestions(raw: unknown, opts?: { keepEmptyTitles?
       required: q.required === true,
       options: Array.isArray(q.options) ? q.options.map(String).filter(Boolean).slice(0, 20) : [],
     }));
-  return (opts?.keepEmptyTitles ? normalized : normalized.filter((q) => q.title.trim() !== "")).slice(0, 30);
+  // 공개 화면에서는 제목이 빈 문항과 "선택지 0개 객관식"(그릴 수 없어 필수면 제출을 막는다)을 제외한다.
+  const visible = normalized.filter(
+    (q) => q.title.trim() !== "" && !((q.type === "single" || q.type === "multiple") && q.options.length === 0),
+  );
+  return (opts?.keepEmptyTitles ? normalized : visible).slice(0, 30);
 }
 
 export type SurveyAnswers = Record<string, number | string | string[]>;
@@ -54,8 +58,10 @@ export function validateSurveyAnswers(
   for (const q of questions) {
     const v = input[q.id];
     const empty = v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
+    // 선택지가 없는 객관식은 응답 화면에 그릴 수 없다 — 필수로 두면 제출 자체가 막히므로 건너뛴다.
+    const unanswerable = (q.type === "single" || q.type === "multiple") && q.options.length === 0;
     if (empty) {
-      if (q.required) return { ok: false, error: `"${q.title}" 항목에 답해주세요.` };
+      if (q.required && !unanswerable) return { ok: false, error: `"${q.title}" 항목에 답해주세요.` };
       continue;
     }
     switch (q.type) {

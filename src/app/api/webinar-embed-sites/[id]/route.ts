@@ -32,13 +32,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const body = await request.json();
   const data: Record<string, unknown> = {};
 
+  // 이 URL 들은 파트너 사이트의 a[href]·window.open 으로 들어간다 →
+  // javascript: 같은 스킴이 저장되면 남의 도메인 컨텍스트에서 실행된다. http(s) 만 허용.
+  const safeUrl = (v: string) => {
+    const s = v.trim();
+    if (!s) return null;
+    try {
+      const u = new URL(s);
+      return u.protocol === "http:" || u.protocol === "https:" ? s : null;
+    } catch {
+      return null; // 상대경로·형식 오류는 저장하지 않는다
+    }
+  };
+
   if (typeof body.name === "string" && body.name.trim()) data.name = body.name.trim();
-  if (typeof body.siteUrl === "string") data.siteUrl = body.siteUrl.trim() || null;
-  if (typeof body.livePageUrl === "string") data.livePageUrl = body.livePageUrl.trim() || null;
+  if (typeof body.siteUrl === "string") data.siteUrl = safeUrl(body.siteUrl);
+  if (typeof body.livePageUrl === "string") data.livePageUrl = safeUrl(body.livePageUrl);
   if (typeof body.isActive === "boolean") data.isActive = body.isActive;
 
-  // allowedOrigins: 저장만 하고 아직 강제하지 않음. register 응답은 여전히 Access-Control-Allow-Origin:* 를 반환한다.
-  // (향후 오리진 허용목록 기능을 위해 예약된 필드 — 현재는 CORS 보호를 제공하지 않음)
+  // allowedOrigins — config 라우트에서 실제로 강제한다(설정 시 미일치 오리진은 403).
   const allowedOrigins = cleanStringArray(body.allowedOrigins);
   if (allowedOrigins !== undefined) data.allowedOrigins = allowedOrigins;
   const bannerPagePatterns = cleanStringArray(body.bannerPagePatterns);

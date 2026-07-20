@@ -48,6 +48,14 @@ function FieldRow({
   const isName = field.system && field.key === "name";
   const typeLocked = field.system && ["name", "phone", "email"].includes(field.key);
 
+  // 드롭다운 옵션은 raw 문자열 보관 — 파싱된 배열을 value 로 되돌리면 개행이 즉시 사라져
+  // 타이핑으로 옵션을 추가할 수 없다(붙여넣기만 가능해짐).
+  const [optRaw, setOptRaw] = useState(() => (field.options ?? []).join("\n"));
+  const onOptChange = (v: string) => {
+    setOptRaw(v);
+    patch({ options: v.split("\n").map((s) => s.trim()).filter(Boolean) });
+  };
+
   return (
     <Reorder.Item
       value={field}
@@ -99,7 +107,7 @@ function FieldRow({
             type="button"
             onClick={onRemove}
             aria-label={`${field.label} 삭제`}
-            className="p-1 rounded-md text-muted-foreground/50 hover:text-red-500 transition-colors justify-self-center"
+            className="grid min-h-[36px] min-w-[36px] place-items-center rounded-md text-muted-foreground/50 transition-colors hover:text-red-500 justify-self-center"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -110,11 +118,17 @@ function FieldRow({
         <div className="mt-2 ml-8 mr-1">
           <textarea
             rows={2}
-            value={(field.options ?? []).join("\n")}
-            onChange={(e) => patch({ options: e.target.value.split("\n").map((v) => v.trim()).filter(Boolean) })}
+            value={optRaw}
+            onChange={(e) => onOptChange(e.target.value)}
             placeholder={"드롭다운 옵션 — 한 줄에 하나씩"}
+            aria-label={`${field.label || "필드"} 옵션`}
             className={`${inputCls} resize-none`}
           />
+          {(field.options ?? []).length === 0 && field.enabled && (
+            <p className="mt-1 text-[11px] text-amber-600">
+              옵션이 없으면 등록 폼에 표시되지 않아요{field.required ? " — 필수 항목이라 등록도 막혀요" : ""}.
+            </p>
+          )}
         </div>
       )}
     </Reorder.Item>
@@ -242,9 +256,9 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         keepalive: true, // 페이지 이탈 중 flush 도 서버에 도달하도록
+        // 이 탭이 소유한 registrationForm 키만 보낸다(서버가 config 를 키 단위로 병합).
         body: JSON.stringify({
           config: {
-            ...(webinar.config ?? {}),
             registrationForm: {
               fields,
               privacyText: privacyText.trim() || initial.privacyText,

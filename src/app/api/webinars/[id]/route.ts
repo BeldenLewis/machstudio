@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma";
 import { logActivity } from "@/lib/activity";
 import { isWebinarStatusOverride } from "@/lib/webinar-status";
 
@@ -56,20 +57,77 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "잘못된 상태 값이에요" }, { status: 400 });
   }
 
-  const updated = await prisma.webinar.update({
-    where: { id },
-    data: {
-      ...(name !== undefined && { name }),
-      ...(description !== undefined && { description }),
-      ...(liveStartAt !== undefined && { liveStartAt: new Date(liveStartAt) }),
-      ...(liveEndAt !== undefined && { liveEndAt: new Date(liveEndAt) }),
-      ...(signupDeadline !== undefined && { signupDeadline: new Date(signupDeadline) }),
-      ...(theme !== undefined && { theme }),
-      ...(config !== undefined && { config }),
-      ...(statusOverride !== undefined && { statusOverride }),
-      ...(components !== undefined && { components }),
-    },
-  });
+  // 날짜는 무효 문자열이면 Prisma 가 500 을 내므로 여기서 걸러 400 으로 돌려준다.
+  const parseDate = (v: unknown, label: string) => {
+    const d = new Date(v as string);
+    if (Number.isNaN(d.getTime())) throw new Error(`${label} 형식이 올바르지 않아요`);
+    return d;
+  };
+
+  // config·components 는 탭마다 자기 키만 보낸다 → 서버에서 최상위 키 단위로 병합한다.
+  // 통째 교체하면 A 탭 저장 직후 B 탭이 옛 스냅샷으로 덮어써 방금 저장한 설정이 롤백된다.
+  // 이 값들은 임베드 로더를 통해 파트너 사이트의 href·stylesheet 로 들어간다.
+  // javascript: 스킴이나 CSS 이스케이프 문자가 저장되면 남의 도메인에서 실행·훼손된다.
+  const URL_KEYS = ["surveyUrl", "calendarUrl"];
+  const sanitizeConfig = (input: Record<string, unknown>) => {
+    const out = { ...input };
+    for (const k of URL_KEYS) {
+      const v = out[k];
+      if (typeof v !== "string" || !v.trim()) continue;
+      try {
+        const u = new URL(v.trim());
+        if (u.protocol !== "http:" && u.protocol !== "https:") out[k] = null;
+      } catch { out[k] = null; }
+    }
+    return out;
+  };
+  // 색상은 #hex / rgb() / 색상이름만, 반지름은 길이 단위만 — 중괄호 등으로 셀렉터를 탈출하지 못하게.
+  const SAFE_COLOR = /^(#[0-9a-fA-F]{3,8}|rgba?\([\d\s.,%]+\)|[a-zA-Z]+)$/;
+  const SAFE_LENGTH = /^\d+(\.\d+)?(px|rem|em|%)?$/;
+  const sanitizeTheme = (input: Record<string, unknown>) => {
+    const out = { ...input };
+    for (const [k, v] of Object.entries(out)) {
+      if (typeof v !== "string") continue;
+      const s = v.trim();
+      const ok = k.toLowerCase().includes("radius") ? SAFE_LENGTH.test(s) : SAFE_COLOR.test(s);
+      if (!ok) delete out[k];
+    }
+    return out;
+  };
+
+  const mergeJson = (current: unknown, incoming: unknown): Prisma.InputJsonValue | typeof Prisma.JsonNull => {
+    if (incoming === null) return Prisma.JsonNull; // 명시적 초기화
+    if (typeof incoming !== "object" || Array.isArray(incoming)) return incoming as Prisma.InputJsonValue;
+    const base = current && typeof current === "object" && !Array.isArray(current) ? (current as Record<string, unknown>) : {};
+    return { ...base, ...(incoming as Record<string, unknown>) } as Prisma.InputJsonValue;
+  };
+
+  let updated;
+  try {
+    updated = await prisma.webinar.update({
+      where: { id },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(description !== undefined && { description }),
+        ...(liveStartAt !== undefined && { liveStartAt: parseDate(liveStartAt, "시작 시각") }),
+        ...(liveEndAt !== undefined && { liveEndAt: parseDate(liveEndAt, "종료 시각") }),
+        ...(signupDeadline !== undefined && { signupDeadline: parseDate(signupDeadline, "등록 마감") }),
+        ...(theme !== undefined && {
+          theme: mergeJson(webinar.theme, theme && typeof theme === "object" && !Array.isArray(theme) ? sanitizeTheme(theme as Record<string, unknown>) : theme),
+        }),
+        ...(config !== undefined && {
+          config: mergeJson(webinar.config, config && typeof config === "object" && !Array.isArray(config) ? sanitizeConfig(config as Record<string, unknown>) : config),
+        }),
+        ...(statusOverride !== undefined && { statusOverride }),
+        ...(components !== undefined && { components: mergeJson(webinar.components, components) }),
+      },
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("형식이 올바르지 않아요")) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
+    throw e;
+  }
 
   const changed = Object.keys(body).filter((k) =>
     ["name", "description", "liveStartAt", "liveEndAt", "signupDeadline", "theme", "config", "statusOverride", "components"].includes(k),

@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import { useWorkspace } from "@/contexts/workspace";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { getPublicAppOrigin } from "@/lib/app-url";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -130,7 +131,9 @@ export default function DeployTab({ webinarId }: { webinarId: string }) {
   const [bannerDrafts, setBannerDrafts] = useState<Record<string, string>>({});
   const hasLoadedRef = useRef(false);
 
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  // 스니펫은 파트너 사이트에 그대로 박히므로 배포 URL 기준이어야 한다.
+  // 접속 중인 호스트(localhost·프리뷰 배포)를 쓰면 곧 죽는 주소가 남는다.
+  const origin = getPublicAppOrigin();
 
   const fetchSites = useCallback(async () => {
     if (!workspace || !currentProject) return;

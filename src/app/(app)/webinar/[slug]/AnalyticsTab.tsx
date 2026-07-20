@@ -345,13 +345,18 @@ function Stat({ label, value, sub, tone }: { label: string; value: string; sub?:
 
 /* ── 퍼널 단계 막대 ── */
 function FunnelStep({ label, value, base, color, delay = 0 }: { label: string; value: number; base: number; color: string; delay?: number }) {
-  const width = base ? Math.max(3, Math.round((value / base) * 100)) : 0;
+  // 방문은 임베드 비콘으로만 집계돼 직접 링크 유입이 많으면 등록 > 방문이 될 수 있다.
+  // 막대는 100% 로 잘라 넘치지 않게 하고, 비율은 초과 사실을 숨기지 않고 그대로 표기한다.
+  const width = base ? Math.min(100, Math.max(3, Math.round((value / base) * 100))) : 0;
   const rate = pct(value, base);
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
         <span className="text-muted-foreground">{label}</span>
-        <span className="font-medium tabular-nums">{n(value)}명 · {rate}%</span>
+        <span className="font-medium tabular-nums">
+          {n(value)}명 · {rate}%
+          {rate > 100 && <span className="ml-1 text-amber-600" title="방문은 임베드 위젯이 붙은 페이지에서만 집계돼요">*</span>}
+        </span>
       </div>
       <div className="h-2.5 overflow-hidden rounded-full bg-secondary">
         <motion.div
@@ -388,6 +393,8 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
   const colors = useChartColors();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [curve, setCurve] = useState<CurveData | null>(null);
+  // 전체 범위 곡선 — KPI 카드(피크·평균)는 타임라인 범위 토글과 무관하게 이 값을 쓴다.
+  const [fullCurve, setFullCurve] = useState<CurveData | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [range, setRange] = useState<Range>("all");
   const [isLoading, setIsLoading] = useState(true);
@@ -419,7 +426,12 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
     setCurveLoading(true);
     try {
       const res = await fetch(`/api/webinars/${webinarId}/analytics/attendance-curve?range=${r}`);
-      if (res.ok) setCurve(await res.json());
+      if (!res.ok) return;
+      const next: CurveData = await res.json();
+      setCurve(next);
+      // KPI(피크·평균)는 방송 전체 기준이어야 한다 — 타임라인 범위(30분/60분)를 좁히면
+      // 그 구간의 피크가 카드에 찍혀 실제보다 작은 숫자가 보인다.
+      if (r === "all") setFullCurve(next);
     } finally {
       setCurveLoading(false);
     }
@@ -428,7 +440,8 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
   useEffect(() => { void fetchCore(); }, [fetchCore]);
   useEffect(() => { void fetchCurve(range); }, [range, fetchCurve]);
 
-  const refreshAll = () => { void fetchCore(true); void fetchCurve(range); };
+  // 좁은 범위를 보고 있어도 KPI 는 전체 기준이라 'all' 곡선도 함께 갱신한다.
+  const refreshAll = () => { void fetchCore(true); void fetchCurve(range); if (range !== "all") void fetchCurve("all"); };
   const exportCsv = () => { window.open(`/api/webinars/${webinarId}/registrations/export`, "_blank"); };
 
   // 운영 이벤트를 시청 곡선의 버킷에 스냅 (fromMs + i*bucketMs)
@@ -474,8 +487,8 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
   const trend = data.registrationTrend ?? [];
   const hasVisits = data.hasVisitData;
   const funnelBase = hasVisits ? funnel.visits : funnel.registered;
-  const peak = curve?.peak ?? 0;
-  const avgConc = curve?.avg ?? 0;
+  const peak = fullCurve?.peak ?? curve?.peak ?? 0;
+  const avgConc = fullCurve?.avg ?? curve?.avg ?? 0;
   const chatParticipation = pct(interactions.chat.participants, funnel.attended);
 
   return (
@@ -543,7 +556,12 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
           </p>
         ) : (
           <>
-            <div className="h-64" style={{ opacity: curveLoading ? 0.5 : 1, transition: "opacity .2s" }}>
+            <div
+              className="h-64"
+              style={{ opacity: curveLoading ? 0.5 : 1, transition: "opacity .2s" }}
+              role="img"
+              aria-label={`시청 곡선 — 피크 ${n(peak)}명, 평균 ${n(avgConc)}명. 아래 표와 지표 카드에 같은 수치가 있어요.`}
+            >
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={curve.points} margin={{ top: 6, right: 4, bottom: 0, left: -16 }}>
                   <defs>

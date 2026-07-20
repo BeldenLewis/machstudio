@@ -165,21 +165,25 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
   // 자동저장 — 폼·CTA·테마 변경 시 디바운스 후 PATCH. 성공하면 상위 config 를 조용히 최신화.
   const save = async () => {
     try {
+      // 입력이 비면 의도적 해제(null)지만, 값이 있는데 파싱 실패면 저장에서 제외한다.
+      // 오타 한 글자로 방송 중인 영상 ID 가 지워지는 걸 막는다(경고는 입력란 아래 인라인).
+      const youtubeTouched = form.youtubeId.trim() === "" || youtubeVideoId !== null;
       const res = await fetch(`/api/webinars/${webinar.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         keepalive: true, // 페이지 이탈 중 flush 도 서버에 도달하도록
+        // 이 탭이 소유한 키만 보낸다 — 서버가 config 를 키 단위로 병합하므로
+        // 옛 스냅샷을 스프레드하면 다른 탭이 방금 저장한 값을 되돌린다.
         body: JSON.stringify({
           config: {
-            ...(webinar.config ?? {}),
-            youtubeId: youtubeVideoId,
+            ...(youtubeTouched ? { youtubeId: youtubeVideoId } : {}),
             calendarUrl: form.calendarUrl.trim() || null,
             surveyUrl: form.surveyUrl.trim() || null,
             livePage: buildLivePage(),
           },
           theme,
           // 다른 components 키(allowLiveRegistration 등)는 보존
-          components: { ...(webinar.components ?? {}), chatEnabled: form.chatEnabled },
+          components: { chatEnabled: form.chatEnabled },
         }),
       });
       if (!res.ok) { toast.error("자동 저장 실패 — 잠시 후 다시 시도돼요", { id: "autosave-error" }); return false; }

@@ -56,6 +56,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   for (const field of fields) {
     if (!field.required) continue;
+    // 옵션이 하나도 없는 드롭다운은 화면에 그릴 수 없다 — 필수로 두면 등록 자체가 막히므로 건너뛴다.
+    if (field.type === "select" && !(field.options ?? []).length) continue;
     const value = field.system ? body[field.key] : customAnswers[field.key];
     if (field.type === "checkbox") {
       if (!value) return NextResponse.json({ error: `${field.label} 항목에 동의해주세요` }, { status: 400, headers: CORS_HEADERS });
@@ -117,7 +119,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       webinarId: webinar.id,
       OR: [
         ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
-        ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+        // 실시간 확인과 같은 기준으로, 과거의 대문자 포함 이메일도 중복으로 차단한다.
+        ...(normalizedEmail ? [{ email: { equals: normalizedEmail, mode: "insensitive" as const } }] : []),
       ],
     },
     orderBy: { submittedAt: "asc" },

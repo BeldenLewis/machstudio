@@ -90,6 +90,14 @@ interface AdminTallyPush {
   createdAt: string;
 }
 
+interface AdminSurveyPush {
+  id: string;
+  title: string;
+  isActive: boolean;
+  isOpen: boolean;
+  _count?: { responses: number };
+}
+
 interface AdminPollOption {
   id: string;
   label: string;
@@ -227,16 +235,22 @@ function PopupPanel({ webinarId }: { webinarId: string }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isActive: !popup.isActive }),
     });
-    if (res.ok) {
-      toast.success(popup.isActive ? "팝업을 껐어요" : "팝업이 시청자에게 표시돼요 (다른 팝업은 자동 OFF)");
+    // 실패를 무음 처리하면 "켰다고 믿는데 시청자에겐 안 뜨는" 라이브 사고가 된다.
+    if (!res.ok) {
+      toast.error(res.status === 409 ? "다른 팝업이 방금 켜졌어요. 목록을 새로고침했어요." : "변경에 실패했어요");
       void fetchPopups();
+      return;
     }
+    toast.success(popup.isActive ? "팝업을 껐어요" : "팝업이 시청자에게 표시돼요 (다른 팝업은 자동 OFF)");
+    void fetchPopups();
   };
 
   const remove = async (popup: AdminPopup) => {
     if (!(await confirm({ title: "팝업을 삭제할까요?", description: `"${popup.title}"`, confirmLabel: "삭제", tone: "danger" }))) return;
     const res = await fetch(`/api/webinars/${webinarId}/popups/${popup.id}`, { method: "DELETE" });
-    if (res.ok) { toast.success("삭제했어요"); void fetchPopups(); }
+    if (!res.ok) { toast.error("삭제에 실패했어요"); void fetchPopups(); return; }
+    toast.success("삭제했어요");
+    void fetchPopups();
   };
 
   const inputCls = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
@@ -400,16 +414,21 @@ function TallyPanel({ webinarId }: { webinarId: string }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isActive: !push.isActive }),
     });
-    if (res.ok) {
-      toast.success(push.isActive ? "푸시를 껐어요" : "시청자 화면에 설문이 표시돼요 (다른 푸시는 자동 OFF)");
+    if (!res.ok) {
+      toast.error(res.status === 409 ? "다른 푸시가 방금 켜졌어요. 목록을 새로고침했어요." : "변경에 실패했어요");
       void fetchPushes();
+      return;
     }
+    toast.success(push.isActive ? "푸시를 껐어요" : "시청자 화면에 설문이 표시돼요 (다른 푸시는 자동 OFF)");
+    void fetchPushes();
   };
 
   const remove = async (push: AdminTallyPush) => {
     if (!(await confirm({ title: "푸시를 삭제할까요?", description: `"${push.title}"`, confirmLabel: "삭제", tone: "danger" }))) return;
     const res = await fetch(`/api/webinars/${webinarId}/tally-pushes/${push.id}`, { method: "DELETE" });
-    if (res.ok) { toast.success("삭제했어요"); void fetchPushes(); }
+    if (!res.ok) { toast.error("삭제에 실패했어요"); void fetchPushes(); return; }
+    toast.success("삭제했어요");
+    void fetchPushes();
   };
 
   const inputCls = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400";
@@ -481,8 +500,13 @@ function PollPanel({ webinarId, tick = 0 }: { webinarId: string; tick?: number }
   const [editQuestion, setEditQuestion] = useState("");
   const [editOptions, setEditOptions] = useState<{ id: string; label: string }[]>([]);
 
+  // 인플라이트 펜스 — 늦게 도착한 tick 응답이 방금 켠 ON/OFF 를 stale 값으로 되돌리지 않게.
+  const pollReqRef = useRef(0);
+  const mutatingRef = useRef(false);
   const fetchPolls = useCallback(async () => {
+    const my = ++pollReqRef.current;
     const res = await fetch(`/api/webinars/${webinarId}/polls`);
+    if (my !== pollReqRef.current) return; // 더 새 요청이 출발했다 — 이 응답은 버린다
     if (res.ok) setPolls((await res.json()).polls ?? []);
   }, [webinarId]);
   useEffect(() => { void fetchPolls(); }, [fetchPolls]);
@@ -493,7 +517,7 @@ function PollPanel({ webinarId, tick = 0 }: { webinarId: string; tick?: number }
   const tickMountedRef = useRef(false);
   useEffect(() => {
     if (!tickMountedRef.current) { tickMountedRef.current = true; return; }
-    if (tick > 0 && !editIdRef.current) void fetchPolls();
+    if (tick > 0 && !editIdRef.current && !mutatingRef.current) void fetchPolls();
   }, [tick, fetchPolls]);
 
   const create = async () => {
@@ -519,21 +543,36 @@ function PollPanel({ webinarId, tick = 0 }: { webinarId: string; tick?: number }
   };
 
   const toggle = async (poll: AdminPoll) => {
-    const res = await fetch(`/api/webinars/${webinarId}/polls/${poll.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isActive: !poll.isActive }),
-    });
-    if (res.ok) {
+    mutatingRef.current = true;
+    try {
+      const res = await fetch(`/api/webinars/${webinarId}/polls/${poll.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !poll.isActive }),
+      });
+      if (!res.ok) {
+        toast.error(res.status === 409 ? "다른 투표가 방금 켜졌어요. 목록을 새로고침했어요." : "변경에 실패했어요");
+        await fetchPolls();
+        return;
+      }
       toast.success(poll.isActive ? "투표를 껐어요" : "투표가 시청자에게 표시돼요 (다른 투표는 자동 OFF)");
-      void fetchPolls();
+      await fetchPolls();
+    } finally {
+      mutatingRef.current = false;
     }
   };
 
   const remove = async (poll: AdminPoll) => {
     if (!(await confirm({ title: "투표를 삭제할까요?", description: `"${poll.question}" — 응답 기록도 함께 삭제돼요.`, confirmLabel: "삭제", tone: "danger" }))) return;
-    const res = await fetch(`/api/webinars/${webinarId}/polls/${poll.id}`, { method: "DELETE" });
-    if (res.ok) { toast.success("삭제했어요"); void fetchPolls(); }
+    mutatingRef.current = true;
+    try {
+      const res = await fetch(`/api/webinars/${webinarId}/polls/${poll.id}`, { method: "DELETE" });
+      if (!res.ok) { toast.error("삭제에 실패했어요"); await fetchPolls(); return; }
+      toast.success("삭제했어요");
+      await fetchPolls();
+    } finally {
+      mutatingRef.current = false;
+    }
   };
 
   const startEdit = (poll: AdminPoll) => {
@@ -1270,12 +1309,13 @@ function RunningOrder({ sessions, liveStartAt }: { sessions: WebinarForConsole["
 const DRAWER_SPRING = { type: "spring", stiffness: 420, damping: 34 } as const;
 
 // 인터랙션 — 통합 송출 카드. 타입별 현재/활성 항목을 토글 행으로, 활성 투표는 실시간 결과 프리뷰.
-// 생성/편집·알림 발송은 헤더 ⚙(또는 하단 버튼)으로 여는 우측 설정 드로어(세그먼트 탭)에서.
+// 생성/편집·알림 발송은 헤더 ⚙로 여는 우측 설정 드로어(세그먼트 탭)에서.
 function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; tick?: number; sections: { key: string; label: string; icon: typeof Bell; render: (open: boolean) => ReactNode }[] }) {
   const [polls, setPolls] = useState<AdminPoll[]>([]);
   const [anns, setAnns] = useState<{ id: string; message: string; isActive: boolean }[]>([]);
   const [popups, setPopups] = useState<{ id: string; title: string; isActive: boolean }[]>([]);
   const [tallies, setTallies] = useState<{ id: string; title: string; isActive: boolean }[]>([]);
+  const [surveys, setSurveys] = useState<AdminSurveyPush[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [hasOpened, setHasOpened] = useState(false);
   const openDrawer = () => { setHasOpened(true); setDrawerOpen(true); };
@@ -1283,22 +1323,38 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
   // 최초 열람 후 유지(mount-on-first-view) — 드로어 열 때 안 본 탭까지 즉시 fetch 하지 않게 방문한 섹션만 마운트.
   const [visited, setVisited] = useState<string[]>(() => (sections[0]?.key ? [sections[0].key] : []));
   const selectSection = (key: string) => { setActiveSection(key); setVisited((v) => (v.includes(key) ? v : [...v, key])); };
+  const openDrawerTo = (key: string) => { selectSection(key); openDrawer(); };
   const panelRef = useRef<HTMLDivElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const mut = useRef(false);
 
+  // 인플라이트 펜스 — tick 으로 출발한 응답이 patch 이후에 도착해 방금 켠 스위치를 되돌리면
+  // 운영자가 다시 눌러 실제 송출을 꺼버리는 역전 사고가 난다.
+  const reqRef = useRef(0);
   const fetchAll = useCallback(async () => {
+    const my = ++reqRef.current;
     const safe = async (url: string, key: string) => { try { const r = await fetch(url); if (!r.ok) return []; return (await r.json())[key] ?? []; } catch { return []; } };
-    const [p, a, pu, t] = await Promise.all([
+    const [p, a, pu, t, s] = await Promise.all([
       safe(`/api/webinars/${webinarId}/polls`, "polls"),
       safe(`/api/webinars/${webinarId}/announcements`, "announcements"),
       safe(`/api/webinars/${webinarId}/popups`, "popups"),
       safe(`/api/webinars/${webinarId}/tally-pushes`, "tallyPushes"),
+      safe(`/api/webinars/${webinarId}/surveys`, "surveys"),
     ]);
-    setPolls(p); setAnns(a); setPopups(pu); setTallies(t);
+    if (my !== reqRef.current) return; // 더 새 요청이 출발했다 — 이 응답은 버린다
+    setPolls(p); setAnns(a); setPopups(pu); setTallies(t); setSurveys(s);
   }, [webinarId]);
   useEffect(() => { void fetchAll(); }, [fetchAll]);
   useEffect(() => { if (tick > 0 && !mut.current) void fetchAll(); }, [tick, fetchAll]);
+  // 드로어를 다시 열 때마다 카드와 패널을 모두 최신화한다.
+  // 패널은 마운트 유지형이라 openGen 을 key 에 섞어 재마운트 = 재조회시킨다
+  // (다른 운영자가 바꾼 내용이 닫혀 있는 동안 반영되지 않던 문제).
+  const [openGen, setOpenGen] = useState(0);
+  useEffect(() => {
+    if (!drawerOpen) return;
+    setOpenGen((g) => g + 1);
+    void fetchAll();
+  }, [drawerOpen, fetchAll]);
 
   const patch = async (seg: string, id: string, isActive: boolean, name: string) => {
     mut.current = true;
@@ -1306,7 +1362,12 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
       const res = await fetch(`/api/webinars/${webinarId}/${seg}/${id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isActive }),
       });
-      if (!res.ok) { toast.error(res.status === 409 ? "다른 항목이 방금 켜졌어요. 새로고침 후 다시 시도해주세요." : "변경에 실패했어요"); return; }
+      // 실패해도 목록을 다시 읽는다 — "다른 항목이 켜졌다"는 사실이 카드에 보여야 재시도 판단이 된다.
+      if (!res.ok) {
+        toast.error(res.status === 409 ? "다른 항목이 방금 켜졌어요. 목록을 새로고침했어요." : "변경에 실패했어요");
+        await fetchAll();
+        return;
+      }
       toast.success(isActive ? `${name} 송출 시작` : `${name} 송출 종료`);
       await fetchAll();
     } finally { mut.current = false; }
@@ -1349,8 +1410,11 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
   }, [drawerOpen]);
 
   const activePoll = polls.find((p) => p.isActive) ?? null;
+  // 마감된 설문은 발행해도 시청자에게 보이지 않으므로, 새 발행 대상으로는 열려 있는 설문만 노출한다.
+  const currentSurvey = surveys.find((s) => s.isActive) ?? surveys.find((s) => s.isOpen) ?? null;
   const rows = [
     { seg: "polls", icon: BarChart3, tone: "bg-violet-500/10 text-violet-600 dark:text-violet-400", name: "실시간 투표", cur: activePoll ?? polls[0] ?? null, summary: (activePoll ?? polls[0])?.question ?? "등록된 투표 없음" },
+    { seg: "surveys", icon: ClipboardCheck, tone: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", name: "설문", cur: currentSurvey, summary: currentSurvey?.title ?? "등록된 설문 없음" },
     { seg: "announcements", icon: Megaphone, tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400", name: "공지", cur: anns.find((a) => a.isActive) ?? anns[0] ?? null, summary: (anns.find((a) => a.isActive) ?? anns[0])?.message ?? "등록된 공지 없음" },
     { seg: "popups", icon: MessageSquarePlus, tone: "bg-secondary text-muted-foreground", name: "팝업", cur: popups.find((p) => p.isActive) ?? popups[0] ?? null, summary: (popups.find((p) => p.isActive) ?? popups[0])?.title ?? "등록된 팝업 없음" },
     { seg: "tally-pushes", icon: Bell, tone: "bg-secondary text-muted-foreground", name: "Tally 설문", cur: tallies.find((t) => t.isActive) ?? tallies[0] ?? null, summary: (tallies.find((t) => t.isActive) ?? tallies[0])?.title ?? "등록된 설문 없음" },
@@ -1384,7 +1448,15 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
                   <span className={`absolute top-[2px] h-[16px] w-[16px] rounded-full bg-white shadow transition-all ${cur.isActive ? "left-[18px]" : "left-[3px]"}`} />
                 </button>
               ) : (
-                <span className="shrink-0 text-[10px] text-muted-foreground">설정에서 추가</span>
+                <button
+                  type="button"
+                  onClick={() => openDrawerTo(r.seg === "tally-pushes" ? "tally" : r.seg)}
+                  aria-label={`${r.name} 설정 열기`}
+                  title={`${r.name} 설정`}
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
               )}
             </div>
           );
@@ -1451,7 +1523,7 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
             </div>
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
               {sections.map((s) => (visited.includes(s.key) ? (
-                <div key={s.key} className={activeSection === s.key ? "" : "hidden"}>{s.render(drawerOpen)}</div>
+                <div key={`${s.key}-${openGen}`} className={activeSection === s.key ? "" : "hidden"}>{s.render(drawerOpen)}</div>
               ) : null))}
             </div>
           </motion.div>
@@ -1486,8 +1558,19 @@ export default function LiveConsoleTab({
   const [chatOn, setChatOn] = useState<boolean>(
     () => (webinar?.components as { chatEnabled?: boolean } | null | undefined)?.chatEnabled === true,
   );
+  // 토글 직후 패널 폴링이 아직 옛 값을 물고 오면 스위치가 혼자 되돌아간다 →
+  // 서버가 내가 보낸 값을 따라잡을 때까지 패널이 올려주는 값을 무시한다.
+  const chatPendingRef = useRef<boolean | null>(null);
+  const onPanelChatEnabled = useCallback((v: boolean) => {
+    if (chatPendingRef.current !== null) {
+      if (v !== chatPendingRef.current) return; // 아직 반영 전 값 — 버린다
+      chatPendingRef.current = null;
+    }
+    setChatOn(v);
+  }, []);
   const toggleChatOn = () => {
     const next = !chatOn;
+    chatPendingRef.current = next;
     setChatOn(next);
     fetch(`/api/webinars/${webinarId}/chat`, {
       method: "PATCH",
@@ -1495,9 +1578,11 @@ export default function LiveConsoleTab({
       body: JSON.stringify({ chatEnabled: next }),
     })
       .then((r) => { if (!r.ok) throw new Error(); toast.success(next ? "시청자 채팅을 켰어요" : "시청자 채팅을 껐어요"); })
-      .catch(() => { setChatOn(!next); toast.error("변경에 실패했어요"); });
+      .catch(() => { chatPendingRef.current = null; setChatOn(!next); toast.error("변경에 실패했어요"); });
   };
   const statusRef = useRef<WebinarStatus>("registration");
+  // 라이브 진입/이탈 시 폴링 루프를 다시 짜기 위한 신호 — ref 만으로는 이미 걸린 90초 타이머가 그대로 남는다.
+  const [isLivePolling, setIsLivePolling] = useState(false);
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -1505,6 +1590,7 @@ export default function LiveConsoleTab({
       if (!res.ok) return;
       const next: DashboardData = await res.json();
       statusRef.current = next.status;
+      setIsLivePolling(next.status === "live");
       setData(next);
       setSyncAt(Date.now());
     } catch {
@@ -1548,7 +1634,9 @@ export default function LiveConsoleTab({
       schedule();
     })();
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [fetchDashboard, fetchCurve, fetchActivity]);
+    // isLivePolling 이 바뀌면 루프를 새로 짠다 — 수동으로 라이브 전환한 직후
+    // 이미 걸려 있던 90초 타이머 때문에 첫 갱신이 늦어지던 문제.
+  }, [fetchDashboard, fetchCurve, fetchActivity, isLivePolling]);
 
   const setOverride = async (value: WebinarStatus | null) => {
     if (switching) return;
@@ -1588,6 +1676,8 @@ export default function LiveConsoleTab({
   const status = data?.status ?? "registration";
   const isOverridden = data?.isOverridden ?? false;
   const summary = data?.summary;
+  // 시청자 목록은 서버에서 상위 일부만 내려온다 — 개수 표기는 항상 집계값을 쓴다.
+  const presenceTotal = summary?.presenceViewers ?? 0;
   const viewers = data?.currentViewers ?? [];
   const meta = STATUS_META[status];
   // 활동 로그 → 차트 이벤트 마커(KST 분 단위). 최근 8건.
@@ -1659,8 +1749,9 @@ export default function LiveConsoleTab({
   );
 
   const viewerSection = (
-    <Section title="시청자" icon={Activity} badge={viewers.length ? (
-      <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">{viewers.length}</span>
+    // 배지는 실제 접속자 수(summary) — viewers 는 미리보기용으로 서버에서 잘려 오므로 개수로 쓰면 안 된다.
+    <Section title="시청자" icon={Activity} badge={presenceTotal ? (
+      <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">{presenceTotal.toLocaleString()}</span>
     ) : undefined}>
       {viewers.length === 0 ? (
         <p className="text-xs text-muted-foreground">현재 시청 중인 참여자가 없어요.</p>
@@ -1701,6 +1792,9 @@ export default function LiveConsoleTab({
               </AnimatePresence>
             </tbody>
           </table>
+          {presenceTotal > viewers.length && (
+            <p className="pt-2 text-[11px] text-muted-foreground">외 {(presenceTotal - viewers.length).toLocaleString()}명 — 전체 명단은 등록자 탭에서 볼 수 있어요.</p>
+          )}
         </div>
       )}
     </Section>
@@ -1761,7 +1855,7 @@ export default function LiveConsoleTab({
         </div>
       </div>
       <div className="min-h-0 flex-1 p-4 sm:p-5">
-        <ChatPanel webinarId={webinarId} tick={liveTick} fillHeight onEnabledChange={setChatOn} />
+        <ChatPanel webinarId={webinarId} tick={liveTick} fillHeight onEnabledChange={onPanelChatEnabled} />
       </div>
     </section>
   );

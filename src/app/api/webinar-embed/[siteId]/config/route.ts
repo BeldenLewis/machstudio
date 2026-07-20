@@ -55,7 +55,16 @@ function buildIcs(webinar: { name: string; description: string | null; liveStart
   ].join("\r\n");
 }
 
-export async function GET(_req: Request, { params }: { params: Promise<{ siteId: string }> }) {
+// 허용 오리진 비교 — 스킴+호스트+포트만 본다(경로·서브도메인 부분일치는 인정하지 않는다).
+function originAllowed(reqOrigin: string | null, allowed: string[]) {
+  if (!allowed.length) return true; // 미설정 = 제한 없음(기존 동작 유지)
+  if (!reqOrigin) return false;
+  const norm = (v: string) => { try { return new URL(v).origin.toLowerCase(); } catch { return ""; } };
+  const target = norm(reqOrigin);
+  return !!target && allowed.some((a) => norm(a) === target);
+}
+
+export async function GET(req: Request, { params }: { params: Promise<{ siteId: string }> }) {
   const { siteId } = await params;
 
   const site = await prisma.webinarEmbedSite.findUnique({
@@ -66,6 +75,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ siteId:
       deletedAt: true,
       livePageUrl: true,
       bannerPagePatterns: true,
+      allowedOrigins: true,
       activeWebinar: {
         select: {
           slug: true,
@@ -90,6 +100,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ siteId:
       { error: "노출 중인 웨비나가 없어요" },
       { status: 404, headers: { ...CORS_HEADERS, "Cache-Control": CACHE_MISS } },
     );
+  }
+
+  // 허용 오리진이 설정돼 있으면 실제로 막는다 — siteId 만 알면 아무 도메인에나
+  // 스니펫을 붙여 진짜 등록 폼을 띄울 수 있던 구멍.
+  // 오리진별 응답이 갈리므로 이 경우엔 CDN 공유 캐시를 끈다(private).
+  const allowedOrigins = site.allowedOrigins ?? [];
+  if (allowedOrigins.length) {
+    const reqOrigin = req.headers.get("origin") ?? req.headers.get("referer");
+    if (!originAllowed(reqOrigin, allowedOrigins)) {
+      return NextResponse.json(
+        { error: "이 사이트에서는 사용할 수 없는 위젯이에요" },
+        { status: 403, headers: { ...CORS_HEADERS, "Cache-Control": "private, no-store" } },
+      );
+    }
   }
 
   const webinar = site.activeWebinar;
@@ -138,6 +162,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ siteId:
   };
 
   return NextResponse.json(payload, {
-    headers: { ...CORS_HEADERS, "Cache-Control": CACHE_OK },
+    // 오리진 제한이 걸린 사이트는 응답이 요청 오리진에 따라 달라지므로 공유 캐시 금지.
+    headers: { ...CORS_HEADERS, "Cache-Control": allowedOrigins.length ? "private, max-age=60" : CACHE_OK },
   });
 }

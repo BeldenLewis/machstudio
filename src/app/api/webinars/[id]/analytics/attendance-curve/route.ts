@@ -20,7 +20,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!user) return NextResponse.json({ error: "인증 필요" }, { status: 401 });
 
   const { id } = await params;
-  const webinar = await prisma.webinar.findUnique({ where: { id }, select: { workspaceId: true } });
+  const webinar = await prisma.webinar.findUnique({
+    where: { id },
+    select: { workspaceId: true, liveStartAt: true, liveEndAt: true },
+  });
   if (!webinar) return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404 });
 
   const membership = await prisma.workspaceMember.findUnique({
@@ -33,8 +36,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     _min: { startedAt: true },
     _max: { endedAt: true },
   });
-  const fullFrom = bounds._min.startedAt;
-  const to = bounds._max.endedAt;
+  // 방치된 탭의 heartbeat 가 방송 후 며칠까지 이어지면 축이 통째로 늘어나
+  // 실제 90분 방송이 한두 포인트로 뭉개진다 → 방송 시간 ±1시간으로 창을 자른다.
+  const PAD_MS = 60 * 60_000;
+  const clampLow = new Date(webinar.liveStartAt.getTime() - PAD_MS);
+  const clampHigh = new Date(webinar.liveEndAt.getTime() + PAD_MS);
+  const rawFrom = bounds._min.startedAt;
+  const rawTo = bounds._max.endedAt;
+  const fullFrom = rawFrom ? new Date(Math.max(rawFrom.getTime(), clampLow.getTime())) : null;
+  const to = rawTo ? new Date(Math.min(rawTo.getTime(), clampHigh.getTime())) : null;
 
   if (!fullFrom || !to || to.getTime() <= fullFrom.getTime()) {
     return NextResponse.json(
@@ -71,6 +81,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             (SELECT COUNT(*)::int
              FROM "WebinarChatMessage" c
              WHERE c."webinarId" = $1::text
+               AND c."isHost" = false -- KPI 카드(참여 채팅)와 같은 기준: 호스트 발화 제외
                AND c."createdAt" >= gs AND c."createdAt" < gs + make_interval(secs => $4::int)) AS chat
      FROM generate_series($2::timestamp, $3::timestamp, make_interval(secs => $4::int)) gs
      ORDER BY gs ASC`,

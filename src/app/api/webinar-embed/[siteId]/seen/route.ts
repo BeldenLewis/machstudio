@@ -7,7 +7,7 @@
  */
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { rateLimit } from "@/lib/ratelimit";
+import { rateLimitAsync } from "@/lib/ratelimit";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -40,7 +40,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ sit
     request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
     request.headers.get("x-real-ip") ??
     "unknown";
-  const rl = rateLimit(`webinar-seen:${ip}`, { limit: 60, windowMs: 60_000 });
+  // 무인증 비콘이 방문 퍼널·연결 배지를 갱신하므로 한도는 공유 스토어(Redis)로 강제해야 한다.
+  // 인메모리는 서버리스 인스턴스마다 따로라 사실상 무제한이었다.
+  const rl = await rateLimitAsync(`webinar-seen:${ip}`, { limit: 60, windowMs: 60_000 });
   if (!rl.allowed) return new NextResponse(null, { status: 429, headers: CORS_HEADERS });
 
   const body = await request.json().catch(async () => {
