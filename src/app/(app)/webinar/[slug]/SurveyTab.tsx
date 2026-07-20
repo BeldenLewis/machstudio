@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
 import { Switch } from "@/components/ui/switch";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { SURVEY_TYPE_LABELS, type SurveyQuestion, type SurveyQuestionType } from "@/lib/webinar-survey";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
@@ -102,6 +103,7 @@ function SurveyEditor({
   const [description, setDescription] = useState(survey.description ?? "");
   const [questions, setQuestions] = useState<SurveyQuestion[]>(survey.questions);
   const [copied, setCopied] = useState(false);
+  const confirm = useConfirm();
 
   const save = async () => {
     try {
@@ -128,7 +130,12 @@ function SurveyEditor({
   };
 
   const remove = async () => {
-    if (!confirm(`"${title}" 설문을 삭제할까요? 응답 ${survey._count?.responses ?? 0}건도 함께 삭제됩니다.`)) return;
+    if (!(await confirm({
+      title: "설문을 삭제할까요?",
+      description: `"${title}" — 응답 ${survey._count?.responses ?? 0}건도 함께 삭제돼요. 되돌릴 수 없어요.`,
+      confirmLabel: "삭제",
+      tone: "danger",
+    }))) return;
     const res = await fetch(`/api/webinars/${webinarId}/surveys/${survey.id}`, { method: "DELETE" });
     if (res.ok) { toast.success("설문을 삭제했어요"); onDeleted(); }
     else toast.error("삭제에 실패했어요");

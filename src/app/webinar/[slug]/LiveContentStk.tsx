@@ -294,6 +294,13 @@ const WATCH_CSS = `
 @media (max-width:720px) {
   .stk-live .lv-wrap { padding:8px 14px 40px; }
   .stk-live .lv-foot.two { grid-template-columns:1fr !important; }
+  /* 모바일 시청자 조작 컨트롤은 터치타깃 ≥44px (데스크톱 밀도는 유지) */
+  .stk-live .lv-tab { padding:13px 0; }
+  .stk-live .lv-ask input, .stk-live .lv-chatbar input { height:44px; }
+  .stk-live .lv-ask button, .stk-live .lv-chatbar button { width:44px; }
+  .stk-live .lv-chip { padding:9px 13px; }
+  .stk-live .lv-vote { min-width:44px; padding:9px 0; }
+  .stk-live .lv-share { height:44px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .stk-live .lv-livepill i, .stk-live .lv-plive i, .stk-live .lv-kicker .d, .stk-live .lv-ses.now .st .d { animation:none !important; }
