@@ -758,6 +758,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     ? `/webinar/${slug}/survey/${endedSurvey.id}?src=ended`
     : typeof webinar.config?.surveyUrl === "string" ? webinar.config.surveyUrl : "";
   const live = normalizeLivePageConfig(webinar.config);
+  // 등록 완료 여부 — 대기 화면은 모두에게 같은 걸 보여주고, 이 값으로 등록 CTA·폼만 켠다.
+  const hasRegistration = registered || !!registrationId;
 
   const renderRegistrationField = (field: RegistrationField) => {
     const commonLabel = `${field.label}${field.required ? " *" : ""}`;
@@ -966,57 +968,11 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           notifyState={{ subscribed: notifySubscribed, onToggle: handleNotifyToggle, error: notifyError, pending: notifyPending }}
         />
       ) : (
-      <div className={view === "signup" && !registered && !registrationId ? "max-w-4xl mx-auto px-4 py-12" : ""}>
-        {/* 히어로·세션 — 신규 방문자 등록 화면에서만(리디자인된 대기/입장/종료는 자체 히어로 보유) */}
-        {view === "signup" && !registered && !registrationId && (<>
-        {/* 헤더 */}
-        <div className="text-center mb-10">
-          <div
-            className="w-14 h-14 mx-auto mb-4 flex items-center justify-center"
-            style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)` }}
-          >
-            <svg className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.9L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
-            </svg>
-          </div>
-          <h1 className="text-2xl md:text-3xl font-bold mb-2">{webinar.name}</h1>
-          {webinar.description && <p className="opacity-60 text-sm whitespace-pre-wrap">{webinar.description}</p>}
-          <p className="opacity-50 text-xs mt-2">
-            {formatKst(webinar.liveStartAt, { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-            {" ~ "}
-            {formatKst(webinar.liveEndAt, { hour: "2-digit", minute: "2-digit" })}
-          </p>
-        </div>
+      <div>
 
-        {/* 세션 목록 */}
-        {webinar.sessions.length > 0 && (
-          <div className="mb-10 space-y-2">
-            <h2 className="text-sm font-semibold opacity-50 uppercase tracking-wider mb-3">세션</h2>
-            {webinar.sessions.map((session) => (
-              <div
-                key={session.id}
-                className="flex items-start gap-3 p-4"
-                style={{ backgroundColor: surface, borderRadius: radius }}
-              >
-                <div
-                  className="w-7 h-7 shrink-0 flex items-center justify-center text-xs font-bold text-white"
-                  style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.5)` }}
-                >
-                  {session.number}
-                </div>
-                <div>
-                  <p className="font-medium">{session.title}</p>
-                  {session.speaker && <p className="text-sm opacity-50 mt-0.5">{session.speaker}</p>}
-                  <p className="text-xs opacity-40 mt-1">{session.startTime} ~ {session.endTime}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        </>)}
-
-        {/* 뷰: 사전등록 — 등록/재방문자는 대기 화면(카운트다운·아젠다), 신규 방문자는 등록 폼 */}
-        {view === "signup" && ((registered || registrationId) ? (
+        {/* 뷰: 사전등록 — 등록 여부와 무관하게 같은 대기 화면(카운트다운·아젠다)을 보여준다.
+            미등록자에겐 그 안에 사전등록 CTA 를 얹고, 폼은 아래에 이어 붙인다. */}
+        {view === "signup" && (
           <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} className="space-y-5">
             <PreLiveWaiting
               webinar={{ name: webinar.name, description: webinar.description ?? null, liveStartAt: webinar.liveStartAt, sessions: webinar.sessions }}
@@ -1025,7 +981,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               surface={surface}
               targetIso={webinar.liveStartAt}
               serverNowMs={serverNowMs}
-              registered
+              registered={hasRegistration}
               live={live}
               hasCalendar={!!calendarUrl}
               onCalendar={calendarUrl ? () => window.open(calendarUrl, "_blank", "noopener,noreferrer") : undefined}
@@ -1033,31 +989,46 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               shareCopied={shareCopied}
               onNotify={handleNotifyToggle}
               notify={{ subscribed: notifySubscribed, pending: notifyPending, error: notifyError }}
+              centerAction={hasRegistration ? undefined : (
+                <div
+                  className="mx-auto w-full max-w-md p-6 text-center"
+                  style={{ backgroundColor: surface, borderRadius: radius, boxShadow: "0 1px 2px rgba(0,0,0,.06), 0 12px 32px rgba(0,0,0,.08)" }}
+                >
+                  {canRegister ? (
+                    <>
+                      <h2 className="text-base font-bold">아직 등록하지 않으셨나요?</h2>
+                      <p className="mt-1 text-sm opacity-60">사전등록하면 시작 전에 알려드리고, 바로 입장할 수 있어요.</p>
+                      {/* 네이티브 앵커 — JS 스크롤에 의존하지 않아 어떤 브라우저에서도 폼으로 이동한다. */}
+                      <a
+                        href="#signup-form"
+                        className="mt-4 flex w-full items-center justify-center font-bold text-white transition-opacity hover:opacity-90"
+                        style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)`, minHeight: 48 }}
+                      >
+                        사전등록하기 →
+                      </a>
+                    </>
+                  ) : (
+                    <>
+                      <h2 className="text-base font-bold">등록이 마감되었어요</h2>
+                      <p className="mt-1 text-sm opacity-60">사전 등록 기간이 종료됐어요.<br />시작 시각에 맞춰 다시 방문해 주세요.</p>
+                    </>
+                  )}
+                </div>
+              )}
             />
           </motion.div>
-        ) : (
-          <motion.div
-            style={{ backgroundColor: surface, borderRadius: radius }}
-            className="p-6 md:p-8"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.15 }}
-          >
-            {!canRegister ? (
-              <div className="py-10 text-center">
-                <h2 className="text-lg font-semibold mb-1">등록이 마감되었어요</h2>
-                <p className="text-sm opacity-60">사전 등록 기간이 종료됐어요.<br />시작 시각에 맞춰 다시 방문해 주세요.</p>
-                {/* 폼을 채우는 동안 마감됐을 수 있다 — 이미 등록한 사람이 여기 갇히지 않게 돌아갈 길을 둔다. */}
-                <button
-                  type="button"
-                  onClick={() => { setViewParam(null); void fetchStatus(); }}
-                  className="mt-5 text-sm underline underline-offset-4 opacity-70 transition-opacity hover:opacity-100"
-                  style={{ minHeight: 44 }}
-                >
-                  이미 등록하셨나요? 입장 확인으로 돌아가기
-                </button>
-              </div>
-            ) : (
+        )}
+
+        {/* 등록 폼 — 미등록 방문자에게만, 대기 화면 아래에 이어 붙인다. */}
+        {view === "signup" && !hasRegistration && canRegister && (
+          <div id="signup-form" className="mx-auto max-w-2xl px-4 pb-16">
+            <motion.div
+              style={{ backgroundColor: surface, borderRadius: radius }}
+              className="p-6 md:p-8"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.15 }}
+            >
               <>
                 <h2 className="text-lg font-semibold mb-1">사전 등록</h2>
                 <p className="text-xs opacity-50 mb-5">
@@ -1114,9 +1085,9 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
                   </motion.button>
                 </div>
               </>
-            )}
-          </motion.div>
-        ))}
+            </motion.div>
+          </div>
+        )}
 
         {/* 뷰: 라이브 */}
         {view === "live" && !registrationId && (
