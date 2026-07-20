@@ -66,6 +66,8 @@ interface EntryVerifyProps {
   onAuthValueChange: (v: string) => void;
   onVerify: () => void;
   onGoSignup: () => void;
+  /** 지금 사전등록을 받는가 — 마감됐으면 등록 안내를 띄우지 않는다(막힌 문을 열어주지 않는다) */
+  canRegister?: boolean;
   live: LivePageConfig;
   viewerCount?: number;
   hasCalendar?: boolean;
@@ -79,7 +81,7 @@ interface EntryVerifyProps {
 export default function EntryVerify({
   webinar, accent, text, surface, targetIso, serverNowMs, isLive,
   authMethod, authValue, verifyError, isVerifying,
-  onAuthMethod, onAuthValueChange, onVerify, onGoSignup,
+  onAuthMethod, onAuthValueChange, onVerify, onGoSignup, canRegister = true,
   live, viewerCount, hasCalendar, onCalendar, onShare, shareCopied, onNotify, notify,
 }: EntryVerifyProps) {
   const showViewers = live.entry.viewerCount && (viewerCount ?? 0) > 0;
@@ -110,7 +112,9 @@ export default function EntryVerify({
         {isVerifying ? "확인 중…" : <>웨비나 입장하기 <ArrowRight /></>}
       </motion.button>
       <div className="ev-trust"><Lock /> 등록 정보 확인용으로만 쓰이고 저장되지 않아요</div>
-      <button type="button" onClick={onGoSignup} className="ev-ghost">아직 등록 전이신가요? <b>사전등록하기 →</b></button>
+      {canRegister && (
+        <button type="button" onClick={onGoSignup} className="ev-ghost">아직 등록 전이신가요? <b>사전등록하기 →</b></button>
+      )}
     </div>
   );
 
