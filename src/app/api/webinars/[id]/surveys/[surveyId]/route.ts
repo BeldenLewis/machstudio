@@ -40,7 +40,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const data: Prisma.WebinarSurveyUpdateInput = {};
   if (typeof body?.title === "string") data.title = body.title.trim() || existing.title;
   if (body?.description !== undefined) data.description = String(body.description ?? "").trim() || null;
-  if (body?.questions !== undefined) data.questions = normalizeSurveyQuestions(body.questions, { keepEmptyTitles: true }) as unknown as Prisma.InputJsonValue;
+  if (body?.questions !== undefined) data.questions = normalizeSurveyQuestions(body.questions, { includeHidden: true }) as unknown as Prisma.InputJsonValue;
   if (typeof body?.isOpen === "boolean") data.isOpen = body.isOpen;
 
   // 종료화면 연결도 웨비나당 1개만 — 켜면 다른 설문의 연결을 내린다

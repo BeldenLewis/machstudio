@@ -23,11 +23,13 @@ const QUESTION_TYPES: readonly SurveyQuestionType[] = ["rating", "single", "mult
 
 /**
  * 문항 정규화.
- * - 뷰어 경로(기본): 제목이 빈 문항은 미완성 초안이므로 숨긴다.
- * - 어드민 저장/편집 경로({ keepEmptyTitles: true }): 초안 문항도 보존한다 —
- *   자동저장이 제목 입력 전의 행(타입·선택지 포함)을 조용히 삭제하지 않도록.
+ * - 뷰어 경로(기본): 응답 화면에 그릴 수 없는 문항을 숨긴다.
+ *   제목이 빈 미완성 초안, 그리고 선택지 0개 객관식(필수면 제출까지 막는다).
+ * - 어드민 경로({ includeHidden: true }): 전부 보존한다. 두 가지 이유 —
+ *   ① 자동저장이 제목 입력 전의 행(타입·선택지 포함)을 조용히 삭제하지 않도록,
+ *   ② 이미 수집된 답변이 정의에서 빠져 관리자에게 안 보이는 일이 없도록.
  */
-export function normalizeSurveyQuestions(raw: unknown, opts?: { keepEmptyTitles?: boolean }): SurveyQuestion[] {
+export function normalizeSurveyQuestions(raw: unknown, opts?: { includeHidden?: boolean }): SurveyQuestion[] {
   if (!Array.isArray(raw)) return [];
   const normalized = raw
     .filter((q): q is Record<string, unknown> => !!q && typeof q === "object")
@@ -38,11 +40,10 @@ export function normalizeSurveyQuestions(raw: unknown, opts?: { keepEmptyTitles?
       required: q.required === true,
       options: Array.isArray(q.options) ? q.options.map(String).filter(Boolean).slice(0, 20) : [],
     }));
-  // 공개 화면에서는 제목이 빈 문항과 "선택지 0개 객관식"(그릴 수 없어 필수면 제출을 막는다)을 제외한다.
   const visible = normalized.filter(
     (q) => q.title.trim() !== "" && !((q.type === "single" || q.type === "multiple") && q.options.length === 0),
   );
-  return (opts?.keepEmptyTitles ? normalized : visible).slice(0, 30);
+  return (opts?.includeHidden ? normalized : visible).slice(0, 30);
 }
 
 export type SurveyAnswers = Record<string, number | string | string[]>;
