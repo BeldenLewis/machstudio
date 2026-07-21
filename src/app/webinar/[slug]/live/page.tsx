@@ -297,6 +297,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       if (typeof data.chatEnabled === "boolean") setChatEnabledLive(data.chatEnabled);
       // 라이브 중 종료 전환 — 종료되면 종료 화면으로. view!=="live" 가 되어 이 폴링도 자동 중단된다.
       if (data.status === "ended") setView("ended");
+      // 운영자가 라이브를 등록/대기로 되돌린 경우(수동 override) — 시청자를 라이브에 가두지 않고 대기 화면으로.
+      else if (data.status !== "live" && !data.entryOpen) setView("signup");
 
       // 채팅 병합 — 요청 시 보낸 after 와 동일한 기준으로 처리(교체 vs 증분)
       if (data.chat) {
@@ -903,8 +905,9 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         announcements={view === "live" && registrationId ? announcements : []}
       />
 
-      {/* 공지 배너 */}
-      {announcements.length > 0 && (
+      {/* 공지 배너 — 라이브 뷰에서만. announcements 는 뷰 전환 시 초기화되지 않아,
+          게이팅이 없으면 사전등록하러 나간 대기 화면이나 종료 화면에 이전 라이브 공지가 잔류한다. */}
+      {view === "live" && announcements.length > 0 && (
         <div
           style={{ backgroundColor: accent }}
           className="px-4 py-2.5 text-center text-sm font-medium"
@@ -1197,7 +1200,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             surface={surface}
             live={live}
             surveyUrl={surveyUrl || undefined}
-            onReplay={handleNotifyToggle}
+            // 다시보기 신청은 등록 이메일이 있어야 발송된다 — 미등록자에겐 버튼을 숨긴다(누르면 항상 400).
+            onReplay={hasRegistration ? handleNotifyToggle : undefined}
             replayRequested={notifySubscribed}
             replayPending={notifyPending}
             onShare={handleShare}

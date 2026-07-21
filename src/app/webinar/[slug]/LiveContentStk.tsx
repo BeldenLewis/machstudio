@@ -113,9 +113,21 @@ const DEFAULT_NOTICE =
 
 // 공유 STK 스타일 — 대기/입장확인/시청 세 상태가 같은 디자인 토큰을 쓰도록 export.
 // (토큰 + 히어로/배지 + 전체폭 아젠다만. 시청 화면 전용 레이아웃은 WATCH_CSS 로 분리)
+// accent 위에 얹을 글자색 — 밝은 accent(노랑 등)엔 흰 글자가 안 읽힌다. 명도로 흰색/진한색 선택.
+export function onAccentColor(accent: string): string {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(accent.trim());
+  if (!m) return "#ffffff"; // hex 가 아니면(rgb·named) 기존 동작 유지
+  let hex = m[1];
+  if (hex.length === 3) hex = hex.split("").map((c) => c + c).join("");
+  const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+  // 상대 명도(sRGB 근사) — 0.6 이상이면 밝은 배경이므로 진한 글자.
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum >= 0.6 ? "#1a1a1f" : "#ffffff";
+}
+
 export function buildStkCss(accent: string, text: string, surface: string) {
   return `
-.stk-live { --key: ${accent}; --key-dim: color-mix(in srgb, ${accent} 12%, transparent); --key-border: color-mix(in srgb, ${accent} 36%, transparent);
+.stk-live { --key: ${accent}; --on-key: ${onAccentColor(accent)}; --key-dim: color-mix(in srgb, ${accent} 12%, transparent); --key-border: color-mix(in srgb, ${accent} 36%, transparent);
   --text:${text}; --muted:color-mix(in srgb, ${text} 62%, transparent); --sub:color-mix(in srgb, ${text} 42%, transparent);
   --card:${surface}; --card-2:color-mix(in srgb, ${text} 5%, ${surface});
   --line:color-mix(in srgb, ${text} 10%, transparent); --line-md:color-mix(in srgb, ${text} 17%, transparent); --radius-sm:12px; --radius:20px; --radius-lg:28px;
@@ -216,12 +228,12 @@ const WATCH_CSS = `
 .stk-live .lv-ask { display:flex; gap:8px; margin-bottom:12px; flex:0 0 auto; }
 .stk-live .lv-ask input { flex:1; min-width:0; height:40px; padding:0 13px; border-radius:11px; border:1px solid var(--line); background:var(--card-2); color:var(--text); font:inherit; font-size:14px; outline:none; transition:border-color .15s ease; }
 .stk-live .lv-ask input:focus { border-color:var(--key); }
-.stk-live .lv-ask button { flex-shrink:0; width:44px; border-radius:11px; border:0; background:var(--key); color:#fff; cursor:pointer; display:grid; place-items:center; box-shadow:var(--btn-shadow-key); }
+.stk-live .lv-ask button { flex-shrink:0; width:44px; border-radius:11px; border:0; background:var(--key); color:var(--on-key); cursor:pointer; display:grid; place-items:center; box-shadow:var(--btn-shadow-key); }
 .stk-live .lv-ask button:disabled { opacity:0.4; cursor:not-allowed; }
 .stk-live .lv-ask button svg { width:17px; height:17px; }
 .stk-live .lv-chips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; flex:0 0 auto; }
 .stk-live .lv-chip { font-size:12px; padding:5px 11px; border-radius:8px; background:var(--card); color:var(--muted); cursor:pointer; box-shadow:var(--btn-shadow); transition:box-shadow .15s ease, color .15s ease; }
-.stk-live .lv-chip.on { background:var(--key); color:#fff; box-shadow:var(--btn-shadow-key); }
+.stk-live .lv-chip.on { background:var(--key); color:var(--on-key); box-shadow:var(--btn-shadow-key); }
 .stk-live .lv-hint { font-size:12px; margin-top:2px; }
 .stk-live .lv-list { display:flex; flex-direction:column; gap:8px; flex:1 1 auto; min-height:0; overflow-y:auto; }
 .stk-live .lv-q { display:flex; gap:11px; padding:12px; border:1px solid var(--line); border-radius:13px; background:var(--card-2); }
@@ -248,7 +260,7 @@ const WATCH_CSS = `
 .stk-live .lv-chatbar { display:flex; gap:8px; margin-top:12px; flex:0 0 auto; }
 .stk-live .lv-chatbar input { flex:1; min-width:0; height:38px; padding:0 13px; border-radius:11px; border:1px solid var(--line); background:var(--card-2); color:var(--text); font:inherit; font-size:14px; outline:none; transition:border-color .15s ease; }
 .stk-live .lv-chatbar input:focus { border-color:var(--key); }
-.stk-live .lv-chatbar button { flex-shrink:0; width:40px; border-radius:11px; border:0; background:var(--key); color:#fff; cursor:pointer; display:grid; place-items:center; box-shadow:var(--btn-shadow-key); }
+.stk-live .lv-chatbar button { flex-shrink:0; width:40px; border-radius:11px; border:0; background:var(--key); color:var(--on-key); cursor:pointer; display:grid; place-items:center; box-shadow:var(--btn-shadow-key); }
 .stk-live .lv-chatbar button:disabled { opacity:0.4; cursor:not-allowed; }
 .stk-live .lv-chatbar button svg { width:17px; height:17px; }
 /* 세션(아젠다) */
@@ -278,7 +290,7 @@ const WATCH_CSS = `
 .stk-live .lv-fbtns { display:flex; flex-direction:column; gap:8px; }
 .stk-live .lv-fbtn { display:flex; align-items:center; justify-content:center; height:40px; border-radius:11px; font-size:14px; font-weight:750; text-decoration:none !important; cursor:pointer; transition:transform .16s ease, opacity .16s ease, box-shadow .16s ease; }
 .stk-live .lv-fbtn:hover { transform:translateY(-1px); opacity:0.94; }
-.stk-live .lv-fbtn.primary { background:var(--key); color:#fff !important; box-shadow:var(--btn-shadow-key); }
+.stk-live .lv-fbtn.primary { background:var(--key); color:var(--on-key) !important; box-shadow:var(--btn-shadow-key); }
 .stk-live .lv-fbtn.ghost { background:var(--card); color:var(--text) !important; box-shadow:var(--btn-shadow); }
 .stk-live .lv-switchrow { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .stk-live .lv-swlabel { font-size:14px; font-weight:650; color:var(--text); }
