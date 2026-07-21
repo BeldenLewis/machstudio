@@ -117,6 +117,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [serverNowMs, setServerNowMs] = useState<number | undefined>(undefined);
   const [viewerCount, setViewerCount] = useState<number | null>(null); // 실시간 동시 시청자 수(라이브)
   const [isTrulyLive, setIsTrulyLive] = useState(false); // status === "live" (입장오픈 전 창과 구분)
+  const [entryOpenNow, setEntryOpenNow] = useState(false); // 입장 확인 창이 열렸는가 — signup 고정 상태의 "입장으로 돌아가기" 노출용
   // 채팅 상태
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -220,6 +221,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       const entryOpen: boolean = data.entryOpen;
       if (typeof data.canRegister === "boolean") setCanRegister(data.canRegister);
       setIsTrulyLive(status === "live"); // 입장오픈(라이브 전) 창에선 false → LIVE 칩 대신 '곧 시작'
+      setEntryOpenNow(status === "live" || entryOpen);
       const requestedView = new URLSearchParams(window.location.search).get("view");
       if (requestedView === "signup" && status !== "ended") setView("signup");
       else if (status === "ended") setView("ended");
@@ -242,6 +244,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       if (typeof data.canRegister === "boolean") setCanRegister(data.canRegister);
       if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
       setIsTrulyLive(status === "live");
+      setEntryOpenNow(status === "live" || entryOpen);
       const requestedView = new URLSearchParams(window.location.search).get("view");
       if (requestedView === "signup" && status !== "ended") setView("signup");
       else if (status === "ended") setView("ended");
@@ -442,6 +445,12 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     setVideoId(previewState === "live" ? previewVideoId : null);
     setIsTrulyLive(previewState === "live");
   }, [previewState, previewVideoId]);
+
+  // 모달이 렌더 조건(뷰 전환·등록 완료)을 벗어나 사라지면 열림 상태도 함께 정리한다 —
+  // 남겨두면 아래 이펙트가 배경 스크롤을 계속 잠근 채로 둔다.
+  useEffect(() => {
+    if (regModalOpen && (view !== "signup" || registered || registrationId)) setRegModalOpen(false);
+  }, [regModalOpen, view, registered, registrationId]);
 
   // 등록 모달 — Esc 로 닫고, 열려 있는 동안 뒤 배경이 스크롤되지 않게 잠근다.
   useEffect(() => {
@@ -833,10 +842,11 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             {field.system && ((field.key === "phone" && dupCheck.phone) || (field.key === "email" && dupCheck.email)) && (
               <p className="text-[11px] mt-1.5" style={{ color: "#f59e0b" }}>
                 이미 사전등록된 {field.key === "phone" ? "연락처" : "이메일"}예요 — 웨비나 당일 이 정보로 바로 입장할 수 있어요.
-                {isTrulyLive && !previewMode && (
+                {entryOpenNow && !previewMode && (
                   <button
                     type="button"
-                    onClick={() => setView("live")}
+                    // ?view=signup 고정을 함께 풀어야 한다 — setView 만 하면 30초 뒤 폴링이 되돌린다
+                    onClick={() => { setViewParam(null); setRegModalOpen(false); setView("live"); }}
                     className="ml-1.5 underline underline-offset-2 font-medium"
                     style={{ color: accent }}
                   >
@@ -1002,7 +1012,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               onCalendar={calendarUrl ? () => window.open(calendarUrl, "_blank", "noopener,noreferrer") : undefined}
               onShare={handleShare}
               shareCopied={shareCopied}
-              onNotify={handleNotifyToggle}
+              // 알림 구독은 등록 이메일이 필요하다 — 미등록자에겐 버튼을 숨기고(누르면 항상 실패) 등록 CTA 로 유도
+              onNotify={hasRegistration ? handleNotifyToggle : undefined}
               notify={{ subscribed: notifySubscribed, pending: notifyPending, error: notifyError }}
               centerAction={hasRegistration ? undefined : (
                 <div
@@ -1028,14 +1039,28 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
                       <p className="mt-1 text-sm opacity-60">사전 등록 기간이 종료됐어요.<br />시작 시각에 맞춰 다시 방문해 주세요.</p>
                     </>
                   )}
+                  {/* 입장 확인에서 "사전등록하기"로 넘어온 등록자의 되돌아갈 길 —
+                      URL 의 ?view=signup 고정을 풀지 않으면 어떤 폴링도 입장 화면으로 보내주지 않는다. */}
+                  {entryOpenNow && (
+                    <button
+                      type="button"
+                      onClick={() => { setViewParam(null); void fetchStatus(); }}
+                      className="mt-3 text-xs underline underline-offset-4 opacity-60 transition-opacity hover:opacity-100"
+                      style={{ minHeight: 44 }}
+                    >
+                      이미 등록하셨나요? 입장 확인으로 돌아가기
+                    </button>
+                  )}
                 </div>
               )}
             />
           </motion.div>
         )}
 
-        {/* 등록 폼 모달 — 대기 화면의 "사전등록하기"로 연다. 대기 화면 자체는 그대로 두고 위에 띄운다. */}
-        {view === "signup" && !hasRegistration && canRegister && regModalOpen && (
+        {/* 등록 폼 모달 — 대기 화면의 "사전등록하기"로 연다. 대기 화면 자체는 그대로 두고 위에 띄운다.
+            canRegister 는 렌더 조건이 아니라 내부 분기 — 폴링으로 마감이 뒤집힐 때 모달이 통째로
+            사라지면 입력이 증발하고, regModalOpen 이 남아 배경 스크롤이 영영 잠긴다. */}
+        {view === "signup" && !hasRegistration && regModalOpen && (
           <div
             className="fixed inset-0 z-[60] flex items-center justify-center p-4"
             style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}
@@ -1060,6 +1085,12 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               >
                 ×
               </button>
+              {!canRegister ? (
+                <div className="py-8 text-center">
+                  <h2 className="text-lg font-semibold mb-1">등록이 마감되었어요</h2>
+                  <p className="text-sm opacity-60">작성 중에 등록 기간이 종료됐어요.<br />시작 시각에 맞춰 다시 방문해 주세요.</p>
+                </div>
+              ) : (
               <>
                 <h2 className="text-lg font-semibold mb-1">사전 등록</h2>
                 <p className="text-xs opacity-50 mb-5">
@@ -1116,6 +1147,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
                   </motion.button>
                 </div>
               </>
+              )}
             </motion.div>
           </div>
         )}
