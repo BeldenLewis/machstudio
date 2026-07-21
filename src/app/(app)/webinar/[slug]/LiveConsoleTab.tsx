@@ -1762,7 +1762,7 @@ export default function LiveConsoleTab({
               <tr className="border-b border-border text-left text-muted-foreground">
                 <th className="py-2 pr-3 font-medium">이름</th>
                 <th className="py-2 pr-3 font-medium">회사</th>
-                <th className="py-2 pr-3 font-medium text-right">체류</th>
+                <th className="py-2 pr-3 font-medium text-right">접속</th>
                 <th className="py-2 font-medium text-right">상태</th>
               </tr>
             </thead>
@@ -1870,7 +1870,7 @@ export default function LiveConsoleTab({
       <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
         {([
           { l: "누적 입장", v: summary.attended.toLocaleString() },
-          { l: "평균 체류", v: `${summary.avgStayMinutes}분` },
+          { l: "평균 접속", v: `${summary.avgStayMinutes}분` },
           { l: "피크 동시", v: (curve?.peak ?? 0).toLocaleString() },
           { l: "입장률", v: `${summary.attendRate}%` },
         ]).map((r) => (
@@ -1981,7 +1981,7 @@ export default function LiveConsoleTab({
             { l: "입장률", v: `${summary.attendRate}`, u: "%", bar: summary.attendRate },
             { l: "입장", v: summary.attended.toLocaleString(), sub: `사전등록 ${summary.totalRegistered.toLocaleString()}` },
             { l: "페이지 유지", v: summary.presenceViewers.toLocaleString(), sub: "최근 5분" },
-            { l: "평균 체류", v: `${summary.avgStayMinutes}`, u: "분" },
+            { l: "평균 접속", v: `${summary.avgStayMinutes}`, u: "분" },
             { l: "대기 질문", v: summary.pendingQuestions.toLocaleString(), attn: summary.pendingQuestions > 0 },
           ] as { l: string; v: string; u?: string; sub?: string; bar?: number; attn?: boolean }[]).map((s) => (
             <div key={s.l} className="flex flex-col gap-1.5 rounded-2xl border border-border bg-card p-4">

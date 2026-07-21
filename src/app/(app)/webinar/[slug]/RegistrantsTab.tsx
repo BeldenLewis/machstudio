@@ -61,6 +61,8 @@ interface Registration {
   agreePrivacy: boolean;
   memo: string | null;
   stayMinutes: number;
+  connectedSeconds: number;
+  focusSeconds: number;
   isActive: boolean;
   submittedAt: string;
   enteredAt: string | null;
@@ -121,7 +123,7 @@ const sortLabels: Record<SortKey, string> = {
   agreeMarketing: "마케팅",
   enteredAt: "최초 입장",
   lastPingAt: "마지막 신호",
-  stayMinutes: "체류",
+  stayMinutes: "접속",
   submittedAt: "등록일",
   isActive: "상태",
 };
@@ -254,6 +256,11 @@ function formatDate(value: string | null) {
 function formatDateShort(value: string | null) {
   if (!value) return "-";
   return formatKst(value, { month: "2-digit", day: "2-digit" });
+}
+
+// 접속 시간(분) — ping 간격 누적값이 단일 소스. 0 이면 이 컬럼 도입 전 데이터라 옛 스팬으로 폴백.
+function connectedMin(r: { connectedSeconds?: number; stayMinutes: number }) {
+  return (r.connectedSeconds ?? 0) > 0 ? Math.floor((r.connectedSeconds as number) / 60) : r.stayMinutes;
 }
 
 function formatSurveyAnswer(question: SurveyQuestion, answer: unknown) {
@@ -1058,7 +1065,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                 <p>등록일: {formatDate(selectedRegistration.submittedAt)}</p>
                 <p>최초 입장: {formatDate(selectedRegistration.enteredAt)}</p>
                 <p>마지막 신호: {formatDate(selectedRegistration.lastPingAt)}</p>
-                <p>체류: {selectedRegistration.enteredAt ? `${selectedRegistration.stayMinutes}분` : "-"}</p>
+                <p>접속: {selectedRegistration.enteredAt ? `${connectedMin(selectedRegistration)}분` : "-"}{selectedRegistration.enteredAt && selectedRegistration.focusSeconds > 0 ? ` (화면 활성 ${Math.floor(selectedRegistration.focusSeconds / 60)}분)` : ""}</p>
               </div>
 
               {surveys.length > 0 && (
@@ -1201,7 +1208,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="업종" sortKey="industry" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="마케팅" sortKey="agreeMarketing" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
                     {surveys.length > 0 && <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">설문</th>}
-                    <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="체류" sortKey="stayMinutes" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="접속" sortKey="stayMinutes" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="최초 입장" sortKey="enteredAt" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="등록일" sortKey="submittedAt" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="상태" sortKey="isActive" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
@@ -1256,7 +1263,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                         </td>
                       )}
                       <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                        {r.enteredAt ? `${r.stayMinutes}분` : "-"}
+                        {r.enteredAt ? `${connectedMin(r)}분` : "-"}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{formatDate(r.enteredAt)}</td>
                       <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{formatDateShort(r.submittedAt)}</td>

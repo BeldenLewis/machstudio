@@ -509,12 +509,14 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       body: JSON.stringify({ registrationId, event: "enter" }),
     });
 
-    // 60초 ± 10초 jitter — 동시 입장한 시청자들의 heartbeat 가 같은 초에 몰리지 않게 분산
+    // 60초 ± 10초 jitter — 동시 입장한 시청자들의 heartbeat 가 같은 초에 몰리지 않게 분산.
+    // hidden 은 접속/포커스 시간을 나눠 쌓기 위한 신호 — 탭이 숨겨져도 ping 은 계속 보낸다
+    // (근무 중 창만 띄워두고 소리로 듣는 참석을 이탈로 세지 않기 위해).
     pingRef.current = setInterval(() => {
       fetch(`/api/webinar/${slug}/ping`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ registrationId, event: "ping" }),
+        body: JSON.stringify({ registrationId, event: "ping", hidden: document.hidden }),
       });
     }, 50_000 + Math.floor(Math.random() * 20_000));
 

@@ -63,7 +63,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .filter((f) => !f.system);
 
   const headers = [
-    "이름", "연락처", "이메일", "회사", "부서", "직함", "업종", "마케팅동의", "체류시간(분)", "등록일", "입장일",
+    "이름", "연락처", "이메일", "회사", "부서", "직함", "업종", "마케팅동의", "접속시간(분)", "등록일", "입장일",
     ...customFieldDefs.map((f) => f.label),
     "사전질문",
     "UTM소스", "UTM매체", "UTM캠페인", "최초UTM소스", "최초UTM매체", "유입경로(referrer)",
