@@ -53,7 +53,9 @@ export function scoreRegistrant(i: EngagementInput): { score: number; segment: S
   const interact = Math.min(30, interactRaw);
   const intent = i.agreeMarketing ? 10 : 0;
   const score = Math.min(100, attend + watch + interact + intent);
-  const segment: Segment = score >= 60 ? "hot" : score >= 30 ? "warm" : "cold";
+  // hot 경계 65 — 참석25+시청35=60 이라, 60이면 "창만 끝까지 띄운 무반응 시청자"가 hot 이 된다.
+  // 65는 풀시청이어도 최소 행동 하나(투표4·질문6…) 또는 마케팅 동의(10)를 요구한다.
+  const segment: Segment = score >= 65 ? "hot" : score >= 30 ? "warm" : "cold";
   return { score, segment };
 }
 
@@ -91,14 +93,23 @@ export async function assembleWebinarEngagement(
     prisma.webinarPollVote.groupBy({ by: ["registrationId"], where: { registrationId: { not: null }, poll: { webinarId } }, _count: { _all: true } }),
     prisma.webinarQA.groupBy({ by: ["registrationId"], where: { webinarId, registrationId: { not: null } }, _count: { _all: true } }),
     prisma.webinarQAVote.groupBy({ by: ["registrationId"], where: { registrationId: { not: null }, qa: { webinarId } }, _count: { _all: true } }),
-    prisma.webinarPopupClick.groupBy({ by: ["registrationId"], where: { webinarId, registrationId: { not: null } }, _count: { _all: true } }),
+    // CTA 는 팝업당 1회만 인정 — 투표(1인 1표)·추천(질문당 1회)과 달리 클릭엔 unique 제약이
+    // 없어, 같은 버튼 연타(안 열리는 줄 알고 8번)만으로 인터랙션 캡을 채우는 걸 막는다.
+    // 원본 클릭 기록은 그대로 두고(클릭률 분석용) 점수 집계만 dedupe 한다.
+    prisma.$queryRaw<{ registrationId: string; cnt: number }[]>`
+      SELECT "registrationId", COUNT(DISTINCT COALESCE("popupId", '') || ':' || "kind")::int AS "cnt"
+        FROM "WebinarPopupClick"
+       WHERE "webinarId" = ${webinarId} AND "registrationId" IS NOT NULL
+       GROUP BY "registrationId"
+    `,
   ]);
 
   const chatMap = countMap(chatG);
   const pollMap = countMap(pollG);
   const qaAskMap = countMap(qaAskG);
   const qaVoteMap = countMap(qaVoteG);
-  const ctaMap = countMap(ctaG);
+  const ctaMap = new Map<string, number>();
+  for (const r of ctaG) ctaMap.set(r.registrationId, Number(r.cnt) || 0);
 
   const rows: ScoredRow[] = regs.map((r) => {
     const entered = !!r.enteredAt;
