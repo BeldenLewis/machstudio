@@ -562,6 +562,11 @@ model WebinarRegistration {
   leftAt         DateTime?
   lastPingAt     DateTime?
   presencePingAt DateTime?
+  // 접속 시간 — heartbeat 간격을 누적한다(끊긴 구간은 제외). 화면 표시·정렬·평균의 단일 소스.
+  // stayMinutes 는 leave 시점의 "입장~퇴장" 스팬이라 자리비움을 포함하는 레거시 값 — 폴백 전용.
+  connectedSeconds Int     @default(0)
+  // 그중 탭이 실제로 보였던 시간. 접속-포커스 차이가 "틀어놓고 듣기" 구간이다.
+  focusSeconds     Int     @default(0)
   stayMinutes    Int       @default(0)
   isActive       Boolean   @default(false)
   submittedAt    DateTime  @default(now())

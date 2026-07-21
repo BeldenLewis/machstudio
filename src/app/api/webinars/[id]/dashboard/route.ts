@@ -89,27 +89,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         COUNT(*) FILTER (WHERE "eff" >= 30) AS "stay30",
         COUNT(*) FILTER (WHERE "eff" >= 60) AS "stay60"
       FROM (
-        -- 실제 시청 구간(WebinarAttendanceSegment) 합이 있으면 그것을 쓴다.
-        -- "입장~마지막활동" 스팬은 중간 이탈까지 시청으로 세어 평균·30/60분 체류를 부풀린다.
-        -- 구간 기록이 없는 과거 데이터만 기존 스팬 방식으로 폴백.
+        -- 접속 시간(connectedSeconds)이 단일 소스 — ping 간격 누적이라 구간 겹침으로 이중계산되지 않는다.
+        -- 0 인데 입장 기록이 있으면 이 컬럼 도입 전 데이터 → 옛 스팬으로만 폴백.
         SELECT LEAST(
-          COALESCE(
-            seg."minutes",
-            GREATEST(
+          CASE WHEN COALESCE(r."connectedSeconds", 0) > 0
+            THEN FLOOR(r."connectedSeconds" / 60.0)::int
+            ELSE GREATEST(
               COALESCE(r."stayMinutes", 0),
               FLOOR(EXTRACT(EPOCH FROM (COALESCE(r."lastPingAt", now()) - r."enteredAt")) / 60)
             )
-          ),
+          END,
           ${capMinutes}::int
         ) AS "eff"
         FROM "WebinarRegistration" r
-        LEFT JOIN (
-          SELECT "registrationId",
-                 FLOOR(SUM(EXTRACT(EPOCH FROM ("endedAt" - "startedAt"))) / 60)::int AS "minutes"
-            FROM "WebinarAttendanceSegment"
-           WHERE "webinarId" = ${id}
-           GROUP BY "registrationId"
-        ) seg ON seg."registrationId" = r."id"
         WHERE r."enteredAt" IS NOT NULL AND r."webinarId" = ${id}
       ) sub
     `,
@@ -134,6 +126,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         enteredAt: true,
         lastPingAt: true,
         presencePingAt: true,
+        connectedSeconds: true,
+        focusSeconds: true,
         stayMinutes: true,
       },
     }),
@@ -186,7 +180,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     },
     currentViewers: currentViewers.map((row) => ({
       ...row,
-      currentStayMinutes: Math.max(row.stayMinutes, minutesBetween(row.enteredAt, row.lastPingAt ?? now)),
+      // 접속 시간 기준(자리비움 제외). 0 이면 컬럼 도입 전 데이터라 옛 스팬으로 폴백.
+      currentStayMinutes: row.connectedSeconds > 0
+        ? Math.floor(row.connectedSeconds / 60)
+        : Math.max(row.stayMinutes, minutesBetween(row.enteredAt, row.lastPingAt ?? now)),
+      currentFocusMinutes: Math.floor((row.focusSeconds ?? 0) / 60),
       isLive: !!row.lastPingAt && row.lastPingAt >= activeSince,
     })),
     latestQuestions,

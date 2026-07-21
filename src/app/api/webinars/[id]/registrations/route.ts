@@ -29,7 +29,7 @@ const sortMap = {
   agreeMarketing: "agreeMarketing",
   enteredAt: "enteredAt",
   lastPingAt: "lastPingAt",
-  stayMinutes: "stayMinutes",
+  stayMinutes: "connectedSeconds", // "체류" 정렬 = 접속 시간 기준
   submittedAt: "submittedAt",
   isActive: "isActive",
 } as const;
@@ -133,7 +133,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       select: {
         id: true, name: true, phone: true, email: true, company: true, department: true,
         jobTitle: true, industry: true, agreeMarketing: true, agreePrivacy: true, memo: true,
-        stayMinutes: true, isActive: true, submittedAt: true, enteredAt: true, lastPingAt: true,
+        connectedSeconds: true, focusSeconds: true, stayMinutes: true,
+        isActive: true, submittedAt: true, enteredAt: true, lastPingAt: true,
       },
     }),
     prisma.webinarRegistration.count({ where }),
