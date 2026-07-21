@@ -88,6 +88,9 @@ ${ATTRIBUTION_CORE_JS}
   function isEntryOpen(status) {
     if (status === "live") return true;
     if (status === "ended") return false;
+    // 서버(webinar-status.ts)와 동일: 수동 override 가 있으면 시간 기반 입장오픈을 억제한다.
+    // (운영자가 종료된 방송을 'registration'으로 되돌려 접수 재개하는 경우 등)
+    if (CFG.statusOverride) return false;
     var openAt = parseMs(CFG.entryOpenAt);
     return openAt !== null && serverNowMs() >= openAt;
   }

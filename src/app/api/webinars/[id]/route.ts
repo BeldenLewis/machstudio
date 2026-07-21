@@ -84,12 +84,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // 색상은 #hex / rgb() / 색상이름만, 반지름은 길이 단위만 — 중괄호 등으로 셀렉터를 탈출하지 못하게.
   const SAFE_COLOR = /^(#[0-9a-fA-F]{3,8}|rgba?\([\d\s.,%]+\)|[a-zA-Z]+)$/;
   const SAFE_LENGTH = /^\d+(\.\d+)?(px|rem|em|%)?$/;
+  // 폰트명은 공백 포함(Noto Sans KR 등) — 색상 정규식으로 검증하면 걸러진다.
+  // CSS 값으로 안전하게 들어가도록 글자·공백·하이픈만 허용한다(따옴표·중괄호 차단).
+  const SAFE_FONT = /^[a-zA-Z0-9 _-]+$/;
   const sanitizeTheme = (input: Record<string, unknown>) => {
     const out = { ...input };
     for (const [k, v] of Object.entries(out)) {
       if (typeof v !== "string") continue;
       const s = v.trim();
-      const ok = k.toLowerCase().includes("radius") ? SAFE_LENGTH.test(s) : SAFE_COLOR.test(s);
+      const ok = k.toLowerCase().includes("radius") ? SAFE_LENGTH.test(s)
+        : k.toLowerCase() === "font" ? SAFE_FONT.test(s)
+        : SAFE_COLOR.test(s);
       if (!ok) delete out[k];
     }
     return out;
@@ -102,8 +107,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return { ...base, ...(incoming as Record<string, unknown>) } as Prisma.InputJsonValue;
   };
 
+  // 일정 순서 검증 — 종료<시작이면 상태머신이 시작 전인데도 '종료'로 판정한다(webinar-status: t>=liveEndAt→ended).
+  // 변경되는 값 + 기존 값을 합쳐 최종 조합으로 본다. parseDate 형식 에러는 아래 catch 가 400 으로 처리.
   let updated;
   try {
+    if (liveStartAt !== undefined || liveEndAt !== undefined || signupDeadline !== undefined) {
+      const start = liveStartAt !== undefined ? parseDate(liveStartAt, "시작 시각") : webinar.liveStartAt;
+      const end = liveEndAt !== undefined ? parseDate(liveEndAt, "종료 시각") : webinar.liveEndAt;
+      const deadline = signupDeadline !== undefined ? parseDate(signupDeadline, "등록 마감") : webinar.signupDeadline;
+      if (start.getTime() >= end.getTime()) throw new Error("종료 시각은 시작 시각보다 뒤여야 해요");
+      if (deadline.getTime() > end.getTime()) throw new Error("등록 마감은 종료 시각보다 앞이어야 해요");
+    }
     updated = await prisma.webinar.update({
       where: { id },
       data: {
@@ -123,7 +137,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       },
     });
   } catch (e) {
-    if (e instanceof Error && e.message.includes("형식이 올바르지 않아요")) {
+    if (e instanceof Error && (e.message.includes("형식이 올바르지 않아요") || e.message.includes("여야 해요"))) {
       return NextResponse.json({ error: e.message }, { status: 400 });
     }
     throw e;
