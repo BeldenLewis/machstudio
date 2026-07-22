@@ -207,7 +207,7 @@ function QuestionRow({
               onClick={() => typePop.setOpen((v) => !v)}
               aria-haspopup="menu"
               aria-expanded={typePop.open}
-              className="flex items-center gap-1.5 rounded-lg bg-background px-2 py-1.5 text-xs font-semibold shadow-sm transition-shadow hover:shadow"
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-background px-2 py-1.5 text-xs font-semibold shadow-sm transition-shadow hover:shadow"
             >
               <span className="grid h-5 w-5 place-items-center rounded-md bg-violet-500/10 text-violet-500"><TypeIcon className="h-3 w-3" /></span>
               {meta.label}
@@ -351,7 +351,7 @@ function SurveyPreview({
   const visible = useMemo(() => normalizeSurveyQuestions(questions), [questions]);
 
   return (
-    <div className="mx-auto w-full max-w-[440px] lg:sticky lg:top-4">
+    <div className="mx-auto w-full max-w-[440px] 2xl:sticky 2xl:top-4">
       <div className="mb-2 flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
         <Smartphone className="h-3 w-3" />응답자 미리보기
         <span className="ml-auto inline-flex items-center gap-1.5 text-emerald-500">
@@ -517,7 +517,7 @@ function SurveyEditor({
 
   return (
     <div className="rounded-2xl bg-background p-4 shadow-sm sm:p-5">
-      <div className="space-y-5 lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-6 lg:space-y-0 xl:grid-cols-[minmax(0,1fr)_390px] xl:gap-8 2xl:grid-cols-[minmax(0,1fr)_430px]">
+      <div className="space-y-5 2xl:grid 2xl:grid-cols-[minmax(0,1fr)_440px] 2xl:gap-8 2xl:space-y-0">
         {/* ---- 편집 컬럼 ---- */}
         <div className="min-w-0 space-y-4">
           <div className="flex items-start justify-between gap-3">
