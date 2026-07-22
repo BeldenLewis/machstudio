@@ -4,14 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { motion, Reorder, useDragControls } from "framer-motion";
 import {
   Plus, Trash2, GripVertical, Link2, Loader2, BarChart3,
-  Star, CircleDot, ListChecks, Gauge, AlignLeft, Copy, ChevronDown, Info, X, Smartphone, CalendarClock, CircleCheckBig,
+  Star, CircleDot, ListChecks, Gauge, AlignLeft, Copy, ChevronDown, ChevronRight, ArrowLeft, Info, X, Smartphone, CalendarClock, CircleCheckBig, ClipboardList,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
 import { Switch } from "@/components/ui/switch";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { normalizeSurveyQuestions, type SurveyQuestion, type SurveyQuestionType } from "@/lib/webinar-survey";
+import { isSurveyAcceptingResponses, normalizeSurveyQuestions, type SurveyQuestion, type SurveyQuestionType } from "@/lib/webinar-survey";
 import SurveyForm, { SURVEY_FORM_CSS } from "@/app/webinar/[slug]/SurveyForm";
 import { buildStkCss } from "@/app/webinar/[slug]/LiveContentStk";
 
@@ -426,6 +426,8 @@ function SurveyEditor({
         body: JSON.stringify({ title, description, questions, doneTitle, doneDescription }),
       });
       if (!res.ok) { toast.error("자동 저장 실패 — 잠시 후 다시 시도돼요", { id: "autosave-error" }); return false; }
+      // 목록(마스터-디테일)이 최신 제목·문항수를 보이도록 부모 캐시도 동기화
+      onMetaChanged({ title, description: description.trim() || null, questions });
       return true;
     } catch { return false; }
   };
@@ -669,6 +671,7 @@ export default function SurveyTab({
 }) {
   const [surveys, setSurveys] = useState<AdminSurvey[] | null>(null);
   const [creating, setCreating] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null); // 목록↔상세(마스터-디테일)
 
   const viewerTheme: ViewerTheme = useMemo(() => ({
     accent: theme?.accentColor || "#6D28D9",
@@ -697,11 +700,44 @@ export default function SurveyTab({
       if (!res.ok) { toast.error("설문 생성에 실패했어요"); return; }
       const data = await res.json();
       setSurveys((prev) => [...(prev ?? []), data.survey]);
+      setSelectedId(data.survey.id); // 만들면 바로 편집으로
     } finally { setCreating(false); }
   };
 
+  // ── 상세(선택된 설문 편집) — 목록에서 클릭하면 진입 ──
+  const selected = surveys?.find((s) => s.id === selectedId) ?? null;
+  if (selected) {
+    return (
+      <div className="max-w-[1600px] space-y-4 p-4 sm:p-6 lg:p-8">
+        <button
+          type="button"
+          onClick={() => setSelectedId(null)}
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />설문 목록
+        </button>
+        <SurveyEditor
+          key={selected.id}
+          webinarId={webinarId}
+          slug={slug}
+          webinarName={webinarName}
+          theme={viewerTheme}
+          survey={selected}
+          onDeleted={() => { setSurveys((prev) => (prev ?? []).filter((item) => item.id !== selected.id)); setSelectedId(null); }}
+          onMetaChanged={(patch) =>
+            setSurveys((prev) => (prev ?? []).map((item) => {
+              if (item.id !== selected.id) return patch.showOnEnded === true ? { ...item, showOnEnded: false } : item;
+              return { ...item, ...patch };
+            }))
+          }
+        />
+      </div>
+    );
+  }
+
+  // ── 목록 ──
   return (
-    <div className="max-w-[1600px] space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="max-w-3xl space-y-6 p-4 sm:p-6 lg:p-8">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-sm font-semibold">설문</h3>
@@ -730,23 +766,42 @@ export default function SurveyTab({
           <p className="text-xs text-muted-foreground">새 설문을 만들면 만족도 템플릿(별점·객관식·추천지수·주관식)으로 시작해요.</p>
         </div>
       )}
-      {surveys?.map((s) => (
-        <SurveyEditor
-          key={s.id}
-          webinarId={webinarId}
-          slug={slug}
-          webinarName={webinarName}
-          theme={viewerTheme}
-          survey={s}
-          onDeleted={() => setSurveys((prev) => (prev ?? []).filter((item) => item.id !== s.id))}
-          onMetaChanged={(patch) =>
-            setSurveys((prev) => (prev ?? []).map((item) => {
-              if (item.id !== s.id) return patch.showOnEnded === true ? { ...item, showOnEnded: false } : item;
-              return { ...item, ...patch };
-            }))
-          }
-        />
-      ))}
+
+      {/* 설문 목록 — 카드 하나 = 설문 하나. 클릭하면 편집으로 (밑으로 길게 쌓이지 않게) */}
+      {surveys && surveys.length > 0 && (
+        <div className="space-y-2">
+          {surveys.map((s) => {
+            const qCount = s.questions.filter((q) => q.title.trim() && !((q.type === "single" || q.type === "multiple") && q.options.filter(Boolean).length === 0)).length;
+            const accepting = isSurveyAcceptingResponses(s);
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setSelectedId(s.id)}
+                className="group flex w-full items-center gap-3 rounded-2xl bg-background p-4 text-left shadow-sm transition-all hover:shadow-md hover:ring-1 hover:ring-violet-400/40"
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-400">
+                  <ClipboardList className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <span className="truncate text-sm font-semibold">{s.title || "제목 없는 설문"}</span>
+                    {s.isActive && <span className="rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-green-600 dark:text-green-400">송출 중</span>}
+                    {s.showOnEnded && <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-medium text-violet-600 dark:text-violet-400">종료 화면</span>}
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${accepting ? "bg-green-500/10 text-green-600 dark:text-green-400" : "bg-secondary text-muted-foreground"}`}>
+                      {accepting ? "응답 받는 중" : "마감"}
+                    </span>
+                  </span>
+                  <span className="mt-0.5 block text-[11px] text-muted-foreground tabular-nums">
+                    {qCount}문항 · 응답 {(s._count?.responses ?? 0).toLocaleString()}건
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-violet-500" />
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
