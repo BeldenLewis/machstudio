@@ -17,7 +17,9 @@ import {
   ClipboardList,
   Clock,
   Eye,
+  ChevronRight,
   HelpCircle,
+  Inbox,
   ListChecks,
   Loader2,
   Mail,
@@ -36,7 +38,7 @@ import QATab from "./QATab";
 import AnnouncementsTab from "./AnnouncementsTab";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { WEBINAR_STATUS_META } from "@/lib/webinar-status";
-import { isSurveyAcceptingResponses } from "@/lib/webinar-survey";
+import { isSurveyAcceptingResponses, type SurveyQuestion } from "@/lib/webinar-survey";
 import { formatKst } from "@/lib/datetime";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
@@ -377,6 +379,139 @@ function SurveyPushPanel({ webinarId }: { webinarId: string }) {
         })
       )}
       <p className="text-[11px] text-muted-foreground">발행하면 시청자 화면에 설문 모달이 떠요. 문항 편집·결과는 만들기 → 설문 / 분석 탭에서.</p>
+    </div>
+  );
+}
+
+/* ── 문의·폼 응답 피드 — CTA 폼/설문으로 들어온 응답을 최신순으로. 누가·무엇을 남겼는지 실시간 확인. ── */
+interface InquiryResponse {
+  id: string;
+  surveyId: string;
+  surveyTitle: string;
+  submittedAt: string;
+  source: string | null;
+  answers: Record<string, unknown>;
+  registrant: { id: string; name: string; company: string | null; email: string | null; phone: string | null } | null;
+}
+const SOURCE_LABEL: Record<string, string> = { live: "라이브", ended: "종료 화면", link: "링크" };
+
+function inquiryAnswerText(q: SurveyQuestion, answer: unknown): string {
+  if (answer === undefined || answer === null || answer === "") return "";
+  const v = Array.isArray(answer) ? answer.join(", ") : String(answer);
+  return q.type === "rating" || q.type === "nps" ? `${v}점` : v;
+}
+
+function InquiryPanel({ webinarId, tick = 0, onNavigate }: { webinarId: string; tick?: number; onNavigate?: (target: string) => void }) {
+  const [responses, setResponses] = useState<InquiryResponse[]>([]);
+  const [surveys, setSurveys] = useState<Record<string, { title: string; questions: SurveyQuestion[] }>>({});
+  const [total, setTotal] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const reqRef = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const my = ++reqRef.current;
+    (async () => {
+      try {
+        const res = await fetch(`/api/webinars/${webinarId}/survey-responses`);
+        if (cancelled || my !== reqRef.current) return;
+        if (!res.ok) { setLoaded(true); return; }
+        const data = await res.json();
+        setResponses(data.responses ?? []);
+        setSurveys(data.surveys ?? {});
+        setTotal(data.total ?? 0);
+      } catch { /* 다음 주기 재시도 */ } finally {
+        if (!cancelled && my === reqRef.current) setLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [webinarId, tick]);
+
+  if (!loaded) {
+    return <div className="flex justify-center py-6 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /></div>;
+  }
+
+  if (responses.length === 0) {
+    return (
+      <p className="rounded-xl border border-dashed border-border p-3 text-xs leading-relaxed text-muted-foreground">
+        아직 들어온 문의·폼 응답이 없어요. 만들기 → 라이브 페이지의 CTA 버튼에 폼을 연결하면, 시청자가 남긴 문의가 여기로 실시간으로 모여요.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="space-y-1.5">
+        {responses.map((r) => {
+          const qs = surveys[r.surveyId]?.questions ?? [];
+          const answered = qs
+            .map((q) => ({ q, text: inquiryAnswerText(q, r.answers?.[q.id]) }))
+            .filter((a) => a.text !== "");
+          const preview = answered.map((a) => a.text).join(" · ");
+          const open = expanded === r.id;
+          return (
+            <div key={r.id} className={`rounded-xl border transition-colors ${open ? "border-violet-500/40 bg-violet-500/[0.04]" : "border-border bg-secondary/20"}`}>
+              <button
+                type="button"
+                onClick={() => setExpanded(open ? null : r.id)}
+                aria-expanded={open}
+                className="flex w-full items-start gap-2.5 p-3 text-left"
+              >
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-500/10 text-[11px] font-semibold text-violet-600 dark:text-violet-400" aria-hidden>
+                  {r.registrant?.name?.[0] ?? "익"}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                    <span className="text-xs font-semibold">{r.registrant?.name ?? "익명"}</span>
+                    {r.registrant?.company && <span className="text-[11px] text-muted-foreground">{r.registrant.company}</span>}
+                    <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">{r.surveyTitle}</span>
+                  </span>
+                  {!open && preview && <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{preview}</span>}
+                </span>
+                <span className="mt-0.5 flex shrink-0 items-center gap-1 text-[10px] tabular-nums text-muted-foreground">
+                  {formatKst(r.submittedAt, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                  <ChevronDown className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`} />
+                </span>
+              </button>
+
+              {open && (
+                <div className="space-y-2.5 border-t border-border/60 px-3 pb-3 pt-2.5">
+                  {(r.registrant?.email || r.registrant?.phone) && (
+                    <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                      {r.registrant?.email && <span>{r.registrant.email}</span>}
+                      {r.registrant?.phone && <span>{r.registrant.phone}</span>}
+                    </p>
+                  )}
+                  {answered.length === 0 ? (
+                    <p className="text-[11px] text-muted-foreground">기록된 답변이 없어요.</p>
+                  ) : (
+                    <dl className="space-y-2">
+                      {answered.map(({ q, text }) => (
+                        <div key={q.id} className="space-y-0.5">
+                          <dt className="text-[11px] text-muted-foreground">{q.title}</dt>
+                          <dd className="whitespace-pre-wrap break-words text-xs leading-relaxed">{text}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                  <p className="text-[10px] text-muted-foreground">{SOURCE_LABEL[r.source ?? ""] ?? "링크"} 유입{r.registrant ? " · 등록자 연결됨" : " · 익명(비등록)"}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between gap-2 pt-0.5">
+        <p className="text-[11px] text-muted-foreground">
+          최근 {responses.length}건{total > responses.length && ` · 전체 ${total.toLocaleString()}건`}
+        </p>
+        {onNavigate && (
+          <button type="button" onClick={() => onNavigate("operate-registrants")} className="inline-flex items-center gap-0.5 text-[11px] font-medium text-violet-600 transition-colors hover:text-violet-500 dark:text-violet-400">
+            등록자에서 전체 보기<ChevronRight className="h-3 w-3" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -1754,6 +1889,15 @@ export default function LiveConsoleTab({
     </>
   );
 
+  const inquirySection = (
+    <Section title="문의·폼 응답" icon={Inbox} defaultOpen={status === "live"}>
+      <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">
+        CTA 폼·설문으로 들어온 응답이에요. 누가 무엇을 남겼는지 최신순으로 보여줘요 — 행을 누르면 답변 전체가 펼쳐져요.
+      </p>
+      <InquiryPanel webinarId={webinarId} tick={liveTick} onNavigate={onNavigate} />
+    </Section>
+  );
+
   const viewerSection = (
     // 배지는 실제 접속자 수(summary) — viewers 는 미리보기용으로 서버에서 잘려 오므로 개수로 쓰면 안 된다.
     <Section title="시청자" icon={Activity} badge={presenceTotal ? (
@@ -2018,7 +2162,8 @@ export default function LiveConsoleTab({
             {chatCard}
           </div>
 
-          {/* 시청자·운영 로그 — 라이브 작업 영역 아래로 (발송·편집은 인터랙션 카드의 설정 드로어로 이동) */}
+          {/* 시청자·문의·운영 로그 — 라이브 작업 영역 아래로 (발송·편집은 인터랙션 카드의 설정 드로어로 이동) */}
+          {inquirySection}
           {viewerSection}
           {activityLog}
         </>
@@ -2036,6 +2181,7 @@ export default function LiveConsoleTab({
           {/* ── 참여 관리 — 시청자가 남긴 것 관리 ── */}
           <GroupLabel>참여 관리</GroupLabel>
           {participationGroup}
+          {inquirySection}
 
           {/* ── 발송 — 외부 설문·이메일 내보내기 ── */}
           <GroupLabel>발송</GroupLabel>
