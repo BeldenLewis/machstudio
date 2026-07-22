@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, BarChart3, Bell, ClipboardCheck, ExternalLink, Megaphone, MessageSquarePlus, X } from "lucide-react";
-import SurveyForm, { SURVEY_FORM_CSS } from "./SurveyForm";
+import SurveyForm, { SURVEY_FORM_CSS, clearSurveyDraft } from "./SurveyForm";
 import type { SurveyAnswers, SurveyQuestion } from "@/lib/webinar-survey";
 
 export interface LivePopup {
@@ -184,6 +184,8 @@ export default function LivePushLayer({
   // 문항은 폴 페이로드에 없으므로 공개 GET 으로 1회 로드한다.
   const surveyKey = (s: { id: string; pushedAt: string | null }) => `mach_survey_${s.id}_${s.pushedAt ?? "0"}`;
   const surveySubmittedKey = (s: { id: string; pushedAt: string | null }) => `mach_survey_submitted_${s.id}_${s.pushedAt ?? "0"}`;
+  // 작성 중 응답 임시저장 키(설문 인스턴스별). 재발행(pushedAt 변경) 시 새 키라 옛 초안이 섞이지 않는다.
+  const surveyDraftKey = (s: { id: string; pushedAt: string | null }) => `mach_survey_draft_${s.id}_${s.pushedAt ?? "0"}`;
   useEffect(() => {
     if (surveyDone) return; // 감사 화면 표시 중 — 타임아웃이 닫는다(폴 갱신이 조기 언마운트하지 않게)
     if (!incomingSurvey || (sessionGet(surveyKey(incomingSurvey)) && surveyReopenKey !== surveyKey(incomingSurvey))) {
@@ -309,6 +311,7 @@ export default function LivePushLayer({
       }
       sessionSet(surveyKey(activeSurvey));
       sessionSet(surveySubmittedKey(activeSurvey));
+      clearSurveyDraft(surveyDraftKey(activeSurvey)); // 제출 완료 — 임시저장 정리
       setSurveyReopenKey(null);
       setSurveyDone(true);
       setTimeout(() => {
@@ -478,7 +481,7 @@ export default function LivePushLayer({
                     <p className="mb-4 whitespace-pre-wrap text-sm leading-relaxed" style={{ color: soft(65) }}>{activeSurvey.description}</p>
                   )}
                   <div className="pt-2">
-                    <SurveyForm questions={activeSurvey.questions} submitting={surveySubmitting} onSubmit={submitSurvey} />
+                    <SurveyForm questions={activeSurvey.questions} submitting={surveySubmitting} onSubmit={submitSurvey} storageKey={surveyDraftKey(activeSurvey)} />
                   </div>
                   {surveyError && <p className="mt-3 text-[13px] text-red-400" role="alert">{surveyError}</p>}
                   <p className="mt-3 text-center text-[11px]" style={{ color: soft(40) }}>닫으면 이 설문은 다시 표시되지 않아요.</p>

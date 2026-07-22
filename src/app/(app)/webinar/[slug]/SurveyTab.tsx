@@ -94,6 +94,22 @@ function QuestionRow({
               선택지가 없으면 응답 화면에 표시되지 않아요{q.required ? " — 필수 문항이라 제출도 막혀요" : ""}.
             </p>
           )}
+          {q.type === "multiple" && q.options.length >= 2 && (
+            <label className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+              최대 선택
+              <select
+                value={q.maxSelect ?? 0}
+                onChange={(e) => { const n = Number(e.target.value); patch({ maxSelect: n > 0 ? n : undefined }); }}
+                className="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:outline-none focus:border-violet-400"
+              >
+                <option value={0}>제한 없음</option>
+                {/* 옵션 전체 선택 = 무제한과 같으므로 옵션수-1 까지만 제공(저장 규칙과 일치) */}
+                {q.options.slice(0, -1).map((_, i) => (
+                  <option key={i} value={i + 1}>{i + 1}개</option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
       )}
     </Reorder.Item>
