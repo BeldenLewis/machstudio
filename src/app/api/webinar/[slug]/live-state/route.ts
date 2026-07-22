@@ -70,7 +70,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     // 자체 설문 푸시 — 발행 중(isActive)이고 응답 수집 중(isOpen)인 것만.
     // questions 는 폴 페이로드에 싣지 않는다(매 폴 중복 전송 방지) — 모달이 공개 GET 으로 1회 로드.
     prisma.webinarSurvey.findFirst({
-      where: { webinarId: wid, isActive: true, isOpen: true },
+      where: { webinarId: wid, isActive: true, isOpen: true, OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }] },
       select: { id: true, title: true, pushedAt: true },
     }),
     wantChat && chatEnabled && registrationId

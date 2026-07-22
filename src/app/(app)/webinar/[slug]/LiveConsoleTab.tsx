@@ -36,6 +36,7 @@ import QATab from "./QATab";
 import AnnouncementsTab from "./AnnouncementsTab";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { WEBINAR_STATUS_META } from "@/lib/webinar-status";
+import { isSurveyAcceptingResponses } from "@/lib/webinar-survey";
 import { formatKst } from "@/lib/datetime";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
@@ -95,6 +96,7 @@ interface AdminSurveyPush {
   title: string;
   isActive: boolean;
   isOpen: boolean;
+  closesAt?: string | null;
   _count?: { responses: number };
 }
 
@@ -327,7 +329,7 @@ function PopupPanel({ webinarId }: { webinarId: string }) {
 
 /* ── 자체 설문 푸시 패널 — 설문 작성은 만들기 → 설문, 콘솔에선 발행/중지만 ── */
 function SurveyPushPanel({ webinarId }: { webinarId: string }) {
-  const [surveys, setSurveys] = useState<{ id: string; title: string; isActive: boolean; isOpen: boolean; questions?: unknown[]; _count?: { responses: number } }[]>([]);
+  const [surveys, setSurveys] = useState<{ id: string; title: string; isActive: boolean; isOpen: boolean; closesAt?: string | null; questions?: unknown[]; _count?: { responses: number } }[]>([]);
 
   const fetchSurveys = useCallback(async () => {
     const res = await fetch(`/api/webinars/${webinarId}/surveys`);
@@ -354,21 +356,25 @@ function SurveyPushPanel({ webinarId }: { webinarId: string }) {
       {surveys.length === 0 ? (
         <p className="text-xs text-muted-foreground">아직 설문이 없어요. 만들기 → 설문에서 먼저 만들어주세요.</p>
       ) : (
-        surveys.map((s) => (
+        surveys.map((s) => {
+          // 마감 예약(closesAt) 경과도 마감 — 발행해도 live-state 가 걸러 시청자에게 안 나가므로 콘솔에서도 막는다
+          const accepting = isSurveyAcceptingResponses(s);
+          return (
           <div key={s.id} className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${s.isActive ? "border-green-500/40 bg-green-500/[0.06]" : "border-border"}`}>
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">
                 {s.isActive && <span className="mr-1.5 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-green-600 dark:text-green-400">송출 중</span>}
                 {s.title}
               </p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">응답 {s._count?.responses ?? 0}건{!s.isOpen && " · 마감됨"}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">응답 {s._count?.responses ?? 0}건{!accepting && (s.isOpen ? " · 예약 마감됨" : " · 마감됨")}</p>
             </div>
-            <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => toggle(s)} disabled={!s.isOpen && !s.isActive}
+            <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => toggle(s)} disabled={!accepting && !s.isActive}
               className={`shrink-0 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-40 ${s.isActive ? "border-border text-muted-foreground hover:bg-secondary" : "border-green-500/40 text-green-600 dark:text-green-400 hover:bg-green-500/10"}`}>
               {s.isActive ? "발행 중지" : "발행"}
             </motion.button>
           </div>
-        ))
+          );
+        })
       )}
       <p className="text-[11px] text-muted-foreground">발행하면 시청자 화면에 설문 모달이 떠요. 문항 편집·결과는 만들기 → 설문 / 분석 탭에서.</p>
     </div>
@@ -1410,8 +1416,8 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
   }, [drawerOpen]);
 
   const activePoll = polls.find((p) => p.isActive) ?? null;
-  // 마감된 설문은 발행해도 시청자에게 보이지 않으므로, 새 발행 대상으로는 열려 있는 설문만 노출한다.
-  const currentSurvey = surveys.find((s) => s.isActive) ?? surveys.find((s) => s.isOpen) ?? null;
+  // 마감된 설문(수동·예약 마감 모두)은 발행해도 시청자에게 보이지 않으므로, 새 발행 대상으로는 응답 수집 중인 설문만 노출한다.
+  const currentSurvey = surveys.find((s) => s.isActive) ?? surveys.find((s) => isSurveyAcceptingResponses(s)) ?? null;
   const rows = [
     { seg: "polls", icon: BarChart3, tone: "bg-violet-500/10 text-violet-600 dark:text-violet-400", name: "실시간 투표", cur: activePoll ?? polls[0] ?? null, summary: (activePoll ?? polls[0])?.question ?? "등록된 투표 없음" },
     { seg: "surveys", icon: ClipboardCheck, tone: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", name: "설문", cur: currentSurvey, summary: currentSurvey?.title ?? "등록된 설문 없음" },

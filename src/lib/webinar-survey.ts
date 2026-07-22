@@ -51,6 +51,13 @@ export function normalizeSurveyQuestions(raw: unknown, opts?: { includeHidden?: 
   return (opts?.includeHidden ? normalized : visible).slice(0, 30);
 }
 
+/** 응답 수집 중인가 — 수동 토글(isOpen)과 마감 예약(closesAt) 양쪽을 판정. 공개 GET/POST·노출면 게이트가 공유. */
+export function isSurveyAcceptingResponses(s: { isOpen: boolean; closesAt?: string | Date | null }): boolean {
+  if (!s.isOpen) return false;
+  if (!s.closesAt) return true;
+  return new Date(s.closesAt).getTime() > Date.now();
+}
+
 export type SurveyAnswers = Record<string, number | string | string[]>;
 
 /** 서버측 응답 검증 — 유효한 답만 남긴 cleaned 를 반환. 필수 미응답/형식 오류면 error. */

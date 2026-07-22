@@ -231,8 +231,138 @@ function ResultBar({ label, count, total }: { label: string; count: number; tota
   );
 }
 
+/* ── 설문 개별 응답 — 열었을 때만 로드(egress). 등록자 연결 응답은 이름·연락처 표시, CSV 내보내기 포함. ── */
+interface SurveyResponseRow {
+  id: string;
+  submittedAt: string;
+  source: string | null;
+  answers: Record<string, number | string | string[]>;
+  registrant: { id: string; name: string; email: string | null; phone: string | null; company: string | null } | null;
+}
+interface SurveyResponsesData {
+  survey: { id: string; title: string };
+  questions: { id: string; type: string; title: string }[];
+  total: number;
+  responses: SurveyResponseRow[];
+}
+
+function formatAnswer(type: string, v: number | string | string[] | undefined): string {
+  if (v === undefined || v === null || v === "") return "";
+  if (Array.isArray(v)) return v.join(", ");
+  if (type === "rating") return `★${v}`;
+  return String(v);
+}
+
+const fmtSubmittedAt = (iso: string) =>
+  new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+
+function SurveyResponsesPanel({ webinarId, surveyId }: { webinarId: string; surveyId: string }) {
+  const [data, setData] = useState<SurveyResponsesData | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/webinars/${webinarId}/surveys/${surveyId}/responses`);
+        if (cancelled) return;
+        if (!res.ok) { setFailed(true); return; }
+        setData(await res.json());
+      } catch { if (!cancelled) setFailed(true); }
+    })();
+    return () => { cancelled = true; };
+  }, [webinarId, surveyId]);
+
+  const downloadCsv = useCallback(() => {
+    if (!data) return;
+    const esc = (v: unknown) => {
+      if (v === null || v === undefined) return "";
+      const s = String(v);
+      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const headers = ["제출시각", "이름", "이메일", "전화", "회사", "소스", ...data.questions.map((q) => q.title || "(제목 없음)")];
+    const rows = data.responses.map((r) => [
+      new Date(r.submittedAt).toLocaleString("ko-KR"),
+      r.registrant?.name ?? "익명",
+      r.registrant?.email ?? "",
+      r.registrant?.phone ?? "",
+      r.registrant?.company ?? "",
+      SOURCE_LABELS[r.source ?? ""] ?? r.source ?? "",
+      ...data.questions.map((q) => formatAnswer(q.type, r.answers[q.id])),
+    ]);
+    const csv = "﻿" + [headers, ...rows].map((row) => row.map(esc).join(",")).join("\r\n"); // BOM — 엑셀 한글
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `설문응답_${data.survey.title}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [data]);
+
+  if (failed) return <p className="mt-4 border-t border-border pt-4 text-xs text-muted-foreground">개별 응답을 불러오지 못했어요. 잠시 후 다시 열어주세요.</p>;
+  if (!data) return <div className="mt-4 flex justify-center border-t border-border pt-6 pb-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /></div>;
+
+  return (
+    <div className="mt-4 border-t border-border pt-4">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground tabular-nums">
+          최근 {data.responses.length}건{data.total > data.responses.length && ` 표시 · 전체 ${n(data.total)}건 (전체는 CSV 기준 최근 ${data.responses.length}건)`}
+        </p>
+        {data.responses.length > 0 && (
+          <button type="button" onClick={downloadCsv} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+            <Download className="h-3.5 w-3.5" />CSV
+          </button>
+        )}
+      </div>
+
+      {data.responses.length === 0 ? (
+        <p className="py-4 text-center text-xs text-muted-foreground">아직 응답이 없어요.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-xs">
+            <thead>
+              <tr className="border-b border-border text-left text-muted-foreground">
+                <th className="whitespace-nowrap py-2 pr-4 font-medium">응답자</th>
+                <th className="whitespace-nowrap py-2 pr-4 font-medium">소스</th>
+                <th className="whitespace-nowrap py-2 pr-4 font-medium">제출</th>
+                {data.questions.map((q) => (
+                  <th key={q.id} className="max-w-[200px] truncate py-2 pr-4 font-medium" title={q.title}>{q.title || "(제목 없음)"}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.responses.map((r) => (
+                <tr key={r.id} className="border-b border-border/50 align-top last:border-0">
+                  <td className="whitespace-nowrap py-2 pr-4">
+                    {r.registrant ? (
+                      <>
+                        <span className="font-medium">{r.registrant.name}</span>
+                        {r.registrant.email && <span className="block text-[11px] text-muted-foreground">{r.registrant.email}</span>}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">익명</span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-4 text-muted-foreground">{SOURCE_LABELS[r.source ?? ""] ?? r.source ?? "—"}</td>
+                  <td className="whitespace-nowrap py-2 pr-4 tabular-nums text-muted-foreground">{fmtSubmittedAt(r.submittedAt)}</td>
+                  {data.questions.map((q) => (
+                    <td key={q.id} className="max-w-[240px] py-2 pr-4">
+                      <span className="line-clamp-3 whitespace-pre-wrap break-words">{formatAnswer(q.type, r.answers[q.id])}</span>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SurveyResultsSection({ webinarId }: { webinarId: string }) {
   const [data, setData] = useState<SurveyResultData[] | null>(null);
+  const [openResponses, setOpenResponses] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -259,14 +389,26 @@ function SurveyResultsSection({ webinarId }: { webinarId: string }) {
     <>
       {data.map((d) => (
         <SectionCard key={d.survey.id}>
-          <div className="mb-4">
-            <h3 className="flex items-center gap-1.5 text-sm font-semibold"><BarChart3 className="h-4 w-4 text-violet-500" /> 설문 결과 — {d.survey.title}</h3>
-            <p className="mt-1 text-xs text-muted-foreground tabular-nums">
-              응답 {d.totalResponses}건 · 등록자 연결 {d.linkedResponses}건
-              {Object.entries(d.bySource).length > 0 && (
-                <> · {Object.entries(d.bySource).map(([k, v]) => `${SOURCE_LABELS[k] ?? k} ${v}`).join(" / ")}</>
-              )}
-            </p>
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="flex items-center gap-1.5 text-sm font-semibold"><BarChart3 className="h-4 w-4 text-violet-500" /> 설문 결과 — {d.survey.title}</h3>
+              <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                응답 {d.totalResponses}건 · 등록자 연결 {d.linkedResponses}건
+                {Object.entries(d.bySource).length > 0 && (
+                  <> · {Object.entries(d.bySource).map(([k, v]) => `${SOURCE_LABELS[k] ?? k} ${v}`).join(" / ")}</>
+                )}
+              </p>
+            </div>
+            {d.totalResponses > 0 && (
+              <button
+                type="button"
+                onClick={() => setOpenResponses((prev) => ({ ...prev, [d.survey.id]: !prev[d.survey.id] }))}
+                aria-expanded={!!openResponses[d.survey.id]}
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${openResponses[d.survey.id] ? "border-violet-500/40 bg-violet-500/10 text-violet-600 dark:text-violet-400" : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
+              >
+                <Users className="h-3.5 w-3.5" />개별 응답 {openResponses[d.survey.id] ? "접기" : "보기"}
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -326,6 +468,8 @@ function SurveyResultsSection({ webinarId }: { webinarId: string }) {
               </div>
             ))}
           </div>
+
+          {openResponses[d.survey.id] && <SurveyResponsesPanel webinarId={webinarId} surveyId={d.survey.id} />}
         </SectionCard>
       ))}
     </>

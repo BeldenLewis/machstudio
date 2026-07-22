@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import type { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { rateLimitAsync, getClientIp } from "@/lib/ratelimit";
-import { normalizeSurveyQuestions, validateSurveyAnswers } from "@/lib/webinar-survey";
+import { isSurveyAcceptingResponses, normalizeSurveyQuestions, validateSurveyAnswers } from "@/lib/webinar-survey";
 
 const CORS_HEADERS = { "Access-Control-Allow-Origin": "*" };
 
 async function findSurvey(slug: string, surveyId: string) {
   return prisma.webinarSurvey.findFirst({
     where: { id: surveyId, webinar: { slug } },
-    select: { id: true, webinarId: true, title: true, description: true, questions: true, isOpen: true },
+    select: { id: true, webinarId: true, title: true, description: true, questions: true, isOpen: true, closesAt: true },
   });
 }
 
@@ -26,7 +26,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         title: survey.title,
         description: survey.description,
         questions: normalizeSurveyQuestions(survey.questions),
-        isOpen: survey.isOpen,
+        isOpen: isSurveyAcceptingResponses(survey), // 마감 예약(closesAt) 경과도 마감으로
       },
     },
     { headers: CORS_HEADERS },
@@ -48,7 +48,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   const survey = await findSurvey(slug, surveyId);
   if (!survey) return NextResponse.json({ error: "없는 설문이에요" }, { status: 404, headers: CORS_HEADERS });
-  if (!survey.isOpen) return NextResponse.json({ error: "마감된 설문이에요" }, { status: 400, headers: CORS_HEADERS });
+  if (!isSurveyAcceptingResponses(survey)) return NextResponse.json({ error: "마감된 설문이에요" }, { status: 400, headers: CORS_HEADERS });
 
   const body = await request.json().catch(() => ({}));
   const questions = normalizeSurveyQuestions(survey.questions);
