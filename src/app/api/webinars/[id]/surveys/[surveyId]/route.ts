@@ -40,6 +40,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const data: Prisma.WebinarSurveyUpdateInput = {};
   if (typeof body?.title === "string") data.title = body.title.trim() || existing.title;
   if (body?.description !== undefined) data.description = String(body.description ?? "").trim() || null;
+  // 제출 완료 화면 문구 — 빈 값이면 null(노출면별 기본 문구로 폴백)
+  if (body?.doneTitle !== undefined) data.doneTitle = String(body.doneTitle ?? "").trim() || null;
+  if (body?.doneDescription !== undefined) data.doneDescription = String(body.doneDescription ?? "").trim() || null;
   if (body?.questions !== undefined) data.questions = normalizeSurveyQuestions(body.questions, { includeHidden: true }) as unknown as Prisma.InputJsonValue;
   if (typeof body?.isOpen === "boolean") data.isOpen = body.isOpen;
 

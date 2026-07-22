@@ -74,6 +74,8 @@ export interface LiveSurveyPush {
 interface ActiveSurveyData extends LiveSurveyPush {
   description: string | null;
   questions: SurveyQuestion[];
+  doneTitle?: string | null;
+  doneDescription?: string | null;
 }
 
 interface TallyWindow extends Window {
@@ -211,7 +213,7 @@ export default function LivePushLayer({
           return;
         }
         setSurveyError("");
-        setActiveSurvey({ ...incomingSurvey, description: data.survey.description ?? null, questions: data.survey.questions });
+        setActiveSurvey({ ...incomingSurvey, description: data.survey.description ?? null, questions: data.survey.questions, doneTitle: data.survey.doneTitle ?? null, doneDescription: data.survey.doneDescription ?? null });
       } catch {
         if (surveyFetchRef.current === key) surveyFetchRef.current = null; // 다음 폴에서 재시도
       }
@@ -468,7 +470,10 @@ export default function LivePushLayer({
               {surveyDone ? (
                 <div className="py-10 text-center">
                   <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full" style={{ background: "color-mix(in srgb,#12B76A 14%,transparent)", color: "#12B76A" }}>✓</div>
-                  <p className="text-lg font-bold">소중한 의견 감사합니다</p>
+                  <p className="text-lg font-bold">{activeSurvey.doneTitle?.trim() || "소중한 의견 감사합니다"}</p>
+                  {activeSurvey.doneDescription?.trim() && (
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed" style={{ color: soft(60) }}>{activeSurvey.doneDescription}</p>
+                  )}
                 </div>
               ) : (
                 <>
