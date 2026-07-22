@@ -973,6 +973,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           viewerCount={viewerCount}
           chatEnabled={chatEnabled}
           onTabChange={setActiveTab}
+          slug={slug}
+          registrationId={registrationId}
           qa={{
             sessions: webinar.sessions,
             question,

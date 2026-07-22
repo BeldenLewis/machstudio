@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
@@ -32,31 +32,54 @@ function Toggle({ checked, onChange, label, desc }: { checked: boolean; onChange
 }
 
 // CTA 카드 편집 폼 (여러 장 지원)
+// 버튼 연결: 링크(URL) 또는 폼(자체 설문 = 커스텀 폼 — 문의·신청 등), 열기 방식: 새 창/모달
+type CtaBtnAction = "url" | "form";
+type CtaBtnOpen = "newTab" | "modal";
+interface CtaBtnForm { label: string; action: CtaBtnAction; url: string; surveyId: string; open: CtaBtnOpen }
 interface CtaFormCard {
   id: string;
   eyebrow: string; title: string; description: string; benefits: string;
-  primaryLabel: string; primaryUrl: string; secondaryLabel: string; secondaryUrl: string;
+  primary: CtaBtnForm; secondary: CtaBtnForm;
 }
-const EMPTY_CTA: CtaFormCard = {
+const emptyBtn = (): CtaBtnForm => ({ label: "", action: "url", url: "", surveyId: "", open: "newTab" });
+const emptyCta = (): CtaFormCard => ({
   id: crypto.randomUUID(),
   eyebrow: "", title: "", description: "", benefits: "",
-  primaryLabel: "", primaryUrl: "", secondaryLabel: "", secondaryUrl: "",
-};
+  primary: emptyBtn(), secondary: emptyBtn(),
+});
+interface RawCtaButton { label?: string; url?: string; style?: string; action?: string; surveyId?: string; open?: string }
+function btnToForm(b?: RawCtaButton): CtaBtnForm {
+  return {
+    label: b?.label ?? "",
+    action: b?.action === "form" ? "form" : "url",
+    url: b?.url ?? "",
+    surveyId: b?.surveyId ?? "",
+    open: b?.open === "modal" ? "modal" : "newTab",
+  };
+}
 function ctaToForm(raw: Record<string, unknown>): CtaFormCard {
-  const buttons = Array.isArray(raw.buttons) ? (raw.buttons as { label?: string; url?: string; style?: string }[]) : [];
-  const primary = buttons.find((b) => b.style !== "ghost");
-  const secondary = buttons.find((b) => b.style === "ghost");
+  const buttons = Array.isArray(raw.buttons) ? (raw.buttons as RawCtaButton[]) : [];
   return {
     id: crypto.randomUUID(),
     eyebrow: (raw.eyebrow as string) ?? "",
     title: (raw.title as string) ?? "",
     description: (raw.description as string) ?? "",
     benefits: Array.isArray(raw.benefits) ? (raw.benefits as string[]).join("\n") : "",
-    primaryLabel: primary?.label ?? "",
-    primaryUrl: primary?.url ?? "",
-    secondaryLabel: secondary?.label ?? "",
-    secondaryUrl: secondary?.url ?? "",
+    primary: btnToForm(buttons.find((b) => b.style !== "ghost")),
+    secondary: btnToForm(buttons.find((b) => b.style === "ghost")),
   };
+}
+/** 편집 폼 → 저장용 버튼 config. 라벨 + (URL 또는 폼) 이 갖춰져야 저장. */
+function btnToConfig(b: CtaBtnForm, style: "white" | "ghost"): Record<string, unknown> | null {
+  if (!b.label.trim()) return null;
+  if (b.action === "form") {
+    if (!b.surveyId) return null;
+    return { label: b.label.trim(), action: "form", surveyId: b.surveyId, open: b.open, style };
+  }
+  if (!b.url.trim()) return null;
+  const o: Record<string, unknown> = { label: b.label.trim(), url: b.url.trim(), style };
+  if (b.open === "modal") o.open = "modal"; // 기본(새 창)은 저장하지 않아 기존 config 와 동일 형태 유지
+  return o;
 }
 
 interface Theme {
@@ -124,12 +147,27 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
   const updateCta = (i: number, patch: Partial<CtaFormCard>) =>
     setCtaCards((prev) => prev.map((c, j) => (j === i ? { ...c, ...patch } : c)));
 
+  // 폼형 버튼의 연결 대상(자체 설문 = 커스텀 폼) 목록 — CTA 편집에서 선택
+  const [surveyOptions, setSurveyOptions] = useState<{ id: string; title: string }[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/webinars/${webinar.id}/surveys`);
+        if (cancelled) return;
+        if (!res.ok) { setSurveyOptions([]); return; }
+        const data = await res.json();
+        setSurveyOptions(((data.surveys ?? []) as { id: string; title: string }[]).map((s) => ({ id: s.id, title: s.title })));
+      } catch { if (!cancelled) setSurveyOptions([]); }
+    })();
+    return () => { cancelled = true; };
+  }, [webinar.id]);
+
   const buildLivePage = () => {
     const ctas = ctaCards
       .map((card) => {
-        const buttons: { label: string; url: string; style: "white" | "ghost" }[] = [];
-        if (card.primaryLabel.trim() && card.primaryUrl.trim()) buttons.push({ label: card.primaryLabel.trim(), url: card.primaryUrl.trim(), style: "white" });
-        if (card.secondaryLabel.trim() && card.secondaryUrl.trim()) buttons.push({ label: card.secondaryLabel.trim(), url: card.secondaryUrl.trim(), style: "ghost" });
+        const buttons = [btnToConfig(card.primary, "white"), btnToConfig(card.secondary, "ghost")]
+          .filter((b): b is Record<string, unknown> => b !== null);
         const benefits = card.benefits.split("\n").map((s) => s.trim()).filter(Boolean);
         const c: Record<string, unknown> = {};
         if (card.eyebrow.trim()) c.eyebrow = card.eyebrow.trim();
@@ -312,17 +350,60 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
                   </div>
                   <textarea rows={2} placeholder="설명" value={card.description} onChange={(e) => updateCta(i, { description: e.target.value })} className={`${inputCls} resize-none`} />
                   <textarea rows={2} placeholder="혜택 목록 — 한 줄에 하나씩 (선택)" value={card.benefits} onChange={(e) => updateCta(i, { benefits: e.target.value })} className={`${inputCls} resize-none`} />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <input type="text" placeholder="메인 버튼 라벨 (예: 자료 받기)" value={card.primaryLabel} onChange={(e) => updateCta(i, { primaryLabel: e.target.value })} className={inputCls} />
-                    <input type="url" placeholder="메인 버튼 URL" value={card.primaryUrl} onChange={(e) => updateCta(i, { primaryUrl: e.target.value })} className={inputCls} />
-                    <input type="text" placeholder="보조 버튼 라벨 (선택)" value={card.secondaryLabel} onChange={(e) => updateCta(i, { secondaryLabel: e.target.value })} className={inputCls} />
-                    <input type="url" placeholder="보조 버튼 URL (선택)" value={card.secondaryUrl} onChange={(e) => updateCta(i, { secondaryUrl: e.target.value })} className={inputCls} />
+                  <div className="space-y-2">
+                    {(["primary", "secondary"] as const).map((slot) => {
+                      const btn = card[slot];
+                      const upd = (patch: Partial<CtaBtnForm>) => updateCta(i, { [slot]: { ...btn, ...patch } } as Partial<CtaFormCard>);
+                      return (
+                        <div key={slot} className="space-y-2 rounded-xl border border-border/60 bg-background/60 p-2.5">
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_130px_96px]">
+                            <input
+                              type="text"
+                              placeholder={slot === "primary" ? "메인 버튼 라벨 (예: 자료 받기·문의하기)" : "보조 버튼 라벨 (선택)"}
+                              value={btn.label}
+                              onChange={(e) => upd({ label: e.target.value })}
+                              className={inputCls}
+                            />
+                            <select value={btn.action} onChange={(e) => upd({ action: e.target.value as CtaBtnAction })} aria-label="버튼 연결 대상" className={inputCls}>
+                              <option value="url">링크 (URL)</option>
+                              <option value="form">폼 (문의·신청)</option>
+                            </select>
+                            <select value={btn.open} onChange={(e) => upd({ open: e.target.value as CtaBtnOpen })} aria-label="열기 방식" className={inputCls}>
+                              <option value="newTab">새 창</option>
+                              <option value="modal">모달</option>
+                            </select>
+                          </div>
+                          {btn.action === "url" ? (
+                            <>
+                              <input type="url" placeholder="연결 URL (https://…)" value={btn.url} onChange={(e) => upd({ url: e.target.value })} className={inputCls} />
+                              {btn.open === "modal" && (
+                                <p className="text-[11px] text-amber-600">일부 사이트는 페이지 안 임베드(모달)를 차단해요 — 모달이 비어 보이면 새 창으로 바꿔주세요.</p>
+                              )}
+                            </>
+                          ) : surveyOptions === null ? (
+                            <p className="text-[11px] text-muted-foreground">폼 목록 불러오는 중…</p>
+                          ) : surveyOptions.length === 0 ? (
+                            <p className="text-[11px] text-amber-600">연결할 폼이 없어요 — 만들기 → 설문에서 먼저 만들어주세요. 설문 빌더가 곧 커스텀 폼 빌더예요(문항 자유 구성).</p>
+                          ) : (
+                            <>
+                              <select value={btn.surveyId} onChange={(e) => upd({ surveyId: e.target.value })} aria-label="연결할 폼" className={inputCls}>
+                                <option value="">폼 선택…</option>
+                                {surveyOptions.map((s) => (
+                                  <option key={s.id} value={s.id}>{s.title}</option>
+                                ))}
+                              </select>
+                              <p className="text-[11px] text-muted-foreground">응답은 분석 탭 → 설문 결과에서 개별 확인·CSV로 내려받을 수 있어요.</p>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </motion.div>
               ))}
             </AnimatePresence>
             <motion.button type="button" whileTap={{ scale: 0.98 }} transition={spring}
-              onClick={() => setCtaCards((prev) => [...prev, { ...EMPTY_CTA, id: crypto.randomUUID() }])}
+              onClick={() => setCtaCards((prev) => [...prev, emptyCta()])}
               className="w-full rounded-xl border border-dashed border-border py-2.5 text-xs font-medium text-violet-500 transition-colors hover:bg-violet-500/5">
               + CTA 카드 추가
             </motion.button>

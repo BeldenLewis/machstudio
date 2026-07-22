@@ -11,6 +11,8 @@ import { motion } from "framer-motion";
 import { getYouTubeVideoId } from "@/lib/youtube";
 import { CheckCircle2, Send, Share2 } from "lucide-react";
 import { formatKst, kstDateString } from "@/lib/datetime";
+import SurveyForm, { SURVEY_FORM_CSS, clearSurveyDraft } from "./SurveyForm";
+import type { SurveyAnswers, SurveyQuestion } from "@/lib/webinar-survey";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -56,8 +58,11 @@ interface ChatProps {
 
 interface CtaButton {
   label: string;
-  url: string;
+  url?: string;
   style?: "white" | "ghost";
+  action?: "url" | "form"; // 기본 url — form 이면 자체 폼(WebinarSurvey)을 연다
+  surveyId?: string; // action === "form" 일 때 연결된 폼
+  open?: "newTab" | "modal"; // 기본 newTab — 모달이면 페이지 안에서 띄운다
 }
 
 interface NotifyConfig {
@@ -299,6 +304,28 @@ const WATCH_CSS = `
 .stk-live .lv-switch[aria-checked="true"] { background:var(--key); border-color:transparent; }
 .stk-live .lv-switch[aria-checked="true"] .knob { transform:translateX(19px); }
 .stk-live .lv-notice { margin-top:16px; padding:14px 18px; border:1px solid var(--key-border); border-radius:var(--radius-sm); background:var(--key-dim); color:var(--muted); font-size:12.5px; line-height:1.7; word-break:keep-all; }
+/* CTA 모달 — 폼(자체 설문)·URL 임베드 공용 */
+.stk-live .lv-ctamodal-backdrop { position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(8,8,12,0.62); backdrop-filter:blur(4px); animation:lvFade .18s ease; }
+@keyframes lvFade { from { opacity:0; } }
+.stk-live .lv-ctamodal { position:relative; width:min(560px,100%); max-height:min(86vh,760px); overflow-y:auto; overscroll-behavior:contain; background:var(--card); color:var(--text); border-radius:var(--radius); box-shadow:0 30px 80px -20px rgba(0,0,0,.55); padding:28px 24px 26px; animation:lvPop .22s cubic-bezier(.2,.9,.3,1.2); }
+@keyframes lvPop { from { opacity:0; transform:translateY(14px) scale(.97); } }
+.stk-live .lv-ctamodal.frame { padding:0; overflow:hidden; width:min(720px,100%); height:min(86vh,760px); display:flex; flex-direction:column; }
+.stk-live .lv-ctamodal-hd { display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--line); flex-shrink:0; }
+.stk-live .lv-ctamodal-hd .t { flex:1; min-width:0; font-size:14px; font-weight:750; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.stk-live .lv-ctamodal-ext { font-size:12px; color:var(--key); font-weight:650; white-space:nowrap; text-decoration:none; }
+.stk-live .lv-ctamodal-ext:hover { text-decoration:underline; }
+.stk-live .lv-ctamodal-iframe { flex:1; width:100%; border:0; background:#fff; }
+.stk-live .lv-ctamodal-x { width:30px; height:30px; border:0; border-radius:8px; background:color-mix(in srgb,var(--text) 7%,transparent); color:var(--muted); font-size:13px; cursor:pointer; flex-shrink:0; transition:background .15s ease; }
+.stk-live .lv-ctamodal-x:hover { background:color-mix(in srgb,var(--text) 13%,transparent); }
+.stk-live .lv-ctamodal-x.abs { position:absolute; top:14px; right:14px; z-index:1; }
+.stk-live .lv-ctamodal-title { font-size:19px; font-weight:820; letter-spacing:-.02em; margin:0 28px 6px 0; word-break:keep-all; }
+.stk-live .lv-ctamodal-desc { font-size:13px; line-height:1.65; color:var(--muted); margin:0 0 18px; white-space:pre-wrap; word-break:keep-all; }
+.stk-live .lv-ctamodal-center { text-align:center; font-size:13.5px; line-height:1.7; color:var(--muted); padding:44px 8px; margin:0; }
+.stk-live .lv-ctamodal-center.done { padding:36px 8px; }
+.stk-live .lv-ctamodal-center.done .ok { display:inline-grid; place-items:center; width:52px; height:52px; border-radius:50%; background:color-mix(in srgb,#12B76A 14%,transparent); color:#12B76A; font-size:24px; font-weight:800; margin-bottom:12px; }
+.stk-live .lv-ctamodal-center.done .big { font-size:17px; font-weight:800; color:var(--text); margin:0 0 6px; }
+.stk-live .lv-ctamodal-center.done p { margin:0; }
+@media (max-width:560px) { .stk-live .lv-ctamodal { padding:22px 16px 20px; } .stk-live .lv-ctamodal-backdrop { padding:12px; } }
 @media (max-width:940px) {
   .stk-live .lv-card { height:auto !important; }
   .stk-live .lv-list, .stk-live .lv-feed, .stk-live .lv-agscroll { max-height:60vh; }
@@ -338,6 +365,8 @@ export default function LiveContentStk({
   chat,
   onTabChange,
   notifyState,
+  slug,
+  registrationId,
 }: {
   webinar: WebinarForLive;
   accent: string;
@@ -352,9 +381,13 @@ export default function LiveContentStk({
   chat?: ChatProps;
   onTabChange?: (tab: string) => void;
   notifyState?: { subscribed: boolean; onToggle: () => void; error?: string; pending?: boolean };
+  /** CTA 폼 모달·새 창 열기에 필요 — 없으면 폼형 CTA 버튼은 동작하지 않는다(목업 하니스 등) */
+  slug?: string;
+  /** 폼 응답을 등록자와 연결 (없으면 익명 응답) */
+  registrationId?: string | null;
 }) {
   const css = useMemo(
-    () => buildStkCss(accent || "#FE5816", text || "#f0f0f2", surface || "#121216") + WATCH_CSS,
+    () => buildStkCss(accent || "#FE5816", text || "#f0f0f2", surface || "#121216") + WATCH_CSS + SURVEY_FORM_CSS,
     [accent, text, surface],
   );
 
@@ -368,6 +401,22 @@ export default function LiveContentStk({
   const notify = live.notify;
   const hasNotify = !!notify?.enabled;
   const footCount = ctaList.length + (hasNotify ? 1 : 0);
+
+  // CTA 버튼 열기 방식 — 폼(자체 설문) 모달/새 창, URL 모달(iframe)/새 창
+  const [ctaFormModal, setCtaFormModal] = useState<string | null>(null); // surveyId
+  const [ctaFrameModal, setCtaFrameModal] = useState<{ url: string; title: string } | null>(null);
+  const ctaNeedsButton = (btn: CtaButton) => (btn.action === "form" && !!btn.surveyId) || (!!btn.url && btn.open === "modal");
+  const onCtaButton = (btn: CtaButton) => {
+    if (btn.action === "form" && btn.surveyId) {
+      if (btn.open === "newTab") {
+        if (slug) window.open(`/webinar/${slug}/survey/${btn.surveyId}`, "_blank", "noopener,noreferrer");
+        return;
+      }
+      if (slug) setCtaFormModal(btn.surveyId);
+      return;
+    }
+    if (btn.url && btn.open === "modal") setCtaFrameModal({ url: btn.url, title: btn.label });
+  };
   const answered = qa.answered ?? [];
 
   // 세션 상태 계산용 시계 — 클라이언트 전용 렌더라 Date.now() 초기화 안전. 30초 틱.
@@ -757,19 +806,32 @@ export default function LiveContentStk({
                 )}
                 {c.buttons && c.buttons.length > 0 && (
                   <div className="lv-fbtns">
-                    {c.buttons.map((btn, j) => (
-                      <motion.a
-                        key={j}
-                        whileTap={{ scale: 0.97 }}
-                        transition={spring}
-                        href={btn.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={`lv-fbtn ${btn.style === "ghost" ? "ghost" : "primary"}`}
-                      >
-                        {btn.label}
-                      </motion.a>
-                    ))}
+                    {c.buttons.map((btn, j) =>
+                      ctaNeedsButton(btn) ? (
+                        <motion.button
+                          key={j}
+                          type="button"
+                          whileTap={{ scale: 0.97 }}
+                          transition={spring}
+                          onClick={() => onCtaButton(btn)}
+                          className={`lv-fbtn ${btn.style === "ghost" ? "ghost" : "primary"}`}
+                        >
+                          {btn.label}
+                        </motion.button>
+                      ) : (
+                        <motion.a
+                          key={j}
+                          whileTap={{ scale: 0.97 }}
+                          transition={spring}
+                          href={btn.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`lv-fbtn ${btn.style === "ghost" ? "ghost" : "primary"}`}
+                        >
+                          {btn.label}
+                        </motion.a>
+                      ),
+                    )}
                   </div>
                 )}
               </div>
@@ -803,6 +865,122 @@ export default function LiveContentStk({
         {/* 안내 문구 */}
         <div className="lv-notice">{live.notice || DEFAULT_NOTICE}</div>
       </div>
+
+      {/* CTA 폼 모달 — 자체 폼(WebinarSurvey)을 페이지 안에서 */}
+      {ctaFormModal && slug && (
+        <CtaFormModal
+          key={ctaFormModal}
+          slug={slug}
+          surveyId={ctaFormModal}
+          registrationId={registrationId ?? null}
+          onClose={() => setCtaFormModal(null)}
+        />
+      )}
+      {/* CTA URL 모달 — 외부 페이지 임베드 */}
+      {ctaFrameModal && (
+        <div className="lv-ctamodal-backdrop" onClick={() => setCtaFrameModal(null)}>
+          <div className="lv-ctamodal frame" role="dialog" aria-modal="true" aria-label={ctaFrameModal.title} onClick={(e) => e.stopPropagation()}>
+            <div className="lv-ctamodal-hd">
+              <span className="t">{ctaFrameModal.title}</span>
+              <a href={ctaFrameModal.url} target="_blank" rel="noopener noreferrer" className="lv-ctamodal-ext">새 창에서 열기</a>
+              <button type="button" className="lv-ctamodal-x" aria-label="닫기" onClick={() => setCtaFrameModal(null)}>✕</button>
+            </div>
+            <iframe src={ctaFrameModal.url} title={ctaFrameModal.title} className="lv-ctamodal-iframe" />
+          </div>
+        </div>
+      )}
     </section>
+  );
+}
+
+/* ── CTA 폼 모달 — 문항은 공개 GET 으로 1회 로드, 임시저장은 독립 응답 페이지와 키 공유 ── */
+function CtaFormModal({ slug, surveyId, registrationId, onClose }: {
+  slug: string;
+  surveyId: string;
+  registrationId: string | null;
+  onClose: () => void;
+}) {
+  const [state, setState] = useState<"loading" | "form" | "closed" | "error" | "done">("loading");
+  const [survey, setSurvey] = useState<{ title: string; description: string | null; questions: SurveyQuestion[] } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const draftKey = `mach_survey_draft_page_${surveyId}`; // 독립 페이지와 초안 공유 — 어느 쪽에서 열어도 이어쓴다
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/webinar/${slug}/survey/${surveyId}`);
+        if (cancelled) return;
+        if (!res.ok) { setState("error"); return; }
+        const data = await res.json();
+        setSurvey(data.survey);
+        setState(data.survey?.isOpen ? "form" : "closed");
+      } catch { if (!cancelled) setState("error"); }
+    })();
+    return () => { cancelled = true; };
+  }, [slug, surveyId]);
+
+  // ESC 닫기
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const isPreview = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("preview");
+
+  const handleSubmit = async (answers: SurveyAnswers) => {
+    // 소유자 미리보기 — 응답을 저장하지 않고 완료 화면만 보여준다 (isPreviewUrl 가드)
+    if (isPreview) { setState("done"); return; }
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      const res = await fetch(`/api/webinar/${slug}/survey/${surveyId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers, registrationId: registrationId ?? undefined, source: "live" }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setSubmitError(data.error ?? "제출에 실패했어요. 잠시 후 다시 시도해주세요.");
+        return;
+      }
+      clearSurveyDraft(draftKey);
+      setState("done");
+    } catch {
+      setSubmitError("네트워크 오류가 발생했어요. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="lv-ctamodal-backdrop" onClick={onClose}>
+      <div className="lv-ctamodal" role="dialog" aria-modal="true" aria-label={survey?.title ?? "폼"} onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="lv-ctamodal-x abs" aria-label="닫기" onClick={onClose}>✕</button>
+
+        {state === "loading" && <p className="lv-ctamodal-center">불러오는 중…</p>}
+        {state === "error" && <p className="lv-ctamodal-center">폼을 불러오지 못했어요.<br />잠시 후 다시 시도해주세요.</p>}
+        {state === "closed" && <p className="lv-ctamodal-center">마감된 폼이에요.<br />소중한 관심 감사합니다.</p>}
+
+        {state === "form" && survey && (
+          <>
+            <h2 className="lv-ctamodal-title">{survey.title}</h2>
+            {survey.description && <p className="lv-ctamodal-desc">{survey.description}</p>}
+            <SurveyForm questions={survey.questions} submitting={submitting} onSubmit={handleSubmit} storageKey={draftKey} />
+            {submitError && <p className="sv-err" style={{ marginTop: 12 }} role="alert">{submitError}</p>}
+          </>
+        )}
+
+        {state === "done" && (
+          <div className="lv-ctamodal-center done">
+            <span className="ok">✓</span>
+            <p className="big">보내주셨어요, 감사합니다!</p>
+            <p>{isPreview ? "미리보기 — 실제 응답으로 저장되지는 않아요." : "내용을 확인하고 빠르게 연락드릴게요."}</p>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
