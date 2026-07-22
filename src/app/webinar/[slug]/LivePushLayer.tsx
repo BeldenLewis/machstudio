@@ -481,7 +481,7 @@ export default function LivePushLayer({
                     <p className="mb-4 whitespace-pre-wrap text-sm leading-relaxed" style={{ color: soft(65) }}>{activeSurvey.description}</p>
                   )}
                   <div className="pt-2">
-                    <SurveyForm questions={activeSurvey.questions} submitting={surveySubmitting} onSubmit={submitSurvey} storageKey={surveyDraftKey(activeSurvey)} />
+                    <SurveyForm key={surveyDraftKey(activeSurvey)} questions={activeSurvey.questions} submitting={surveySubmitting} onSubmit={submitSurvey} storageKey={surveyDraftKey(activeSurvey)} />
                   </div>
                   {surveyError && <p className="mt-3 text-[13px] text-red-400" role="alert">{surveyError}</p>}
                   <p className="mt-3 text-center text-[11px]" style={{ color: soft(40) }}>닫으면 이 설문은 다시 표시되지 않아요.</p>

@@ -54,7 +54,11 @@ function QuestionRow({
   const [optRaw, setOptRaw] = useState(() => q.options.join("\n"));
   const onOptChange = (v: string) => {
     setOptRaw(v);
-    patch({ options: v.split("\n").map((s) => s.trim()).filter(Boolean) });
+    const options = v.split("\n").map((s) => s.trim()).filter(Boolean);
+    const next: Partial<SurveyQuestion> = { options };
+    // 옵션이 줄어 maxSelect 가 옵션수 이상이 되면 무제한과 같아진다 — 정규화 규칙·드롭다운 표시와 어긋나지 않게 정리.
+    if (q.maxSelect !== undefined && q.maxSelect >= options.length) next.maxSelect = undefined;
+    patch(next);
   };
 
   return (
