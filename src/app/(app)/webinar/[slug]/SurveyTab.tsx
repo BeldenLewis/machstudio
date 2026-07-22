@@ -426,8 +426,15 @@ function SurveyEditor({
         body: JSON.stringify({ title, description, questions, doneTitle, doneDescription }),
       });
       if (!res.ok) { toast.error("자동 저장 실패 — 잠시 후 다시 시도돼요", { id: "autosave-error" }); return false; }
-      // 목록(마스터-디테일)이 최신 제목·문항수를 보이도록 부모 캐시도 동기화
-      onMetaChanged({ title, description: description.trim() || null, questions });
+      // 목록(마스터-디테일) 왕복 후 재진입해도 방금 저장한 값으로 초기화되도록 부모 캐시 동기화
+      // (빠뜨린 필드는 재진입 시 옛 값으로 되돌아가 다음 자동저장이 그 옛 값을 다시 저장한다)
+      onMetaChanged({
+        title,
+        description: description.trim() || null,
+        questions,
+        doneTitle: doneTitle.trim() || null,
+        doneDescription: doneDescription.trim() || null,
+      });
       return true;
     } catch { return false; }
   };
