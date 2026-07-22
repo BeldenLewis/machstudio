@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { motion, Reorder, useDragControls } from "framer-motion";
-import { Plus, Trash2, GripVertical } from "lucide-react";
+import { Plus, Trash2, GripVertical, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
 import { Switch } from "@/components/ui/switch";
 import { normalizeRegistrationForm, type WebinarRegistrationField } from "@/lib/webinar-config";
+import { buildStkCss } from "@/app/webinar/[slug]/LiveContentStk";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -24,15 +25,14 @@ const TYPE_LABELS: Record<FieldType, string> = {
 
 interface Webinar {
   id: string;
+  slug?: string;
   config: Record<string, unknown>;
+  theme?: Record<string, string>;
 }
 
 const inputCls = "w-full px-2.5 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors disabled:opacity-40";
-// 한 줄 인라인 편집 그리드 — 그립 | 라벨 | 타입 | 입력 예시 | 필수 | 표시 | 삭제
-const ROW_GRID = "grid grid-cols-[24px_minmax(0,1.1fr)_104px_minmax(0,1.3fr)_36px_36px_24px] gap-2 items-center";
-
-// 필드 한 줄 — 라벨·타입·placeholder·필수·표시 전부 행 안에서 바로 편집 (펼침 없음).
-function FieldRow({
+// 필드 카드 — 설문 문항 카드와 같은 결. 라벨은 헤더에서, 형식·예시·옵션은 본문에서 편집.
+function FieldCard({
   field,
   setFields,
   onRemove,
@@ -62,60 +62,76 @@ function FieldRow({
       dragListener={false}
       dragControls={dragControls}
       layout
-      className={`rounded-xl border border-border bg-background px-2 py-2 ${field.enabled ? "" : "opacity-55"}`}
+      className={`rounded-xl bg-secondary/40 transition-colors focus-within:bg-secondary/60 ${field.enabled ? "" : "opacity-60"}`}
     >
-      <div className={ROW_GRID}>
+      <div className="flex items-center gap-1 px-2 pt-2">
         <button
           type="button"
           aria-label="순서 변경"
           onPointerDown={(e) => { e.preventDefault(); dragControls.start(e); }}
-          className="p-1 rounded-md text-muted-foreground/40 hover:text-muted-foreground cursor-grab active:cursor-grabbing touch-none transition-colors justify-self-center"
+          className="grid h-8 w-7 shrink-0 cursor-grab place-items-center rounded-md text-muted-foreground/40 transition-colors hover:text-muted-foreground active:cursor-grabbing touch-none"
         >
-          <GripVertical className="w-4 h-4" />
+          <GripVertical className="h-4 w-4" />
         </button>
-
-        <input value={field.label} onChange={(e) => patch({ label: e.target.value })} aria-label="라벨" className={inputCls} />
-
-        <select
-          value={field.type}
-          onChange={(e) => patch({ type: e.target.value as FieldType })}
-          disabled={typeLocked}
-          aria-label="타입"
-          className={inputCls}
-        >
-          {(Object.keys(TYPE_LABELS) as FieldType[]).map((t) => (
-            <option key={t} value={t}>{TYPE_LABELS[t]}</option>
-          ))}
-        </select>
-
         <input
-          value={field.placeholder ?? ""}
-          onChange={(e) => patch({ placeholder: e.target.value })}
-          disabled={field.type === "checkbox" || field.type === "select"}
-          placeholder={field.type === "tel" ? "01012345678" : field.type === "checkbox" || field.type === "select" ? "—" : "입력 예시"}
-          aria-label="입력 예시"
-          className={inputCls}
+          value={field.label}
+          onChange={(e) => patch({ label: e.target.value })}
+          aria-label="라벨"
+          placeholder="항목 이름"
+          className="min-w-0 flex-1 bg-transparent py-1 text-[14px] font-semibold tracking-tight outline-none placeholder:font-normal placeholder:text-muted-foreground/50"
         />
-
-        <Switch checked={field.required} onChange={(v) => patch({ required: v })} disabled={isName} label={`${field.label} 필수`} />
-        <Switch checked={field.enabled} onChange={(v) => patch({ enabled: v })} disabled={isName} label={`${field.label} 표시`} />
-
+        {field.system && <span className="shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">기본</span>}
+        <label className={`flex shrink-0 select-none items-center gap-1 text-[11px] ${field.required ? "font-semibold text-amber-600" : "text-muted-foreground"}`}>
+          필수<Switch checked={field.required} onChange={(v) => patch({ required: v })} disabled={isName} label={`${field.label} 필수`} />
+        </label>
+        <label className="flex shrink-0 select-none items-center gap-1 text-[11px] text-muted-foreground">
+          표시<Switch checked={field.enabled} onChange={(v) => patch({ enabled: v })} disabled={isName} label={`${field.label} 표시`} />
+        </label>
         {field.system ? (
-          <span />
+          <span className="w-8 shrink-0" />
         ) : (
           <button
             type="button"
             onClick={onRemove}
             aria-label={`${field.label} 삭제`}
-            className="grid min-h-[36px] min-w-[36px] place-items-center rounded-md text-muted-foreground/50 transition-colors hover:text-red-500 justify-self-center"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground/50 transition-colors hover:bg-red-500/10 hover:text-red-500"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 px-3 pb-3 pl-[42px] pt-1">
+        <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          형식
+          <select
+            value={field.type}
+            onChange={(e) => patch({ type: e.target.value as FieldType })}
+            disabled={typeLocked}
+            aria-label="형식"
+            className="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:border-violet-400 focus:outline-none disabled:opacity-50"
+          >
+            {(Object.keys(TYPE_LABELS) as FieldType[]).map((t) => (
+              <option key={t} value={t}>{TYPE_LABELS[t]}</option>
+            ))}
+          </select>
+        </label>
+        {(field.type === "text" || field.type === "email" || field.type === "tel") && (
+          <input
+            value={field.placeholder ?? ""}
+            onChange={(e) => patch({ placeholder: e.target.value })}
+            placeholder={field.type === "tel" ? "입력 예시 (예: 01012345678)" : "입력 예시 (선택)"}
+            aria-label="입력 예시"
+            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs focus:border-violet-400 focus:outline-none"
+          />
+        )}
+        {field.type === "checkbox" && (
+          <span className="text-[11px] text-muted-foreground">체크박스 — 동의·확인용 항목</span>
+        )}
+      </div>
+
       {field.type === "select" && (
-        <div className="mt-2 ml-8 mr-1">
+        <div className="px-3 pb-3 pl-[42px]">
           <textarea
             rows={2}
             value={optRaw}
@@ -135,6 +151,26 @@ function FieldRow({
   );
 }
 
+// 등록 폼 미리보기 — 설문 미리보기와 같은 폰 프레임 + STK 테마(웨비나 색). 실제 등록 화면과 결을 맞춘다.
+const REG_PREVIEW_CSS = `
+.stk-live.regprev { background:var(--card-2); padding:20px 14px 28px; min-height:100%; }
+.stk-live.regprev .rp-head { text-align:center; margin-bottom:16px; padding:0 4px; }
+.stk-live.regprev .rp-kick { font-size:10px; font-weight:750; letter-spacing:.14em; text-transform:uppercase; color:var(--key); margin:0 0 6px; }
+.stk-live.regprev .rp-title { font-size:18px; font-weight:820; letter-spacing:-.02em; color:var(--text); margin:0; word-break:keep-all; }
+.stk-live.regprev .rp-desc { font-size:12px; line-height:1.6; color:var(--muted); margin:7px 0 0; word-break:keep-all; }
+.stk-live.regprev .rp-card { background:var(--card); border-radius:16px; box-shadow:var(--card-shadow); padding:18px 15px; display:flex; flex-direction:column; gap:13px; }
+.stk-live.regprev .rp-label { display:block; font-size:12px; font-weight:650; color:var(--text); margin:0 0 5px; word-break:keep-all; }
+.stk-live.regprev .rp-label .rq { color:var(--key); margin-left:2px; }
+.stk-live.regprev .rp-input { width:100%; padding:10px 12px; border-radius:10px; border:1.5px solid var(--line-md); background:var(--card-2); color:var(--text); font:inherit; font-size:13px; }
+.stk-live.regprev .rp-input.ph { color:var(--sub); }
+.stk-live.regprev .rp-consent { display:flex; align-items:flex-start; gap:8px; font-size:11.5px; line-height:1.5; color:var(--muted); }
+.stk-live.regprev .rp-check { width:16px; height:16px; border-radius:5px; box-shadow:inset 0 0 0 1.5px var(--line-md); flex-shrink:0; margin-top:1px; display:grid; place-items:center; color:transparent; font-size:11px; font-weight:900; }
+.stk-live.regprev .rp-check.on { background:var(--key); box-shadow:none; color:var(--on-key); }
+.stk-live.regprev .rp-link { text-decoration:underline; text-underline-offset:2px; }
+.stk-live.regprev .rp-submit { width:100%; height:46px; border-radius:12px; background:var(--key); color:var(--on-key); font:inherit; font-size:14px; font-weight:800; border:0; margin-top:3px; box-shadow:var(--btn-shadow-key); }
+.stk-live.regprev .rp-empty { text-align:center; font-size:12px; color:var(--muted); padding:8px 0; }
+`;
+
 function RegistrationFormPreview({
   fields,
   privacyText,
@@ -144,6 +180,8 @@ function RegistrationFormPreview({
   privacyDefaultChecked,
   marketingDefaultChecked,
   submitLabel,
+  theme,
+  slug,
 }: {
   fields: RegistrationField[];
   privacyText: string;
@@ -153,70 +191,71 @@ function RegistrationFormPreview({
   privacyDefaultChecked: boolean;
   marketingDefaultChecked: boolean;
   submitLabel: string;
+  theme: { accent: string; text: string; surface: string };
+  slug?: string;
 }) {
-  const visibleFields = fields.filter((field) => field.enabled);
+  const visibleFields = fields.filter((field) => field.enabled && !(field.type === "select" && (field.options ?? []).length === 0));
+  const css = useMemo(() => buildStkCss(theme.accent, theme.text, theme.surface) + REG_PREVIEW_CSS, [theme.accent, theme.text, theme.surface]);
 
   return (
-    <aside className="sticky top-6 rounded-2xl border border-border bg-secondary/20 p-4 space-y-4">
-      <div>
-        <p className="text-sm font-semibold">미리보기</p>
-        <p className="text-xs text-muted-foreground mt-1">배너 모달과 라이브 페이지 등록 폼에 적용됩니다.</p>
+    <div className="mx-auto w-full max-w-[440px] lg:sticky lg:top-4">
+      <div className="mb-2 flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
+        <Smartphone className="h-3 w-3" />등록 화면 미리보기
+        <span className="ml-auto inline-flex items-center gap-1.5 text-emerald-500">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 motion-safe:animate-pulse" />실시간
+        </span>
       </div>
-      <div className="rounded-2xl border border-border bg-background p-5 space-y-3 shadow-sm">
-        <div>
-          <h4 className="text-base font-semibold">사전 등록</h4>
-          <p className="text-xs text-muted-foreground mt-1">웨비나 참여 정보를 입력해주세요.</p>
+      <div className="overflow-hidden rounded-[24px] shadow-xl">
+        <div className="flex h-8 items-center justify-center bg-secondary/70 px-3">
+          <span className="truncate font-mono text-[10px] text-muted-foreground/80">…/webinar/{slug ?? "…"} · 사전 등록</span>
         </div>
-        <div className="space-y-3">
-          {visibleFields.map((field) => {
-            if (field.type === "checkbox") {
-              return (
-                <label key={field.id} className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <input type="checkbox" className="mt-0.5 accent-violet-500" />
-                  <span>{field.label}{field.required ? " *" : ""}</span>
+        <div className="relative max-h-[min(760px,calc(100vh-230px))] overflow-y-auto overscroll-contain">
+          <style dangerouslySetInnerHTML={{ __html: css }} />
+          <div className="stk-live regprev">
+            <div className="rp-head">
+              <p className="rp-kick">WEBINAR</p>
+              <h4 className="rp-title">사전 등록</h4>
+              <p className="rp-desc">웨비나 참여 정보를 입력해주세요.</p>
+            </div>
+            <div className="rp-card">
+              {visibleFields.length === 0 && <p className="rp-empty">표시할 항목이 없어요.</p>}
+              {visibleFields.map((field) => {
+                if (field.type === "checkbox") {
+                  return (
+                    <label key={field.id} className="rp-consent">
+                      <span className="rp-check" />
+                      <span>{field.label}{field.required ? " *" : ""}</span>
+                    </label>
+                  );
+                }
+                return (
+                  <div key={field.id}>
+                    <label className="rp-label">{field.label}{field.required && <span className="rq">*</span>}</label>
+                    {field.type === "select" ? (
+                      <div className="rp-input ph">{(field.options ?? [])[0] ?? "선택해주세요"}</div>
+                    ) : (
+                      <div className="rp-input ph">{field.placeholder || (field.type === "email" ? "you@example.com" : field.type === "tel" ? "01012345678" : "입력해주세요")}</div>
+                    )}
+                  </div>
+                );
+              })}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <label className="rp-consent">
+                  <span className={`rp-check ${privacyDefaultChecked ? "on" : ""}`}>✓</span>
+                  <span className={privacyBody ? "rp-link" : ""}>{privacyText}</span>
                 </label>
-              );
-            }
-
-            return (
-              <div key={field.id}>
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  {field.label}{field.required ? " *" : ""}
+                <label className="rp-consent">
+                  <span className={`rp-check ${marketingDefaultChecked ? "on" : ""}`}>✓</span>
+                  <span className={marketingBody ? "rp-link" : ""}>{marketingText}</span>
                 </label>
-                {field.type === "select" ? (
-                  <select className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none">
-                    <option>선택해주세요</option>
-                    {(field.options ?? []).map((option) => (
-                      <option key={option}>{option}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type={field.type}
-                    placeholder={field.placeholder}
-                    className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none"
-                  />
-                )}
               </div>
-            );
-          })}
+              <button type="button" className="rp-submit">{submitLabel}</button>
+            </div>
+          </div>
         </div>
-        <div className="space-y-2 pt-1">
-          <label className="flex items-start gap-2 text-xs text-muted-foreground">
-            {/* key 로 강제 리마운트 — defaultChecked 는 uncontrolled 라 prop 변경만으로는 재반영되지 않음 */}
-            <input key={`p-${privacyDefaultChecked}`} type="checkbox" defaultChecked={privacyDefaultChecked} className="mt-0.5 accent-violet-500" />
-            <span className={privacyBody ? "underline underline-offset-2 decoration-from-font" : ""}>{privacyText}</span>
-          </label>
-          <label className="flex items-start gap-2 text-xs text-muted-foreground">
-            <input key={`m-${marketingDefaultChecked}`} type="checkbox" defaultChecked={marketingDefaultChecked} className="mt-0.5 accent-violet-500" />
-            <span className={marketingBody ? "underline underline-offset-2 decoration-from-font" : ""}>{marketingText}</span>
-          </label>
-        </div>
-        <button className="w-full py-2.5 rounded-xl bg-violet-500 text-white text-sm font-medium">
-          {submitLabel}
-        </button>
       </div>
-    </aside>
+      <p className="mt-2 px-1 text-center text-[11px] text-muted-foreground/70">배너 모달·라이브 페이지 등록 폼에 이대로 적용돼요.</p>
+    </div>
   );
 }
 
@@ -230,6 +269,12 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
   const [privacyDefaultChecked, setPrivacyDefaultChecked] = useState(initial.privacyDefaultChecked);
   const [marketingDefaultChecked, setMarketingDefaultChecked] = useState(initial.marketingDefaultChecked);
   const [submitLabel, setSubmitLabel] = useState(initial.submitLabel);
+
+  const previewTheme = useMemo(() => ({
+    accent: webinar.theme?.accentColor || "#6D28D9",
+    text: webinar.theme?.textColor || "#141320",
+    surface: webinar.theme?.surfaceColor || "#FFFFFF",
+  }), [webinar.theme]);
 
   const addCustomField = () => {
     const id = crypto.randomUUID();
@@ -285,13 +330,13 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
   const hasTel = fields.some((f) => f.enabled && f.type === "tel");
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] grid grid-cols-1 gap-6 items-start lg:grid-cols-[minmax(0,1fr)_390px] xl:gap-8 2xl:grid-cols-[minmax(0,1fr)_430px]">
       <div className="space-y-6 min-w-0">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="text-sm font-semibold">입력 항목</h3>
             <p className="text-sm text-muted-foreground mt-1">
-              모든 값은 행에서 바로 수정돼요. 왼쪽 그립(⠿)을 끌면 순서가 바뀝니다.
+              카드에서 바로 수정돼요. 왼쪽 그립(⠿)을 끌면 순서가 바뀝니다.
             </p>
           </div>
           <motion.button
@@ -305,29 +350,16 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
           </motion.button>
         </div>
 
-        <div className="overflow-x-auto">
-          <div className="min-w-[560px] space-y-1.5">
-            <div className={`${ROW_GRID} px-2 text-[11px] font-medium text-muted-foreground/70`}>
-              <span />
-              <span>라벨</span>
-              <span>타입</span>
-              <span>입력 예시</span>
-              <span className="text-center">필수</span>
-              <span className="text-center">표시</span>
-              <span />
-            </div>
-            <Reorder.Group axis="y" values={fields} onReorder={setFields} className="space-y-1.5">
-              {fields.map((field) => (
-                <FieldRow
-                  key={field.id}
-                  field={field}
-                  setFields={setFields}
-                  onRemove={() => setFields((prev) => prev.filter((item) => item.id !== field.id))}
-                />
-              ))}
-            </Reorder.Group>
-          </div>
-        </div>
+        <Reorder.Group axis="y" values={fields} onReorder={setFields} className="space-y-2">
+          {fields.map((field) => (
+            <FieldCard
+              key={field.id}
+              field={field}
+              setFields={setFields}
+              onRemove={() => setFields((prev) => prev.filter((item) => item.id !== field.id))}
+            />
+          ))}
+        </Reorder.Group>
         {hasTel && (
           <p className="text-[11px] text-muted-foreground/70 -mt-3">전화번호 필드는 하이픈(-) 없이 숫자만 입력받아요.</p>
         )}
@@ -392,6 +424,8 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
         privacyDefaultChecked={privacyDefaultChecked}
         marketingDefaultChecked={marketingDefaultChecked}
         submitLabel={submitLabel}
+        theme={previewTheme}
+        slug={webinar.slug}
       />
     </div>
   );

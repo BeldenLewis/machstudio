@@ -149,7 +149,7 @@ export default function PageSetupTab({
               )}
               {section === "registration" && (
                 <div className="lg:h-full overflow-auto">
-                  <RegistrationFormTab webinar={webinar} onSilentUpdate={onSilentUpdate} />
+                  <RegistrationFormTab webinar={{ id: webinar.id, slug: webinar.slug, config: webinar.config, theme: webinar.theme }} onSilentUpdate={onSilentUpdate} />
                 </div>
               )}
               {section === "sessions" && (
