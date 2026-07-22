@@ -288,7 +288,7 @@ const WATCH_CSS = `
 .stk-live .lv-fc { border-radius:var(--radius); background:var(--card); padding:18px; box-shadow:var(--card-shadow); }
 .stk-live .lv-fk { font-size:11.5px; font-weight:700; color:var(--sub); letter-spacing:0.01em; }
 .stk-live .lv-fc h3 { margin:8px 0 4px; font-size:17px; font-weight:800; letter-spacing:-0.02em; color:var(--text); }
-.stk-live .lv-fc p { margin:0 0 14px; color:var(--muted); font-size:13.5px; line-height:1.6; word-break:keep-all; }
+.stk-live .lv-fc p { margin:0 0 14px; color:var(--muted); font-size:13.5px; line-height:1.6; word-break:keep-all; white-space:pre-wrap; }
 .stk-live .lv-fbenefits { list-style:none; margin:0 0 14px; padding:0; display:flex; flex-direction:column; gap:6px; }
 .stk-live .lv-fbenefits li { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); }
 .stk-live .lv-fbenefits li::before { content:''; flex-shrink:0; width:5px; height:5px; border-radius:50%; background:var(--key); }
