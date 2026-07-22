@@ -169,7 +169,7 @@ export default function PageSetupTab({
               )}
               {section === "survey" && (
                 <div className="lg:h-full overflow-auto">
-                  <SurveyTab webinarId={webinar.id} slug={webinar.slug} />
+                  <SurveyTab webinarId={webinar.id} slug={webinar.slug} webinarName={webinar.name} theme={webinar.theme} />
                 </div>
               )}
             </motion.div>
