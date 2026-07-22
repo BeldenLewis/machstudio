@@ -9,6 +9,7 @@ export interface SurveyQuestion {
   title: string;
   required: boolean;
   options: string[]; // single/multiple 만 사용
+  maxSelect?: number; // multiple 전용 — 최대 선택 개수(없으면 무제한)
 }
 
 export const SURVEY_TYPE_LABELS: Record<SurveyQuestionType, string> = {
@@ -33,13 +34,17 @@ export function normalizeSurveyQuestions(raw: unknown, opts?: { includeHidden?: 
   if (!Array.isArray(raw)) return [];
   const normalized = raw
     .filter((q): q is Record<string, unknown> => !!q && typeof q === "object")
-    .map((q, i) => ({
-      id: String(q.id ?? `q_${i}`),
-      type: QUESTION_TYPES.includes(q.type as SurveyQuestionType) ? (q.type as SurveyQuestionType) : "text",
-      title: String(q.title ?? ""),
-      required: q.required === true,
-      options: Array.isArray(q.options) ? q.options.map(String).filter(Boolean).slice(0, 20) : [],
-    }));
+    .map((q, i) => {
+      const options = Array.isArray(q.options) ? q.options.map(String).filter(Boolean).slice(0, 20) : [];
+      const type = QUESTION_TYPES.includes(q.type as SurveyQuestionType) ? (q.type as SurveyQuestionType) : "text";
+      // maxSelect 는 복수응답에서만 의미 — 1~옵션수 범위로 클램프. 옵션 전체 이상이면 무제한과 같아 생략.
+      const rawMax = Number(q.maxSelect);
+      const maxSelect =
+        type === "multiple" && Number.isInteger(rawMax) && rawMax >= 1 && rawMax < options.length
+          ? rawMax
+          : undefined;
+      return { id: String(q.id ?? `q_${i}`), type, title: String(q.title ?? ""), required: q.required === true, options, ...(maxSelect !== undefined ? { maxSelect } : {}) };
+    });
   const visible = normalized.filter(
     (q) => q.title.trim() !== "" && !((q.type === "single" || q.type === "multiple") && q.options.length === 0),
   );
@@ -87,7 +92,11 @@ export function validateSurveyAnswers(
       case "multiple": {
         const arr = (Array.isArray(v) ? v : [v]).map(String);
         if (arr.some((s) => !q.options.includes(s))) return { ok: false, error: `"${q.title}" 선택지가 올바르지 않아요.` };
-        cleaned[q.id] = [...new Set(arr)];
+        const uniq = [...new Set(arr)];
+        if (q.maxSelect !== undefined && uniq.length > q.maxSelect) {
+          return { ok: false, error: `"${q.title}" 은(는) 최대 ${q.maxSelect}개까지 선택할 수 있어요.` };
+        }
+        cleaned[q.id] = uniq;
         break;
       }
       case "text": {

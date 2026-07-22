@@ -3,7 +3,7 @@
 import { use, useEffect, useMemo, useState } from "react";
 import { Loader2, Check } from "lucide-react";
 import { buildStkCss } from "../../LiveContentStk";
-import SurveyForm, { SURVEY_FORM_CSS } from "../../SurveyForm";
+import SurveyForm, { SURVEY_FORM_CSS, clearSurveyDraft } from "../../SurveyForm";
 import type { SurveyAnswers, SurveyQuestion } from "@/lib/webinar-survey";
 
 /**
@@ -95,6 +95,7 @@ export default function SurveyPage({ params }: { params: Promise<{ slug: string;
         setSubmitError(data.error ?? "제출에 실패했어요. 잠시 후 다시 시도해주세요.");
         return;
       }
+      clearSurveyDraft(`mach_survey_draft_page_${surveyId}`); // 제출 완료 — 임시저장 정리
       setState("done");
     } catch {
       setSubmitError("네트워크 오류가 발생했어요. 잠시 후 다시 시도해주세요.");
@@ -131,7 +132,7 @@ export default function SurveyPage({ params }: { params: Promise<{ slug: string;
           <h1 className="svp-title">{survey.title}</h1>
           {survey.description && <p className="svp-desc">{survey.description}</p>}
           <div className="svp-card">
-            <SurveyForm questions={survey.questions} submitting={submitting} onSubmit={handleSubmit} />
+            <SurveyForm questions={survey.questions} submitting={submitting} onSubmit={handleSubmit} storageKey={`mach_survey_draft_page_${surveyId}`} />
             {submitError && <p className="sv-err" style={{ marginTop: 12 }} role="alert">{submitError}</p>}
           </div>
         </div>
