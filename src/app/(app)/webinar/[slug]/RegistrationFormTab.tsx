@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type ElementType, type SetStateAction } from "react";
 import { motion, Reorder, useDragControls } from "framer-motion";
-import { Plus, Trash2, GripVertical, Smartphone } from "lucide-react";
+import { Plus, Trash2, GripVertical, Smartphone, AlignLeft, Mail, Phone, ListChecks, SquareCheck, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
@@ -15,14 +15,6 @@ const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 type FieldType = WebinarRegistrationField["type"];
 export type RegistrationField = WebinarRegistrationField;
 
-const TYPE_LABELS: Record<FieldType, string> = {
-  text: "텍스트",
-  email: "이메일",
-  tel: "전화번호",
-  select: "드롭다운",
-  checkbox: "체크박스",
-};
-
 interface Webinar {
   id: string;
   slug?: string;
@@ -31,7 +23,60 @@ interface Webinar {
 }
 
 const inputCls = "w-full px-2.5 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors disabled:opacity-40";
-// 필드 카드 — 설문 문항 카드와 같은 결. 라벨은 헤더에서, 형식·예시·옵션은 본문에서 편집.
+// 항목 형식 메타 — 설문 문항 타입 칩과 같은 결(아이콘+라벨)
+const REG_TYPE_META: Record<FieldType, { label: string; desc: string; icon: ElementType }> = {
+  text: { label: "텍스트", desc: "한 줄 입력", icon: AlignLeft },
+  email: { label: "이메일", desc: "이메일 주소", icon: Mail },
+  tel: { label: "전화번호", desc: "숫자만", icon: Phone },
+  select: { label: "드롭다운", desc: "목록에서 선택", icon: ListChecks },
+  checkbox: { label: "체크박스", desc: "동의·확인", icon: SquareCheck },
+};
+const REG_TYPE_ORDER: FieldType[] = ["text", "email", "tel", "select", "checkbox"];
+
+function useRegPopover() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+  return { open, setOpen, ref };
+}
+
+function RegTypeMenu({ current, onPick }: { current: FieldType; onPick: (t: FieldType) => void }) {
+  return (
+    <div className="absolute left-0 top-full z-30 mt-1.5 w-56 rounded-xl border border-border bg-background p-1.5 shadow-xl">
+      <p className="px-2 pb-1 pt-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">항목 형식</p>
+      {REG_TYPE_ORDER.map((t) => {
+        const meta = REG_TYPE_META[t];
+        const Icon = meta.icon;
+        const active = current === t;
+        return (
+          <button
+            key={t}
+            type="button"
+            onClick={() => onPick(t)}
+            className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors ${active ? "bg-violet-500/10" : "hover:bg-secondary/70"}`}
+          >
+            <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${active ? "bg-violet-500 text-white" : "bg-violet-500/10 text-violet-500"}`}>
+              <Icon className="h-3.5 w-3.5" />
+            </span>
+            <span className="min-w-0">
+              <span className={`block text-[13px] font-semibold ${active ? "text-violet-600 dark:text-violet-400" : ""}`}>{meta.label}</span>
+              <span className="block text-[11px] text-muted-foreground">{meta.desc}</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// 필드 카드 — 설문 문항 카드(QuestionRow)와 동일한 결: 헤더에 타입 칩, 본문에 라벨·옵션.
 function FieldCard({
   field,
   setFields,
@@ -42,18 +87,41 @@ function FieldCard({
   onRemove: () => void;
 }) {
   const dragControls = useDragControls();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const pendingFocus = useRef<number | null>(null);
+  const typePop = useRegPopover();
   const patch = (next: Partial<RegistrationField>) =>
     setFields((fields) => fields.map((item) => (item.id === field.id ? { ...item, ...next } : item)));
 
   const isName = field.system && field.key === "name";
   const typeLocked = field.system && ["name", "phone", "email"].includes(field.key);
+  const meta = REG_TYPE_META[field.type];
+  const TypeIcon = meta.icon;
 
-  // 드롭다운 옵션은 raw 문자열 보관 — 파싱된 배열을 value 로 되돌리면 개행이 즉시 사라져
-  // 타이핑으로 옵션을 추가할 수 없다(붙여넣기만 가능해짐).
-  const [optRaw, setOptRaw] = useState(() => (field.options ?? []).join("\n"));
-  const onOptChange = (v: string) => {
-    setOptRaw(v);
-    patch({ options: v.split("\n").map((s) => s.trim()).filter(Boolean) });
+  // 선택지 추가/삭제 후 해당 입력으로 포커스 이동 (설문 빌더와 동일)
+  useEffect(() => {
+    if (pendingFocus.current === null) return;
+    const el = rootRef.current?.querySelector<HTMLInputElement>(`input[data-opt-idx="${pendingFocus.current}"]`);
+    pendingFocus.current = null;
+    el?.focus();
+  });
+
+  const options = field.options ?? [];
+  const setOption = (idx: number, v: string) => { const next = [...options]; next[idx] = v; patch({ options: next }); };
+  const addOption = (at: number) => { const next = [...options]; next.splice(at, 0, ""); patch({ options: next }); pendingFocus.current = at; };
+  const removeOption = (at: number, focusPrev = false) => {
+    const next = [...options];
+    if (next.length <= 1) next[at] = ""; else next.splice(at, 1);
+    patch({ options: next });
+    if (focusPrev) pendingFocus.current = Math.max(0, at - 1);
+  };
+
+  const changeType = (t: FieldType) => {
+    typePop.setOpen(false);
+    if (t === field.type) return;
+    const next: Partial<RegistrationField> = { type: t };
+    if (t === "select" && options.filter(Boolean).length === 0) next.options = ["", ""];
+    patch(next);
   };
 
   return (
@@ -64,89 +132,120 @@ function FieldCard({
       layout
       className={`rounded-xl bg-secondary/40 transition-colors focus-within:bg-secondary/60 ${field.enabled ? "" : "opacity-60"}`}
     >
-      <div className="flex items-center gap-1 px-2 pt-2">
-        <button
-          type="button"
-          aria-label="순서 변경"
-          onPointerDown={(e) => { e.preventDefault(); dragControls.start(e); }}
-          className="grid h-8 w-7 shrink-0 cursor-grab place-items-center rounded-md text-muted-foreground/40 transition-colors hover:text-muted-foreground active:cursor-grabbing touch-none"
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
-        <input
-          value={field.label}
-          onChange={(e) => patch({ label: e.target.value })}
-          aria-label="라벨"
-          placeholder="항목 이름"
-          className="min-w-0 flex-1 bg-transparent py-1 text-[14px] font-semibold tracking-tight outline-none placeholder:font-normal placeholder:text-muted-foreground/50"
-        />
-        {field.system && <span className="shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">기본</span>}
-        <label className={`flex shrink-0 select-none items-center gap-1 text-[11px] ${field.required ? "font-semibold text-amber-600" : "text-muted-foreground"}`}>
-          필수<Switch checked={field.required} onChange={(v) => patch({ required: v })} disabled={isName} label={`${field.label} 필수`} />
-        </label>
-        <label className="flex shrink-0 select-none items-center gap-1 text-[11px] text-muted-foreground">
-          표시<Switch checked={field.enabled} onChange={(v) => patch({ enabled: v })} disabled={isName} label={`${field.label} 표시`} />
-        </label>
-        {field.system ? (
-          <span className="w-8 shrink-0" />
-        ) : (
+      <div ref={rootRef}>
+        <div className="flex items-center gap-1 px-2 pt-2">
           <button
             type="button"
-            onClick={onRemove}
-            aria-label={`${field.label} 삭제`}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground/50 transition-colors hover:bg-red-500/10 hover:text-red-500"
+            aria-label="순서 변경"
+            onPointerDown={(e) => { e.preventDefault(); dragControls.start(e); }}
+            className="grid h-8 w-7 shrink-0 cursor-grab place-items-center rounded-md text-muted-foreground/40 transition-colors hover:text-muted-foreground active:cursor-grabbing touch-none"
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <GripVertical className="h-4 w-4" />
           </button>
-        )}
-      </div>
 
-      <div className="flex flex-wrap items-center gap-2 px-3 pb-3 pl-[42px] pt-1">
-        <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          형식
-          <select
-            value={field.type}
-            onChange={(e) => patch({ type: e.target.value as FieldType })}
-            disabled={typeLocked}
-            aria-label="형식"
-            className="rounded-md border border-border bg-background px-1.5 py-1 text-xs focus:border-violet-400 focus:outline-none disabled:opacity-50"
-          >
-            {(Object.keys(TYPE_LABELS) as FieldType[]).map((t) => (
-              <option key={t} value={t}>{TYPE_LABELS[t]}</option>
-            ))}
-          </select>
-        </label>
-        {(field.type === "text" || field.type === "email" || field.type === "tel") && (
-          <input
-            value={field.placeholder ?? ""}
-            onChange={(e) => patch({ placeholder: e.target.value })}
-            placeholder={field.type === "tel" ? "입력 예시 (예: 01012345678)" : "입력 예시 (선택)"}
-            aria-label="입력 예시"
-            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs focus:border-violet-400 focus:outline-none"
-          />
-        )}
-        {field.type === "checkbox" && (
-          <span className="text-[11px] text-muted-foreground">체크박스 — 동의·확인용 항목</span>
-        )}
-      </div>
+          <div className="relative" ref={typePop.ref}>
+            <button
+              type="button"
+              onClick={() => !typeLocked && typePop.setOpen((v) => !v)}
+              aria-haspopup={typeLocked ? undefined : "menu"}
+              aria-expanded={typeLocked ? undefined : typePop.open}
+              disabled={typeLocked}
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-background px-2 py-1.5 text-xs font-semibold shadow-sm transition-shadow hover:shadow disabled:cursor-default disabled:opacity-90"
+            >
+              <span className="grid h-5 w-5 place-items-center rounded-md bg-violet-500/10 text-violet-500"><TypeIcon className="h-3 w-3" /></span>
+              {meta.label}
+              {!typeLocked && <ChevronDown className="h-3 w-3 text-muted-foreground/60" />}
+            </button>
+            {typePop.open && !typeLocked && <RegTypeMenu current={field.type} onPick={changeType} />}
+          </div>
 
-      {field.type === "select" && (
-        <div className="px-3 pb-3 pl-[42px]">
-          <textarea
-            rows={2}
-            value={optRaw}
-            onChange={(e) => onOptChange(e.target.value)}
-            placeholder={"드롭다운 옵션 — 한 줄에 하나씩"}
-            aria-label={`${field.label || "필드"} 옵션`}
-            className={`${inputCls} resize-none`}
-          />
-          {(field.options ?? []).length === 0 && field.enabled && (
-            <p className="mt-1 text-[11px] text-amber-600">
-              옵션이 없으면 등록 폼에 표시되지 않아요{field.required ? " — 필수 항목이라 등록도 막혀요" : ""}.
-            </p>
+          {field.system && <span className="ml-1.5 shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">기본</span>}
+          <span className="flex-1" />
+          <label className={`flex shrink-0 select-none items-center gap-1 text-[11px] ${field.required ? "font-semibold text-amber-600" : "text-muted-foreground"}`}>
+            필수<Switch checked={field.required} onChange={(v) => patch({ required: v })} disabled={isName} label={`${field.label} 필수`} />
+          </label>
+          <label className="flex shrink-0 select-none items-center gap-1 text-[11px] text-muted-foreground">
+            표시<Switch checked={field.enabled} onChange={(v) => patch({ enabled: v })} disabled={isName} label={`${field.label} 표시`} />
+          </label>
+          {field.system ? (
+            <span className="w-8 shrink-0" />
+          ) : (
+            <button
+              type="button"
+              onClick={onRemove}
+              aria-label={`${field.label} 삭제`}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground/50 transition-colors hover:bg-red-500/10 hover:text-red-500"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
           )}
         </div>
-      )}
+
+        <div className="px-3 pb-3 pl-[42px] pt-1">
+          <input
+            value={field.label}
+            onChange={(e) => patch({ label: e.target.value })}
+            aria-label="항목 이름"
+            placeholder="항목 이름을 입력하세요"
+            className="w-full bg-transparent pb-2 text-[14px] font-semibold tracking-tight outline-none placeholder:font-normal placeholder:text-muted-foreground/50"
+          />
+
+          {(field.type === "text" || field.type === "email" || field.type === "tel") && (
+            <div className="flex items-center gap-2 rounded-lg bg-background px-2.5 shadow-sm">
+              <input
+                value={field.placeholder ?? ""}
+                onChange={(e) => patch({ placeholder: e.target.value })}
+                placeholder={field.type === "tel" ? "입력 예시 (예: 01012345678)" : "입력 예시 — 응답 칸에 회색으로 (선택)"}
+                aria-label="입력 예시"
+                className="min-w-0 flex-1 bg-transparent py-2 text-[13px] outline-none placeholder:text-muted-foreground/40"
+              />
+            </div>
+          )}
+
+          {field.type === "checkbox" && (
+            <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <SquareCheck className="h-3 w-3 shrink-0" />동의·확인용 체크박스예요.
+            </p>
+          )}
+
+          {field.type === "select" && (
+            <div className="space-y-1.5">
+              {options.map((opt, idx) => (
+                <div key={idx} className="group flex items-center gap-2 rounded-lg bg-background px-2.5 shadow-sm transition-shadow focus-within:ring-2 focus-within:ring-violet-400/50">
+                  <span className="h-3.5 w-3.5 shrink-0 rounded-full border-[1.5px] border-muted-foreground/40" />
+                  <input
+                    value={opt}
+                    data-opt-idx={idx}
+                    onChange={(e) => setOption(idx, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.nativeEvent.isComposing) return;
+                      if (e.key === "Enter") { e.preventDefault(); addOption(idx + 1); }
+                      else if (e.key === "Backspace" && e.currentTarget.value === "" && options.length > 1) { e.preventDefault(); removeOption(idx, true); }
+                    }}
+                    placeholder={`선택지 ${idx + 1}`}
+                    aria-label={`${field.label || "필드"} 선택지 ${idx + 1}`}
+                    className="min-w-0 flex-1 bg-transparent py-2 text-[13px] outline-none placeholder:text-muted-foreground/40"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeOption(idx)}
+                    aria-label={`선택지 ${idx + 1} 삭제`}
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted-foreground/40 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+              <button type="button" onClick={() => addOption(options.length)} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-violet-500 transition-colors hover:bg-violet-500/10">
+                <Plus className="h-3.5 w-3.5" />선택지 추가 <span className="font-normal text-muted-foreground/60">— 입력 중 Enter 로도 추가돼요</span>
+              </button>
+              {options.filter(Boolean).length === 0 && field.enabled && (
+                <p className="text-[11px] text-amber-600">옵션이 없으면 등록 폼에 표시되지 않아요{field.required ? " — 필수 항목이라 등록도 막혀요" : ""}.</p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </Reorder.Item>
   );
 }
@@ -198,7 +297,7 @@ function RegistrationFormPreview({
   const css = useMemo(() => buildStkCss(theme.accent, theme.text, theme.surface) + REG_PREVIEW_CSS, [theme.accent, theme.text, theme.surface]);
 
   return (
-    <div className="mx-auto w-full max-w-[440px] lg:sticky lg:top-4">
+    <div className="mx-auto w-full max-w-[440px] 2xl:sticky 2xl:top-4">
       <div className="mb-2 flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
         <Smartphone className="h-3 w-3" />등록 화면 미리보기
         <span className="ml-auto inline-flex items-center gap-1.5 text-emerald-500">
@@ -330,7 +429,7 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
   const hasTel = fields.some((f) => f.enabled && f.type === "tel");
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] grid grid-cols-1 gap-6 items-start lg:grid-cols-[minmax(0,1fr)_390px] xl:gap-8 2xl:grid-cols-[minmax(0,1fr)_430px]">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] space-y-6 2xl:grid 2xl:grid-cols-[minmax(0,1fr)_440px] 2xl:gap-8 2xl:space-y-0 2xl:items-start">
       <div className="space-y-6 min-w-0">
         <div className="flex items-start justify-between gap-4">
           <div>
