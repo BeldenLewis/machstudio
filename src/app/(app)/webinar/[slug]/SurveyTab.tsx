@@ -339,7 +339,7 @@ function SurveyPreview({
   const visible = useMemo(() => normalizeSurveyQuestions(questions), [questions]);
 
   return (
-    <div className="lg:sticky lg:top-4">
+    <div className="mx-auto w-full max-w-[440px] lg:sticky lg:top-4">
       <div className="mb-2 flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
         <Smartphone className="h-3 w-3" />응답자 미리보기
         <span className="ml-auto inline-flex items-center gap-1.5 text-emerald-500">
@@ -350,7 +350,7 @@ function SurveyPreview({
         <div className="flex h-8 items-center justify-center bg-secondary/70 px-3">
           <span className="truncate font-mono text-[10px] text-muted-foreground/80">…/webinar/{slug}/survey</span>
         </div>
-        <div ref={bodyRef} className="relative max-h-[560px] overflow-y-auto overscroll-contain">
+        <div ref={bodyRef} className="relative max-h-[min(760px,calc(100vh-230px))] overflow-y-auto overscroll-contain">
           <style dangerouslySetInnerHTML={{ __html: css }} />
           <div className="stk-live svprev">
             <div className="pv-head">
@@ -485,7 +485,7 @@ function SurveyEditor({
 
   return (
     <div className="rounded-2xl bg-background p-4 shadow-sm sm:p-5">
-      <div className="space-y-5 lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-6 lg:space-y-0 xl:grid-cols-[minmax(0,1fr)_330px]">
+      <div className="space-y-5 lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-6 lg:space-y-0 xl:grid-cols-[minmax(0,1fr)_390px] xl:gap-8 2xl:grid-cols-[minmax(0,1fr)_430px]">
         {/* ---- 편집 컬럼 ---- */}
         <div className="min-w-0 space-y-4">
           <div className="flex items-start justify-between gap-3">
@@ -625,7 +625,7 @@ export default function SurveyTab({
   };
 
   return (
-    <div className="max-w-5xl space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="max-w-[1600px] space-y-6 p-4 sm:p-6 lg:p-8">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-sm font-semibold">설문</h3>
