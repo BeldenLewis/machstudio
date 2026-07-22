@@ -293,7 +293,10 @@ function RegistrationFormPreview({
   theme: { accent: string; text: string; surface: string };
   slug?: string;
 }) {
-  const visibleFields = fields.filter((field) => field.enabled && !(field.type === "select" && (field.options ?? []).length === 0));
+  // 공개 폼과 같은 기준 — 빈 선택지 행(편집 중)은 없는 것으로 취급
+  const visibleFields = fields.filter(
+    (field) => field.enabled && !(field.type === "select" && (field.options ?? []).filter((o) => o.trim()).length === 0),
+  );
   const css = useMemo(() => buildStkCss(theme.accent, theme.text, theme.surface) + REG_PREVIEW_CSS, [theme.accent, theme.text, theme.surface]);
 
   return (
@@ -331,7 +334,7 @@ function RegistrationFormPreview({
                   <div key={field.id}>
                     <label className="rp-label">{field.label}{field.required && <span className="rq">*</span>}</label>
                     {field.type === "select" ? (
-                      <div className="rp-input ph">{(field.options ?? [])[0] ?? "선택해주세요"}</div>
+                      <div className="rp-input ph">{(field.options ?? []).find((o) => o.trim()) ?? "선택해주세요"}</div>
                     ) : (
                       <div className="rp-input ph">{field.placeholder || (field.type === "email" ? "you@example.com" : field.type === "tel" ? "01012345678" : "입력해주세요")}</div>
                     )}
@@ -404,7 +407,8 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
         body: JSON.stringify({
           config: {
             registrationForm: {
-              fields,
+              // 편집 중 빈 선택지 행은 로컬에만 두고 저장에서는 정리 — 공개 폼에 빈 옵션이 새지 않게
+              fields: fields.map((f) => ({ ...f, options: (f.options ?? []).map((o) => o.trim()).filter(Boolean) })),
               privacyText: privacyText.trim() || initial.privacyText,
               marketingText: marketingText.trim() || initial.marketingText,
               privacyBody: privacyBody.trim(),

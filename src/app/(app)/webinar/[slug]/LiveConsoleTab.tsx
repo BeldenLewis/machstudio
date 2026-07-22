@@ -427,6 +427,8 @@ function InquiryPanel({ webinarId, tick = 0, onNavigate }: { webinarId: string; 
         setCounts(data.counts ?? {});
         setSurveyOrder(data.surveyOrder ?? []);
         setTotal(data.total ?? 0);
+        // 필터 중이던 폼이 삭제됐으면(카운트에서 사라짐) 전체로 복귀 — 유령 필터에 고착 방지
+        if (filter !== "all" && !(data.surveys ?? {})[filter]) setFilter("all");
       } catch { /* 다음 주기 재시도 */ } finally {
         if (!cancelled && my === reqRef.current) setLoaded(true);
       }

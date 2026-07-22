@@ -145,7 +145,9 @@ export function normalizeRegistrationForm(
       id: field.id,
       key: field.key,
       type: saved?.type != null ? normalizeFieldType(saved.type) : field.type,
-      options: Array.isArray(saved?.options) ? saved.options.map(String) : field.options,
+      // 빈 옵션은 그릴 수 없다 — 편집 중 자동저장으로 빈 행이 저장돼도 읽기에서 걸러
+      // 공개 폼에 빈 드롭다운 항목이 뜨거나(중복 key) 필수 검증이 등록을 막는 일을 방지.
+      options: Array.isArray(saved?.options) ? saved.options.map(String).filter((s) => s.trim() !== "") : field.options,
       system: true,
     } satisfies WebinarRegistrationField;
   });
@@ -160,7 +162,7 @@ export function normalizeRegistrationForm(
       placeholder: String(item.placeholder ?? ""),
       required: Boolean(item.required),
       enabled: item.enabled !== false,
-      options: Array.isArray(item.options) ? item.options.map(String) : [],
+      options: Array.isArray(item.options) ? item.options.map(String).filter((s) => s.trim() !== "") : [],
       system: false,
     } satisfies WebinarRegistrationField));
 
