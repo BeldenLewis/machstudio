@@ -28,6 +28,8 @@ interface PublicSurvey {
   description: string | null;
   questions: SurveyQuestion[];
   isOpen: boolean;
+  doneTitle?: string | null;
+  doneDescription?: string | null;
 }
 
 type PageState = "loading" | "notfound" | "closed" | "form" | "done";
@@ -141,8 +143,8 @@ export default function SurveyPage({ params }: { params: Promise<{ slug: string;
       {state === "done" && (
         <div className="svp-center">
           <div className="svp-check"><Check strokeWidth={2.6} style={{ width: 28, height: 28 }} /></div>
-          <p className="svp-done-title">소중한 의견 감사합니다</p>
-          <p style={{ margin: 0, fontSize: 14 }}>보내주신 답변이 다음 웨비나를 더 좋게 만들어요.</p>
+          <p className="svp-done-title">{survey?.doneTitle?.trim() || "소중한 의견 감사합니다"}</p>
+          <p style={{ margin: 0, fontSize: 14, whiteSpace: "pre-wrap" }}>{survey?.doneDescription?.trim() || "보내주신 답변이 다음 웨비나를 더 좋게 만들어요."}</p>
         </div>
       )}
     </div>

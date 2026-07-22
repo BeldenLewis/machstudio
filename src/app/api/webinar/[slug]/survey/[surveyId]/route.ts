@@ -9,7 +9,7 @@ const CORS_HEADERS = { "Access-Control-Allow-Origin": "*" };
 async function findSurvey(slug: string, surveyId: string) {
   return prisma.webinarSurvey.findFirst({
     where: { id: surveyId, webinar: { slug } },
-    select: { id: true, webinarId: true, title: true, description: true, questions: true, isOpen: true, closesAt: true },
+    select: { id: true, webinarId: true, title: true, description: true, questions: true, isOpen: true, closesAt: true, doneTitle: true, doneDescription: true },
   });
 }
 
@@ -27,6 +27,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         description: survey.description,
         questions: normalizeSurveyQuestions(survey.questions),
         isOpen: isSurveyAcceptingResponses(survey), // 마감 예약(closesAt) 경과도 마감으로
+        doneTitle: survey.doneTitle,
+        doneDescription: survey.doneDescription,
       },
     },
     { headers: CORS_HEADERS },

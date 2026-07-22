@@ -901,7 +901,7 @@ function CtaFormModal({ slug, surveyId, registrationId, onClose }: {
   onClose: () => void;
 }) {
   const [state, setState] = useState<"loading" | "form" | "closed" | "error" | "done">("loading");
-  const [survey, setSurvey] = useState<{ title: string; description: string | null; questions: SurveyQuestion[] } | null>(null);
+  const [survey, setSurvey] = useState<{ title: string; description: string | null; questions: SurveyQuestion[]; doneTitle?: string | null; doneDescription?: string | null } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const draftKey = `mach_survey_draft_page_${surveyId}`; // 독립 페이지와 초안 공유 — 어느 쪽에서 열어도 이어쓴다
@@ -976,8 +976,8 @@ function CtaFormModal({ slug, surveyId, registrationId, onClose }: {
         {state === "done" && (
           <div className="lv-ctamodal-center done">
             <span className="ok">✓</span>
-            <p className="big">보내주셨어요, 감사합니다!</p>
-            <p>{isPreview ? "미리보기 — 실제 응답으로 저장되지는 않아요." : "내용을 확인하고 빠르게 연락드릴게요."}</p>
+            <p className="big">{survey?.doneTitle?.trim() || "보내주셨어요, 감사합니다!"}</p>
+            <p style={{ whiteSpace: "pre-wrap" }}>{isPreview ? "미리보기 — 실제 응답으로 저장되지는 않아요." : (survey?.doneDescription?.trim() || "내용을 확인하고 빠르게 연락드릴게요.")}</p>
           </div>
         )}
       </div>

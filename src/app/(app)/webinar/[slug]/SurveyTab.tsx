@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { motion, Reorder, useDragControls } from "framer-motion";
 import {
   Plus, Trash2, GripVertical, Link2, Loader2, BarChart3,
-  Star, CircleDot, ListChecks, Gauge, AlignLeft, Copy, ChevronDown, Info, X, Smartphone, CalendarClock,
+  Star, CircleDot, ListChecks, Gauge, AlignLeft, Copy, ChevronDown, Info, X, Smartphone, CalendarClock, CircleCheckBig,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
@@ -41,6 +41,8 @@ interface AdminSurvey {
   questions: SurveyQuestion[];
   isOpen: boolean;
   closesAt: string | null; // 마감 예약 — 지나면 isOpen 과 무관하게 응답 마감
+  doneTitle: string | null; // 제출 완료 화면 제목(없으면 기본 문구)
+  doneDescription: string | null; // 제출 완료 화면 설명
   showOnEnded: boolean;
   isActive: boolean;
   _count?: { responses: number };
@@ -407,6 +409,8 @@ function SurveyEditor({
   const [title, setTitle] = useState(survey.title);
   const [description, setDescription] = useState(survey.description ?? "");
   const [questions, setQuestions] = useState<SurveyQuestion[]>(survey.questions);
+  const [doneTitle, setDoneTitle] = useState(survey.doneTitle ?? "");
+  const [doneDescription, setDoneDescription] = useState(survey.doneDescription ?? "");
   const [copied, setCopied] = useState(false);
   const confirm = useConfirm();
   const addPop = usePopover();
@@ -419,13 +423,13 @@ function SurveyEditor({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         keepalive: true,
-        body: JSON.stringify({ title, description, questions }),
+        body: JSON.stringify({ title, description, questions, doneTitle, doneDescription }),
       });
       if (!res.ok) { toast.error("자동 저장 실패 — 잠시 후 다시 시도돼요", { id: "autosave-error" }); return false; }
       return true;
     } catch { return false; }
   };
-  const { state: saveState, retry } = useAutosave({ title, description, questions }, save);
+  const { state: saveState, retry } = useAutosave({ title, description, questions, doneTitle, doneDescription }, save);
 
   const toggle = async (key: "isOpen" | "showOnEnded", value: boolean) => {
     const res = await fetch(`/api/webinars/${webinarId}/surveys/${survey.id}`, {
@@ -561,6 +565,28 @@ function SurveyEditor({
               <Plus className="h-3.5 w-3.5" />질문 추가
             </button>
             {addPop.open && <TypeMenu onPick={addQuestion} />}
+          </div>
+
+          {/* 제출 완료 화면 — 응답 제출 후 보이는 문구(비우면 기본 문구). 응답 링크·라이브 푸시·CTA 모달 공통 적용. */}
+          <div className="space-y-2 rounded-xl border border-border bg-secondary/20 p-3">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+              <CircleCheckBig className="h-3.5 w-3.5 text-violet-500" />제출 완료 화면
+            </p>
+            <input
+              value={doneTitle}
+              onChange={(e) => setDoneTitle(e.target.value)}
+              placeholder="완료 제목 (비우면 기본: 소중한 의견 감사합니다)"
+              aria-label="제출 완료 제목"
+              className="w-full bg-transparent text-[13px] font-medium outline-none placeholder:font-normal placeholder:text-muted-foreground/50"
+            />
+            <textarea
+              value={doneDescription}
+              onChange={(e) => setDoneDescription(e.target.value)}
+              rows={2}
+              placeholder="완료 설명 (선택) — 예: 문의가 접수됐어요. 담당자가 확인 후 연락드릴게요."
+              aria-label="제출 완료 설명"
+              className="w-full resize-none bg-transparent text-[12px] leading-relaxed text-muted-foreground outline-none placeholder:text-muted-foreground/50"
+            />
           </div>
 
           {questions.some((q) => !q.title.trim()) && (
