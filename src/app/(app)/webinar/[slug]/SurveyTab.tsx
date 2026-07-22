@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { motion, Reorder, useDragControls } from "framer-motion";
 import {
   Plus, Trash2, GripVertical, Link2, Loader2, BarChart3,
-  Star, CircleDot, ListChecks, Gauge, AlignLeft, Copy, ChevronDown, Info, X, Smartphone,
+  Star, CircleDot, ListChecks, Gauge, AlignLeft, Copy, ChevronDown, Info, X, Smartphone, CalendarClock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
@@ -40,9 +40,19 @@ interface AdminSurvey {
   description: string | null;
   questions: SurveyQuestion[];
   isOpen: boolean;
+  closesAt: string | null; // 마감 예약 — 지나면 isOpen 과 무관하게 응답 마감
   showOnEnded: boolean;
   isActive: boolean;
   _count?: { responses: number };
+}
+
+/** ISO → datetime-local 입력값(로컬 타임존 yyyy-MM-ddTHH:mm) */
+function toLocalInputValue(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const p = (v: number) => String(v).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 interface ViewerTheme { accent: string; text: string; surface: string }
@@ -427,6 +437,22 @@ function SurveyEditor({
     else toast.error("변경에 실패했어요");
   };
 
+  // 마감 예약 — 입력 중엔 로컬 draft, 확정(blur/해제)에만 PATCH (datetime-local 은 필드 편집마다 change 가 발생)
+  const [closesDraft, setClosesDraft] = useState(() => toLocalInputValue(survey.closesAt));
+  useEffect(() => { setClosesDraft(toLocalInputValue(survey.closesAt)); }, [survey.closesAt]);
+  const commitClosesAt = async (local: string) => {
+    const iso = local ? new Date(local).toISOString() : null;
+    if (toLocalInputValue(iso) === toLocalInputValue(survey.closesAt)) return; // 변경 없음
+    const res = await fetch(`/api/webinars/${webinarId}/surveys/${survey.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ closesAt: iso }),
+    });
+    if (res.ok) onMetaChanged({ closesAt: iso });
+    else { toast.error("마감 예약 변경에 실패했어요"); setClosesDraft(toLocalInputValue(survey.closesAt)); }
+  };
+  const scheduledClosed = !!survey.closesAt && new Date(survey.closesAt).getTime() <= Date.now();
+
   const remove = async () => {
     if (!(await confirm({
       title: "설문을 삭제할까요?",
@@ -554,6 +580,30 @@ function SurveyEditor({
             <label className="flex select-none items-center gap-2 text-xs text-muted-foreground">
               <Switch checked={survey.showOnEnded} onChange={(v) => toggle("showOnEnded", v)} label="종료 화면에 연결" />
               종료 화면에 연결
+            </label>
+            <label className="flex select-none items-center gap-1.5 text-xs text-muted-foreground">
+              <CalendarClock className="h-3.5 w-3.5" />마감 예약
+              <input
+                type="datetime-local"
+                value={closesDraft}
+                onChange={(e) => setClosesDraft(e.target.value)}
+                onBlur={(e) => void commitClosesAt(e.target.value)}
+                aria-label="마감 예약 시각"
+                className="rounded-md border border-border bg-background px-1.5 py-1 text-[11px] tabular-nums transition-colors focus:border-violet-400 focus:outline-none"
+              />
+              {survey.closesAt && (
+                <button
+                  type="button"
+                  onClick={() => { setClosesDraft(""); void commitClosesAt(""); }}
+                  aria-label="마감 예약 해제"
+                  className="grid h-5 w-5 place-items-center rounded text-muted-foreground/50 transition-colors hover:bg-red-500/10 hover:text-red-500"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+              {scheduledClosed && (
+                <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">예약 시각이 지나 마감됨</span>
+              )}
             </label>
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground/70"><BarChart3 className="h-3 w-3" />응답 {survey._count?.responses ?? 0}건</span>
             <button type="button" onClick={copyLink} className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground">

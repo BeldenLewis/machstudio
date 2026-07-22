@@ -41,7 +41,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
 
   // /info 와 동일 — 종료 화면에 연결된 자체 설문. 미리보기가 실제 시청자와 같은 화면을 보도록.
   const endedSurvey = await prisma.webinarSurvey.findFirst({
-    where: { webinarId: webinar.id, showOnEnded: true, isOpen: true },
+    where: { webinarId: webinar.id, showOnEnded: true, isOpen: true, OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }] },
     select: { id: true, title: true },
   });
 

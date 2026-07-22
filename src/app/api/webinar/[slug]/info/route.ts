@@ -30,7 +30,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
 
   // 종료 화면에 연결된 자체 설문 — 있으면 외부 surveyUrl 보다 우선한다 (id/title 만 공개)
   const endedSurvey = await prisma.webinarSurvey.findFirst({
-    where: { webinarId: webinar.id, showOnEnded: true, isOpen: true },
+    where: { webinarId: webinar.id, showOnEnded: true, isOpen: true, OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }] },
     select: { id: true, title: true },
   });
 

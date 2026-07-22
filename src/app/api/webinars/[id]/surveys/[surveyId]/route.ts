@@ -43,6 +43,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body?.questions !== undefined) data.questions = normalizeSurveyQuestions(body.questions, { includeHidden: true }) as unknown as Prisma.InputJsonValue;
   if (typeof body?.isOpen === "boolean") data.isOpen = body.isOpen;
 
+  // 마감 예약 — null/빈 문자열이면 해제, 아니면 유효한 시각만 수용
+  if (body?.closesAt !== undefined) {
+    if (body.closesAt === null || body.closesAt === "") {
+      data.closesAt = null;
+    } else {
+      const d = new Date(body.closesAt);
+      if (isNaN(d.getTime())) return NextResponse.json({ error: "마감 예약 시각이 올바르지 않아요" }, { status: 400 });
+      data.closesAt = d;
+    }
+  }
+
   // 종료화면 연결도 웨비나당 1개만 — 켜면 다른 설문의 연결을 내린다
   if (body?.showOnEnded === true) {
     await prisma.webinarSurvey.updateMany({ where: { webinarId: id, showOnEnded: true, NOT: { id: surveyId } }, data: { showOnEnded: false } });
@@ -71,8 +82,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body?.isActive === false) data.isActive = false;
 
   const survey = await prisma.webinarSurvey.update({ where: { id: surveyId }, data });
-  // 자동저장(문항 편집)까지 전부 기록하면 피드가 시끄러워짐 — 발행/중지·마감·종료화면 연결 같은 상태 변화만 남긴다
-  if (body?.isActive === false || typeof body?.isOpen === "boolean" || typeof body?.showOnEnded === "boolean") {
+  // 자동저장(문항 편집)까지 전부 기록하면 피드가 시끄러워짐 — 발행/중지·마감·마감 예약·종료화면 연결 같은 상태 변화만 남긴다
+  if (body?.isActive === false || typeof body?.isOpen === "boolean" || typeof body?.showOnEnded === "boolean" || body?.closesAt !== undefined) {
     await logSurveyUpdate(webinar.workspaceId, user.id, id, surveyId, Object.keys(data));
   }
   return NextResponse.json({ survey });
