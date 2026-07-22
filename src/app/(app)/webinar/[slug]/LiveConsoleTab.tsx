@@ -404,7 +404,10 @@ function inquiryAnswerText(q: SurveyQuestion, answer: unknown): string {
 function InquiryPanel({ webinarId, tick = 0, onNavigate }: { webinarId: string; tick?: number; onNavigate?: (target: string) => void }) {
   const [responses, setResponses] = useState<InquiryResponse[]>([]);
   const [surveys, setSurveys] = useState<Record<string, { title: string; questions: SurveyQuestion[] }>>({});
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [surveyOrder, setSurveyOrder] = useState<string[]>([]);
   const [total, setTotal] = useState(0);
+  const [filter, setFilter] = useState<string>("all"); // "all" | surveyId
   const [loaded, setLoaded] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const reqRef = useRef(0);
@@ -414,25 +417,29 @@ function InquiryPanel({ webinarId, tick = 0, onNavigate }: { webinarId: string; 
     const my = ++reqRef.current;
     (async () => {
       try {
-        const res = await fetch(`/api/webinars/${webinarId}/survey-responses`);
+        const qs = filter === "all" ? "" : `?surveyId=${encodeURIComponent(filter)}`;
+        const res = await fetch(`/api/webinars/${webinarId}/survey-responses${qs}`);
         if (cancelled || my !== reqRef.current) return;
         if (!res.ok) { setLoaded(true); return; }
         const data = await res.json();
         setResponses(data.responses ?? []);
         setSurveys(data.surveys ?? {});
+        setCounts(data.counts ?? {});
+        setSurveyOrder(data.surveyOrder ?? []);
         setTotal(data.total ?? 0);
       } catch { /* 다음 주기 재시도 */ } finally {
         if (!cancelled && my === reqRef.current) setLoaded(true);
       }
     })();
     return () => { cancelled = true; };
-  }, [webinarId, tick]);
+  }, [webinarId, tick, filter]);
 
   if (!loaded) {
     return <div className="flex justify-center py-6 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /></div>;
   }
 
-  if (responses.length === 0) {
+  // 응답이 하나도 없으면(전체 기준) 빈 상태 — 필터 칩도 숨긴다
+  if (total === 0) {
     return (
       <p className="rounded-xl border border-dashed border-border p-3 text-xs leading-relaxed text-muted-foreground">
         아직 들어온 문의·폼 응답이 없어요. 만들기 → 라이브 페이지의 CTA 버튼에 폼을 연결하면, 시청자가 남긴 문의가 여기로 실시간으로 모여요.
@@ -440,8 +447,30 @@ function InquiryPanel({ webinarId, tick = 0, onNavigate }: { webinarId: string; 
     );
   }
 
+  const chipCls = (active: boolean) =>
+    `inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${active ? "bg-violet-500 text-white" : "bg-secondary text-muted-foreground hover:text-foreground"}`;
+  // 필터 칩에 노출할 폼 — 응답 1건 이상인 폼만(만든 순)
+  const chipSurveys = surveyOrder.filter((sid) => (counts[sid] ?? 0) > 0);
+  const viewTotal = filter === "all" ? total : (counts[filter] ?? responses.length);
+
   return (
     <div className="space-y-2">
+      {/* 전체 + 폼(CTA 연결)별 필터 */}
+      <div className="flex flex-wrap gap-1.5 pb-0.5">
+        <button type="button" onClick={() => setFilter("all")} className={chipCls(filter === "all")} aria-pressed={filter === "all"}>
+          전체 <span className="tabular-nums opacity-70">{total.toLocaleString()}</span>
+        </button>
+        {chipSurveys.map((sid) => (
+          <button key={sid} type="button" onClick={() => setFilter(sid)} className={chipCls(filter === sid)} aria-pressed={filter === sid}>
+            <span className="max-w-[160px] truncate">{surveys[sid]?.title ?? "폼"}</span>
+            <span className="tabular-nums opacity-70">{(counts[sid] ?? 0).toLocaleString()}</span>
+          </button>
+        ))}
+      </div>
+
+      {responses.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border p-3 text-xs text-muted-foreground">이 폼에는 아직 응답이 없어요.</p>
+      ) : (
       <div className="space-y-1.5">
         {responses.map((r) => {
           const qs = surveys[r.surveyId]?.questions ?? [];
@@ -502,9 +531,10 @@ function InquiryPanel({ webinarId, tick = 0, onNavigate }: { webinarId: string; 
           );
         })}
       </div>
+      )}
       <div className="flex items-center justify-between gap-2 pt-0.5">
         <p className="text-[11px] text-muted-foreground">
-          최근 {responses.length}건{total > responses.length && ` · 전체 ${total.toLocaleString()}건`}
+          {filter === "all" ? "" : "이 폼 "}최근 {responses.length}건{viewTotal > responses.length && ` · 전체 ${viewTotal.toLocaleString()}건`}
         </p>
         {onNavigate && (
           <button type="button" onClick={() => onNavigate("operate-registrants")} className="inline-flex items-center gap-0.5 text-[11px] font-medium text-violet-600 transition-colors hover:text-violet-500 dark:text-violet-400">
