@@ -46,6 +46,7 @@ interface EditorState {
   ctaLabel: string;
   intro: { enabled: boolean; title: string; body: string };
   sessionsEnabled: boolean;
+  sessionsDetailPopup: boolean;
   timetableEnabled: boolean;
   programs: { enabled: boolean; items: LandingProgramItem[] };
   highlights: { enabled: boolean; items: LandingHighlightItem[] };
@@ -66,6 +67,7 @@ function toEditorState(config: Record<string, unknown>): EditorState {
     ctaLabel: lp.ctaLabel,
     intro: lp.intro,
     sessionsEnabled: lp.sessions.enabled,
+    sessionsDetailPopup: lp.sessions.detailPopup,
     timetableEnabled: lp.timetable.enabled,
     programs: lp.programs,
     highlights: lp.highlights,
@@ -87,7 +89,7 @@ function toConfigPayload(s: EditorState) {
     venue: s.venue,
     ctaLabel: s.ctaLabel,
     intro: s.intro,
-    sessions: { enabled: s.sessionsEnabled },
+    sessions: { enabled: s.sessionsEnabled, detailPopup: s.sessionsDetailPopup },
     timetable: { enabled: s.timetableEnabled },
     programs: s.programs,
     highlights: s.highlights,
@@ -403,8 +405,15 @@ export default function LandingPageTab({
                 <Switch checked={state.timetableEnabled} onChange={(v) => patch({ timetableEnabled: v })} label="타임테이블 표시" />
               </label>
             </div>
+            <label className={`flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-background/60 px-3 py-2.5 text-sm transition-opacity ${state.sessionsEnabled ? "" : "opacity-50"}`}>
+              <span>
+                카드 클릭 시 상세 팝업
+                <span className="mt-0.5 block text-[11px] text-muted-foreground">주제·세션 내용·연사 사진·소속·약력을 팝업으로 보여줘요.</span>
+              </span>
+              <Switch checked={state.sessionsDetailPopup} onChange={(v) => patch({ sessionsDetailPopup: v })} disabled={!state.sessionsEnabled} label="상세 팝업 열기" />
+            </label>
             <p className="text-[11px] text-muted-foreground">
-              이 구간에서 배경이 키컬러로 전환돼요. 연사 사진은 세션의 연사 사진을 그대로 사용해요.
+              내용(소속·직책·약력 포함)은 만들기 → 세션에서 관리해요. 이 구간에서 배경이 키컬러로 전환돼요.
             </p>
           </SectionCard>
 

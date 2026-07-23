@@ -23,8 +23,10 @@ interface WebinarSession {
   type: string;
   title: string;
   speaker: string | null;
+  speakerCompany: string | null;
   speakerPhotoUrl: string | null;
   description: string | null;
+  speakerBio: string | null;
   startTime: string;
   endTime: string;
 }
@@ -34,8 +36,10 @@ interface SessionForm {
   type: string;
   title: string;
   speaker: string;
+  speakerCompany: string;
   speakerPhotoUrl: string;
   description: string;
+  speakerBio: string;
   startTime: string;
   endTime: string;
 }
@@ -45,8 +49,10 @@ const emptyForm: SessionForm = {
   type: "session",
   title: "",
   speaker: "",
+  speakerCompany: "",
   speakerPhotoUrl: "",
   description: "",
+  speakerBio: "",
   startTime: "",
   endTime: "",
 };
@@ -57,8 +63,10 @@ function toForm(session: WebinarSession): SessionForm {
     type: session.type || "session",
     title: session.title,
     speaker: session.speaker ?? "",
+    speakerCompany: session.speakerCompany ?? "",
     speakerPhotoUrl: session.speakerPhotoUrl ?? "",
     description: session.description ?? "",
+    speakerBio: session.speakerBio ?? "",
     startTime: session.startTime,
     endTime: session.endTime,
   };
@@ -134,12 +142,22 @@ function SessionFormFields({
         />
       </div>
       <div className="col-span-12 sm:col-span-4">
-        <label className="text-xs text-muted-foreground mb-1 block">연사</label>
+        <label className="text-xs text-muted-foreground mb-1 block">연사 이름</label>
         <input
           type="text"
           value={form.speaker}
           onChange={(e) => setForm((f) => ({ ...f, speaker: e.target.value }))}
-          placeholder="홍길동 | 회사명"
+          placeholder="홍길동"
+          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
+        />
+      </div>
+      <div className="col-span-12 sm:col-span-4">
+        <label className="text-xs text-muted-foreground mb-1 block">소속·직책</label>
+        <input
+          type="text"
+          value={form.speakerCompany}
+          onChange={(e) => setForm((f) => ({ ...f, speakerCompany: e.target.value }))}
+          placeholder="예: 잡코리아 CEO"
           className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
         />
       </div>
@@ -161,15 +179,26 @@ function SessionFormFields({
           className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
         />
       </div>
-      <div className="col-span-12 sm:col-span-4">
-        <label className="text-xs text-muted-foreground mb-1 block">설명</label>
-        <input
-          type="text"
+      <div className="col-span-12">
+        <label className="text-xs text-muted-foreground mb-1 block">세션 내용</label>
+        <textarea
           value={form.description}
           onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-          placeholder="선택 입력"
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
+          placeholder="세션 주제에 대한 상세 설명 (선택) — 랜딩 상세 팝업에 표시돼요"
+          rows={2}
+          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors resize-y"
         />
+      </div>
+      <div className="col-span-12">
+        <label className="text-xs text-muted-foreground mb-1 block">연사 약력·경력</label>
+        <textarea
+          value={form.speakerBio}
+          onChange={(e) => setForm((f) => ({ ...f, speakerBio: e.target.value }))}
+          placeholder={"예:\n전) 우아한청년들 CEO\n전) 우아한형제들 공동창업자 겸 CTO, COO"}
+          rows={3}
+          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors resize-y"
+        />
+        <p className="mt-1 text-[11px] text-muted-foreground">랜딩 상세 팝업의 &lsquo;약력&rsquo; 영역에 표시돼요. 줄바꿈이 그대로 유지됩니다.</p>
       </div>
       <div className="col-span-12">
         <label className="text-xs text-muted-foreground mb-1.5 block">연사 사진 (선택)</label>
@@ -250,8 +279,10 @@ export default function SessionsTab({
     type: form.type,
     title: form.title.trim(),
     speaker: form.speaker.trim() || null,
+    speakerCompany: form.speakerCompany.trim() || null,
     speakerPhotoUrl: form.speakerPhotoUrl.trim() || null,
     description: form.description.trim() || null,
+    speakerBio: form.speakerBio.trim() || null,
     startTime: form.startTime,
     endTime: form.endTime,
   });

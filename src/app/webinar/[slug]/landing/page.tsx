@@ -20,10 +20,22 @@ interface LandingSession {
   type?: string;
   title: string;
   speaker: string | null;
+  speakerCompany?: string | null;
   speakerPhotoUrl?: string | null;
   description?: string | null;
+  speakerBio?: string | null;
   startTime: string;
   endTime: string;
+}
+
+// 연사 표기 분리: 새 데이터는 speakerCompany 컬럼, 레거시는 speaker 의 "이름 | 회사" 결합형을 파싱.
+function parseSpeaker(speaker: string | null | undefined, company: string | null | undefined): { name: string; company: string } {
+  const raw = (speaker ?? "").trim();
+  const co = (company ?? "").trim();
+  if (co) return { name: raw, company: co };
+  const idx = raw.indexOf("|");
+  if (idx >= 0) return { name: raw.slice(0, idx).trim(), company: raw.slice(idx + 1).trim() };
+  return { name: raw, company: "" };
 }
 
 interface LandingWebinar {
@@ -216,6 +228,38 @@ function LandingContent({
     return seen;
   }, [lp.faq.items]);
   const [faqCategory, setFaqCategory] = useState<string | null>(null);
+
+  // 세션 상세 팝업(글래스모피즘). 임베드 iframe 은 내부 스크롤이 없어 카드의
+  // getBoundingClientRect().top(+scrollY) 이 곧 문서 Y → 클릭한 카드 중심에 absolute 로
+  // 앵커하면 임베드·단독 모두 사용자의 현재 시야 안에 뜬다(position:fixed 는 임베드에서 안 통함).
+  const detailPopup = lp.sessions.enabled && lp.sessions.detailPopup;
+  const [activeSession, setActiveSession] = useState<{ session: LandingSession; top: number } | null>(null);
+  const openerRef = useRef<HTMLButtonElement | null>(null);
+  const closeBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  const openSession = useCallback((session: LandingSession, el: HTMLButtonElement) => {
+    const rect = el.getBoundingClientRect();
+    openerRef.current = el;
+    setActiveSession({ session, top: rect.top + window.scrollY + rect.height / 2 });
+  }, []);
+  const closeSession = useCallback(() => {
+    setActiveSession(null);
+    openerRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (!activeSession) return;
+    closeBtnRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeSession(); };
+    window.addEventListener("keydown", onKey);
+    // 단독 페이지에서만 배경 스크롤 잠금 — 임베드는 호스트가 스크롤하므로 iframe 안에서 잠글 수 없다.
+    let prevOverflow = "";
+    if (!embedded) { prevOverflow = document.documentElement.style.overflow; document.documentElement.style.overflow = "hidden"; }
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (!embedded) document.documentElement.style.overflow = prevOverflow;
+    };
+  }, [activeSession, embedded, closeSession]);
   const activeFaqCategory = faqCategory && faqCategories.includes(faqCategory) ? faqCategory : faqCategories[0];
 
   // 스크롤 리빌 — transform 만 쓰므로 JS 미실행/미지원에서도 콘텐츠는 보인다
@@ -394,21 +438,49 @@ function LandingContent({
               Sessions
             </h2>
             <div className="session-cards rv">
-              {sessionCards.map((session) => (
-                <article className="session-card" key={session.id}>
-                  {session.speakerPhotoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- 세션 연사 사진(어드민 업로드 URL)
-                    <img className="session-photo" src={session.speakerPhotoUrl} alt="" loading="lazy" />
-                  ) : null}
-                  <div className="session-card-body">
-                    <span className="session-time">
-                      {session.startTime}–{session.endTime}
-                    </span>
-                    <h3>{session.title}</h3>
-                    <div className="speaker">{session.speaker && <b>{session.speaker}</b>}</div>
-                  </div>
-                </article>
-              ))}
+              {sessionCards.map((session) => {
+                const sp = parseSpeaker(session.speaker, session.speakerCompany);
+                const inner = (
+                  <>
+                    {session.speakerPhotoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- 세션 연사 사진(어드민 업로드 URL)
+                      <img className="session-photo" src={session.speakerPhotoUrl} alt="" loading="lazy" />
+                    ) : null}
+                    <div className="session-card-body">
+                      <span className="session-time">
+                        {session.startTime}–{session.endTime}
+                      </span>
+                      <h3>{session.title}</h3>
+                      <div className="speaker">
+                        {sp.name && <b>{sp.name}</b>}
+                        {sp.company && <span className="speaker-co">{sp.company}</span>}
+                      </div>
+                      {detailPopup && (
+                        <span className="session-more" aria-hidden="true">
+                          자세히 보기
+                          <svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        </span>
+                      )}
+                    </div>
+                  </>
+                );
+                return detailPopup ? (
+                  <button
+                    type="button"
+                    className="session-card is-clickable"
+                    key={session.id}
+                    aria-haspopup="dialog"
+                    aria-label={`${session.title} — 연사 상세 보기`}
+                    onClick={(e) => openSession(session, e.currentTarget)}
+                  >
+                    {inner}
+                  </button>
+                ) : (
+                  <article className="session-card" key={session.id}>
+                    {inner}
+                  </article>
+                );
+              })}
             </div>
           </section>
         )}
@@ -535,6 +607,72 @@ function LandingContent({
           )}
         </div>
       </main>
+
+      {/* 세션 상세 팝업 — 글래스모피즘. 클릭한 카드 중심(문서 Y)에 앵커 → 임베드에서도 시야 안. */}
+      {activeSession && (() => {
+        const s = activeSession.session;
+        const sp = parseSpeaker(s.speaker, s.speakerCompany);
+        const hasSpeaker = Boolean(sp.name || sp.company || s.speakerBio);
+        return (
+          <div className="lnd-modal-root" role="presentation" onClick={closeSession}>
+            <div className="lnd-modal-backdrop" />
+            <div
+              className={`lnd-modal${s.speakerPhotoUrl ? " has-photo" : ""}`}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="lnd-modal-title"
+              style={{ top: `${activeSession.top}px` }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button ref={closeBtnRef} type="button" className="lnd-modal-close" onClick={closeSession} aria-label="닫기">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+              </button>
+
+              {s.speakerPhotoUrl && (
+                <div className="lnd-modal-photo">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- 연사 사진(어드민 업로드 URL) */}
+                  <img src={s.speakerPhotoUrl} alt={sp.name || s.title} />
+                  {(sp.name || sp.company) && (
+                    <div className="lnd-modal-photo-cap">
+                      {sp.name && <b>{sp.name}</b>}
+                      {sp.company && <span>{sp.company}</span>}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="lnd-modal-main">
+                <span className="lnd-modal-time">{s.startTime}–{s.endTime}</span>
+                <h3 id="lnd-modal-title">{s.title}</h3>
+                {s.description && <p className="lnd-modal-desc">{s.description}</p>}
+
+                {hasSpeaker && (
+                  <div className="lnd-modal-speaker">
+                    <div className="lnd-modal-speaker-head">
+                      <span className="lnd-modal-avatar" aria-hidden="true">
+                        {s.speakerPhotoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- 연사 사진(어드민 업로드 URL)
+                          <img src={s.speakerPhotoUrl} alt="" />
+                        ) : (sp.name.trim().charAt(0) || "·")}
+                      </span>
+                      <div className="lnd-modal-speaker-id">
+                        {sp.name && <b>{sp.name}</b>}
+                        {sp.company && <span>{sp.company}</span>}
+                      </div>
+                    </div>
+                    {s.speakerBio && (
+                      <div className="lnd-modal-bio">
+                        <h4>약력</h4>
+                        <p>{s.speakerBio}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -729,7 +867,12 @@ const LANDING_CSS = `
   background: linear-gradient(160deg, #1b2130, #12161f 60%, #0c0f16);
   box-shadow: var(--shadow);
   transform: translateZ(0);
+  /* article/button 겸용 — 버튼일 때 기본 스타일 리셋 */
+  display: block; text-align: left; color: inherit; font: inherit; border: 0; padding: 0; appearance: none;
 }
+.lnd .session-card.is-clickable { cursor: pointer; transition: transform .22s ease, box-shadow .22s ease; }
+.lnd .session-card.is-clickable:hover { transform: translateY(-4px); box-shadow: 0 26px 54px rgba(0, 0, 0, .5); }
+.lnd .session-card.is-clickable:focus-visible { outline: 2px solid var(--primary-bright); outline-offset: 3px; }
 .lnd .session-photo { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: cover; }
 .lnd .session-card::after {
   content: ""; position: absolute; inset: 0; z-index: 1;
@@ -748,8 +891,76 @@ const LANDING_CSS = `
   margin: 12px 0 20px;
   font-size: 17px; line-height: 1.35; letter-spacing: -.03em; word-break: keep-all;
 }
-.lnd .speaker { width: 100%; display: flex; justify-content: space-between; gap: 12px; color: #dfe5f0; font-size: 12px; }
-.lnd .speaker b { color: #fff; }
+.lnd .speaker { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; color: #dfe5f0; font-size: 12px; }
+.lnd .speaker b { color: #fff; font-weight: 800; }
+.lnd .speaker-co { color: #aeb8c9; font-size: 11px; font-weight: 600; letter-spacing: -.01em; }
+.lnd .session-more {
+  display: inline-flex; align-items: center; gap: 5px; margin-top: 11px;
+  font-size: 11px; font-weight: 800; letter-spacing: -.01em; color: var(--primary-bright);
+}
+.lnd .session-more svg { width: 13px; height: 13px; }
+
+/* ── 세션 상세 팝업 (글래스모피즘) — 클릭 카드 문서 Y 에 앵커 ── */
+.lnd .lnd-modal-root { position: absolute; inset: 0; z-index: 3000; }
+.lnd .lnd-modal-backdrop {
+  position: absolute; inset: 0; background: rgba(4, 6, 11, .62);
+  -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
+  animation: lnd-modal-fade .2s ease;
+}
+.lnd .lnd-modal {
+  position: absolute; left: 50%; transform: translate(-50%, -50%);
+  width: min(920px, calc(100% - 32px)); max-height: 90vh;
+  display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  overflow: hidden; border-radius: 18px;
+  background: rgba(19, 23, 32, .72);
+  -webkit-backdrop-filter: blur(26px) saturate(1.3); backdrop-filter: blur(26px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, .12);
+  box-shadow: 0 40px 90px rgba(0, 0, 0, .6);
+  animation: lnd-modal-pop .22s cubic-bezier(.2, .8, .3, 1);
+}
+.lnd.embedded .lnd-modal { max-height: calc(var(--lnd-vh, 720px) - 40px); }
+.lnd .lnd-modal:not(.has-photo) { grid-template-columns: minmax(0, 1fr); width: min(600px, calc(100% - 32px)); }
+.lnd .lnd-modal-close {
+  position: absolute; top: 12px; right: 12px; z-index: 3;
+  width: 38px; height: 38px; display: grid; place-items: center; border-radius: 999px; color: #fff;
+  background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .14);
+  transition: background .18s ease;
+}
+.lnd .lnd-modal-close:hover { background: rgba(255, 255, 255, .2); }
+.lnd .lnd-modal-close svg { width: 18px; height: 18px; }
+.lnd .lnd-modal-photo { position: relative; min-height: 100%; background: #0c0f16; }
+.lnd .lnd-modal-photo img { width: 100%; height: 100%; object-fit: cover; }
+.lnd .lnd-modal-photo::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 48%, rgba(6, 9, 15, .85)); }
+.lnd .lnd-modal-photo-cap { position: absolute; z-index: 1; left: 20px; bottom: 18px; display: flex; flex-direction: column; gap: 3px; color: #fff; }
+.lnd .lnd-modal-photo-cap b { font-size: 16px; font-weight: 800; letter-spacing: -.02em; }
+.lnd .lnd-modal-photo-cap span { font-size: 12px; color: #cfd6e2; }
+.lnd .lnd-modal-main { padding: 30px; overflow-y: auto; }
+.lnd .lnd-modal-time {
+  display: inline-flex; align-items: center; min-height: 26px; padding: 0 9px; border-radius: 4px;
+  background: var(--primary); color: var(--on-primary); font-size: 12px; font-weight: 850; font-variant-numeric: tabular-nums;
+}
+.lnd .lnd-modal-main h3 { margin: 14px 0 0; font-size: clamp(21px, 2.4vw, 27px); font-weight: 900; letter-spacing: -.035em; line-height: 1.25; word-break: keep-all; }
+.lnd .lnd-modal-desc { margin: 14px 0 0; color: #c4ccd9; font-size: 15px; line-height: 1.7; white-space: pre-line; word-break: keep-all; }
+.lnd .lnd-modal-speaker { margin-top: 22px; padding: 18px; border-radius: 14px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .08); }
+.lnd .lnd-modal-speaker-head { display: flex; align-items: center; gap: 13px; }
+.lnd .lnd-modal-avatar { width: 52px; height: 52px; border-radius: 999px; overflow: hidden; flex-shrink: 0; display: grid; place-items: center; background: var(--primary-soft, #2a3040); color: #fff; font-weight: 800; font-size: 20px; }
+.lnd .lnd-modal-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.lnd .lnd-modal-speaker-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.lnd .lnd-modal-speaker-id b { font-size: 16px; font-weight: 800; letter-spacing: -.02em; }
+.lnd .lnd-modal-speaker-id span { font-size: 13px; color: #aeb8c9; }
+.lnd .lnd-modal-bio { margin-top: 16px; padding-top: 15px; border-top: 1px solid rgba(255, 255, 255, .09); }
+.lnd .lnd-modal-bio h4 { margin: 0 0 8px; padding-left: 10px; border-left: 3px solid var(--primary-bright); font-size: 13px; font-weight: 800; letter-spacing: -.01em; }
+.lnd .lnd-modal-bio p { margin: 0; color: #c4ccd9; font-size: 14px; line-height: 1.7; white-space: pre-line; word-break: keep-all; }
+@keyframes lnd-modal-fade { from { opacity: 0; } }
+@keyframes lnd-modal-pop { from { opacity: 0; transform: translate(-50%, calc(-50% + 10px)); } }
+@media (max-width: 640px) {
+  .lnd .lnd-modal, .lnd .lnd-modal.has-photo { grid-template-columns: minmax(0, 1fr); width: calc(100% - 24px); }
+  .lnd .lnd-modal-photo { display: none; }
+  .lnd .lnd-modal-main { padding: 24px 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lnd .lnd-modal, .lnd .lnd-modal-backdrop { animation: none; }
+}
 
 /* ── 타임테이블 ── */
 .lnd .schedule { display: grid; gap: 10px; list-style: none; }

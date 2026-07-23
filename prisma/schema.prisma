@@ -534,9 +534,11 @@ model WebinarSession {
   number          Int
   type            String  @default("session") // "session" | "qa" | "break"
   title           String
-  speaker         String?
+  speaker         String? // 연사 이름(레거시 데이터는 "이름 | 회사" 결합형일 수 있음 — 표시 시 파싱)
+  speakerCompany  String? // 소속·직책 (랜딩 상세 팝업에서 이름과 분리 표시)
   speakerPhotoUrl String?
-  description     String?
+  description     String? // 세션 내용(주제 상세)
+  speakerBio      String? // 연사 약력·경력 (랜딩 상세 팝업)
   startTime       String
   endTime         String
 

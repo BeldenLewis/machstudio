@@ -16,8 +16,10 @@ interface WebinarSession {
   type: string;
   title: string;
   speaker: string | null;
+  speakerCompany: string | null;
   speakerPhotoUrl: string | null;
   description: string | null;
+  speakerBio: string | null;
   startTime: string;
   endTime: string;
 }
