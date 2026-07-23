@@ -229,22 +229,6 @@ function LandingContent({
     // 섹션 구성이 바뀌면(편집 미리보기) 새 .rv 도 관찰해야 한다
   }, [wrapRef, lp, webinar.sessions.length]);
 
-  // 하단 dock 은 히어로(자체 CTA 보유)를 지나면 표시 — 첫 화면에서 일시·CTA 이중 노출 방지(단독 열람 전용 게이트)
-  useEffect(() => {
-    const root = wrapRef.current;
-    if (!root || embedded || !lp.bottomBanner.enabled || !("IntersectionObserver" in window)) return;
-    const hero = root.querySelector<HTMLElement>(".hero");
-    if (!hero) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => root.classList.toggle("dock-on", !entry.isIntersecting));
-      },
-      { threshold: 0.15 },
-    );
-    io.observe(hero);
-    return () => io.disconnect();
-  }, [wrapRef, embedded, lp.bottomBanner.enabled]);
-
   // 세션~타임테이블 구간 키컬러 배경 — IO 중앙 밴드(임베드 iframe 에서도 최상위 뷰포트 기준으로 동작)
   useEffect(() => {
     const root = wrapRef.current;
@@ -309,6 +293,11 @@ function LandingContent({
       style={{ "--primary": accent, "--on-primary": onPrimary } as React.CSSProperties}
       lang="ko"
     >
+      {/* Pretendard 웹폰트 — 뷰어 PC에 미설치여도 랜딩은 항상 Pretendard로(React가 head로 hoist·dedupe) */}
+      <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+      />
       <style>{LANDING_CSS}</style>
 
       {!lp.enabled && isPreview && <div className="preview-badge">비공개 상태 · 미리보기</div>}
@@ -532,31 +521,6 @@ function LandingContent({
           )}
         </div>
       </main>
-
-      {/* 하단 등록 배너 — 단독 열람: 화면 하단 고정 dock, 임베드: 푸터 위 정적 스트립(fixed 는 auto-height iframe 에서 무의미) */}
-      {lp.bottomBanner.enabled && (
-        <div className="dock" role="region" aria-label="등록 배너">
-          <div className="dock-inner">
-            <p className="dock-text">{lp.bottomBanner.text.trim() || dateStr}</p>
-            <a
-              className="dock-cta"
-              href={registerUrl}
-              target={embedded ? "_blank" : undefined}
-              rel={embedded ? "noopener" : undefined}
-            >
-              {lp.ctaLabel} <span aria-hidden="true">→</span>
-            </a>
-          </div>
-        </div>
-      )}
-
-      <footer className="site-footer">
-        <p className="footer-meta">
-          <span className="wordmark">{webinar.name}</span>
-          {"  ·  "}
-          {dateStr} · Online Live
-        </p>
-      </footer>
     </div>
   );
 }
@@ -575,7 +539,7 @@ const LANDING_CSS = `
   --primary-ink: color-mix(in srgb, var(--primary) 52%, #050403);
   --max: 960px;
   --shadow: 0 26px 80px rgba(0, 6, 24, .38);
-  --sans: Pretendard, "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --sans: "Pretendard Variable", Pretendard, "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   min-height: 100%;
   background: var(--ink);
   color: var(--paper);
@@ -684,15 +648,15 @@ const LANDING_CSS = `
 }
 .lnd .hero-meta {
   position: absolute; left: 0; bottom: 54px;
-  color: #fff; font-size: 14px; font-weight: 650; line-height: 1.45;
-  white-space: pre-line; font-variant-numeric: tabular-nums;
+  color: #fff; font-size: clamp(16px, 2vw, 21px); font-weight: 700; line-height: 1.5;
+  letter-spacing: -.01em; white-space: pre-line; font-variant-numeric: tabular-nums;
 }
 .lnd .hero-cta {
   position: absolute; right: 0; bottom: 48px;
   min-width: 210px; min-height: 58px;
   display: inline-flex; align-items: center; justify-content: space-between; gap: 20px;
   padding: 0 24px; border-radius: 999px;
-  background: linear-gradient(100deg, var(--primary-soft), var(--primary));
+  background: var(--primary);
   color: var(--on-primary);
   box-shadow: 0 16px 34px color-mix(in srgb, var(--primary) 34%, transparent);
   font-weight: 850;
@@ -712,7 +676,7 @@ const LANDING_CSS = `
 }
 .lnd .intro-copy { max-width: 760px; }
 .lnd .intro h2 {
-  font-size: clamp(28px, 4vw, 48px); line-height: 1.28; letter-spacing: -.04em;
+  font-size: clamp(28px, 4vw, 48px); font-weight: 900; line-height: 1.28; letter-spacing: -.04em;
   white-space: pre-line; text-wrap: balance; word-break: keep-all;
 }
 .lnd .intro p {
@@ -736,7 +700,7 @@ const LANDING_CSS = `
 .lnd .section-title {
   margin: 0 0 clamp(42px, 6vw, 70px);
   text-align: center;
-  font-size: clamp(30px, 4vw, 44px); line-height: 1; letter-spacing: -.04em; text-transform: uppercase;
+  font-size: clamp(30px, 4vw, 44px); font-weight: 900; line-height: 1; letter-spacing: -.04em; text-transform: uppercase;
 }
 .lnd .accent-zone .section-title { transition: color .8s ease; }
 .lnd.on-accent .accent-zone .section-title { color: var(--on-primary); }
@@ -863,63 +827,6 @@ const LANDING_CSS = `
 .lnd .faq-item[open] summary::after { content: "\\2212"; }
 .lnd .faq-item p { padding: 0 18px 20px; color: #c0c7d2; font-size: 13px; white-space: pre-line; }
 
-/* ── 하단 등록 배너 ── */
-.lnd .dock {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 80;
-  padding: 12px clamp(16px, 4vw, 44px) calc(12px + env(safe-area-inset-bottom));
-  background: linear-gradient(to top, rgba(4, 6, 11, .94), rgba(4, 6, 11, .55) 70%, transparent);
-  pointer-events: none;
-}
-.lnd .dock-inner {
-  pointer-events: auto;
-  width: min(720px, 100%); margin: 0 auto;
-  display: flex; align-items: center; justify-content: space-between; gap: 14px;
-}
-.lnd .dock-text {
-  min-width: 0; color: var(--paper);
-  font-size: clamp(12px, 1.6vw, 14px); font-weight: 700; font-variant-numeric: tabular-nums;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.lnd .dock-cta {
-  flex-shrink: 0;
-  display: inline-flex; align-items: center; gap: 10px;
-  min-height: 52px; padding: 0 26px; border-radius: 999px;
-  background: linear-gradient(100deg, var(--primary-soft), var(--primary));
-  color: var(--on-primary);
-  font-weight: 850; font-size: 15px;
-  box-shadow: 0 14px 40px color-mix(in srgb, var(--primary) 40%, transparent);
-  transition: transform .15s ease, box-shadow .15s ease, background .3s ease, color .3s ease;
-}
-.lnd .dock-cta:hover { transform: translateY(-2px); box-shadow: 0 18px 48px color-mix(in srgb, var(--primary) 52%, transparent); }
-/* 키컬러 배경 구간에선 반전(오렌지 위 오렌지 버튼 방지) */
-.lnd.on-accent .dock-cta { background: var(--ink); color: var(--paper); box-shadow: 0 14px 40px rgba(4, 6, 11, .5); }
-/* 단독 열람에서 dock 이 푸터를 가리지 않게 */
-.lnd:not(.embedded):has(.dock) .site-footer { padding-bottom: 120px; }
-/* 단독 열람: 히어로(자체 CTA)가 보이는 동안엔 dock 숨김 — 지나면 슬라이드 업 */
-.lnd:not(.embedded) .dock {
-  opacity: 0; transform: translateY(14px);
-  transition: opacity .35s ease, transform .35s ease;
-}
-.lnd:not(.embedded) .dock .dock-inner { pointer-events: none; }
-.lnd:not(.embedded).dock-on .dock { opacity: 1; transform: none; }
-.lnd:not(.embedded).dock-on .dock .dock-inner { pointer-events: auto; }
-/* 임베드: fixed 가 iframe 문서 끝에 붙을 뿐이므로 정적 스트립으로 — 푸터 위 풀폭 배너 */
-.lnd.embedded .dock {
-  position: static;
-  padding: 22px clamp(16px, 4vw, 44px);
-  background: var(--ink-soft);
-  border-top: 1px solid rgba(255, 255, 255, .07);
-}
-
-/* ── 푸터 ── */
-.lnd .site-footer {
-  min-height: 110px; display: grid; place-items: center;
-  padding: 30px 16px;
-  background: #0d1219; border-top: 1px solid rgba(255, 255, 255, .06); text-align: center;
-}
-.lnd .footer-meta { color: var(--muted); font-size: 12.5px; letter-spacing: .04em; font-variant-numeric: tabular-nums; white-space: pre-wrap; }
-.lnd .wordmark { font-weight: 900; letter-spacing: .12em; text-transform: uppercase; color: var(--paper); }
-
 /* ── 스크롤 리빌(transform 전용 — JS 미실행에서도 콘텐츠 가시) ── */
 .lnd .rv { transform: translateY(12px); transition: transform .5s cubic-bezier(.22, .7, .2, 1); }
 .lnd .rv.in { transform: translateY(0); }
@@ -928,7 +835,7 @@ const LANDING_CSS = `
   .lnd .hero-inner { width: min(100% - 32px, 980px); padding-bottom: 150px; }
   .lnd .hero h1 { font-size: clamp(38px, 13vw, 66px); }
   .lnd .hero-subtitle { font-size: 17px; }
-  .lnd .hero-meta { left: 50%; bottom: 112px; transform: translateX(-50%); width: 100%; text-align: center; font-size: 12px; }
+  .lnd .hero-meta { left: 50%; bottom: 116px; transform: translateX(-50%); width: 100%; text-align: center; font-size: 15px; }
   .lnd .hero-cta { left: 50%; right: auto; bottom: 36px; width: min(100%, 320px); transform: translateX(-50%); }
   .lnd .hero-cta:hover { transform: translate(-50%, -2px); }
   .lnd .intro { min-height: 480px; padding-inline: 20px; }
