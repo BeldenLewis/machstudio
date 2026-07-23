@@ -710,7 +710,7 @@ const LANDING_CSS = `
 .lnd .session-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; }
 .lnd .session-card {
   position: relative;
-  width: calc(50% - 8px); max-width: 460px; aspect-ratio: .86;
+  width: calc(50% - 8px); max-width: 460px; aspect-ratio: 210 / 297; /* A4 세로 */
   overflow: hidden; border-radius: 9px;
   background: linear-gradient(160deg, #1b2130, #12161f 60%, #0c0f16);
   box-shadow: var(--shadow);
