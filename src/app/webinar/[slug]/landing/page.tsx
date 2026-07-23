@@ -98,40 +98,6 @@ export default function WebinarLandingPage({ params }: { params: Promise<{ slug:
     if (webinar?.name) document.title = `${webinar.name} — 사전 등록`;
   }, [webinar?.name]);
 
-  // 임베드: 문서 높이를 부모로 전송(민감정보 없음) + 호스트 뷰포트 높이 수신(--lnd-vh)
-  useEffect(() => {
-    if (typeof window === "undefined" || window.self === window.top) return;
-    let raf = 0;
-    const post = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        window.parent.postMessage(
-          { type: "machstudio:landing-height", slug, height: document.documentElement.scrollHeight },
-          "*",
-        );
-      });
-    };
-    const ro = new ResizeObserver(post);
-    ro.observe(document.documentElement);
-    ro.observe(document.body);
-    const onMsg = (e: MessageEvent) => {
-      const d = e.data as { type?: string; vh?: number } | null;
-      if (d?.type === "machstudio:host-viewport" && typeof d.vh === "number" && wrapRef.current) {
-        wrapRef.current.style.setProperty("--lnd-vh", `${Math.max(480, Math.min(1400, Math.round(d.vh)))}px`);
-        post();
-      }
-    };
-    window.addEventListener("message", onMsg);
-    window.addEventListener("load", post);
-    post();
-    return () => {
-      ro.disconnect();
-      cancelAnimationFrame(raf);
-      window.removeEventListener("message", onMsg);
-      window.removeEventListener("load", post);
-    };
-  }, [slug, webinar]);
-
   if (error) {
     return (
       <div style={{ minHeight: "60vh", display: "grid", placeItems: "center", background: "#06080d", color: "#abb5c7", fontFamily: "Pretendard, sans-serif", padding: 24, textAlign: "center" }}>
@@ -252,10 +218,10 @@ function LandingContent({
     return () => io.disconnect();
   }, [wrapRef, lp.sessions.enabled, lp.timetable.enabled, webinar.sessions.length]);
 
-  // 왼쪽 목차 스크롤 스파이(임베드에선 목차 자체를 숨김)
+  // 왼쪽 목차 스크롤 스파이 — 임베드(100vh 내부 스크롤 iframe)에서도 동작
   useEffect(() => {
     const root = wrapRef.current;
-    if (!root || embedded || !("IntersectionObserver" in window)) return;
+    if (!root || !("IntersectionObserver" in window)) return;
     const sections = tocItems
       .map((t) => root.querySelector<HTMLElement>(`#${t.id}`))
       .filter((el): el is HTMLElement => Boolean(el));
@@ -269,7 +235,7 @@ function LandingContent({
     );
     sections.forEach((section) => io.observe(section));
     return () => io.disconnect();
-  }, [wrapRef, embedded, tocItems]);
+  }, [wrapRef, tocItems]);
 
   const scrollToSection = useCallback((id: string) => {
     const el = document.getElementById(id);
@@ -302,7 +268,7 @@ function LandingContent({
 
       {!lp.enabled && isPreview && <div className="preview-badge">비공개 상태 · 미리보기</div>}
 
-      {!embedded && tocItems.length > 1 && (
+      {tocItems.length > 1 && (
         <nav className="toc" aria-label="섹션 목차">
           {tocItems.map((item) => (
             <a
@@ -569,7 +535,7 @@ const LANDING_CSS = `
   position: fixed; left: 24px; top: 50%; transform: translateY(-50%); z-index: 90;
   display: none; flex-direction: column; gap: 2px;
 }
-@media (min-width: 1280px) { .lnd .toc { display: flex; } }
+@media (min-width: 1200px) { .lnd .toc { display: flex; } }
 .lnd .toc-link {
   display: flex; align-items: center; gap: 11px; min-height: 30px;
   color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase;
@@ -587,7 +553,7 @@ const LANDING_CSS = `
 .lnd.on-accent .toc-link[aria-current="true"] { color: var(--on-primary); }
 .lnd.on-accent .toc-link[aria-current="true"] .toc-mark { background: var(--on-primary); }
 
-/* ── 히어로 — 임베드에선 호스트 뷰포트 높이(--lnd-vh)를 사용 ── */
+/* ── 히어로 — 단독·임베드 모두 뷰포트 풀스크린(임베드는 100vh 고정 높이 iframe) ── */
 .lnd .hero {
   position: relative;
   min-height: 100svh;
@@ -597,7 +563,6 @@ const LANDING_CSS = `
     radial-gradient(circle at 50% 45%, rgba(7, 12, 26, .15) 0 20%, transparent 21%),
     linear-gradient(180deg, #05070c 0%, #05070d 100%);
 }
-.lnd.embedded .hero { min-height: var(--lnd-vh, 720px); }
 .lnd .hero::before,
 .lnd .hero::after {
   content: ""; position: absolute; inset: 50% auto auto 50%;
@@ -710,7 +675,7 @@ const LANDING_CSS = `
 .lnd .session-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; }
 .lnd .session-card {
   position: relative;
-  width: calc(50% - 8px); max-width: 460px; aspect-ratio: .86;
+  width: calc(50% - 8px); max-width: 460px; aspect-ratio: 210 / 297; /* A4 세로 */
   overflow: hidden; border-radius: 9px;
   background: linear-gradient(160deg, #1b2130, #12161f 60%, #0c0f16);
   box-shadow: var(--shadow);
