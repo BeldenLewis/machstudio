@@ -16,7 +16,7 @@ export async function proxy(request: NextRequest) {
     pathname === "/live-preview" || // 라이브 페이지 상태별 디자인 프리뷰(목업 데이터, 공개)
     pathname.match(/^\/webinar\/[^/]+\/live/) ||
     pathname.match(/^\/webinar\/[^/]+\/survey\//) || // 시청자 설문 응답 페이지(공개 — 종료화면·응답링크로 진입)
-    pathname.match(/^\/webinar\/[^/]+\/landing/) || // 랜딩 상세페이지(공개 — 외부 사이트 iframe 임베드)
+    pathname.match(/^\/webinar\/[^/]+\/(landing|embed)/) || // 랜딩 상세페이지 + 임베드 로더 스크립트(공개)
     pathname.startsWith("/api/public") ||
     pathname.startsWith("/api/shorten-url") ||
     pathname.startsWith("/api/health") ||

@@ -116,18 +116,13 @@ const MOUNT_MARKERS = [
   },
 ] as const;
 
-// 랜딩 임베드 스니펫 — 뷰포트 높이(100svh) iframe 으로 내부 스크롤.
-// 풀스크린 히어로·왼쪽 고정 목차가 단독 페이지와 동일하게 동작하도록(자동높이 iframe 에선 fixed/100svh 가 안 됨).
-// postMessage 핸드셰이크가 없어 아임웹처럼 커스텀 HTML 을 감싸는 빌더에서도 안정적이다.
+// 랜딩 임베드 스니펫 — 로더 스크립트 한 줄.
+// 로더가 ①랜딩을 자동높이 iframe 으로 삽입(호스트가 자연 스크롤 → 중첩 스크롤 없음)
+// ②웨비나 상태(등록중/라이브중/종료)에 맞춘 고정 하단 배너를 아임웹 페이지에 주입한다.
+// 히어로 버튼은 랜딩 안에서 상태별로 자동 전환. (기존 /w/{siteId} + 마운트 마커 방식은 그대로 유지)
 function buildLandingEmbedSnippet(origin: string, slug: string) {
-  return `<!-- machstudio 웨비나 랜딩 -->
-<iframe
-  src="${origin}/webinar/${slug}/landing"
-  title="웨비나 랜딩페이지"
-  style="display:block;width:100%;height:100svh;border:0"
-  allow="autoplay; fullscreen"
-  loading="lazy"
-></iframe>`;
+  return `<!-- machstudio 웨비나 랜딩(상태연동 배너 포함) -->
+<script async src="${origin}/webinar/${slug}/embed"></script>`;
 }
 
 export default function DeployTab({ webinarId, slug }: { webinarId: string; slug: string }) {

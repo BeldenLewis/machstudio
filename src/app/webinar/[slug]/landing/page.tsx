@@ -33,6 +33,7 @@ interface LandingWebinar {
   liveStartAt: string;
   theme: Record<string, string>;
   config: Record<string, unknown>;
+  components?: Record<string, unknown> | null;
   sessions: LandingSession[];
 }
 
@@ -60,9 +61,16 @@ const TOC_DEF = [
   { id: "lnd-faq", label: "FAQ" },
 ] as const;
 
+interface WebinarState {
+  status?: string;
+  entryOpen?: boolean;
+  canRegister?: boolean;
+}
+
 export default function WebinarLandingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
   const [webinar, setWebinar] = useState<LandingWebinar | null>(null);
+  const [state, setState] = useState<WebinarState>({});
   const [error, setError] = useState<string | null>(null);
   const [embedded, setEmbedded] = useState(false);
   const [isPreview, setIsPreview] = useState(false);
@@ -72,6 +80,40 @@ export default function WebinarLandingPage({ params }: { params: Promise<{ slug:
     setEmbedded(typeof window !== "undefined" && window.self !== window.top);
     setIsPreview(typeof window !== "undefined" && new URLSearchParams(window.location.search).has("preview"));
   }, []);
+
+  // 임베드: 문서 높이를 부모(로더)에 전송(자동높이 iframe) + 호스트 뷰포트 높이 수신(--lnd-vh, 히어로 풀스크린용)
+  useEffect(() => {
+    if (typeof window === "undefined" || window.self === window.top) return;
+    let raf = 0;
+    const post = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        window.parent.postMessage(
+          { type: "machstudio:landing-height", slug, height: document.documentElement.scrollHeight },
+          "*",
+        );
+      });
+    };
+    const ro = new ResizeObserver(post);
+    ro.observe(document.documentElement);
+    ro.observe(document.body);
+    const onMsg = (e: MessageEvent) => {
+      const d = e.data as { type?: string; vh?: number } | null;
+      if (d?.type === "machstudio:host-viewport" && typeof d.vh === "number" && wrapRef.current) {
+        wrapRef.current.style.setProperty("--lnd-vh", `${Math.max(480, Math.min(1400, Math.round(d.vh)))}px`);
+        post();
+      }
+    };
+    window.addEventListener("message", onMsg);
+    window.addEventListener("load", post);
+    post();
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(raf);
+      window.removeEventListener("message", onMsg);
+      window.removeEventListener("load", post);
+    };
+  }, [slug]);
 
   useEffect(() => {
     let alive = true;
@@ -85,6 +127,7 @@ export default function WebinarLandingPage({ params }: { params: Promise<{ slug:
           return;
         }
         setWebinar(data.webinar as LandingWebinar);
+        setState({ status: data.status, entryOpen: data.entryOpen, canRegister: data.canRegister });
       } catch {
         if (alive) setError("불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
       }
@@ -112,16 +155,18 @@ export default function WebinarLandingPage({ params }: { params: Promise<{ slug:
       </div>
     );
   }
-  return <LandingContent webinar={webinar} embedded={embedded} isPreview={isPreview} wrapRef={wrapRef} />;
+  return <LandingContent webinar={webinar} state={state} embedded={embedded} isPreview={isPreview} wrapRef={wrapRef} />;
 }
 
 function LandingContent({
   webinar,
+  state,
   embedded,
   isPreview,
   wrapRef,
 }: {
   webinar: LandingWebinar;
+  state: WebinarState;
   embedded: boolean;
   isPreview: boolean;
   wrapRef: React.MutableRefObject<HTMLDivElement | null>;
@@ -136,6 +181,14 @@ function LandingContent({
   const subtitle = lp.subtitle.trim() || (webinar.description ?? "").split("\n")[0] || "";
   const dateStr = `${formatKst(webinar.liveStartAt, { year: "numeric", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false })} KST`;
   const registerUrl = `/webinar/${webinar.slug}/live?view=signup`;
+  const liveUrl = `/webinar/${webinar.slug}/live`;
+  // 히어로 CTA는 웨비나 상태(서버 계산)에 맞춰 자동 전환 — 하단 배너와 동일한 규칙.
+  const heroLabels = (webinar.components?.heroButton as { labelByStatus?: Record<string, string> } | undefined)?.labelByStatus ?? {};
+  const heroCta = state.status === "ended"
+    ? { label: heroLabels.ended || "다시보기", href: liveUrl }
+    : state.entryOpen
+      ? { label: heroLabels.live || "웨비나 입장하기", href: liveUrl }
+      : { label: lp.ctaLabel, href: registerUrl };
 
   const sessionCards = lp.sessions.enabled ? webinar.sessions.filter((s) => (s.type ?? "session") === "session") : [];
   const timetableRows = lp.timetable.enabled ? webinar.sessions : [];
@@ -218,10 +271,10 @@ function LandingContent({
     return () => io.disconnect();
   }, [wrapRef, lp.sessions.enabled, lp.timetable.enabled, webinar.sessions.length]);
 
-  // 왼쪽 목차 스크롤 스파이 — 임베드(100vh 내부 스크롤 iframe)에서도 동작
+  // 왼쪽 목차 스크롤 스파이 — 임베드(자동높이 iframe)에선 목차 자체를 숨기므로 스킵
   useEffect(() => {
     const root = wrapRef.current;
-    if (!root || !("IntersectionObserver" in window)) return;
+    if (!root || embedded || !("IntersectionObserver" in window)) return;
     const sections = tocItems
       .map((t) => root.querySelector<HTMLElement>(`#${t.id}`))
       .filter((el): el is HTMLElement => Boolean(el));
@@ -235,7 +288,7 @@ function LandingContent({
     );
     sections.forEach((section) => io.observe(section));
     return () => io.disconnect();
-  }, [wrapRef, tocItems]);
+  }, [wrapRef, embedded, tocItems]);
 
   const scrollToSection = useCallback((id: string) => {
     const el = document.getElementById(id);
@@ -268,7 +321,7 @@ function LandingContent({
 
       {!lp.enabled && isPreview && <div className="preview-badge">비공개 상태 · 미리보기</div>}
 
-      {tocItems.length > 1 && (
+      {!embedded && tocItems.length > 1 && (
         <nav className="toc" aria-label="섹션 목차">
           {tocItems.map((item) => (
             <a
@@ -316,11 +369,11 @@ function LandingContent({
             </p>
             <a
               className="hero-cta"
-              href={registerUrl}
+              href={heroCta.href}
               target={embedded ? "_blank" : undefined}
               rel={embedded ? "noopener" : undefined}
             >
-              <span>{lp.ctaLabel}</span>
+              <span>{heroCta.label}</span>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -553,7 +606,7 @@ const LANDING_CSS = `
 .lnd.on-accent .toc-link[aria-current="true"] { color: var(--on-primary); }
 .lnd.on-accent .toc-link[aria-current="true"] .toc-mark { background: var(--on-primary); }
 
-/* ── 히어로 — 단독·임베드 모두 뷰포트 풀스크린(임베드는 100vh 고정 높이 iframe) ── */
+/* ── 히어로 — 단독: 100svh, 임베드: 호스트 뷰포트(--lnd-vh)로 풀스크린(자동높이 iframe) ── */
 .lnd .hero {
   position: relative;
   min-height: 100svh;
@@ -563,6 +616,8 @@ const LANDING_CSS = `
     radial-gradient(circle at 50% 45%, rgba(7, 12, 26, .15) 0 20%, transparent 21%),
     linear-gradient(180deg, #05070c 0%, #05070d 100%);
 }
+/* 임베드(자동높이 iframe)에선 100svh 가 문서 전체가 돼 무한 성장 → 호스트 뷰포트 높이 사용 */
+.lnd.embedded .hero { min-height: var(--lnd-vh, 720px); }
 .lnd .hero::before,
 .lnd .hero::after {
   content: ""; position: absolute; inset: 50% auto auto 50%;
