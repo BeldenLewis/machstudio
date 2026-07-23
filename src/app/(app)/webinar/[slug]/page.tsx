@@ -28,13 +28,13 @@ import { InlineError } from "@/components/ui/inline-error";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
-type SettingsSection = "general" | "registration" | "sessions" | "waiting" | "livepage" | "ended" | "survey";
+type SettingsSection = "general" | "landing" | "registration" | "sessions" | "waiting" | "livepage" | "ended" | "survey";
 // 새 IA: 만들기(create=설정) / 배포(deploy) / 운영(operate=콘솔+등록자) / 분석(analytics)
 type Tab = "create" | "deploy" | "operate" | "analytics";
 type NavigationTarget = Tab | `create-${SettingsSection}` | "operate-registrants";
 
 const TAB_IDS: Tab[] = ["create", "deploy", "operate", "analytics"];
-const CREATE_SECTIONS: SettingsSection[] = ["general", "registration", "sessions", "waiting", "livepage", "ended", "survey"];
+const CREATE_SECTIONS: SettingsSection[] = ["general", "landing", "registration", "sessions", "waiting", "livepage", "ended", "survey"];
 const OPERATE_SECTIONS: OperateSection[] = ["console", "registrants"];
 
 interface WebinarSession {
@@ -394,7 +394,7 @@ function WebinarDetail({ id }: { id: string }) {
                 onSectionChange={(section) => navigate("create", section, { replace: true })}
               />
             )}
-            {activeTab === "deploy" && <DeployTab webinarId={id} />}
+            {activeTab === "deploy" && <DeployTab webinarId={id} slug={webinar.slug} />}
             {activeTab === "operate" && (
               <OperateTab
                 webinarId={id}

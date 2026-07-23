@@ -42,6 +42,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     surveyUrl: rawConfig.surveyUrl,
     livePage: rawConfig.livePage,
     registrationForm: rawConfig.registrationForm,
+    landingPage: rawConfig.landingPage, // 랜딩 상세페이지(공개 렌더) — normalize 가 URL 스킴을 재검증한다
   };
 
   return NextResponse.json(

@@ -2,12 +2,13 @@
 
 import { type ElementType } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FileText, ListChecks, MonitorPlay, SlidersHorizontal, Hourglass, Flag, ClipboardCheck } from "lucide-react";
+import { FileText, ListChecks, MonitorPlay, SlidersHorizontal, Hourglass, Flag, ClipboardCheck, Megaphone } from "lucide-react";
 import BasicInfoTab from "./BasicInfoTab";
 import RegistrationFormTab from "./RegistrationFormTab";
 import SessionsTab from "./SessionsTab";
 import LivePageTab from "./LivePageTab";
 import SurveyTab from "./SurveyTab";
+import LandingPageTab from "./LandingPageTab";
 
 interface WebinarSession {
   id: string;
@@ -35,10 +36,12 @@ interface Webinar {
   sessions: WebinarSession[];
 }
 
-type PageSetupSection = "general" | "registration" | "sessions" | "waiting" | "livepage" | "ended" | "survey";
+type PageSetupSection = "general" | "landing" | "registration" | "sessions" | "waiting" | "livepage" | "ended" | "survey";
 
 const sections: { id: PageSetupSection; label: string; desc: string; icon: ElementType }[] = [
   { id: "general", label: "기본 정보", desc: "웨비나 이름·설명·일정과 삭제를 관리합니다.", icon: SlidersHorizontal },
+  // 랜딩은 홍보 진입점이라 등록보다 앞 — 만들기 순서 = 시청자 여정 순서
+  { id: "landing", label: "랜딩 페이지", desc: "외부 사이트에 임베드하는 상세페이지 — 히어로·소개·프로그램·FAQ를 구성합니다.", icon: Megaphone },
   { id: "registration", label: "등록", desc: "사전등록에서 수집할 항목과 동의 문구를 설정합니다.", icon: FileText },
   { id: "sessions", label: "세션", desc: "라이브 페이지에 표시될 아젠다와 시간표를 정리합니다.", icon: ListChecks },
   { id: "waiting", label: "대기 화면", desc: "라이브 전 등록자가 보는 화면 — 카운트다운·아젠다·알림을 구성합니다.", icon: Hourglass },
@@ -145,6 +148,14 @@ export default function PageSetupTab({
               {section === "general" && (
                 <div className="lg:h-full overflow-auto">
                   <BasicInfoTab webinar={webinar} onSilentUpdate={onSilentUpdate} />
+                </div>
+              )}
+              {section === "landing" && (
+                <div className="lg:h-full overflow-auto">
+                  <LandingPageTab
+                    webinar={{ id: webinar.id, slug: webinar.slug, name: webinar.name, description: webinar.description, config: webinar.config }}
+                    onSilentUpdate={onSilentUpdate}
+                  />
                 </div>
               )}
               {section === "registration" && (

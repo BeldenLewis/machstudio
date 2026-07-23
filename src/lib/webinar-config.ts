@@ -112,6 +112,122 @@ export function normalizeLivePageConfig(config: unknown): LivePageConfig {
   };
 }
 
+// ── 랜딩 페이지(외부 사이트 임베드용 상세페이지) — config.landingPage ──
+// 섹션은 "토글 ON + 실제 데이터 있음" 이중 게이트로만 노출된다(빈 껍데기 금지).
+// 세션·타임테이블 데이터는 여기 저장하지 않고 실제 세션(webinar.sessions)에서 파생한다.
+export interface LandingProgramItem { icon: string; title: string; description: string }
+export interface LandingHighlightItem { title: string; description: string }
+export interface LandingJoinStep { title: string; description: string }
+export interface LandingFaqItem { category: string; question: string; answer: string }
+export type LandingHeroMedia = { type: "image" | "video"; url: string } | null;
+
+export interface LandingPageConfig {
+  enabled: boolean;
+  heroMedia: LandingHeroMedia;
+  /** 히어로 상단 작은 브랜드 라벨 — 비우면 웨비나 이름 */
+  brand: string;
+  /** 히어로 대형 타이틀(줄 단위) — 비우면 웨비나 이름 한 줄 */
+  titleLines: string[];
+  /** 히어로 부제 — 비우면 웨비나 설명 첫 줄 */
+  subtitle: string;
+  /** 일시 옆 라벨 (예: ONLINE LIVE) */
+  venue: string;
+  ctaLabel: string;
+  intro: { enabled: boolean; title: string; body: string };
+  sessions: { enabled: boolean };
+  timetable: { enabled: boolean };
+  programs: { enabled: boolean; items: LandingProgramItem[] };
+  highlights: { enabled: boolean; items: LandingHighlightItem[] };
+  join: { enabled: boolean; steps: LandingJoinStep[] };
+  faq: { enabled: boolean; items: LandingFaqItem[] };
+}
+
+/** 온라인 웨비나 공통 참여 절차 — 사실 기반 기본값(어드민이 자유 수정) */
+export const DEFAULT_LANDING_JOIN_STEPS: LandingJoinStep[] = [
+  { title: "사전 등록", description: "이름과 연락처만 남기면 등록 완료.\n시작 전 입장 안내를 보내드려요." },
+  { title: "입장 확인", description: "라이브 당일 등록한 연락처로\n본인 확인 후 바로 입장할 수 있어요." },
+  { title: "라이브 시청", description: "실시간 Q&A와 채팅으로\n궁금한 점을 그 자리에서 해결하세요." },
+];
+
+// 공개 페이지에 들어가는 URL 은 http(s)만 — javascript: 등 스킴이 임베드된 외부 사이트에서 실행되는 것을 차단.
+function safeHttpUrl(value: unknown): string {
+  const url = String(value ?? "").trim();
+  if (!url) return "";
+  try {
+    const u = new URL(url);
+    return u.protocol === "http:" || u.protocol === "https:" ? url : "";
+  } catch {
+    return "";
+  }
+}
+
+export function normalizeLandingPageConfig(config: unknown): LandingPageConfig {
+  const c = config && typeof config === "object" && !Array.isArray(config) ? (config as Record<string, unknown>) : {};
+  const lp = c.landingPage && typeof c.landingPage === "object" && !Array.isArray(c.landingPage)
+    ? (c.landingPage as Record<string, unknown>)
+    : {};
+  const obj = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+  const bool = (v: unknown, def: boolean) => (typeof v === "boolean" ? v : def);
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  const rows = <T>(v: unknown, map: (r: Record<string, unknown>) => T, keep: (t: T) => boolean): T[] =>
+    Array.isArray(v) ? (v as unknown[]).map((r) => map(obj(r))).filter(keep) : [];
+
+  const mediaRaw = obj(lp.heroMedia);
+  const mediaUrl = safeHttpUrl(mediaRaw.url);
+  const heroMedia: LandingHeroMedia = mediaUrl
+    ? { type: mediaRaw.type === "video" ? "video" : "image", url: mediaUrl }
+    : null;
+
+  const intro = obj(lp.intro);
+  const programs = obj(lp.programs);
+  const highlights = obj(lp.highlights);
+  const join = obj(lp.join);
+  const faq = obj(lp.faq);
+
+  return {
+    enabled: bool(lp.enabled, false),
+    heroMedia,
+    brand: str(lp.brand),
+    titleLines: Array.isArray(lp.titleLines) ? (lp.titleLines as unknown[]).map(String).filter((s) => s.trim() !== "") : [],
+    subtitle: str(lp.subtitle),
+    venue: str(lp.venue) || "ONLINE LIVE",
+    ctaLabel: str(lp.ctaLabel) || "사전 등록하기",
+    intro: { enabled: bool(intro.enabled, true), title: str(intro.title), body: str(intro.body) },
+    sessions: { enabled: bool(obj(lp.sessions).enabled, true) },
+    timetable: { enabled: bool(obj(lp.timetable).enabled, true) },
+    programs: {
+      enabled: bool(programs.enabled, true),
+      items: rows(
+        programs.items,
+        (r) => ({ icon: str(r.icon), title: str(r.title), description: str(r.description) }),
+        (r) => r.title.trim() !== "",
+      ),
+    },
+    highlights: {
+      enabled: bool(highlights.enabled, true),
+      items: rows(
+        highlights.items,
+        (r) => ({ title: str(r.title), description: str(r.description) }),
+        (r) => r.title.trim() !== "",
+      ),
+    },
+    join: {
+      enabled: bool(join.enabled, true),
+      steps: Array.isArray(join.steps)
+        ? rows(join.steps, (r) => ({ title: str(r.title), description: str(r.description) }), (r) => r.title.trim() !== "")
+        : DEFAULT_LANDING_JOIN_STEPS,
+    },
+    faq: {
+      enabled: bool(faq.enabled, true),
+      items: rows(
+        faq.items,
+        (r) => ({ category: str(r.category).trim() || "일반", question: str(r.question), answer: str(r.answer) }),
+        (r) => r.question.trim() !== "",
+      ),
+    },
+  };
+}
+
 export const DEFAULT_REGISTRATION_FIELDS: WebinarRegistrationField[] = [
   { id: "name", key: "name", label: "이름", type: "text", placeholder: "홍길동", required: true, enabled: true, options: [], system: true },
   { id: "phone", key: "phone", label: "연락처", type: "tel", placeholder: "01012345678", required: false, enabled: true, options: [], system: true },
