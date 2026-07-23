@@ -706,10 +706,11 @@ const LANDING_CSS = `
 .lnd.on-accent .accent-zone .section-title { color: var(--on-primary); }
 
 /* ── 세션 카드 ── */
-.lnd .session-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 18px; }
+/* 데스크톱 4개/줄(폭 = 4개가 960 컨테이너에 들어가도록). flex + 가운데 정렬이라 개수 무관하게 균형 유지 */
+.lnd .session-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; }
 .lnd .session-card {
   position: relative;
-  width: min(100%, 286px); aspect-ratio: .72;
+  width: min(100%, calc((var(--max) - 64px) / 4)); aspect-ratio: .72;
   overflow: hidden; border-radius: 9px;
   background: linear-gradient(160deg, #1b2130, #12161f 60%, #0c0f16);
   box-shadow: var(--shadow);
