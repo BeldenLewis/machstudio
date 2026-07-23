@@ -13,6 +13,7 @@ import {
   Copy,
   ExternalLink,
   Loader2,
+  Megaphone,
   Plus,
   Trash2,
 } from "lucide-react";
@@ -115,7 +116,37 @@ const MOUNT_MARKERS = [
   },
 ] as const;
 
-export default function DeployTab({ webinarId }: { webinarId: string }) {
+// 랜딩 임베드 스니펫 — 높이 자동조절(자식이 문서 높이를 postMessage) + 호스트 뷰포트 전달(히어로 높이용).
+// 오리진·slug 를 모두 검사해 같은 페이지에 여러 웨비나 임베드가 있어도 높이가 섞이지 않는다.
+function buildLandingEmbedSnippet(origin: string, slug: string) {
+  return `<!-- machstudio 웨비나 랜딩 -->
+<div id="ms-landing-${slug}"></div>
+<script>
+(function () {
+  var mount = document.getElementById("ms-landing-${slug}");
+  var frame = document.createElement("iframe");
+  frame.src = "${origin}/webinar/${slug}/landing";
+  frame.title = "웨비나 랜딩페이지";
+  frame.style.cssText = "display:block;width:100%;border:0;min-height:640px";
+  frame.setAttribute("allow", "autoplay");
+  mount.appendChild(frame);
+  function sendViewport() {
+    if (frame.contentWindow) frame.contentWindow.postMessage({ type: "machstudio:host-viewport", vh: window.innerHeight }, "${origin}");
+  }
+  frame.addEventListener("load", sendViewport);
+  window.addEventListener("resize", sendViewport);
+  window.addEventListener("message", function (e) {
+    if (e.origin !== "${origin}") return;
+    var d = e.data || {};
+    if (d.type === "machstudio:landing-height" && d.slug === "${slug}" && typeof d.height === "number") {
+      frame.style.height = Math.ceil(d.height) + "px";
+    }
+  });
+})();
+</script>`;
+}
+
+export default function DeployTab({ webinarId, slug }: { webinarId: string; slug: string }) {
   const confirm = useConfirm();
   const { workspace, currentProject } = useWorkspace();
   const [sites, setSites] = useState<EmbedSite[]>([]);
@@ -225,9 +256,46 @@ export default function DeployTab({ webinarId }: { webinarId: string }) {
     );
   }
 
+  const landingUrl = `${origin}/webinar/${slug}/landing`;
+
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="max-w-3xl space-y-6">
+      {/* 랜딩 페이지 임베드 — 사이트 연결(추적)과 독립적으로 바로 쓸 수 있다 */}
+      <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <Megaphone className="h-4 w-4 text-violet-500" /> 랜딩 페이지 임베드
+        </h2>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          아임웹 HTML 위젯에 아래 코드를 붙이면 헤더 아래에 상세페이지가 그대로 들어가요. 높이는 자동으로 맞춰지고,
+          만들기 → 랜딩 페이지에서 수정하면 재부착 없이 즉시 반영돼요.
+        </p>
+        <div className="mt-4 space-y-3">
+          <div>
+            <p className="mb-1 text-xs font-medium text-muted-foreground">직접 링크</p>
+            <div className="flex items-center gap-2">
+              <code className="min-w-0 flex-1 truncate rounded-xl border border-border bg-secondary/40 px-3 py-2.5 text-[11.5px]">{landingUrl}</code>
+              <CopyButton text={landingUrl} />
+              <a
+                href={landingUrl}
+                target="_blank"
+                rel="noopener"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs transition-colors hover:bg-secondary"
+              >
+                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" /> 열기
+              </a>
+            </div>
+          </div>
+          <div>
+            <p className="mb-1 text-xs font-medium text-muted-foreground">임베드 코드 (아임웹 HTML 위젯)</p>
+            <CodeBlock code={buildLandingEmbedSnippet(origin, slug)} />
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            비공개 상태면 방문자에게 “아직 공개되지 않은 페이지” 안내만 보여요 — 만들기 → 랜딩 페이지에서 공개로 켜세요.
+          </p>
+        </div>
+      </section>
+
       {/* ① 사이트 연결 */}
       <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
