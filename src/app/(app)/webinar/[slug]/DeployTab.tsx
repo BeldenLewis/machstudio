@@ -116,13 +116,34 @@ const MOUNT_MARKERS = [
   },
 ] as const;
 
-// 랜딩 임베드 스니펫 — 로더 스크립트 한 줄.
-// 로더가 ①랜딩을 자동높이 iframe 으로 삽입(호스트가 자연 스크롤 → 중첩 스크롤 없음)
-// ②웨비나 상태(등록중/라이브중/종료)에 맞춘 고정 하단 배너를 아임웹 페이지에 주입한다.
-// 히어로 버튼은 랜딩 안에서 상태별로 자동 전환. (기존 /w/{siteId} + 마운트 마커 방식은 그대로 유지)
+// 랜딩 임베드 스니펫 — 높이 자동조절(자식이 문서 높이를 postMessage) + 호스트 뷰포트 전달(히어로 높이용).
+// 오리진·slug 를 모두 검사해 같은 페이지에 여러 웨비나 임베드가 있어도 높이가 섞이지 않는다.
 function buildLandingEmbedSnippet(origin: string, slug: string) {
-  return `<!-- machstudio 웨비나 랜딩(상태연동 배너 포함) -->
-<script async src="${origin}/webinar/${slug}/embed"></script>`;
+  return `<!-- machstudio 웨비나 랜딩 -->
+<div id="ms-landing-${slug}"></div>
+<script>
+(function () {
+  var mount = document.getElementById("ms-landing-${slug}");
+  var frame = document.createElement("iframe");
+  frame.src = "${origin}/webinar/${slug}/landing";
+  frame.title = "웨비나 랜딩페이지";
+  frame.style.cssText = "display:block;width:100%;border:0;min-height:640px";
+  frame.setAttribute("allow", "autoplay");
+  mount.appendChild(frame);
+  function sendViewport() {
+    if (frame.contentWindow) frame.contentWindow.postMessage({ type: "machstudio:host-viewport", vh: window.innerHeight }, "${origin}");
+  }
+  frame.addEventListener("load", sendViewport);
+  window.addEventListener("resize", sendViewport);
+  window.addEventListener("message", function (e) {
+    if (e.origin !== "${origin}") return;
+    var d = e.data || {};
+    if (d.type === "machstudio:landing-height" && d.slug === "${slug}" && typeof d.height === "number") {
+      frame.style.height = Math.ceil(d.height) + "px";
+    }
+  });
+})();
+</script>`;
 }
 
 export default function DeployTab({ webinarId, slug }: { webinarId: string; slug: string }) {
