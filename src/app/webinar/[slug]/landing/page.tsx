@@ -38,16 +38,16 @@ interface LandingWebinar {
 
 const SAFE_HEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
-// 키컬러 위 텍스트(흑/백) — WCAG 명암비가 더 높은 쪽을 고른다
+// 키컬러 위 텍스트 — 브랜드 요청으로 흰색 기본(라이브 페이지의 밝은 버튼 인상과 통일).
+// 노랑·연회색처럼 아주 밝은 키컬러에서만 안전장치로 진한 글자(명도 0.78 이상).
 function onPrimaryFor(accent: string): string {
   let hex = accent.slice(1);
   if (hex.length === 3) hex = hex.split("").map((c) => c + c).join("");
-  const ch = (i: number) => {
-    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
-    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-  };
-  const lum = 0.2126 * ch(0) + 0.7152 * ch(2) + 0.0722 * ch(4);
-  return (lum + 0.05) / 0.05 >= 1.05 / (lum + 0.05) ? "#160a00" : "#ffffff";
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum >= 0.78 ? "#1a1a1f" : "#ffffff";
 }
 
 const TOC_DEF = [
@@ -174,7 +174,10 @@ function LandingContent({
   const sessionCards = lp.sessions.enabled ? webinar.sessions.filter((s) => (s.type ?? "session") === "session") : [];
   const timetableRows = lp.timetable.enabled ? webinar.sessions : [];
   const introTitle = lp.intro.title.trim() || subtitle;
-  const introBody = lp.intro.body.trim() || (webinar.description ?? "");
+  // 본문 기본값: 설명에서 제목으로 쓰인 첫 줄은 빼고 — 같은 문장이 제목·본문에 두 번 나오지 않게
+  const descLines = (webinar.description ?? "").split("\n");
+  const introBodyDefault = (descLines[0]?.trim() === introTitle.trim() ? descLines.slice(1) : descLines).join("\n").trim();
+  const introBody = lp.intro.body.trim() || introBodyDefault;
   const showIntro = lp.intro.enabled && Boolean(introTitle || introBody);
   const showPrograms = lp.programs.enabled && lp.programs.items.length > 0;
   const showHighlights = lp.highlights.enabled && lp.highlights.items.length > 0;
@@ -225,6 +228,22 @@ function LandingContent({
     return () => io.disconnect();
     // 섹션 구성이 바뀌면(편집 미리보기) 새 .rv 도 관찰해야 한다
   }, [wrapRef, lp, webinar.sessions.length]);
+
+  // 하단 dock 은 히어로(자체 CTA 보유)를 지나면 표시 — 첫 화면에서 일시·CTA 이중 노출 방지(단독 열람 전용 게이트)
+  useEffect(() => {
+    const root = wrapRef.current;
+    if (!root || embedded || !lp.bottomBanner.enabled || !("IntersectionObserver" in window)) return;
+    const hero = root.querySelector<HTMLElement>(".hero");
+    if (!hero) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => root.classList.toggle("dock-on", !entry.isIntersecting));
+      },
+      { threshold: 0.15 },
+    );
+    io.observe(hero);
+    return () => io.disconnect();
+  }, [wrapRef, embedded, lp.bottomBanner.enabled]);
 
   // 세션~타임테이블 구간 키컬러 배경 — IO 중앙 밴드(임베드 iframe 에서도 최상위 뷰포트 기준으로 동작)
   useEffect(() => {
@@ -513,6 +532,23 @@ function LandingContent({
           )}
         </div>
       </main>
+
+      {/* 하단 등록 배너 — 단독 열람: 화면 하단 고정 dock, 임베드: 푸터 위 정적 스트립(fixed 는 auto-height iframe 에서 무의미) */}
+      {lp.bottomBanner.enabled && (
+        <div className="dock" role="region" aria-label="등록 배너">
+          <div className="dock-inner">
+            <p className="dock-text">{lp.bottomBanner.text.trim() || dateStr}</p>
+            <a
+              className="dock-cta"
+              href={registerUrl}
+              target={embedded ? "_blank" : undefined}
+              rel={embedded ? "noopener" : undefined}
+            >
+              {lp.ctaLabel} <span aria-hidden="true">→</span>
+            </a>
+          </div>
+        </div>
+      )}
 
       <footer className="site-footer">
         <p className="footer-meta">
@@ -826,6 +862,54 @@ const LANDING_CSS = `
 .lnd .faq-item summary::after { content: "+"; color: #b9c1cf; font-size: 21px; font-weight: 400; }
 .lnd .faq-item[open] summary::after { content: "\\2212"; }
 .lnd .faq-item p { padding: 0 18px 20px; color: #c0c7d2; font-size: 13px; white-space: pre-line; }
+
+/* ── 하단 등록 배너 ── */
+.lnd .dock {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 80;
+  padding: 12px clamp(16px, 4vw, 44px) calc(12px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, rgba(4, 6, 11, .94), rgba(4, 6, 11, .55) 70%, transparent);
+  pointer-events: none;
+}
+.lnd .dock-inner {
+  pointer-events: auto;
+  width: min(720px, 100%); margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+}
+.lnd .dock-text {
+  min-width: 0; color: var(--paper);
+  font-size: clamp(12px, 1.6vw, 14px); font-weight: 700; font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lnd .dock-cta {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 10px;
+  min-height: 52px; padding: 0 26px; border-radius: 999px;
+  background: linear-gradient(100deg, var(--primary-soft), var(--primary));
+  color: var(--on-primary);
+  font-weight: 850; font-size: 15px;
+  box-shadow: 0 14px 40px color-mix(in srgb, var(--primary) 40%, transparent);
+  transition: transform .15s ease, box-shadow .15s ease, background .3s ease, color .3s ease;
+}
+.lnd .dock-cta:hover { transform: translateY(-2px); box-shadow: 0 18px 48px color-mix(in srgb, var(--primary) 52%, transparent); }
+/* 키컬러 배경 구간에선 반전(오렌지 위 오렌지 버튼 방지) */
+.lnd.on-accent .dock-cta { background: var(--ink); color: var(--paper); box-shadow: 0 14px 40px rgba(4, 6, 11, .5); }
+/* 단독 열람에서 dock 이 푸터를 가리지 않게 */
+.lnd:not(.embedded):has(.dock) .site-footer { padding-bottom: 120px; }
+/* 단독 열람: 히어로(자체 CTA)가 보이는 동안엔 dock 숨김 — 지나면 슬라이드 업 */
+.lnd:not(.embedded) .dock {
+  opacity: 0; transform: translateY(14px);
+  transition: opacity .35s ease, transform .35s ease;
+}
+.lnd:not(.embedded) .dock .dock-inner { pointer-events: none; }
+.lnd:not(.embedded).dock-on .dock { opacity: 1; transform: none; }
+.lnd:not(.embedded).dock-on .dock .dock-inner { pointer-events: auto; }
+/* 임베드: fixed 가 iframe 문서 끝에 붙을 뿐이므로 정적 스트립으로 — 푸터 위 풀폭 배너 */
+.lnd.embedded .dock {
+  position: static;
+  padding: 22px clamp(16px, 4vw, 44px);
+  background: var(--ink-soft);
+  border-top: 1px solid rgba(255, 255, 255, .07);
+}
 
 /* ── 푸터 ── */
 .lnd .site-footer {
