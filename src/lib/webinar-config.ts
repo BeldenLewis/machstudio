@@ -140,8 +140,6 @@ export interface LandingPageConfig {
   highlights: { enabled: boolean; items: LandingHighlightItem[] };
   join: { enabled: boolean; steps: LandingJoinStep[] };
   faq: { enabled: boolean; items: LandingFaqItem[] };
-  /** 하단 고정 등록 배너 — 기본 ON. text 비우면 일시가 들어간다 */
-  bottomBanner: { enabled: boolean; text: string };
 }
 
 /** 온라인 웨비나 공통 참여 절차 — 사실 기반 기본값(어드민이 자유 수정) */
@@ -226,10 +224,6 @@ export function normalizeLandingPageConfig(config: unknown): LandingPageConfig {
         (r) => ({ category: str(r.category).trim() || "일반", question: str(r.question), answer: str(r.answer) }),
         (r) => r.question.trim() !== "",
       ),
-    },
-    bottomBanner: {
-      enabled: bool(obj(lp.bottomBanner).enabled, true),
-      text: str(obj(lp.bottomBanner).text),
     },
   };
 }

@@ -51,7 +51,6 @@ interface EditorState {
   highlights: { enabled: boolean; items: LandingHighlightItem[] };
   join: { enabled: boolean; steps: LandingJoinStep[] };
   faq: { enabled: boolean; items: LandingFaqItem[] };
-  bottomBanner: { enabled: boolean; text: string };
 }
 
 function toEditorState(config: Record<string, unknown>): EditorState {
@@ -72,7 +71,6 @@ function toEditorState(config: Record<string, unknown>): EditorState {
     highlights: lp.highlights,
     join: lp.join,
     faq: lp.faq,
-    bottomBanner: lp.bottomBanner,
   };
 }
 
@@ -95,7 +93,6 @@ function toConfigPayload(s: EditorState) {
     highlights: s.highlights,
     join: s.join,
     faq: s.faq,
-    bottomBanner: s.bottomBanner,
   };
 }
 
@@ -542,24 +539,6 @@ export default function LandingPageTab({
               </RowShell>
             ))}
             <AddRowButton label="질문 추가" onClick={() => setRows("faq", [...state.faq.items, { category: "참가신청", question: "", answer: "" }])} />
-          </SectionCard>
-
-          {/* 하단 배너 */}
-          <SectionCard
-            title="하단 배너"
-            hint="등록 버튼이 달린 하단 고정 배너 — 임베드에선 푸터 위 배너로 들어가요."
-            enabled={state.bottomBanner.enabled}
-            onToggle={(v) => patch({ bottomBanner: { ...state.bottomBanner, enabled: v } })}
-          >
-            <div>
-              <label className={labelCls}>배너 문구</label>
-              <input
-                className={inputCls}
-                value={state.bottomBanner.text}
-                onChange={(e) => patch({ bottomBanner: { ...state.bottomBanner, text: e.target.value } })}
-                placeholder="비우면 라이브 일시가 들어가요"
-              />
-            </div>
           </SectionCard>
         </div>
 
