@@ -4,9 +4,10 @@
 // 모든 값은 config.landingPage 한 곳에 저장되고 공개 페이지(/webinar/[slug]/landing)가 그대로 렌더한다.
 // 섹션은 "토글 ON + 실제 내용 있음"일 때만 공개 페이지에 노출된다(빈 껍데기 방지 — 읽기에서 걸러짐).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { ExternalLink, Plus, Trash2, Image as ImageIcon, Clapperboard, Ban } from "lucide-react";
+import { ExternalLink, Plus, Trash2, Image as ImageIcon, Clapperboard, Ban, Loader2, UploadCloud, Link2 } from "lucide-react";
+import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
 import { Switch } from "@/components/ui/switch";
@@ -17,6 +18,7 @@ import {
   type LandingJoinStep,
   type LandingProgramItem,
 } from "@/lib/webinar-config";
+import { LANDING_IMAGE_ACCEPT, LANDING_VIDEO_ACCEPT, validateLandingMedia } from "@/lib/webinar-landing-media";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 const inputCls =
@@ -49,6 +51,7 @@ interface EditorState {
   highlights: { enabled: boolean; items: LandingHighlightItem[] };
   join: { enabled: boolean; steps: LandingJoinStep[] };
   faq: { enabled: boolean; items: LandingFaqItem[] };
+  bottomBanner: { enabled: boolean; text: string };
 }
 
 function toEditorState(config: Record<string, unknown>): EditorState {
@@ -69,6 +72,7 @@ function toEditorState(config: Record<string, unknown>): EditorState {
     highlights: lp.highlights,
     join: lp.join,
     faq: lp.faq,
+    bottomBanner: lp.bottomBanner,
   };
 }
 
@@ -91,6 +95,7 @@ function toConfigPayload(s: EditorState) {
     highlights: s.highlights,
     join: s.join,
     faq: s.faq,
+    bottomBanner: s.bottomBanner,
   };
 }
 
@@ -171,8 +176,35 @@ export default function LandingPageTab({
 }) {
   const [state, setState] = useState<EditorState>(() => toEditorState(webinar.config));
   const [previewNonce, setPreviewNonce] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const patch = (updates: Partial<EditorState>) => setState((prev) => ({ ...prev, ...updates }));
+
+  // 히어로 배경 파일 업로드 — 성공하면 URL 필드를 채우고 자동저장이 이어서 영속화한다
+  const uploadHeroMedia = async (file: File) => {
+    const validationError = validateLandingMedia(file);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+    setIsUploading(true);
+    try {
+      const body = new FormData();
+      body.set("file", file);
+      const res = await fetch(`/api/webinars/${webinar.id}/landing-media`, { method: "POST", body });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.url) {
+        toast.error(data?.error ?? "업로드에 실패했어요.");
+        return;
+      }
+      patch({ heroMediaType: data.type === "video" ? "video" : "image", heroMediaUrl: data.url });
+      toast.success("업로드했어요");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const { state: saveState, retry } = useAutosave(state, async (value) => {
     const res = await fetch(`/api/webinars/${webinar.id}`, {
@@ -286,16 +318,50 @@ export default function LandingPageTab({
                   })}
                 </div>
                 {state.heroMediaType !== "none" && (
-                  <input
-                    className={`${inputCls} flex-1 min-w-[220px]`}
-                    value={state.heroMediaUrl}
-                    onChange={(e) => patch({ heroMediaUrl: e.target.value })}
-                    placeholder={state.heroMediaType === "video" ? "https://…/hero.mp4" : "https://…/hero.jpg"}
-                  />
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-medium transition-colors hover:border-violet-400 hover:text-violet-500 disabled:opacity-50"
+                    >
+                      {isUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="h-3.5 w-3.5" />}
+                      {isUploading ? "올리는 중…" : "파일 올리기"}
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept={state.heroMediaType === "video" ? LANDING_VIDEO_ACCEPT : LANDING_IMAGE_ACCEPT}
+                      className="sr-only"
+                      onChange={(e) => {
+                        const file = e.currentTarget.files?.[0];
+                        if (file) void uploadHeroMedia(file);
+                      }}
+                    />
+                    <div className="relative flex-1 min-w-[220px]">
+                      <Link2 className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        className={`${inputCls} pl-8`}
+                        value={state.heroMediaUrl}
+                        onChange={(e) => patch({ heroMediaUrl: e.target.value })}
+                        placeholder={state.heroMediaType === "video" ? "또는 URL 붙여넣기 (mp4)" : "또는 URL 붙여넣기 (jpg·png)"}
+                      />
+                    </div>
+                  </>
                 )}
               </div>
+              {state.heroMediaType !== "none" && state.heroMediaUrl.trim() && (
+                <div className="mt-2 overflow-hidden rounded-xl border border-border bg-black/40">
+                  {state.heroMediaType === "video" ? (
+                    <video src={state.heroMediaUrl} className="h-28 w-full object-cover" muted loop autoPlay playsInline />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element -- 어드민 미리보기(임의 호스트 URL)
+                    <img src={state.heroMediaUrl} alt="배경 미리보기" className="h-28 w-full object-cover" />
+                  )}
+                </div>
+              )}
               <p className="mt-1 text-[11px] text-muted-foreground">
-                없으면 키컬러 그라디언트가 배경이 돼요. 동영상은 mp4 권장(자동재생·음소거·반복).
+                이미지 5MB·동영상 50MB까지. 없으면 키컬러 그라디언트가 배경이 돼요. 동영상은 자동재생·음소거·반복으로 깔려요.
               </p>
             </div>
           </SectionCard>
@@ -476,6 +542,24 @@ export default function LandingPageTab({
               </RowShell>
             ))}
             <AddRowButton label="질문 추가" onClick={() => setRows("faq", [...state.faq.items, { category: "참가신청", question: "", answer: "" }])} />
+          </SectionCard>
+
+          {/* 하단 배너 */}
+          <SectionCard
+            title="하단 배너"
+            hint="등록 버튼이 달린 하단 고정 배너 — 임베드에선 푸터 위 배너로 들어가요."
+            enabled={state.bottomBanner.enabled}
+            onToggle={(v) => patch({ bottomBanner: { ...state.bottomBanner, enabled: v } })}
+          >
+            <div>
+              <label className={labelCls}>배너 문구</label>
+              <input
+                className={inputCls}
+                value={state.bottomBanner.text}
+                onChange={(e) => patch({ bottomBanner: { ...state.bottomBanner, text: e.target.value } })}
+                placeholder="비우면 라이브 일시가 들어가요"
+              />
+            </div>
           </SectionCard>
         </div>
 
