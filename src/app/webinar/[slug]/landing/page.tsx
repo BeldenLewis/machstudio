@@ -5,7 +5,8 @@
 // - 임베드는 "높이 자동조절" 방식이라 iframe 내부 스크롤이 없다 → 스크롤 연출은 전부
 //   IntersectionObserver 로 구현한다(iframe 안에서도 최상위 뷰포트를 기준으로 동작).
 // - 100svh 는 auto-height iframe 안에서 문서 전체 높이가 되어 무한 성장 루프를 만든다 →
-//   히어로 높이는 --lnd-vh 변수(임베드 스니펫이 postMessage 로 호스트 뷰포트를 전달)로 잡는다.
+//   히어로 높이는 --lnd-vh 변수로 잡는다. 스니펫이 postMessage 로 (호스트 뷰포트 − 상단 헤더)를
+//   전달하고, 자식은 마운트 시 landing-ready 를 보내 재전송을 유도한다(최초 로드 레이스·헤더 밀림 방지).
 // - 디자인은 다크 에디토리얼 고정 테마(의도된 단일 테마), 키컬러만 theme.accentColor 에서 파생.
 
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -67,6 +68,8 @@ export default function WebinarLandingPage({ params }: { params: Promise<{ slug:
   const [embedded, setEmbedded] = useState(false);
   const [isPreview, setIsPreview] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  // 임베드 호스트가 보낸 뷰포트/상단 고정영역(헤더) 높이. wrap 마운트 전 도착분도 보관해 늦게 반영.
+  const viewportRef = useRef<{ vh: number; top: number } | null>(null);
 
   useEffect(() => {
     setEmbedded(typeof window !== "undefined" && window.self !== window.top);
@@ -98,7 +101,7 @@ export default function WebinarLandingPage({ params }: { params: Promise<{ slug:
     if (webinar?.name) document.title = `${webinar.name} — 사전 등록`;
   }, [webinar?.name]);
 
-  // 임베드: 문서 높이를 부모로 전송(민감정보 없음) + 호스트 뷰포트 높이 수신(--lnd-vh)
+  // 임베드: 문서 높이를 부모로 전송(민감정보 없음) + 호스트 뷰포트/헤더 높이 수신(--lnd-vh)
   useEffect(() => {
     if (typeof window === "undefined" || window.self === window.top) return;
     let raf = 0;
@@ -111,18 +114,29 @@ export default function WebinarLandingPage({ params }: { params: Promise<{ slug:
         );
       });
     };
+    // 히어로 높이 = 호스트 뷰포트 − 상단 고정영역(아임웹 헤더). 값은 ref에 보관해 wrap 마운트 순서와 무관하게 반영.
+    const applyViewport = () => {
+      const v = viewportRef.current;
+      if (!v || !wrapRef.current) return;
+      const usable = Math.max(480, Math.min(1400, Math.round(v.vh - v.top)));
+      wrapRef.current.style.setProperty("--lnd-vh", `${usable}px`);
+    };
     const ro = new ResizeObserver(post);
     ro.observe(document.documentElement);
     ro.observe(document.body);
     const onMsg = (e: MessageEvent) => {
-      const d = e.data as { type?: string; vh?: number } | null;
-      if (d?.type === "machstudio:host-viewport" && typeof d.vh === "number" && wrapRef.current) {
-        wrapRef.current.style.setProperty("--lnd-vh", `${Math.max(480, Math.min(1400, Math.round(d.vh)))}px`);
+      const d = e.data as { type?: string; vh?: number; top?: number } | null;
+      if (d?.type === "machstudio:host-viewport" && typeof d.vh === "number") {
+        viewportRef.current = { vh: d.vh, top: typeof d.top === "number" ? d.top : 0 };
+        applyViewport();
         post();
       }
     };
     window.addEventListener("message", onMsg);
     window.addEventListener("load", post);
+    // 준비 완료 신호 → 호스트가 뷰포트를 (재)전송. wrap 마운트 후 재전송을 보장해 최초 로드 레이스를 없앤다.
+    window.parent.postMessage({ type: "machstudio:landing-ready", slug }, "*");
+    applyViewport(); // 이전 실행에서 저장된 값이 있으면 즉시 반영
     post();
     return () => {
       ro.disconnect();

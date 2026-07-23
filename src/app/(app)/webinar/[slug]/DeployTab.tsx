@@ -131,13 +131,20 @@ function buildLandingEmbedSnippet(origin: string, slug: string) {
   frame.setAttribute("allow", "autoplay");
   mount.appendChild(frame);
   function sendViewport() {
-    if (frame.contentWindow) frame.contentWindow.postMessage({ type: "machstudio:host-viewport", vh: window.innerHeight }, "${origin}");
+    if (!frame.contentWindow) return;
+    // 헤더 등 아이프레임 위 고정영역 높이: 최상단일 때 프레임 top = 위쪽 점유 높이(헤더). 스크롤 중엔 0.
+    var rect = frame.getBoundingClientRect();
+    var top = (window.scrollY || window.pageYOffset || 0) < 4 ? Math.min(240, Math.max(0, Math.round(rect.top))) : 0;
+    frame.contentWindow.postMessage({ type: "machstudio:host-viewport", vh: window.innerHeight, top: top }, "${origin}");
   }
   frame.addEventListener("load", sendViewport);
   window.addEventListener("resize", sendViewport);
+  window.addEventListener("orientationchange", sendViewport);
   window.addEventListener("message", function (e) {
     if (e.origin !== "${origin}") return;
     var d = e.data || {};
+    // 자식 준비 완료 → 뷰포트 재전송(최초 로드 레이스 해소)
+    if (d.type === "machstudio:landing-ready" && d.slug === "${slug}") { sendViewport(); return; }
     if (d.type === "machstudio:landing-height" && d.slug === "${slug}" && typeof d.height === "number") {
       frame.style.height = Math.ceil(d.height) + "px";
     }
