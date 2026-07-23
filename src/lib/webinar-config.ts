@@ -134,7 +134,8 @@ export interface LandingPageConfig {
   venue: string;
   ctaLabel: string;
   intro: { enabled: boolean; title: string; body: string };
-  sessions: { enabled: boolean };
+  /** detailPopup: 세션 카드 클릭 시 연사 상세(주제·내용·사진·소속·약력) 팝업 열기 */
+  sessions: { enabled: boolean; detailPopup: boolean };
   timetable: { enabled: boolean };
   programs: { enabled: boolean; items: LandingProgramItem[] };
   highlights: { enabled: boolean; items: LandingHighlightItem[] };
@@ -193,7 +194,7 @@ export function normalizeLandingPageConfig(config: unknown): LandingPageConfig {
     venue: str(lp.venue) || "ONLINE LIVE",
     ctaLabel: str(lp.ctaLabel) || "사전 등록하기",
     intro: { enabled: bool(intro.enabled, true), title: str(intro.title), body: str(intro.body) },
-    sessions: { enabled: bool(obj(lp.sessions).enabled, true) },
+    sessions: { enabled: bool(obj(lp.sessions).enabled, true), detailPopup: bool(obj(lp.sessions).detailPopup, true) },
     timetable: { enabled: bool(obj(lp.timetable).enabled, true) },
     programs: {
       enabled: bool(programs.enabled, true),
