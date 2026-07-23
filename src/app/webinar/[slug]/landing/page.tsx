@@ -33,7 +33,6 @@ interface LandingWebinar {
   liveStartAt: string;
   theme: Record<string, string>;
   config: Record<string, unknown>;
-  components?: Record<string, unknown> | null;
   sessions: LandingSession[];
 }
 
@@ -61,16 +60,9 @@ const TOC_DEF = [
   { id: "lnd-faq", label: "FAQ" },
 ] as const;
 
-interface WebinarState {
-  status?: string;
-  entryOpen?: boolean;
-  canRegister?: boolean;
-}
-
 export default function WebinarLandingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
   const [webinar, setWebinar] = useState<LandingWebinar | null>(null);
-  const [state, setState] = useState<WebinarState>({});
   const [error, setError] = useState<string | null>(null);
   const [embedded, setEmbedded] = useState(false);
   const [isPreview, setIsPreview] = useState(false);
@@ -81,7 +73,32 @@ export default function WebinarLandingPage({ params }: { params: Promise<{ slug:
     setIsPreview(typeof window !== "undefined" && new URLSearchParams(window.location.search).has("preview"));
   }, []);
 
-  // 임베드: 문서 높이를 부모(로더)에 전송(자동높이 iframe) + 호스트 뷰포트 높이 수신(--lnd-vh, 히어로 풀스크린용)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/webinar/${slug}/info`);
+        const data = await res.json().catch(() => null);
+        if (!alive) return;
+        if (!res.ok || !data?.webinar) {
+          setError(data?.error ?? "웨비나를 찾을 수 없어요");
+          return;
+        }
+        setWebinar(data.webinar as LandingWebinar);
+      } catch {
+        if (alive) setError("불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [slug]);
+
+  useEffect(() => {
+    if (webinar?.name) document.title = `${webinar.name} — 사전 등록`;
+  }, [webinar?.name]);
+
+  // 임베드: 문서 높이를 부모로 전송(민감정보 없음) + 호스트 뷰포트 높이 수신(--lnd-vh)
   useEffect(() => {
     if (typeof window === "undefined" || window.self === window.top) return;
     let raf = 0;
@@ -113,33 +130,7 @@ export default function WebinarLandingPage({ params }: { params: Promise<{ slug:
       window.removeEventListener("message", onMsg);
       window.removeEventListener("load", post);
     };
-  }, [slug]);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const res = await fetch(`/api/webinar/${slug}/info`);
-        const data = await res.json().catch(() => null);
-        if (!alive) return;
-        if (!res.ok || !data?.webinar) {
-          setError(data?.error ?? "웨비나를 찾을 수 없어요");
-          return;
-        }
-        setWebinar(data.webinar as LandingWebinar);
-        setState({ status: data.status, entryOpen: data.entryOpen, canRegister: data.canRegister });
-      } catch {
-        if (alive) setError("불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [slug]);
-
-  useEffect(() => {
-    if (webinar?.name) document.title = `${webinar.name} — 사전 등록`;
-  }, [webinar?.name]);
+  }, [slug, webinar]);
 
   if (error) {
     return (
@@ -155,18 +146,16 @@ export default function WebinarLandingPage({ params }: { params: Promise<{ slug:
       </div>
     );
   }
-  return <LandingContent webinar={webinar} state={state} embedded={embedded} isPreview={isPreview} wrapRef={wrapRef} />;
+  return <LandingContent webinar={webinar} embedded={embedded} isPreview={isPreview} wrapRef={wrapRef} />;
 }
 
 function LandingContent({
   webinar,
-  state,
   embedded,
   isPreview,
   wrapRef,
 }: {
   webinar: LandingWebinar;
-  state: WebinarState;
   embedded: boolean;
   isPreview: boolean;
   wrapRef: React.MutableRefObject<HTMLDivElement | null>;
@@ -181,14 +170,6 @@ function LandingContent({
   const subtitle = lp.subtitle.trim() || (webinar.description ?? "").split("\n")[0] || "";
   const dateStr = `${formatKst(webinar.liveStartAt, { year: "numeric", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false })} KST`;
   const registerUrl = `/webinar/${webinar.slug}/live?view=signup`;
-  const liveUrl = `/webinar/${webinar.slug}/live`;
-  // 히어로 CTA는 웨비나 상태(서버 계산)에 맞춰 자동 전환 — 하단 배너와 동일한 규칙.
-  const heroLabels = (webinar.components?.heroButton as { labelByStatus?: Record<string, string> } | undefined)?.labelByStatus ?? {};
-  const heroCta = state.status === "ended"
-    ? { label: heroLabels.ended || "다시보기", href: liveUrl }
-    : state.entryOpen
-      ? { label: heroLabels.live || "웨비나 입장하기", href: liveUrl }
-      : { label: lp.ctaLabel, href: registerUrl };
 
   const sessionCards = lp.sessions.enabled ? webinar.sessions.filter((s) => (s.type ?? "session") === "session") : [];
   const timetableRows = lp.timetable.enabled ? webinar.sessions : [];
@@ -271,7 +252,7 @@ function LandingContent({
     return () => io.disconnect();
   }, [wrapRef, lp.sessions.enabled, lp.timetable.enabled, webinar.sessions.length]);
 
-  // 왼쪽 목차 스크롤 스파이 — 임베드(자동높이 iframe)에선 목차 자체를 숨기므로 스킵
+  // 왼쪽 목차 스크롤 스파이(임베드에선 목차 자체를 숨김)
   useEffect(() => {
     const root = wrapRef.current;
     if (!root || embedded || !("IntersectionObserver" in window)) return;
@@ -369,11 +350,11 @@ function LandingContent({
             </p>
             <a
               className="hero-cta"
-              href={heroCta.href}
+              href={registerUrl}
               target={embedded ? "_blank" : undefined}
               rel={embedded ? "noopener" : undefined}
             >
-              <span>{heroCta.label}</span>
+              <span>{lp.ctaLabel}</span>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -588,7 +569,7 @@ const LANDING_CSS = `
   position: fixed; left: 24px; top: 50%; transform: translateY(-50%); z-index: 90;
   display: none; flex-direction: column; gap: 2px;
 }
-@media (min-width: 1200px) { .lnd .toc { display: flex; } }
+@media (min-width: 1280px) { .lnd .toc { display: flex; } }
 .lnd .toc-link {
   display: flex; align-items: center; gap: 11px; min-height: 30px;
   color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase;
@@ -606,7 +587,7 @@ const LANDING_CSS = `
 .lnd.on-accent .toc-link[aria-current="true"] { color: var(--on-primary); }
 .lnd.on-accent .toc-link[aria-current="true"] .toc-mark { background: var(--on-primary); }
 
-/* ── 히어로 — 단독: 100svh, 임베드: 호스트 뷰포트(--lnd-vh)로 풀스크린(자동높이 iframe) ── */
+/* ── 히어로 — 임베드에선 호스트 뷰포트 높이(--lnd-vh)를 사용 ── */
 .lnd .hero {
   position: relative;
   min-height: 100svh;
@@ -616,7 +597,6 @@ const LANDING_CSS = `
     radial-gradient(circle at 50% 45%, rgba(7, 12, 26, .15) 0 20%, transparent 21%),
     linear-gradient(180deg, #05070c 0%, #05070d 100%);
 }
-/* 임베드(자동높이 iframe)에선 100svh 가 문서 전체가 돼 무한 성장 → 호스트 뷰포트 높이 사용 */
 .lnd.embedded .hero { min-height: var(--lnd-vh, 720px); }
 .lnd .hero::before,
 .lnd .hero::after {
@@ -730,7 +710,7 @@ const LANDING_CSS = `
 .lnd .session-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; }
 .lnd .session-card {
   position: relative;
-  width: calc(50% - 8px); max-width: 460px; aspect-ratio: 210 / 297; /* A4 세로 */
+  width: calc(50% - 8px); max-width: 460px; aspect-ratio: .86;
   overflow: hidden; border-radius: 9px;
   background: linear-gradient(160deg, #1b2130, #12161f 60%, #0c0f16);
   box-shadow: var(--shadow);
