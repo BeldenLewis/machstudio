@@ -284,6 +284,11 @@ ${ATTRIBUTION_CORE_JS}
       ".mw-msg-success { display: block; background: rgba(22,163,74,0.08); border: 1px solid rgba(22,163,74,0.25); color: #15803d; }",
       ".mw-live-frame { width: 100%; border: 0; display: block; min-height: 520px; }",
       ".mw-banner { position: fixed !important; left: 50% !important; bottom: 24px !important; transform: translateX(-50%) !important; width: 680px; max-width: calc(100vw - 32px); z-index: 999900 !important; border-radius: 16px; background: linear-gradient(180deg, rgba(24,24,28,0.92), rgba(14,14,18,0.88)); border: 1px solid rgba(255,255,255,0.14); color: #fff !important; box-shadow: 0 16px 48px rgba(0,0,0,0.4); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); overflow: hidden; }",
+      // 랜딩(호스트 DOM 마운트)이 히어로를 보여주는 동안에는 배너를 비운다 — 랜딩 자체 CTA 와 겹치기 때문.
+      // 정적 DOM 존재가 아니라 **런타임 신호**로 판정한다: 랜딩 스크립트가 실패하면 신호가 안 서고
+      // 배너가 정상 노출되므로 CTA 가 하나도 없는 상태가 생기지 않는다.
+      ".mw-banner { transition: opacity .28s ease, transform .28s ease; }",
+      'html[data-ms-landing-hero="in"] .mw-banner, html[data-ms-landing-modal="open"] .mw-banner { opacity: 0 !important; pointer-events: none !important; transform: translateX(-50%) translateY(12px) !important; }',
       ".mw-banner-inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px 14px 20px; }",
       ".mw-banner-text { min-width: 0; }",
       ".mw-banner-title { font-size: 14px; font-weight: 700; color: rgba(255,255,255,0.95) !important; -webkit-text-fill-color: rgba(255,255,255,0.95) !important; line-height: 1.45; word-break: keep-all; }",
