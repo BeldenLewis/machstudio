@@ -303,6 +303,8 @@ ${ATTRIBUTION_CORE_JS}
       ".mw-modal-overlay { position: fixed; inset: 0; z-index: 999950; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.62); }",
       ".mw-modal-card { position: relative; width: 100%; max-width: 480px; max-height: 86vh; overflow-y: auto; border-radius: 16px; }",
       ".mw-modal-close { position: absolute; top: 14px; right: 14px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(120,120,128,0.3); border-radius: 8px; background: #fff; color: #666; font-size: 17px; line-height: 1; cursor: pointer; z-index: 2; }",
+      // 캘린더 추가는 모바일에서만 — PC 는 네이티브 캘린더 연동이 없어 실효가 낮고 배너만 붐빈다.
+      "@media (min-width: 601px) { .mw-banner .mw-btn-cal { display: none !important; } }",
       "@media (max-width: 600px) { .mw-banner { left: 12px !important; right: 12px !important; bottom: 12px !important; width: auto; transform: none !important; } .mw-banner-inner { flex-direction: column; align-items: stretch; gap: 10px; } .mw-banner-ctas { width: 100%; } .mw-banner .mw-btn { flex: 1; } }"
     ].join("\\n");
   }
@@ -871,7 +873,7 @@ ${ATTRIBUTION_CORE_JS}
         texts.registration || ((CFG.name || "웨비나") + " 사전등록이 진행 중입니다.")
       ));
       if (bc.showCalendarButton !== false) {
-        var calBtn = el("button", "mw-btn mw-btn-secondary", "캘린더 추가");
+        var calBtn = el("button", "mw-btn mw-btn-secondary mw-btn-cal", "캘린더 추가");
         calBtn.type = "button";
         calBtn.addEventListener("click", openCalendar);
         ctas.appendChild(calBtn);
@@ -883,7 +885,7 @@ ${ATTRIBUTION_CORE_JS}
     } else {
       title.textContent = texts.upcoming || ((CFG.name || "웨비나") + "가 곧 시작됩니다.");
       if (bc.showCalendarButton !== false) {
-        var calBtn2 = el("button", "mw-btn mw-btn-secondary", "캘린더 추가");
+        var calBtn2 = el("button", "mw-btn mw-btn-secondary mw-btn-cal", "캘린더 추가");
         calBtn2.type = "button";
         calBtn2.addEventListener("click", openCalendar);
         ctas.appendChild(calBtn2);
