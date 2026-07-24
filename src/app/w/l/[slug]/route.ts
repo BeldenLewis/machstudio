@@ -12,6 +12,7 @@
  * public/ 에 두면 비로그인 방문자가 "/" 로 리다이렉트된다 → nosniff 로 실행 거부.
  */
 
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { LANDING_RUNTIME_JS } from "@/generated/landing-runtime";
@@ -97,15 +98,23 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
     LANDING_RUNTIME_JS +
     `\n__msLanding.boot(${jsonForScript({ slug, origin, webinar })});\n`;
 
+  // ETag 필수 — 검증자가 없으면 브라우저가 재검증을 못 해 낡은 스크립트를 계속 실행한다
+  // (실측: 새 탭에서도 transferSize 0 으로 캐시된 옛 번들이 돌아 수정이 반영되지 않았다).
+  // 본문 해시라 런타임이 바뀌거나 데이터가 바뀌면 자동으로 무효화된다.
+  const etag = `W/"${createHash("sha256").update(body).digest("base64url").slice(0, 27)}"`;
+  const cacheHeaders = {
+    "Cache-Control": "public, max-age=0, must-revalidate",
+    // 엣지만 60초 캐시 + 최대 하루 stale 서빙 → DB 가 죽어도 콘텐츠가 보인다.
+    "CDN-Cache-Control": "public, s-maxage=60, stale-while-revalidate=86400",
+    ETag: etag,
+  } as const;
+
+  if (req.headers.get("if-none-match") === etag) {
+    return new NextResponse(null, { status: 304, headers: { ...SCRIPT_HEADERS, ...cacheHeaders } });
+  }
+
   return new NextResponse(body, {
     status: 200,
-    headers: {
-      ...SCRIPT_HEADERS,
-      // 브라우저는 **항상 재검증**한다(대개 304). stale-while-revalidate 를 브라우저에까지
-      // 주면 랜딩을 고쳐도 방문자가 최대 하루 낡은 화면을 보게 된다 — 실제로 하니스에서 재현했다.
-      "Cache-Control": "public, max-age=0, must-revalidate",
-      // 엣지만 60초 캐시 + 최대 하루 stale 서빙 → DB 가 죽어도 콘텐츠가 보인다.
-      "CDN-Cache-Control": "public, s-maxage=60, stale-while-revalidate=86400",
-    },
+    headers: { ...SCRIPT_HEADERS, ...cacheHeaders },
   });
 }
