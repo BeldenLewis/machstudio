@@ -51,6 +51,21 @@ function ensureStyles(): void {
   document.head.appendChild(style);
 }
 
+/**
+ * 히어로 이미지를 DOM 조립보다 먼저 받기 시작한다.
+ * 임베드는 페이로드가 스크립트에 실려 와 URL 을 즉시 알 수 있으므로, 트리를 다 만든 뒤
+ * <img> 가 붙기를 기다릴 이유가 없다. 첫 화면에서 배경이 비어 보이는 시간을 줄인다.
+ */
+function preloadHeroImage(url: string): void {
+  if (document.querySelector(`link[rel="preload"][href="${CSS.escape(url)}"]`)) return;
+  const link = document.createElement("link");
+  link.rel = "preload";
+  link.as = "image";
+  link.href = url;
+  link.setAttribute("fetchpriority", "high");
+  document.head.appendChild(link);
+}
+
 /** Pretendard — 호스트가 이미 로드했을 수 있으니 중복 주입만 피한다. */
 function ensureFont(): void {
   if (document.getElementById(FONT_ID)) return;
@@ -69,6 +84,9 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   ensureFont();
 
   const m = buildLandingModel(webinar, { uid, embedded, isPreview, origin: opts.origin });
+
+  // 장식 링을 안 그리는 대신(첫 화면 교체 방지) 이미지가 최대한 빨리 오게 한다.
+  if (m.lp.heroMedia?.type === "image" && m.lp.heroMedia.url) preloadHeroImage(m.lp.heroMedia.url);
 
   const root = h("div", {
     class: `lnd${embedded ? " embedded" : ""}`,
@@ -184,8 +202,7 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
 
   // ── 호스트 크롬(헤더) 높이 보정 ───────────────────────────────────────
   // 임베드는 호스트 헤더 아래에서 시작하는데 히어로가 100svh 면 바닥의 일시·CTA 가 헤더 높이만큼
-  // 화면 밖으로 밀린다(실측: 아임웹 헤더 130px → CTA 가 fold 아래). 최상단일 때의 마운트 top 이
-  // 곧 위쪽 점유 높이다. 스크롤 중에는 값이 의미 없으므로 최상단에서만 갱신한다.
+  // 화면 밖으로 밀린다(실측: 아임웹 헤더 130px → CTA 가 fold 아래).
   // 단독 페이지는 마운트가 문서 최상단이라 자연히 0 → 기존 동작 그대로.
   // 마운트의 **문서상 절대 Y** 를 쓴다(뷰포트 상대 top + 현재 스크롤). 스크롤 위치와 무관하게
   // 항상 같은 값이 나오므로, 사용자가 스크롤한 상태에서 창을 최대화해도 정확히 재측정된다.
