@@ -187,23 +187,32 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   // 화면 밖으로 밀린다(실측: 아임웹 헤더 130px → CTA 가 fold 아래). 최상단일 때의 마운트 top 이
   // 곧 위쪽 점유 높이다. 스크롤 중에는 값이 의미 없으므로 최상단에서만 갱신한다.
   // 단독 페이지는 마운트가 문서 최상단이라 자연히 0 → 기존 동작 그대로.
+  // 마운트의 **문서상 절대 Y** 를 쓴다(뷰포트 상대 top + 현재 스크롤). 스크롤 위치와 무관하게
+  // 항상 같은 값이 나오므로, 사용자가 스크롤한 상태에서 창을 최대화해도 정확히 재측정된다.
+  // (뷰포트 상대 top 만 쓰고 "최상단일 때만 갱신" 가드를 두면, 스크롤 중 리사이즈가 통째로
+  //  건너뛰어져 낡은 값이 남는다 — 실제로 창 최대화 시 히어로 하단이 잘리는 버그였다.)
   const applyTopInset = () => {
-    if ((window.scrollY || 0) >= 4) return;
-    const top = Math.max(0, Math.min(240, Math.round(mount.getBoundingClientRect().top)));
+    const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
+    const absTop = mount.getBoundingClientRect().top + scrollTop;
+    const top = Math.max(0, Math.min(240, Math.round(absTop)));
     root.style.setProperty("--lnd-topinset", `${top}px`);
   };
   applyTopInset();
   let insetRaf = 0;
-  const onResize = () => {
+  const scheduleInset = () => {
     cancelAnimationFrame(insetRaf);
     insetRaf = requestAnimationFrame(applyTopInset);
   };
-  window.addEventListener("resize", onResize);
-  window.addEventListener("orientationchange", onResize);
+  window.addEventListener("resize", scheduleInset);
+  window.addEventListener("orientationchange", scheduleInset);
+  // 창 크기 변화 없이 호스트 헤더만 다시 접히는 경우(반응형 내비 등)도 잡는다.
+  const insetRo = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleInset) : null;
+  insetRo?.observe(document.body);
   cleanups.push(() => {
     cancelAnimationFrame(insetRaf);
-    window.removeEventListener("resize", onResize);
-    window.removeEventListener("orientationchange", onResize);
+    window.removeEventListener("resize", scheduleInset);
+    window.removeEventListener("orientationchange", scheduleInset);
+    insetRo?.disconnect();
   });
 
   // ── 이펙트 ────────────────────────────────────────────────────────────
