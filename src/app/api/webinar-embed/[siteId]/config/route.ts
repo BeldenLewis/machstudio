@@ -26,33 +26,92 @@ export async function OPTIONS() {
   });
 }
 
-function toICSDate(date: Date) {
+/** DTSTAMP 등 UTC 고정 필드용. */
+function toICSDateUtc(date: Date) {
   return date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
 }
 
+/**
+ * 한국시간(Asia/Seoul) 벽시계 표기 — TZID 와 함께 쓴다.
+ * KST 는 1988년 이후 서머타임이 없어 UTC+9 고정이라 오프셋 가산으로 충분하다.
+ */
+function toICSDateKst(date: Date) {
+  return new Date(date.getTime() + 9 * 60 * 60 * 1000)
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .split(".")[0];
+}
+
+/** RFC 5545 TEXT 이스케이프 — 안 하면 설명의 쉼표·세미콜론에서 파싱이 깨진다. */
+function icsText(value: string) {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/[\r\n]+/g, "\\n");
+}
+
+/** RFC 5545 줄 접기(75 옥텟). 한국어 설명은 쉽게 넘어가고, 안 접으면 가져오기에 실패하는 앱이 있다. */
+function foldIcsLine(line: string) {
+  const bytes = Buffer.from(line, "utf8");
+  if (bytes.length <= 75) return line;
+  const out: string[] = [];
+  let start = 0;
+  let limit = 75;
+  while (start < bytes.length) {
+    let take = Math.min(limit, bytes.length - start);
+    // 멀티바이트 문자를 자르지 않도록 경계까지 뒤로 물린다
+    while (take > 0 && (bytes[start + take] & 0xc0) === 0x80) take--;
+    out.push(bytes.subarray(start, start + take).toString("utf8"));
+    start += take;
+    limit = 74; // 이어지는 줄은 선행 공백 1옥텟을 쓴다
+  }
+  return out.join("\r\n ");
+}
+
 function buildIcs(webinar: { name: string; description: string | null; liveStartAt: Date; liveEndAt: Date; slug: string }) {
+  const name = icsText(webinar.name);
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
     "PRODID:-//mach studio//Webinar//KR",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
+    // 한국시간 기준을 명시한다. TZID 없이 UTC 로만 주면 절대시각은 맞지만
+    // 캘린더 앱이 기기 시간대로만 보여줘 "한국시간 몇 시인지"가 드러나지 않는다.
+    "BEGIN:VTIMEZONE",
+    "TZID:Asia/Seoul",
+    "BEGIN:STANDARD",
+    "DTSTART:19881009T030000",
+    "TZOFFSETFROM:+1000",
+    "TZOFFSETTO:+0900",
+    "TZNAME:KST",
+    "END:STANDARD",
+    "END:VTIMEZONE",
     "BEGIN:VEVENT",
     `UID:mach-webinar-${webinar.slug}@machstudio`,
-    `DTSTAMP:${toICSDate(new Date())}`,
-    `DTSTART:${toICSDate(webinar.liveStartAt)}`,
-    `DTEND:${toICSDate(webinar.liveEndAt)}`,
-    `SUMMARY:${webinar.name.replace(/[\n\r]/g, " ")}`,
-    `DESCRIPTION:${(webinar.description ?? "").replace(/[\n\r]/g, " ")}`,
+    `DTSTAMP:${toICSDateUtc(new Date())}`,
+    `DTSTART;TZID=Asia/Seoul:${toICSDateKst(webinar.liveStartAt)}`,
+    `DTEND;TZID=Asia/Seoul:${toICSDateKst(webinar.liveEndAt)}`,
+    `SUMMARY:${name}`,
+    `DESCRIPTION:${icsText(webinar.description ?? "")}`,
     "LOCATION:Online",
+    // 알림 2회 — 1시간 전, 10분 전
     "BEGIN:VALARM",
-    "TRIGGER:-PT60M",
+    "TRIGGER:-PT1H",
     "ACTION:DISPLAY",
-    `DESCRIPTION:${webinar.name.replace(/[\n\r]/g, " ")} 1시간 전입니다!`,
+    `DESCRIPTION:${name} 1시간 전입니다!`,
+    "END:VALARM",
+    "BEGIN:VALARM",
+    "TRIGGER:-PT10M",
+    "ACTION:DISPLAY",
+    `DESCRIPTION:${name} 10분 뒤 시작합니다!`,
     "END:VALARM",
     "END:VEVENT",
     "END:VCALENDAR",
-  ].join("\r\n");
+  ]
+    .map(foldIcsLine)
+    .join("\r\n");
 }
 
 // 허용 오리진 비교 — 스킴+호스트+포트만 본다(경로·서브도메인 부분일치는 인정하지 않는다).
