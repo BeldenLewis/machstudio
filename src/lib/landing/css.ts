@@ -92,7 +92,9 @@ export const LANDING_CSS = `
    그 경로에 한해 호스트가 postMessage 로 넘겨준 --lnd-vh 로 대체한다. */
 .lnd .hero {
   position: relative;
-  min-height: 100svh;
+  /* --lnd-topinset = 첫 화면에서 랜딩 위를 차지하는 호스트 크롬(헤더) 높이.
+     빼지 않으면 히어로 바닥에 붙은 일시·CTA 가 딱 그만큼 화면 밖으로 밀린다. */
+  min-height: calc(100svh - var(--lnd-topinset, 0px));
   display: grid; place-items: center;
   overflow: hidden;
   background:
