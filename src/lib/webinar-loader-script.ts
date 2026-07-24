@@ -292,7 +292,6 @@ ${ATTRIBUTION_CORE_JS}
       ".mw-banner-inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px 14px 20px; }",
       ".mw-banner-text { min-width: 0; }",
       ".mw-banner-title { font-size: 14px; font-weight: 700; color: rgba(255,255,255,0.95) !important; -webkit-text-fill-color: rgba(255,255,255,0.95) !important; line-height: 1.45; word-break: keep-all; }",
-      ".mw-banner-sub { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; font-weight: 600; color: #fbbf24 !important; -webkit-text-fill-color: #fbbf24 !important; }",
       ".mw-banner-ctas { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }",
       ".mw-banner .mw-btn { padding: 11px 18px; font-size: 13px; }",
       ".mw-banner .mw-btn-secondary { background: rgba(255,255,255,0.09) !important; color: #fff !important; -webkit-text-fill-color: #fff !important; border: 1px solid rgba(255,255,255,0.18) !important; }",
@@ -871,13 +870,6 @@ ${ATTRIBUTION_CORE_JS}
       title.appendChild(document.createTextNode(
         texts.registration || ((CFG.name || "웨비나") + " 사전등록이 진행 중입니다.")
       ));
-      var startTxt = fmtKstDateTime(CFG.liveStartAt);
-      if (startTxt) {
-        var sub = el("div", "mw-banner-sub");
-        sub.textContent = "\\ud83d\\udcc5 " + startTxt + " 라이브";
-        textArea.appendChild(title);
-        textArea.appendChild(sub);
-      }
       if (bc.showCalendarButton !== false) {
         var calBtn = el("button", "mw-btn mw-btn-secondary", "캘린더 추가");
         calBtn.type = "button";
@@ -906,14 +898,6 @@ ${ATTRIBUTION_CORE_JS}
     document.body.appendChild(banner);
   }
 
-  // KST 절대 시각 포맷 (예: "7월 7일 오후 7:44")
-  function fmtKstDateTime(iso) {
-    try {
-      var d = new Date(iso);
-      if (isNaN(d.getTime())) return "";
-      return new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(d);
-    } catch (e) { return ""; }
-  }
 
   /* ── 렌더 오케스트레이션 ── */
   function renderAll() {

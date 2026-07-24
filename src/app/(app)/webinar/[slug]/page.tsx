@@ -396,7 +396,13 @@ function WebinarDetail({ id }: { id: string }) {
                 onSectionChange={(section) => navigate("create", section, { replace: true })}
               />
             )}
-            {activeTab === "deploy" && <DeployTab webinarId={id} slug={webinar.slug} webinarName={webinar.name} />}
+            {activeTab === "deploy" && <DeployTab
+                webinarId={id}
+                slug={webinar.slug}
+                webinarName={webinar.name}
+                components={webinar.components ?? null}
+                onSilentUpdate={() => fetchWebinar(true)}
+              />}
             {activeTab === "operate" && (
               <OperateTab
                 webinarId={id}
