@@ -198,20 +198,17 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
     root.style.setProperty("--lnd-topinset", `${top}px`);
   };
   applyTopInset();
-  let insetRaf = 0;
-  const scheduleInset = () => {
-    cancelAnimationFrame(insetRaf);
-    insetRaf = requestAnimationFrame(applyTopInset);
-  };
-  window.addEventListener("resize", scheduleInset);
-  window.addEventListener("orientationchange", scheduleInset);
+  // 동기로 즉시 반영한다. requestAnimationFrame 으로만 미루면 rAF 가 스로틀되는 상황
+  // (백그라운드 탭·절전·일부 자동화 환경)에서 재측정이 통째로 유실된다 — 실제로 그렇게 재현됐다.
+  // resize/ResizeObserver 는 이미 레이아웃 이후에 오므로 여기서 바로 재도 정확하다.
+  window.addEventListener("resize", applyTopInset);
+  window.addEventListener("orientationchange", applyTopInset);
   // 창 크기 변화 없이 호스트 헤더만 다시 접히는 경우(반응형 내비 등)도 잡는다.
-  const insetRo = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleInset) : null;
+  const insetRo = typeof ResizeObserver !== "undefined" ? new ResizeObserver(applyTopInset) : null;
   insetRo?.observe(document.body);
   cleanups.push(() => {
-    cancelAnimationFrame(insetRaf);
-    window.removeEventListener("resize", scheduleInset);
-    window.removeEventListener("orientationchange", scheduleInset);
+    window.removeEventListener("resize", applyTopInset);
+    window.removeEventListener("orientationchange", applyTopInset);
     insetRo?.disconnect();
   });
 
