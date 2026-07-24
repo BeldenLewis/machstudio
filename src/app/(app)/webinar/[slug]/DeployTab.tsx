@@ -21,6 +21,8 @@ import { toast } from "sonner";
 import { useWorkspace } from "@/contexts/workspace";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { getPublicAppOrigin } from "@/lib/app-url";
+import { useAutosave } from "@/components/ui/use-autosave";
+import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -136,8 +138,45 @@ function buildLandingEmbedSnippet(origin: string, slug: string, name: string) {
 <script async src="${origin}/w/l/${slug}"></script>`;
 }
 
-export default function DeployTab({ webinarId, slug, webinarName }: { webinarId: string; slug: string; webinarName: string }) {
+export default function DeployTab({ webinarId, slug, webinarName, components, onSilentUpdate }: {
+  webinarId: string;
+  slug: string;
+  webinarName: string;
+  components: Record<string, unknown> | null;
+  onSilentUpdate: () => void;
+}) {
   const confirm = useConfirm();
+
+  // 하단 배너 문구 — 로더가 components.banner.textByStatus 를 상태별로 읽는다.
+  // 비워두면 웨비나 이름 기반 기본 문구가 나가므로, placeholder 로 그 기본값을 그대로 보여준다.
+  const bannerTexts = ((components?.banner as Record<string, unknown> | undefined)?.textByStatus ??
+    {}) as Record<string, string>;
+  const [bannerText, setBannerText] = useState({
+    upcoming: bannerTexts.upcoming ?? "",
+    registration: bannerTexts.registration ?? "",
+    live: bannerTexts.live ?? "",
+    ended: bannerTexts.ended ?? "",
+  });
+  const { state: bannerSaveState, retry: bannerRetry } = useAutosave(bannerText, async (value) => {
+    const res = await fetch(`/api/webinars/${webinarId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        components: {
+          banner: {
+            textByStatus: {
+              upcoming: value.upcoming.trim(),
+              registration: value.registration.trim(),
+              live: value.live.trim(),
+              ended: value.ended.trim(),
+            },
+          },
+        },
+      }),
+    });
+    if (res.ok) onSilentUpdate();
+    return res.ok;
+  });
   const { workspace, currentProject } = useWorkspace();
   const [sites, setSites] = useState<EmbedSite[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -284,6 +323,41 @@ export default function DeployTab({ webinarId, slug, webinarName }: { webinarId:
             비공개 상태면 방문자에게 “아직 공개되지 않은 페이지” 안내만 보여요 — 만들기 → 랜딩 페이지에서 공개로 켜세요.
           </p>
         </div>
+      </section>
+
+      {/* 하단 배너 문구 — 배너는 임베드 전용이라 배포 탭에서 함께 다룬다(표시 범위 설정도 여기 있음) */}
+      <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            <Megaphone className="h-4 w-4 text-violet-500" /> 하단 배너 문구
+          </h2>
+          <AutosaveIndicator state={bannerSaveState} onRetry={bannerRetry} />
+        </div>
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          아임웹 페이지 하단에 뜨는 배너 문구예요. 웨비나 상태에 따라 자동으로 바뀝니다. 비워두면 기본 문구가 나가요.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {([
+            { key: "registration", label: "사전등록 중", ph: `${webinarName} 사전등록이 진행 중입니다.` },
+            { key: "live", label: "라이브·입장 중", ph: `${webinarName}가 지금 진행 중입니다!` },
+            { key: "upcoming", label: "시작 전", ph: `${webinarName}가 곧 시작됩니다.` },
+            { key: "ended", label: "종료 후", ph: `${webinarName}가 종료되었습니다. 참여해주셔서 감사합니다!` },
+          ] as const).map((f) => (
+            <div key={f.key}>
+              <label className="mb-1 block text-xs text-muted-foreground">{f.label}</label>
+              <input
+                type="text"
+                value={bannerText[f.key]}
+                onChange={(e) => setBannerText((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                placeholder={f.ph}
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm transition-colors focus:border-violet-400 focus:outline-none"
+              />
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          변경은 방문자에게 최대 1분 안에 반영돼요(로더가 설정을 60초 캐시).
+        </p>
       </section>
 
       {/* ① 사이트 연결 */}
