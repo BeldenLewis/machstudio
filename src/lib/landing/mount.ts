@@ -182,6 +182,30 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   clearNode(mount);
   mount.appendChild(root);
 
+  // ── 호스트 크롬(헤더) 높이 보정 ───────────────────────────────────────
+  // 임베드는 호스트 헤더 아래에서 시작하는데 히어로가 100svh 면 바닥의 일시·CTA 가 헤더 높이만큼
+  // 화면 밖으로 밀린다(실측: 아임웹 헤더 130px → CTA 가 fold 아래). 최상단일 때의 마운트 top 이
+  // 곧 위쪽 점유 높이다. 스크롤 중에는 값이 의미 없으므로 최상단에서만 갱신한다.
+  // 단독 페이지는 마운트가 문서 최상단이라 자연히 0 → 기존 동작 그대로.
+  const applyTopInset = () => {
+    if ((window.scrollY || 0) >= 4) return;
+    const top = Math.max(0, Math.min(240, Math.round(mount.getBoundingClientRect().top)));
+    root.style.setProperty("--lnd-topinset", `${top}px`);
+  };
+  applyTopInset();
+  let insetRaf = 0;
+  const onResize = () => {
+    cancelAnimationFrame(insetRaf);
+    insetRaf = requestAnimationFrame(applyTopInset);
+  };
+  window.addEventListener("resize", onResize);
+  window.addEventListener("orientationchange", onResize);
+  cleanups.push(() => {
+    cancelAnimationFrame(insetRaf);
+    window.removeEventListener("resize", onResize);
+    window.removeEventListener("orientationchange", onResize);
+  });
+
   // ── 이펙트 ────────────────────────────────────────────────────────────
   cleanups.push(attachReveal(root));
   const accentZones = [m.sectionId("lnd-sessions"), m.sectionId("lnd-timetable")];
