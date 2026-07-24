@@ -116,44 +116,27 @@ const MOUNT_MARKERS = [
   },
 ] as const;
 
-// 랜딩 임베드 스니펫 — 높이 자동조절(자식이 문서 높이를 postMessage) + 호스트 뷰포트 전달(히어로 높이용).
-// 오리진·slug 를 모두 검사해 같은 페이지에 여러 웨비나 임베드가 있어도 높이가 섞이지 않는다.
-function buildLandingEmbedSnippet(origin: string, slug: string) {
+// 랜딩 임베드 스니펫 — 호스트 문서에 직접 마운트한다(iframe 아님).
+// iframe 은 별도 뷰포트라 (a) 100svh 풀스크린이 호스트 화면을 모르고 (b) position:fixed 가
+// 호스트 뷰포트에 안 붙어 팝업이 어긋나고 (c) 배경 스크롤을 잠글 수 없고 (d) 높이를
+// postMessage 로 중계해야 해서 로드 직후 빈 상자가 오래 보인다 — 전부 실측된 문제라 걷어냈다.
+//
+// 인라인 <script> 를 쓰지 않는 이유: 아임웹 코드위젯이 재저장 시 인라인 스크립트를 지우는 경우가 있다.
+// div 안의 링크는 스크립트가 영영 안 와도 등록 경로가 살아 있게 하는 폴백이다.
+function buildLandingEmbedSnippet(origin: string, slug: string, name: string) {
+  const label = (name || "웨비나").replace(/[<>&]/g, "");
   return `<!-- machstudio 웨비나 랜딩 -->
-<div id="ms-landing-${slug}"></div>
-<script>
-(function () {
-  var mount = document.getElementById("ms-landing-${slug}");
-  var frame = document.createElement("iframe");
-  frame.src = "${origin}/webinar/${slug}/landing";
-  frame.title = "웨비나 랜딩페이지";
-  frame.style.cssText = "display:block;width:100%;border:0;min-height:640px";
-  frame.setAttribute("allow", "autoplay");
-  mount.appendChild(frame);
-  function sendViewport() {
-    if (!frame.contentWindow) return;
-    // 헤더 등 아이프레임 위 고정영역 높이: 최상단일 때 프레임 top = 위쪽 점유 높이(헤더). 스크롤 중엔 0.
-    var rect = frame.getBoundingClientRect();
-    var top = (window.scrollY || window.pageYOffset || 0) < 4 ? Math.min(240, Math.max(0, Math.round(rect.top))) : 0;
-    frame.contentWindow.postMessage({ type: "machstudio:host-viewport", vh: window.innerHeight, top: top }, "${origin}");
-  }
-  frame.addEventListener("load", sendViewport);
-  window.addEventListener("resize", sendViewport);
-  window.addEventListener("orientationchange", sendViewport);
-  window.addEventListener("message", function (e) {
-    if (e.origin !== "${origin}") return;
-    var d = e.data || {};
-    // 자식 준비 완료 → 뷰포트 재전송(최초 로드 레이스 해소)
-    if (d.type === "machstudio:landing-ready" && d.slug === "${slug}") { sendViewport(); return; }
-    if (d.type === "machstudio:landing-height" && d.slug === "${slug}" && typeof d.height === "number") {
-      frame.style.height = Math.ceil(d.height) + "px";
-    }
-  });
-})();
-</script>`;
+<div id="ms-landing-${slug}" data-ms-landing-mount data-ms-slug="${slug}"
+     style="display:block;min-height:100svh;background:#06080d">
+  <a href="${origin}/webinar/${slug}/landing"
+     style="display:block;padding:96px 20px;color:#abb5c7;text-align:center;text-decoration:none;font:600 15px/1.7 Pretendard,-apple-system,sans-serif">
+    ${label} 사전 등록 페이지 열기 →
+  </a>
+</div>
+<script async src="${origin}/w/l/${slug}"></script>`;
 }
 
-export default function DeployTab({ webinarId, slug }: { webinarId: string; slug: string }) {
+export default function DeployTab({ webinarId, slug, webinarName }: { webinarId: string; slug: string; webinarName: string }) {
   const confirm = useConfirm();
   const { workspace, currentProject } = useWorkspace();
   const [sites, setSites] = useState<EmbedSite[]>([]);
@@ -295,7 +278,7 @@ export default function DeployTab({ webinarId, slug }: { webinarId: string; slug
           </div>
           <div>
             <p className="mb-1 text-xs font-medium text-muted-foreground">임베드 코드 (아임웹 HTML 위젯)</p>
-            <CodeBlock code={buildLandingEmbedSnippet(origin, slug)} />
+            <CodeBlock code={buildLandingEmbedSnippet(origin, slug, webinarName)} />
           </div>
           <p className="text-[11px] text-muted-foreground">
             비공개 상태면 방문자에게 “아직 공개되지 않은 페이지” 안내만 보여요 — 만들기 → 랜딩 페이지에서 공개로 켜세요.

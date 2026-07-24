@@ -29,8 +29,30 @@ export const LANDING_CSS = `
 }
 .lnd.on-accent { background: var(--primary); }
 .lnd *, .lnd *::before, .lnd *::after { box-sizing: border-box; margin: 0; padding: 0; }
-.lnd a { color: inherit; text-decoration: none; }
-.lnd button { font: inherit; color: inherit; }
+
+/* ── 호스트 전역 CSS 방어 ──
+   외부 사이트(아임웹 등) 문서에 직접 마운트되면 호스트의 **상속 프로퍼티**가 그대로 흘러든다.
+   실측(www.k-expo.org): body 에 -webkit-text-fill-color:#363636 이 걸려 있어 우리 흰 글자가
+   진회색으로 렌더됐다(color 를 덮어쓰는 프로퍼티라 color 지정만으로는 못 막는다).
+   상속으로 새는 것들만 루트에서 다시 못박고, 호스트가 !important 로 강제하는 4종에만
+   !important 로 맞선다(같은 호스트에서 도는 /w 로더가 이미 같은 방어를 쓰고 있다). */
+.lnd.lnd, .lnd.lnd * { -webkit-text-fill-color: currentColor !important; }
+.lnd.lnd {
+  letter-spacing: normal; word-spacing: normal; text-transform: none;
+  text-align: left; text-indent: 0; text-shadow: none; white-space: normal;
+  font-style: normal; font-weight: 400; visibility: visible;
+  /* all:initial 을 쓰지 않는 이유: text-size-adjust 가 auto 로 풀려 iOS 텍스트 자동확대가
+     랜딩 안에서만 되살아난다. 필요한 것만 명시한다. */
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+}
+.lnd a { color: inherit !important; text-decoration: none !important; }
+.lnd button {
+  font: inherit; color: inherit; background: transparent; border: 0; border-radius: 0;
+  padding: 0; margin: 0; text-align: inherit; cursor: pointer;
+  -webkit-appearance: none; appearance: none;
+}
+.lnd ul, .lnd ol { list-style: none; }
+.lnd img, .lnd svg, .lnd video { display: block; max-width: 100%; border: 0; }
 .lnd ::selection { background: var(--primary); color: var(--on-primary); }
 .lnd :focus-visible { outline: 3px solid var(--primary-bright); outline-offset: 4px; }
 

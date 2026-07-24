@@ -396,7 +396,7 @@ function WebinarDetail({ id }: { id: string }) {
                 onSectionChange={(section) => navigate("create", section, { replace: true })}
               />
             )}
-            {activeTab === "deploy" && <DeployTab webinarId={id} slug={webinar.slug} />}
+            {activeTab === "deploy" && <DeployTab webinarId={id} slug={webinar.slug} webinarName={webinar.name} />}
             {activeTab === "operate" && (
               <OperateTab
                 webinarId={id}
