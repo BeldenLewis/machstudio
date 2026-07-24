@@ -77,7 +77,7 @@ export function renderHero(m: LandingModel): HTMLElement {
       ? media.type === "video"
         ? renderHeroVideo(media.url)
         : // 외부 임의 호스트 이미지(어드민 입력 URL) — normalize 단계에서 http(s) 만 통과
-          h("img", { src: media.url, alt: "", loading: "eager" })
+          h("img", { src: media.url, alt: "", loading: "eager", fetchpriority: "high" })
       : null,
   );
 
@@ -103,7 +103,7 @@ export function renderHero(m: LandingModel): HTMLElement {
 
   return h(
     "section",
-    { class: "hero", "aria-label": "웨비나 소개" },
+    { class: cx("hero", media ? "hero-has-media" : null), "aria-label": "웨비나 소개" },
     mediaBox,
     h(
       "div",

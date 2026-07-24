@@ -102,6 +102,12 @@ export const LANDING_CSS = `
     linear-gradient(180deg, #05070c 0%, #05070d 100%);
 }
 .lnd[data-legacy-iframe] .hero { min-height: var(--lnd-vh, 720px); }
+/* 히어로 이미지·영상이 있으면 기본 장식(키컬러 링·그라데이션)을 **아예 그리지 않는다**.
+   덮어씌우는 방식이면 CSS 는 즉시 그려지고 이미지는 나중에 도착하므로,
+   첫 로드에 기본 화면이 보였다가 이미지로 바뀌는 게 그대로 눈에 띈다. */
+.lnd .hero.hero-has-media { background: var(--ink); }
+.lnd .hero.hero-has-media::before,
+.lnd .hero.hero-has-media::after { content: none; }
 .lnd .hero::before,
 .lnd .hero::after {
   content: ""; position: absolute; inset: 50% auto auto 50%;
