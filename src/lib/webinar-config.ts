@@ -151,7 +151,7 @@ export const DEFAULT_LANDING_JOIN_STEPS: LandingJoinStep[] = [
 ];
 
 // 공개 페이지에 들어가는 URL 은 http(s)만 — javascript: 등 스킴이 임베드된 외부 사이트에서 실행되는 것을 차단.
-function safeHttpUrl(value: unknown): string {
+export function safeHttpUrl(value: unknown): string {
   const url = String(value ?? "").trim();
   if (!url) return "";
   try {
