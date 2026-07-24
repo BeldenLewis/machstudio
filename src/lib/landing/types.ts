@@ -27,3 +27,45 @@ export interface LandingWebinar {
   config: Record<string, unknown>;
   sessions: LandingSession[];
 }
+
+export interface LandingTocItem {
+  id: string;
+  label: string;
+}
+
+/**
+ * 렌더 직전까지 모든 파생을 끝낸 모델. 뷰 함수는 여기서만 값을 읽는다
+ * (뷰에 조건 분기가 흩어지지 않게 — 단독/미리보기/임베드가 같은 결론을 보게 하려는 목적).
+ */
+export interface LandingModel {
+  webinar: LandingWebinar;
+  lp: import("@/lib/webinar-config").LandingPageConfig;
+  /** 인스턴스 고유 접두 — 한 페이지에 랜딩이 둘 이상 붙어도 id 가 안 부딪히게. */
+  uid: string;
+  accent: string;
+  onPrimary: string;
+  brand: string;
+  titleLines: string[];
+  subtitle: string;
+  dateStr: string;
+  registerUrl: string;
+  introTitle: string;
+  introBody: string;
+  sessionCards: LandingSession[];
+  timetableRows: LandingSession[];
+  faqCategories: string[];
+  tocItems: LandingTocItem[];
+  showIntro: boolean;
+  showPrograms: boolean;
+  showHighlights: boolean;
+  showJoin: boolean;
+  showFaq: boolean;
+  /** 세션 카드 클릭 시 상세 팝업 사용 여부. */
+  detailPopup: boolean;
+  /** 임베드로 마운트된 경우 true — 링크 target, 랜드마크 태그 선택에 쓴다. */
+  embedded: boolean;
+  isPreview: boolean;
+  /** 섹션 id 를 uid 접두 붙여 만든다. */
+  sectionId: (base: string) => string;
+}
+
