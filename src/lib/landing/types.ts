@@ -29,6 +29,7 @@ export interface LandingWebinar {
 }
 
 export interface LandingTocItem {
+  /** uid 접두 **전**의 base id (예: "lnd-sessions"). 접두는 렌더 시 sectionId() 가 한 번만 붙인다. */
   id: string;
   label: string;
 }

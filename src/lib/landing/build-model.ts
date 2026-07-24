@@ -1,0 +1,119 @@
+/**
+ * 랜딩 파생 모델 빌더 — 원본 LandingContent 상단의 계산을 전부 여기로 옮겼다.
+ *
+ * 왜 분리했는가: 단독 페이지 / 어드민 미리보기 / 외부 사이트 임베드가 같은 마크업을 공유하는데,
+ * 파생 계산이 뷰에 섞여 있으면 세 경로가 조금씩 다른 결론을 내기 쉽다. 렌더 직전까지의 판단
+ * (무엇을 보여줄지·어떤 문자열을 쓸지)을 이 파일 한 곳에서 끝내고, 뷰는 LandingModel 만 읽는다.
+ * React / Next 를 import 하지 않는다 — 호스트 DOM 번들에 그대로 들어간다.
+ */
+
+import { formatKst } from "@/lib/datetime";
+import { normalizeLandingPageConfig, safeHttpUrl } from "@/lib/webinar-config";
+import { SAFE_HEX, TOC_DEF, onPrimaryFor } from "./model";
+import type { LandingModel, LandingSession, LandingTocItem, LandingWebinar } from "./types";
+
+export interface BuildLandingModelOptions {
+  /** 인스턴스 고유 접두 — 한 페이지에 랜딩이 둘 이상 붙어도 DOM id 가 안 부딪히게. */
+  uid: string;
+  embedded: boolean;
+  isPreview: boolean;
+  /** 임베드는 호스트 도메인이 달라 상대경로가 깨진다 → 등록 링크를 절대 URL 로 만들 오리진. */
+  origin?: string;
+}
+
+/** 등록 링크 — 원본과 같은 경로. origin 이 있으면 절대 URL(임베드용). */
+function buildRegisterUrl(slug: string, origin?: string): string {
+  const path = `/webinar/${encodeURIComponent(slug)}/live?view=signup`;
+  const base = (origin ?? "").trim();
+  if (!base) return path;
+  try {
+    // safeHttpUrl 로 한 번 더 거른다 — 호스트가 넘긴 오리진이 http(s) 가 아니면 상대경로로 되돌림.
+    return safeHttpUrl(new URL(path, base).toString()) || path;
+  } catch {
+    return path;
+  }
+}
+
+export function buildLandingModel(webinar: LandingWebinar, opts: BuildLandingModelOptions): LandingModel {
+  const { uid, embedded, isPreview, origin } = opts;
+  const lp = normalizeLandingPageConfig(webinar.config);
+  const sectionId = (base: string) => `${uid}-${base}`;
+
+  const accentRaw = String(webinar.theme?.accentColor ?? "");
+  const accent = SAFE_HEX.test(accentRaw) ? accentRaw : "#8b5cf6";
+  const onPrimary = onPrimaryFor(accent);
+
+  const brand = lp.brand.trim() || webinar.name;
+  const titleLines = lp.titleLines.length ? lp.titleLines : [webinar.name];
+  const subtitle = lp.subtitle.trim() || (webinar.description ?? "").split("\n")[0] || "";
+  const dateStr = `${formatKst(webinar.liveStartAt, { year: "numeric", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false })} KST`;
+  const registerUrl = buildRegisterUrl(webinar.slug, origin);
+
+  // 임베드는 호출자가 만든 임의의 객체를 넘길 수 있어 세션 배열 부재를 방어한다(파트너 문서에서 throw 금지).
+  const sessions: LandingSession[] = Array.isArray(webinar.sessions) ? webinar.sessions : [];
+  const sessionCards = lp.sessions.enabled ? sessions.filter((s) => (s.type ?? "session") === "session") : [];
+  const timetableRows = lp.timetable.enabled ? sessions : [];
+
+  const introTitle = lp.intro.title.trim() || subtitle;
+  // 본문 기본값: 설명에서 제목으로 쓰인 첫 줄은 빼고 — 같은 문장이 제목·본문에 두 번 나오지 않게
+  const descLines = (webinar.description ?? "").split("\n");
+  const introBodyDefault = (descLines[0]?.trim() === introTitle.trim() ? descLines.slice(1) : descLines).join("\n").trim();
+  const introBody = lp.intro.body.trim() || introBodyDefault;
+
+  const showIntro = lp.intro.enabled && Boolean(introTitle || introBody);
+  const showPrograms = lp.programs.enabled && lp.programs.items.length > 0;
+  const showHighlights = lp.highlights.enabled && lp.highlights.items.length > 0;
+  const showJoin = lp.join.enabled && lp.join.steps.length > 0;
+  const showFaq = lp.faq.enabled && lp.faq.items.length > 0;
+
+  // 목차 노출 조건은 TOC_DEF 의 원래 id(=섹션 base)로 판단하고, 실제 id 는 uid 접두를 붙여 내보낸다.
+  const visible: Record<string, boolean> = {
+    "lnd-about": showIntro,
+    "lnd-sessions": sessionCards.length > 0,
+    "lnd-timetable": timetableRows.length > 0,
+    "lnd-programs": showPrograms,
+    "lnd-highlights": showHighlights,
+    "lnd-join": showJoin,
+    "lnd-faq": showFaq,
+  };
+  // id 는 **base**(uid 접두 전) 그대로 싣는다. 접두는 뷰(renderToc)가 m.sectionId 로 한 번만 붙인다.
+  // 여기서 미리 붙이면 뷰에서 두 번 붙어 앵커·스크롤·aria-current 가 전부 죽는다.
+  const tocItems: LandingTocItem[] = TOC_DEF.filter((t) => visible[t.id]).map((t) => ({
+    id: t.id,
+    label: t.label,
+  }));
+
+  // FAQ 카테고리 — 등장 순서 유지(중복만 제거).
+  const faqCategories: string[] = [];
+  for (const item of lp.faq.items) if (!faqCategories.includes(item.category)) faqCategories.push(item.category);
+
+  const detailPopup = lp.sessions.enabled && lp.sessions.detailPopup;
+
+  return {
+    webinar,
+    lp,
+    uid,
+    accent,
+    onPrimary,
+    brand,
+    titleLines,
+    subtitle,
+    dateStr,
+    registerUrl,
+    introTitle,
+    introBody,
+    sessionCards,
+    timetableRows,
+    faqCategories,
+    tocItems,
+    showIntro,
+    showPrograms,
+    showHighlights,
+    showJoin,
+    showFaq,
+    detailPopup,
+    embedded,
+    isPreview,
+    sectionId,
+  };
+}

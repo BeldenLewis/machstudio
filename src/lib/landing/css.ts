@@ -64,7 +64,10 @@ export const LANDING_CSS = `
 .lnd.on-accent .toc-link[aria-current="true"] { color: var(--on-primary); }
 .lnd.on-accent .toc-link[aria-current="true"] .toc-mark { background: var(--on-primary); }
 
-/* ── 히어로 — 임베드에선 호스트 뷰포트 높이(--lnd-vh)를 사용 ── */
+/* ── 히어로 ──
+   호스트 DOM 에 직접 마운트하면 100svh 가 브라우저 네이티브로 동작한다(모바일 주소창 접힘에도
+   재계산 없음). 레거시 iframe 임베드에서만 문서 전체 높이가 되어 무한 성장하므로,
+   그 경로에 한해 호스트가 postMessage 로 넘겨준 --lnd-vh 로 대체한다. */
 .lnd .hero {
   position: relative;
   min-height: 100svh;
@@ -74,7 +77,7 @@ export const LANDING_CSS = `
     radial-gradient(circle at 50% 45%, rgba(7, 12, 26, .15) 0 20%, transparent 21%),
     linear-gradient(180deg, #05070c 0%, #05070d 100%);
 }
-.lnd.embedded .hero { min-height: var(--lnd-vh, 720px); }
+.lnd[data-legacy-iframe] .hero { min-height: var(--lnd-vh, 720px); }
 .lnd .hero::before,
 .lnd .hero::after {
   content: ""; position: absolute; inset: 50% auto auto 50%;
@@ -114,11 +117,13 @@ export const LANDING_CSS = `
   font-size: clamp(15px, 1.8vw, 22px); font-weight: 900; letter-spacing: -.03em;
   color: var(--primary-bright);
 }
-.lnd .hero h1 {
+/* 임베드에선 호스트에 h1 이 이미 있어 히어로 제목만 h2 로 낮춘다 — 시각은 동일하게 */
+.lnd .hero h1,
+.lnd .hero h2 {
   font-size: clamp(44px, 7vw, 92px); font-weight: 900; letter-spacing: -.055em;
   line-height: .98; text-transform: uppercase; text-wrap: balance; word-break: keep-all;
 }
-.lnd .hero h1 span { display: block; }
+.lnd .hero h1 span, .lnd .hero h2 span { display: block; }
 .lnd .hero-subtitle {
   margin: 24px 0 0;
   font-size: clamp(17px, 2.3vw, 30px); font-weight: 800; letter-spacing: -.035em; word-break: keep-all;
@@ -225,16 +230,30 @@ export const LANDING_CSS = `
 }
 .lnd .session-more svg { width: 13px; height: 13px; }
 
-/* ── 세션 상세 팝업 (글래스모피즘) — 클릭 카드 문서 Y 에 앵커 ── */
-.lnd .lnd-modal-root { position: absolute; inset: 0; z-index: 3000; }
+/* ── body 직계 고정 레이어 ── 모달처럼 뷰포트에 붙어야 하는 것만 여기 산다.
+   외부 사이트(아임웹)에 마운트되면 조상에 position:relative/transform 이 있어
+   랜딩 내부의 position:fixed 가 갇힌다 → 레이어를 body 직계로 포털한다.
+   평소엔 pointer-events:none 이라 호스트 클릭을 가로채지 않는다. */
+.lnd.lnd-layer {
+  position: fixed; inset: 0; z-index: 999960;
+  background: none; min-height: 0; width: auto; margin: 0; overflow: visible;
+  pointer-events: none;
+}
+.lnd.lnd-layer > * { pointer-events: auto; }
+
+/* ── 세션 상세 팝업 (글래스모피즘) — 뷰포트 중앙 고정 ── */
+.lnd .lnd-modal-root {
+  position: fixed; inset: 0; z-index: 1;
+  display: grid; place-items: center; padding: 16px;
+}
 .lnd .lnd-modal-backdrop {
   position: absolute; inset: 0; background: rgba(4, 6, 11, .62);
   -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
   animation: lnd-modal-fade .2s ease;
 }
 .lnd .lnd-modal {
-  position: absolute; left: 50%; transform: translate(-50%, -50%);
-  width: min(920px, calc(100% - 32px)); max-height: 90vh;
+  position: relative;
+  width: min(920px, calc(100% - 32px)); max-height: min(90svh, 900px);
   display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
   overflow: hidden; border-radius: 18px;
   background: rgba(19, 23, 32, .72);
@@ -243,7 +262,6 @@ export const LANDING_CSS = `
   box-shadow: 0 40px 90px rgba(0, 0, 0, .6);
   animation: lnd-modal-pop .22s cubic-bezier(.2, .8, .3, 1);
 }
-.lnd.embedded .lnd-modal { max-height: calc(var(--lnd-vh, 720px) - 40px); }
 .lnd .lnd-modal:not(.has-photo) { grid-template-columns: minmax(0, 1fr); width: min(600px, calc(100% - 32px)); }
 .lnd .lnd-modal-close {
   position: absolute; top: 12px; right: 12px; z-index: 3;
@@ -277,7 +295,7 @@ export const LANDING_CSS = `
 .lnd .lnd-modal-bio h4 { margin: 0 0 8px; padding-left: 10px; border-left: 3px solid var(--primary-bright); font-size: 13px; font-weight: 800; letter-spacing: -.01em; }
 .lnd .lnd-modal-bio p { margin: 0; color: #c4ccd9; font-size: 14px; line-height: 1.7; white-space: pre-line; word-break: keep-all; }
 @keyframes lnd-modal-fade { from { opacity: 0; } }
-@keyframes lnd-modal-pop { from { opacity: 0; transform: translate(-50%, calc(-50% + 10px)); } }
+@keyframes lnd-modal-pop { from { opacity: 0; transform: translateY(10px); } }
 @media (max-width: 640px) {
   .lnd .lnd-modal, .lnd .lnd-modal.has-photo { grid-template-columns: minmax(0, 1fr); width: calc(100% - 24px); }
   .lnd .lnd-modal-photo { display: none; }
@@ -384,7 +402,7 @@ export const LANDING_CSS = `
 
 @media (max-width: 760px) {
   .lnd .hero-inner { width: min(100% - 32px, 980px); padding-bottom: 150px; }
-  .lnd .hero h1 { font-size: clamp(38px, 13vw, 66px); }
+  .lnd .hero h1, .lnd .hero h2 { font-size: clamp(38px, 13vw, 66px); }
   .lnd .hero-subtitle { font-size: 17px; }
   .lnd .hero-meta { left: 50%; bottom: 116px; transform: translateX(-50%); width: 100%; text-align: center; font-size: 15px; }
   .lnd .hero-cta { left: 50%; right: auto; bottom: 36px; width: min(100%, 320px); transform: translateX(-50%); }
