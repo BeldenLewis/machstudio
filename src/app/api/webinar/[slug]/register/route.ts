@@ -37,7 +37,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     return NextResponse.json({ error: "사전등록이 마감됐어요" }, { status: 400, headers: CORS_HEADERS });
   }
 
-  const body = await request.json();
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "요청 형식이 올바르지 않아요" }, { status: 400, headers: CORS_HEADERS });
+  }
 
   // 허니팟 — 봇이 자동완성하는 hidden 필드. 값이 들어오면 봇으로 간주.
   // 200 응답으로 봇이 재시도하지 못하게.
@@ -49,10 +52,35 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     );
   }
   const { name, phone, email, company, department, jobTitle, industry, agreeMarketing, agreePrivacy, memo, customFields } = body;
+
+  // 길이 상한 — 예전엔 사용자 입력만 무캡이라 IP 하나로 분당 수십 MB 를 DB 에 밀어넣을 수 있었고
+  // 등록자 목록·CSV 도 함께 망가졌다(userAgent·UTM 은 이미 캡이 있었다).
+  const TEXT_MAX = 200;
+  const MEMO_MAX = 2000;
+  const tooLong = (v: unknown, max: number) => typeof v === "string" && v.length > max;
+  if (
+    tooLong(name, TEXT_MAX) || tooLong(phone, 50) || tooLong(email, 320) ||
+    tooLong(company, TEXT_MAX) || tooLong(department, TEXT_MAX) ||
+    tooLong(jobTitle, TEXT_MAX) || tooLong(industry, TEXT_MAX) || tooLong(memo, MEMO_MAX)
+  ) {
+    return NextResponse.json({ error: "입력이 너무 길어요" }, { status: 400, headers: CORS_HEADERS });
+  }
   const normalizedPhone = normalizePhone(phone);
   const normalizedEmail = normalizeEmail(email);
   const fields = normalizeRegistrationForm(webinar.config).fields;
-  const customAnswers = typeof customFields === "object" && customFields !== null ? customFields as Record<string, unknown> : {};
+  const customAnswersRaw = typeof customFields === "object" && customFields !== null && !Array.isArray(customFields)
+    ? (customFields as Record<string, unknown>)
+    : {};
+  // config 에 정의된 키만 받는다 — 예전엔 임의 키·중첩 객체가 그대로 memo 컬럼에 직렬화됐다.
+  const allowedCustomKeys = new Set(fields.filter((f) => !f.system).map((f) => f.key));
+  const customAnswers: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(customAnswersRaw)) {
+    if (!allowedCustomKeys.has(key)) continue;
+    if (value === null || value === undefined) continue;
+    if (typeof value === "object") continue; // 중첩 객체·배열 거부
+    const text = String(value);
+    customAnswers[key] = text.length > MEMO_MAX ? text.slice(0, MEMO_MAX) : text;
+  }
 
   for (const field of fields) {
     if (!field.required) continue;
@@ -156,7 +184,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     );
   }
 
-  const registration = await prisma.webinarRegistration.create({
+  // DB 부분 유니크 인덱스(webinarId+phone / webinarId+lower(email))가 경쟁 조건을 막는다.
+  // 위 findFirst 는 같은 순간의 동시 제출을 못 잡으므로(읽고-쓰기 사이 틈), P2002 를 중복으로 처리한다.
+  let registration;
+  try {
+    registration = await prisma.webinarRegistration.create({
     data: {
       webinarId: webinar.id,
       name: name.trim(),
@@ -174,6 +206,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       registeredStatus: statusInfo.status,
     },
   });
+  } catch (e) {
+    const code = (e as { code?: string }).code;
+    if (code === "P2002") {
+      const dupField = normalizedPhone ? "연락처" : "이메일";
+      return NextResponse.json(
+        {
+          error: `이미 사전등록된 ${dupField}예요. 웨비나 당일 이 ${dupField}로 바로 입장할 수 있어요.`,
+          duplicateField: normalizedPhone ? "phone" : "email",
+          alreadyRegistered: true,
+        },
+        { status: 409, headers: CORS_HEADERS },
+      );
+    }
+    throw e;
+  }
 
   return NextResponse.json({ registration: { id: registration.id, name: registration.name }, ...(videoId ? { youtubeId: videoId } : {}) }, {
     status: 201,

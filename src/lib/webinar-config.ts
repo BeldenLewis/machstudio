@@ -162,7 +162,10 @@ export function safeHttpUrl(value: unknown): string {
   }
 }
 
-export function normalizeLandingPageConfig(config: unknown): LandingPageConfig {
+export function normalizeLandingPageConfig(
+  config: unknown,
+  opts?: { keepEmptyRows?: boolean },
+): LandingPageConfig {
   const c = config && typeof config === "object" && !Array.isArray(config) ? (config as Record<string, unknown>) : {};
   const lp = c.landingPage && typeof c.landingPage === "object" && !Array.isArray(c.landingPage)
     ? (c.landingPage as Record<string, unknown>)
@@ -170,8 +173,12 @@ export function normalizeLandingPageConfig(config: unknown): LandingPageConfig {
   const obj = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
   const bool = (v: unknown, def: boolean) => (typeof v === "boolean" ? v : def);
   const str = (v: unknown) => (typeof v === "string" ? v : "");
+  // keep 필터는 **공개 렌더용**이다(제목 없는 행을 시청자에게 그리지 않는다).
+  // 어드민 편집에서 이걸 그대로 쓰면, 아직 제목을 안 쓴 행이 리마운트 때 사라지고
+  // 다음 자동저장이 그 배열을 그대로 덮어써 DB 에서도 영구 소실된다 → keepEmptyRows 로 끈다.
+  const keepEmpty = opts?.keepEmptyRows === true;
   const rows = <T>(v: unknown, map: (r: Record<string, unknown>) => T, keep: (t: T) => boolean): T[] =>
-    Array.isArray(v) ? (v as unknown[]).map((r) => map(obj(r))).filter(keep) : [];
+    Array.isArray(v) ? (v as unknown[]).map((r) => map(obj(r))).filter((t) => keepEmpty || keep(t)) : [];
 
   const mediaRaw = obj(lp.heroMedia);
   const mediaUrl = safeHttpUrl(mediaRaw.url);

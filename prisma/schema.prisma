@@ -597,6 +597,10 @@ model WebinarRegistration {
   attendanceSegments WebinarAttendanceSegment[]
 
   @@index([webinarId, submittedAt(sort: Desc)])
+  // 동시 제출로 인한 중복 행 방지 — NULL 은 제외(전화만/이메일만 등록 허용),
+  // 이메일은 lower() 로 대소문자 무시. Prisma 가 부분/함수 인덱스를 표현하지 못해
+  // 실제 인덱스는 SQL 로 생성했다: WebinarRegistration_webinarId_phone_key,
+  // WebinarRegistration_webinarId_email_lower_key (register 라우트가 P2002 를 409 로 처리).
   @@index([webinarId, phone])
   @@index([webinarId, email])
   @@index([webinarId, utmSource])
