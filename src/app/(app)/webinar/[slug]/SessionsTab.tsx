@@ -6,6 +6,7 @@ import { Clock, Edit3, ImagePlus, Link2, Loader2, Plus, Save, Trash2, X } from "
 import { toast } from "sonner";
 import { useUndoableDelete } from "@/components/ui/use-undoable-delete";
 import { SPEAKER_PHOTO_ACCEPT, validateSpeakerPhoto } from "@/lib/webinar-speaker-photo";
+import { cleanSessionText, isRealSession } from "@/lib/webinar-sessions";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -111,8 +112,11 @@ function SessionFormFields({
   return (
     <div className="grid grid-cols-12 gap-3">
       <div className="col-span-4 sm:col-span-2">
-        <label className="text-xs text-muted-foreground mb-1 block">번호</label>
+        {/* "번호"가 아니라 "순서" — 휴식·Q&A 도 이 번호를 차지한다(진행 순서라서).
+            시청자에게 보이는 "세션 n"은 실제 세션만 다시 센 값이라 이 숫자와 다를 수 있다. */}
+        <label htmlFor="ses-order" className="text-xs text-muted-foreground mb-1 block">순서</label>
         <input
+          id="ses-order"
           type="number"
           min={1}
           value={form.number}
@@ -279,6 +283,7 @@ export default function SessionsTab({
   const sortedSessions = [...sessions]
     .filter((s) => !pendingDeleteIds.has(s.id))
     .sort((a, b) => a.number - b.number);
+  const realSessionCount = sortedSessions.filter(isRealSession).length;
 
   const resetCreate = () => {
     setCreateForm({ ...emptyForm, number: String((sortedSessions.at(-1)?.number ?? 0) + 1) });
@@ -363,7 +368,10 @@ export default function SessionsTab({
     if (editingId === session.id) setEditingId(null);
     undoableRemove({
       key: session.id,
-      message: `세션 ${session.number}을(를) 삭제했어요`,
+      // 휴식·Q&A 를 "세션 3" 이라고 부르지 않는다 — 유형 이름으로 말한다
+      message: isRealSession(session)
+        ? `세션 ${session.number}을(를) 삭제했어요`
+        : `${TYPE_LABEL[session.type ?? ""] ?? "항목"}을(를) 삭제했어요`,
       onOptimistic: () => setPendingDeleteIds((prev) => new Set(prev).add(session.id)),
       onUndo: () => setPendingDeleteIds((prev) => { const n = new Set(prev); n.delete(session.id); return n; }),
       commit: async () => {
@@ -378,9 +386,21 @@ export default function SessionsTab({
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-4">
       <div className="flex items-center justify-between gap-4">
-        <p className="text-sm text-muted-foreground">
-          라이브 페이지와 임베드 코드에 표시될 세션 아젠다를 관리해요
-        </p>
+        <div className="min-w-0">
+          <p className="text-sm text-muted-foreground">
+            라이브 페이지와 임베드 코드에 표시될 세션 아젠다를 관리해요
+          </p>
+          {/* 세션 수와 진행 순서 항목 수를 나눠 보여준다 — 휴식·Q&A 는 순서를 차지하지만 세션이 아니다.
+              둘이 다를 때만 뒤 문구를 붙여, 휴식이 없는 웨비나에선 군더더기가 없다. */}
+          {sortedSessions.length > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground/70">
+              세션 {realSessionCount}개
+              {sortedSessions.length !== realSessionCount && (
+                <> · 진행 순서 {sortedSessions.length}개 (휴식·Q&amp;A 포함)</>
+              )}
+            </p>
+          )}
+        </div>
         <motion.button
           whileHover={{ y: -1 }}
           whileTap={{ scale: 0.96 }}
@@ -482,7 +502,17 @@ export default function SessionsTab({
                 </div>
               ) : (
                 <div className="flex items-start gap-4">
-                  <div className="w-9 h-9 rounded-xl bg-violet-500/10 text-violet-500 flex items-center justify-center text-sm font-semibold shrink-0">
+                  {/* 진행 순서 번호(1..N) — 휴식·Q&A 도 순서를 차지하므로 번호는 그대로 보여준다.
+                      다만 강조색은 실제 세션만. 휴식·Q&A 까지 같은 보라 배지를 달면
+                      "세션 번호"처럼 읽혀서 세션이 6개인 줄 알게 된다. */}
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-semibold shrink-0 ${
+                      isRealSession(session)
+                        ? "bg-violet-500/10 text-violet-500"
+                        : "bg-secondary text-muted-foreground/70"
+                    }`}
+                    title={isRealSession(session) ? `진행 순서 ${session.number}` : `진행 순서 ${session.number} · 세션 아님`}
+                  >
                     {session.number}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -497,8 +527,13 @@ export default function SessionsTab({
                         {session.startTime} - {session.endTime}
                       </span>
                     </div>
-                    {session.speaker && <p className="text-xs text-muted-foreground mt-1">{session.speaker}</p>}
-                    {session.description && <p className="text-xs text-muted-foreground mt-1.5">{session.description}</p>}
+                    {/* cleanSessionText: 레거시 행에 문자열 "null" 이 남아 있어도 회색 "null" 이 안 찍히게 */}
+                    {cleanSessionText(session.speaker) && (
+                      <p className="text-xs text-muted-foreground mt-1">{cleanSessionText(session.speaker)}</p>
+                    )}
+                    {cleanSessionText(session.description) && (
+                      <p className="text-xs text-muted-foreground mt-1.5">{cleanSessionText(session.description)}</p>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <motion.button
