@@ -64,8 +64,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "수정할 항목이 없어요" }, { status: 400 });
   }
 
+  // sourceId 로 반드시 함께 스코프한다. authorize(id) 는 "이 소스의 워크스페이스 멤버인가"만 보므로,
+  // recordId 만으로 update 하면 자기 소스 id + 남의 레코드 id 조합으로 다른 워크스페이스의
+  // 레코드를 수정할 수 있다(활동 로그는 공격자 워크스페이스에 남아 피해자는 알지도 못한다).
+  // GET 은 이미 findFirst({ id, sourceId }) 로 걸러 왔는데 PATCH/DELETE 만 빠져 있었다.
+  const target = await prisma.collectRecord.findFirst({
+    where: { id: recordId, sourceId: id },
+    select: { id: true },
+  });
+  if (!target) return NextResponse.json({ error: "레코드를 찾을 수 없어요" }, { status: 404 });
+
   const record = await prisma.collectRecord.update({
-    where: { id: recordId },
+    where: { id: target.id },
     data: updateData,
   });
 
@@ -85,7 +95,15 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const auth = await authorize(id, true);
   if ("error" in auth) return auth.error;
 
-  await prisma.collectRecord.delete({ where: { id: recordId } });
+  // PATCH 와 같은 이유로 sourceId 를 함께 걸어 확인한다 — 스코프 없이 지우면 남의 워크스페이스
+  // 레코드를 삭제할 수 있고, 삭제는 되돌릴 수 없다.
+  const target = await prisma.collectRecord.findFirst({
+    where: { id: recordId, sourceId: id },
+    select: { id: true },
+  });
+  if (!target) return NextResponse.json({ error: "레코드를 찾을 수 없어요" }, { status: 404 });
+
+  await prisma.collectRecord.delete({ where: { id: target.id } });
 
   await logActivity({
     workspaceId: auth.source.workspaceId,
