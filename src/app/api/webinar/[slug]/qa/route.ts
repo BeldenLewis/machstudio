@@ -2,13 +2,22 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimitAsync } from "@/lib/ratelimit";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
+import { normalizeQaMode } from "@/lib/webinar-config";
 import { maskName } from "@/lib/mask";
 
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
 
-  const webinar = await prisma.webinar.findUnique({ where: { slug }, select: { id: true } });
+  const webinar = await prisma.webinar.findUnique({ where: { slug }, select: { id: true, components: true } });
   if (!webinar) return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404 });
+
+  // 폐쇄형이면 질문은 주최자만 본다 → 목록을 내보내지 않는다.
+  // live-state 만 막아선 안 된다. 이 라우트는 Q&A 모달이 1회 로드하는 별도 경로이고
+  // 인증도 없어서(CORS *) 열어 두면 폐쇄형이 이름만 폐쇄형이 된다.
+  const qaMode = normalizeQaMode(webinar.components);
+  if (qaMode === "closed") {
+    return NextResponse.json({ questions: [], qaMode }, { headers: { "Access-Control-Allow-Origin": "*" } });
+  }
 
   // 공개 GET — 라이브 Q&A 보드: 미채택(dismissed) 제외한 질문을 추천순으로.
   // 이름은 서버에서 가운데 마스킹해 원본 PII 는 내보내지 않는다.
@@ -20,7 +29,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   });
   const questions = rows.map((q) => ({ ...q, name: q.name ? maskName(q.name) : null }));
 
-  return NextResponse.json({ questions }, {
+  return NextResponse.json({ questions, qaMode }, {
     headers: { "Access-Control-Allow-Origin": "*" },
   });
 }

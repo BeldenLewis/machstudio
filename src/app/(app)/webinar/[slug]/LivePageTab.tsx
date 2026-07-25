@@ -31,6 +31,56 @@ function Toggle({ checked, onChange, label, desc }: { checked: boolean; onChange
   );
 }
 
+/**
+ * 이름 있는 모드 두 개 중 하나를 고르는 컨트롤. on/off 가 아니라 "어느 쪽인가"라서
+ * Toggle 대신 라디오로 둔다 — 토글은 꺼진 쪽이 무엇인지 라벨로 드러나지 않는다.
+ * 선택 상태는 외곽선이 아니라 그림자로 마감(제품 원칙).
+ */
+function ModeChoice<T extends string>({ value, onChange, label, desc, options }: {
+  value: T;
+  onChange: (v: T) => void;
+  label: string;
+  desc?: string;
+  options: { value: T; title: string; desc: string }[];
+}) {
+  return (
+    <div>
+      <p className="text-sm font-medium">{label}</p>
+      {desc && <p className="text-[11px] text-muted-foreground/70 mt-0.5 leading-relaxed">{desc}</p>}
+      <div className="mt-2.5 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={label}>
+        {options.map((o) => {
+          const on = value === o.value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => onChange(o.value)}
+              className={`rounded-xl p-3 text-left transition-all ${
+                on ? "bg-violet-500/12 shadow-[0_0_0_1.5px_rgb(139_92_246)]" : "bg-secondary/40 hover:bg-secondary/70"
+              }`}
+            >
+              <span className="flex items-center gap-1.5 text-[13px] font-semibold">
+                <span
+                  aria-hidden
+                  className={`grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full transition-colors ${
+                    on ? "bg-violet-500" : "border border-border bg-transparent"
+                  }`}
+                >
+                  {on && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                </span>
+                {o.title}
+              </span>
+              <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground/80">{o.desc}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // CTA 카드 편집 폼 (여러 장 지원)
 // 버튼 연결: 링크(URL) 또는 폼(자체 설문 = 커스텀 폼 — 문의·신청 등), 열기 방식: 새 창/모달
 type CtaBtnAction = "url" | "form";
@@ -123,6 +173,7 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
     lpContact: (livePage.infoContact as string) ?? "",
     lpNotice: (livePage.notice as string) ?? "",
     chatEnabled: components.chatEnabled === true,
+    qaMode: components.qaMode === "closed" ? ("closed" as const) : ("open" as const),
     notifyEnabled: notify.enabled === true,
     notifyKicker: (notify.kicker as string) ?? "",
     notifyTitle: (notify.title as string) ?? "",
@@ -221,7 +272,7 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
           },
           theme,
           // 다른 components 키(allowLiveRegistration 등)는 보존
-          components: { chatEnabled: form.chatEnabled },
+          components: { chatEnabled: form.chatEnabled, qaMode: form.qaMode },
         }),
       });
       if (!res.ok) { toast.error("자동 저장 실패 — 잠시 후 다시 시도돼요", { id: "autosave-error" }); return false; }
@@ -439,13 +490,25 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
               <h3 className="text-sm font-semibold">참여 구성</h3>
               <p className="mt-1 text-xs text-muted-foreground">시청 화면 참여 박스(Q&amp;A·채팅·세션) 구성이에요.</p>
             </div>
-            <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+            <div className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-4">
               <Toggle
                 checked={form.chatEnabled}
                 onChange={(v) => setForm((f) => ({ ...f, chatEnabled: v }))}
                 label="채팅 탭 사용"
                 desc="끄면 참여 박스에서 채팅 탭이 사라져요. 라이브 중 메시지 관리는 운영 → 라이브 콘솔 → 실시간 채팅에서."
               />
+              <div className="border-t border-border/60 pt-4">
+                <ModeChoice
+                  value={form.qaMode}
+                  onChange={(v) => setForm((f) => ({ ...f, qaMode: v }))}
+                  label="Q&A 공개 범위"
+                  desc="라이브 중에도 운영 → 라이브 콘솔에서 바꿀 수 있어요."
+                  options={[
+                    { value: "open", title: "오픈형", desc: "올라온 질문을 시청자끼리 보고 추천할 수 있어요." },
+                    { value: "closed", title: "폐쇄형", desc: "질문은 주최자만 봐요. 시청자에겐 질문하기 입력만 보여요." },
+                  ]}
+                />
+              </div>
             </div>
           </section>
 

@@ -58,6 +58,24 @@ export function isValidEmail(email: string): boolean {
   return EMAIL_REGEX.test(email) && email.length <= 320;
 }
 
+// ── Q&A 공개 범위 ──
+// components.qaMode 에 저장(chatEnabled 와 같은 자리 — 라이브 중에도 콘솔에서 바꾸는 운영 스위치라서).
+//  open   = 시청자끼리 올라온 질문을 서로 보고 추천할 수 있다 (기존 동작)
+//  closed = 질문은 주최자만 본다. 시청자에겐 질문하기 입력만 남는다.
+// 기본값은 open — 기존 웨비나의 동작이 조용히 바뀌면 안 된다.
+export type QaMode = "open" | "closed";
+
+/**
+ * 폐쇄형은 **서버에서** 막아야 한다. 뷰어에서 목록만 숨기면 /live-state 응답과 공개 GET /qa 에
+ * 남의 질문이 그대로 실려 나가므로(개발자도구로 그대로 보인다) UI 게이팅은 게이팅이 아니다.
+ */
+export function normalizeQaMode(components: unknown): QaMode {
+  const c = components && typeof components === "object" && !Array.isArray(components)
+    ? (components as Record<string, unknown>)
+    : {};
+  return c.qaMode === "closed" ? "closed" : "open";
+}
+
 // ── 라이브 페이지 화면(대기·입장·종료) 구성 — 섹션별 on/off + 자료·넥스트 데이터 ──
 // config.livePage 에 저장(JSON blob, 마이그레이션 불필요). 데이터가 없으면 토글이 켜져 있어도 뷰어에서 자동 숨김.
 export interface LiveResource { title: string; meta: string; url: string }

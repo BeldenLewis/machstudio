@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimitAsync } from "@/lib/ratelimit";
+import { normalizeQaMode } from "@/lib/webinar-config";
 
 const CORS = { "Access-Control-Allow-Origin": "*" };
 
@@ -20,8 +21,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     );
   }
 
-  const webinar = await prisma.webinar.findUnique({ where: { slug }, select: { id: true } });
+  const webinar = await prisma.webinar.findUnique({ where: { slug }, select: { id: true, components: true } });
   if (!webinar) return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404, headers: CORS });
+
+  // 폐쇄형은 보드가 없으니 추천도 없다. UI 가 안 그려 준다고 끝이 아니라 — qaId 를 아는 상태로
+  // (예: 오픈형이던 동안 받아 둔 목록) 직접 호출해 표를 넣는 걸 막는다.
+  if (normalizeQaMode(webinar.components) === "closed") {
+    return NextResponse.json({ error: "이 웨비나는 질문 추천을 받지 않아요." }, { status: 403, headers: CORS });
+  }
 
   const body = await request.json().catch(() => ({}));
 

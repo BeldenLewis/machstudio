@@ -124,6 +124,7 @@ interface LiveStateResponse {
   entryOpen: boolean;
   serverNow: string;
   chatEnabled?: boolean;
+  qaMode?: "open" | "closed";
   youtubeId?: string | null;
   viewerCount?: number | null;
   announcements: Announcement[];
@@ -166,6 +167,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [isSendingChat, setIsSendingChat] = useState(false);
   const [chatError, setChatError] = useState("");
   const [chatEnabledLive, setChatEnabledLive] = useState<boolean | null>(null); // 라이브 중 /live-state 로 동기화
+  const [qaModeLive, setQaModeLive] = useState<"open" | "closed" | null>(null); // 라이브 중 Q&A 공개범위 전환 반영
   const [votedQa, setVotedQa] = useState<Set<string>>(() => new Set()); // 세션 내 추천한 질문
   const [activeTab, setActiveTab] = useState<string>("qa");
   const chatCursorRef = useRef<string | null>(null);
@@ -297,6 +299,9 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
   // 채팅 활성 여부 — 초기값은 /info(components.chatEnabled), 라이브 중엔 /live-state 의 chatEnabled 로 동기화
   const chatEnabled = chatEnabledLive ?? ((webinar?.components ?? {})["chatEnabled"] === true);
+  // Q&A 공개 범위 — 같은 방식(초기값 /info, 라이브 중 /live-state). closed = 질문은 주최자만 본다.
+  const qaMode: "open" | "closed" =
+    qaModeLive ?? (((webinar?.components ?? {})["qaMode"] === "closed") ? "closed" : "open");
 
   // 통합 라이브 폴링 — 공지·답변 Q&A·채팅·투표·팝업·Tally·상태를 한 번의 요청으로 받아 egress 절감.
   // 예전엔 announcements/qa/chat 3개 + LivePushLayer 자체 3개로 분산 폴링했다.
@@ -306,7 +311,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     const gen = ++liveReqRef.current;
     try {
       const useChat = chatEnabled && activeTab === "chat" && !!registrationId;
-      const useQa = activeTab === "qa" && !!registrationId; // Q&A 탭 볼 때만 보드 100행 요청(egress 절감)
+      // Q&A 탭 볼 때만 보드 100행 요청(egress 절감). 폐쇄형은 보드가 없으니 아예 요청하지 않는다.
+      const useQa = activeTab === "qa" && !!registrationId && qaMode === "open";
       const after = useChat && !fullChat ? chatCursorRef.current : null;
       const params = new URLSearchParams();
       if (registrationId) params.set("registrationId", registrationId);
@@ -326,7 +332,10 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       setViewerCount(data.viewerCount ?? null);
 
       setAnnouncements(data.announcements ?? []);
-      if (data.answeredQA) setAnsweredQA(data.answeredQA);
+      // 라이브 중 오픈형 → 폐쇄형으로 바뀌면 이미 받아 둔 목록을 지운다.
+      // (폐쇄형에선 answeredQA 가 아예 안 오므로 아래 if 만으로는 옛 목록이 화면에 남는다)
+      if (data.qaMode === "closed") setAnsweredQA([]);
+      else if (data.answeredQA) setAnsweredQA(data.answeredQA);
       setPushedQuestion(data.pushedQuestion ?? null);
       setPinnedMessage(data.pinnedMessage ?? null);
       setPushPopup(data.popup ?? null);
@@ -337,6 +346,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       setIsTrulyLive(data.status === "live");
       // 채팅 on/off 를 라이브 중에도 반영 — 호스트가 세션 중 토글하면 다음 폴에서 탭 노출/숨김이 갱신됨
       if (typeof data.chatEnabled === "boolean") setChatEnabledLive(data.chatEnabled);
+      if (data.qaMode === "open" || data.qaMode === "closed") setQaModeLive(data.qaMode);
       // 라이브 중 종료 전환 — 종료되면 종료 화면으로. view!=="live" 가 되어 이 폴링도 자동 중단된다.
       if (data.status === "ended") setView("ended");
       // 운영자가 라이브를 등록/대기로 되돌린 경우(수동 override) — 시청자를 라이브에 가두지 않고 대기 화면으로.
@@ -362,7 +372,9 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     } catch {
       /* 폴링 중 일시적 네트워크 오류는 다음 주기에 재시도 */
     }
-  }, [slug, registrationId, chatEnabled, activeTab, videoId]);
+    // qaMode: useQa 판단에 쓰인다. 빠뜨리면 폐쇄형→오픈형 전환 시 콜백이 옛 값을 계속 봐서
+    // 보드를 영원히 요청하지 않는다(목록이 안 나옴).
+  }, [slug, registrationId, chatEnabled, activeTab, videoId, qaMode]);
 
   const handleSendChat = async () => {
     if (isPreviewUrl()) return;
@@ -1044,8 +1056,10 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             sent: qaSent,
             error: qaError,
             answered: answeredQA,
-            onVote: handleVoteQA,
+            // 폐쇄형은 목록이 없어 추천 대상도 없다 → 핸들러를 아예 넘기지 않는다
+            onVote: qaMode === "closed" ? undefined : handleVoteQA,
             votedIds: [...votedQa],
+            mode: qaMode,
           }}
           chat={chatEnabled ? {
             messages: chatMessages,

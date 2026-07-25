@@ -140,6 +140,7 @@ export default function LivePreviewPage() {
   const [question, setQuestion] = useState("");
   const [selectedSession, setSelectedSession] = useState<number | null>(null);
   const [chatOn, setChatOn] = useState(true);
+  const [qaMode, setQaMode] = useState<"open" | "closed">("open");
 
   const target = useMemo(() => new Date(Date.now() + (2 * 86400 + 5 * 3600 + 37 * 60) * 1000).toISOString(), []);
   // 라이브 프리뷰에선 세션이 진행 중으로 보이게 서버시각을 행사 중으로 고정.
@@ -187,6 +188,10 @@ export default function LivePreviewPage() {
           style={{ marginLeft: "auto", padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.16)", fontSize: 12, fontWeight: 700, cursor: "pointer", background: chatOn ? t.accent : "transparent", color: "#fff" }}>
           채팅 {chatOn ? "ON" : "OFF"}
         </button>
+        <button onClick={() => setQaMode((v) => (v === "open" ? "closed" : "open"))}
+          style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.16)", fontSize: 12, fontWeight: 700, cursor: "pointer", background: qaMode === "closed" ? t.accent : "transparent", color: "#fff" }}>
+          Q&amp;A {qaMode === "open" ? "오픈형" : "폐쇄형"}
+        </button>
         {/* 목업일 때만 테마 토글 노출 — 실제 웨비나는 저장된 테마를 그대로 사용 */}
         {!real && (
           <div style={{ display: "flex", gap: 4 }}>
@@ -216,7 +221,7 @@ export default function LivePreviewPage() {
         <LiveContentStk
           webinar={webinarData} accent={t.accent} text={t.text} surface={t.surface} youtubeId={null}
           serverNowMs={previewNowMs} chatEnabled={chatOn}
-          qa={{ sessions: webinarData.sessions, question, setQuestion, selectedSession, setSelectedSession, onSend: () => {}, isSending: false, sent: false, answered: ANSWERED, onVote: () => {}, votedIds: [] }}
+          qa={{ sessions: webinarData.sessions, question, setQuestion, selectedSession, setSelectedSession, onSend: () => {}, isSending: false, sent: false, answered: ANSWERED, onVote: qaMode === "closed" ? undefined : () => {}, votedIds: [], mode: qaMode }}
           chat={chatOn ? { messages: CHAT, input: chatText, setInput: setChatText, onSend: () => setChatText(""), isSending: false } : undefined}
           notifyState={{ subscribed: false, onToggle: () => {}, error: "", pending: false }}
         />
