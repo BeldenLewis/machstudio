@@ -65,7 +65,14 @@ export async function POST(request: Request) {
   };
   let config: unknown = {};
   let components: unknown = undefined;
-  let clonedSessions: { number: number; type: string; title: string; speaker: string | null; speakerPhotoUrl: string | null; description: string | null; startTime: string; endTime: string }[] = [];
+  // speakerCompany·speakerBio 가 빠져 있어서, 복제하면 연사 소속·약력이 조용히 사라졌다
+  // (랜딩 세션 상세 팝업이 이 두 값을 쓴다). 세션 스키마의 텍스트 필드를 전부 싣는다.
+  let clonedSessions: {
+    number: number; type: string; title: string;
+    speaker: string | null; speakerCompany: string | null; speakerPhotoUrl: string | null;
+    description: string | null; speakerBio: string | null;
+    startTime: string; endTime: string;
+  }[] = [];
 
   // 프로젝트 간 복제 — 같은 워크스페이스의 어느 프로젝트 웨비나든 설정만 복사(일정·slug·등록자 제외).
   if (cloneFromId) {
@@ -76,7 +83,12 @@ export async function POST(request: Request) {
         config: true,
         components: true,
         sessions: {
-          select: { number: true, type: true, title: true, speaker: true, speakerPhotoUrl: true, description: true, startTime: true, endTime: true },
+          select: {
+            number: true, type: true, title: true,
+            speaker: true, speakerCompany: true, speakerPhotoUrl: true,
+            description: true, speakerBio: true,
+            startTime: true, endTime: true,
+          },
           orderBy: { number: "asc" },
         },
       },

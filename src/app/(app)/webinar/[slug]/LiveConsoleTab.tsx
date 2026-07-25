@@ -40,6 +40,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { WEBINAR_STATUS_META } from "@/lib/webinar-status";
 import { isSurveyAcceptingResponses, type SurveyQuestion } from "@/lib/webinar-survey";
 import { formatKst } from "@/lib/datetime";
+import { isRealSession } from "@/lib/webinar-sessions";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -1465,11 +1466,21 @@ function RunningOrder({ sessions, liveStartAt }: { sessions: WebinarForConsole["
             <div key={s.id} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
               <span className={`h-2 w-2 shrink-0 rounded-full ${state === "live" ? "animate-pulse bg-green-500" : state === "next" ? "bg-violet-500" : state === "done" ? "bg-muted-foreground/30" : "bg-border"}`} />
               <div className="min-w-0 flex-1">
-                <div className={`truncate text-[13px] ${state === "done" ? "text-muted-foreground" : "font-medium"}`}>{s.title}</div>
+                <div className={`flex items-center gap-1.5 text-[13px] ${state === "done" ? "text-muted-foreground" : "font-medium"}`}>
+                  <span className="truncate">{s.title}</span>
+                  {/* 휴식·Q&A 는 세션이 아니라는 걸 러닝오더에서도 알 수 있어야 한다.
+                      예전엔 휴식에 아무 표시가 없어 운영자가 실제 세션과 구분할 수 없었다. */}
+                  {s.type === "break" && (
+                    <span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">휴식</span>
+                  )}
+                  {s.type === "qa" && (
+                    <span className="shrink-0 rounded bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">Q&amp;A</span>
+                  )}
+                </div>
                 <div className="text-[11px] tabular-nums text-muted-foreground">{s.startTime} – {s.endTime}</div>
               </div>
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${state === "live" ? "bg-green-500/10 text-green-600 dark:text-green-400" : state === "next" ? "bg-violet-500/10 text-violet-600 dark:text-violet-400" : "bg-secondary text-muted-foreground"}`}>
-                {state === "live" ? "진행 중" : state === "next" ? (s.type === "qa" ? "다음 · Q&A" : "다음") : state === "done" ? "완료" : "예정"}
+                {state === "live" ? "진행 중" : state === "next" ? "다음" : state === "done" ? "완료" : "예정"}
               </span>
             </div>
           );
@@ -1882,7 +1893,8 @@ export default function LiveConsoleTab({
 
   const hasRegistrationForm = Boolean(webinar?.config?.registrationForm);
   const hasVideo = typeof webinar?.config?.youtubeId === "string" && Boolean(webinar.config.youtubeId);
-  const hasSessions = Boolean(webinar?.sessions?.length);
+  // "세션 구성" 완료 판정은 실제 세션 기준 — 휴식·Q&A 행만 있으면 아직 구성된 게 아니다.
+  const hasSessions = (webinar?.sessions ?? []).some(isRealSession);
   const showChecklist = (status === "registration" || status === "upcoming") && (summary?.attended ?? 0) === 0;
 
   const overrideOptions: { value: WebinarStatus | null; label: string }[] = [

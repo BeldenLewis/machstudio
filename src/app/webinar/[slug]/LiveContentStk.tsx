@@ -11,6 +11,7 @@ import { motion } from "framer-motion";
 import { getYouTubeVideoId } from "@/lib/youtube";
 import { CheckCircle2, Send, Share2 } from "lucide-react";
 import { formatKst, kstDateString } from "@/lib/datetime";
+import { buildSessionNumbering, cleanSessionText, isRealSession } from "@/lib/webinar-sessions";
 import SurveyForm, { SURVEY_FORM_CSS, clearSurveyDraft } from "./SurveyForm";
 import type { SurveyAnswers, SurveyQuestion } from "@/lib/webinar-survey";
 
@@ -471,12 +472,19 @@ export default function LiveContentStk({
   // 지금/다음 세션이 있을 때만 focus — 모든 세션 종료 후엔 끝난 세션을 "다음"으로 잘못 표기하지 않는다
   const focus = activeSession ?? nextSession ?? null;
 
+  // 표시 순번·개수는 실제 세션만 센다. 예전엔 `focus.number}/${sessions.length}` 여서
+  // 중간에 휴식이 끼면 세 번째 세션이 "4/6" 으로 보였다(분자·분모 둘 다 틀림).
+  const numbering = useMemo(() => buildSessionNumbering(webinar.sessions), [webinar.sessions]);
   const metaKind = focus?.type === "break" ? "휴식" : focus?.type === "qa" ? "Q&A" : "세션";
+  const focusDisplayNo = focus ? numbering.displayNumber(focus.number) : null;
   const metaKicker = focus
-    ? `${activeSession ? "지금" : "다음"} ${metaKind} · ${focus.number}/${sessions.length}`
+    ? // 휴식·Q&A 는 번호가 없다 → "지금 휴식" 처럼 종류만 알려준다
+      `${activeSession ? "지금" : "다음"} ${metaKind}${focusDisplayNo !== null ? ` · ${focusDisplayNo}/${numbering.realCount}` : ""}`
     : null;
   const metaTitle = focus?.title || webinar.name;
   const metaDesc = focus?.description || webinar.description;
+  // 휴식엔 연사가 없고, 레거시 행은 speaker 에 문자열 "null" 이 들어 있을 수 있다.
+  const focusSpeaker = focus && focus.type !== "break" ? cleanSessionText(focus.speaker) : "";
 
   // 탭 구성 — 채팅은 chatEnabled 일 때만 노출(오프하면 탭 자체가 사라짐)
   const tabs = useMemo(
@@ -601,13 +609,13 @@ export default function LiveContentStk({
             {metaKicker && <span className="lv-kicker"><span className="d" />{metaKicker}</span>}
             <h1 className="lv-title">{metaTitle}</h1>
             {metaDesc && <p className="lv-desc">{metaDesc}</p>}
-            {focus?.speaker && (
+            {focusSpeaker && (
               <div className="lv-hosts">
                 <span className="lv-host">
                   <span className="av">
-                    {focus.speakerPhotoUrl ? <img src={focus.speakerPhotoUrl} alt={focus.speaker} /> : focus.speaker.trim().charAt(0)}
+                    {focus?.speakerPhotoUrl ? <img src={focus.speakerPhotoUrl} alt={focusSpeaker} /> : focusSpeaker.charAt(0)}
                   </span>
-                  {focus.speaker}
+                  {focusSpeaker}
                 </span>
               </div>
             )}
@@ -642,8 +650,10 @@ export default function LiveContentStk({
               {tab === "qa" && (
                 <div className="lv-panel" role="tabpanel" id="lv-panel-qa" aria-labelledby="lv-tab-qa">
                   {(() => {
-                    // 질문 대상 칩은 "세션" 유형만 (Q&A·브레이크 제외)
-                    const chipSessions = qa.sessions.filter((s) => (s.type ?? "session") === "session");
+                    // 질문 대상 칩은 "세션" 유형만 (Q&A·브레이크 제외).
+                    // 라벨은 표시 순번 — 예전엔 원본 number 라 휴식이 끼면 "세션 1, 3, 5" 처럼 건너뛰었다.
+                    // 저장·비교는 그대로 s.number (WebinarQA.sessionNumber 참조를 깨지 않으려고).
+                    const chipSessions = qa.sessions.filter(isRealSession);
                     return chipSessions.length > 1 ? (
                       <div className="lv-chips">
                         {chipSessions.map((s) => (
@@ -655,7 +665,7 @@ export default function LiveContentStk({
                             className={`lv-chip ${qa.selectedSession === s.number ? "on" : ""}`}
                             onClick={() => qa.setSelectedSession(qa.selectedSession === s.number ? null : s.number)}
                           >
-                            세션 {s.number}
+                            세션 {numbering.displayNumber(s.number) ?? s.number}
                           </motion.button>
                         ))}
                       </div>
@@ -711,7 +721,10 @@ export default function LiveContentStk({
                               <p>{q.question}</p>
                               <div className="m">
                                 {q.name && <span>{q.name}</span>}
-                                {q.sessionNumber != null && <span>· 세션 {q.sessionNumber}</span>}
+                                {/* 저장값은 원본 number → 칩 라벨과 같은 표시 순번으로 변환해 보여준다 */}
+                                {q.sessionNumber != null && (
+                                  <span>· 세션 {numbering.displayNumber(q.sessionNumber) ?? q.sessionNumber}</span>
+                                )}
                                 {q.status === "answered" && <span className="lv-ans">답변 완료</span>}
                               </div>
                             </div>
@@ -785,7 +798,9 @@ export default function LiveContentStk({
                                 {s.title}
                                 {s.type && s.type !== "session" && <span className="lv-setype">{SES_TYPE_LABEL[s.type] ?? s.type}</span>}
                               </h4>
-                              {s.speaker && <small>{s.speaker}</small>}
+                              {/* 휴식엔 연사가 없다. cleanSessionText 는 레거시 "null" 문자열도 걸러 준다
+                                  (예전엔 휴식 행 밑에 회색 "null" 이 찍혔다). */}
+                              {s.type !== "break" && cleanSessionText(s.speaker) && <small>{cleanSessionText(s.speaker)}</small>}
                               {s.status === "now" && (
                                 <div className="lv-prog"><span style={{ width: `${pct}%` }} /></div>
                               )}
