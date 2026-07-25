@@ -160,8 +160,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   const { memberId } = await request.json();
 
+  // workspaceId 확인은 필수다. 위 PATCH 는 하고 DELETE 만 빠져 있었다 → A 의 관리자가
+  // memberId 만 알면 B 의 멤버를 제거할 수 있었고, 피해자에게는 A 이름으로 제거 알림이 갔다.
   const target = await prisma.workspaceMember.findUnique({ where: { id: memberId } });
-  if (!target) return NextResponse.json({ error: "멤버를 찾을 수 없어요" }, { status: 404 });
+  if (!target || target.workspaceId !== id) {
+    return NextResponse.json({ error: "멤버를 찾을 수 없어요" }, { status: 404 });
+  }
   if (target.role === "OWNER") {
     return NextResponse.json({ error: "소유자는 제거할 수 없어요" }, { status: 403 });
   }

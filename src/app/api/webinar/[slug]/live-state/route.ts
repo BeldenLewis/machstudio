@@ -33,6 +33,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const qaMode = normalizeQaMode(components);
   const wid = webinar.id;
 
+  // registrationId 는 쿼리스트링에서 온 **자칭**이다 — "값이 있다"가 아니라 "이 웨비나의 등록자다"를
+  // 확인해야 한다. 예전엔 아래 youtubeId 만 소속을 검증하고, Q&A 보드·채팅·송출 질문·고정 메시지는
+  // truthy 검사만 했다. 그래서 ?registrationId=아무거나 로 등록자 전용 콘텐츠(질문·채팅 원문)가
+  // 미등록자에게도, 심지어 다른 웨비나 등록자에게도 그대로 나갔다.
+  // 여기서 한 번 확인하고 모든 게이트가 그 결과를 쓴다(아래 youtubeId 조회도 이걸 재사용 → 쿼리 수는 그대로).
+  const viewer = registrationId
+    ? await prisma.webinarRegistration.findFirst({
+        where: { id: registrationId, webinarId: wid },
+        select: { id: true },
+      })
+    : null;
+  const isViewer = viewer !== null;
+
   // 동시 병렬 조회 — 필요할 때만 (Q&A/채팅은 게이팅)
   const [announcements, qaRows, pollRow, popupRow, tallyRow, surveyRow, chatRows, pushedRow, pinnedRow] = await Promise.all([
     prisma.webinarAnnouncement.findMany({
@@ -40,7 +53,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       orderBy: { createdAt: "desc" },
       select: { id: true, type: true, message: true, createdAt: true },
     }),
-    registrationId && wantQa && qaMode === "open"
+    isViewer && wantQa && qaMode === "open"
       ? prisma.webinarQA.findMany({
           where: { webinarId: wid, status: { not: "dismissed" } },
           orderBy: [{ voteCount: "desc" }, { createdAt: "asc" }],
@@ -77,7 +90,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       where: { webinarId: wid, isActive: true, isOpen: true, OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }] },
       select: { id: true, title: true, pushedAt: true },
     }),
-    wantChat && chatEnabled && registrationId
+    wantChat && chatEnabled && isViewer
       ? (() => {
           const afterMs = chatAfterRaw ? Date.parse(chatAfterRaw) : NaN;
           const after = Number.isNaN(afterMs) ? null : new Date(afterMs);
@@ -94,15 +107,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
               }).then((r) => r.reverse());
         })()
       : Promise.resolve(null),
-    // Q&A '화면에 띄우기' — 현재 송출 중인 질문(웨비나당 1개). Q&A 보드처럼 registrationId 게이팅 + dismissed 제외.
-    registrationId
+    // Q&A '화면에 띄우기' — 현재 송출 중인 질문(웨비나당 1개). Q&A 보드처럼 등록자 게이팅 + dismissed 제외.
+    isViewer
       ? prisma.webinarQA.findFirst({
           where: { webinarId: wid, onScreen: true, status: { not: "dismissed" } },
           select: { id: true, question: true, name: true },
         })
       : Promise.resolve(null),
-    // 고정 채팅 메시지 — chatEnabled + registrationId 일 때만(채팅 콘텐츠).
-    chatEnabled && registrationId
+    // 고정 채팅 메시지 — chatEnabled + 확인된 등록자일 때만(채팅 콘텐츠).
+    chatEnabled && isViewer
       ? prisma.webinarChatMessage.findFirst({
           where: { webinarId: wid, isPinned: true },
           select: { id: true, name: true, message: true, isHost: true, createdAt: true },
@@ -141,13 +154,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
 
   // 영상 동기화 — 유효 등록자에게만 현재 설정을 전달한다.
   // 최초 입장 뒤 운영자가 주소를 교체하거나 비워도 다음 상태 폴에서 시청 화면이 같은 값으로 갱신된다.
+  // 소속 확인은 위에서 이미 했다 — 같은 조회를 두 번 하지 않는다.
   let youtubeId: string | null = null;
-  if (registrationId) {
-    const reg = await prisma.webinarRegistration.findFirst({ where: { id: registrationId, webinarId: wid }, select: { id: true } });
-    if (reg) {
-      const yt = (webinar.config as Record<string, unknown> | null)?.youtubeId;
-      youtubeId = typeof yt === "string" ? yt : null;
-    }
+  if (isViewer) {
+    const yt = (webinar.config as Record<string, unknown> | null)?.youtubeId;
+    youtubeId = typeof yt === "string" ? yt : null;
   }
 
   return NextResponse.json(

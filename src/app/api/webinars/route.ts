@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
+import { assertScheduleOrder, parseWebinarDate, WebinarScheduleError } from "@/lib/webinar-schedule";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -41,6 +42,19 @@ export async function POST(request: Request) {
 
   if (!workspaceId || !projectId || !name || !slug || !liveStartAt || !liveEndAt || !signupDeadline) {
     return NextResponse.json({ error: "필수 항목이 누락됐어요" }, { status: 400 });
+  }
+
+  // 존재 검증만으로는 부족하다 — 순서까지 본다(PATCH 와 같은 규칙, webinar-schedule).
+  // 종료가 시작보다 앞선 웨비나가 저장되면 상태머신이 시작 전에도 '종료'로 판정해 등록·입장이 다 막힌다.
+  let startAt: Date, endAt: Date, deadlineAt: Date;
+  try {
+    startAt = parseWebinarDate(liveStartAt, "시작 시각");
+    endAt = parseWebinarDate(liveEndAt, "종료 시각");
+    deadlineAt = parseWebinarDate(signupDeadline, "등록 마감");
+    assertScheduleOrder(startAt, endAt, deadlineAt);
+  } catch (e) {
+    if (e instanceof WebinarScheduleError) return NextResponse.json({ error: e.message }, { status: 400 });
+    throw e;
   }
 
   const membership = await prisma.workspaceMember.findUnique({
@@ -109,9 +123,9 @@ export async function POST(request: Request) {
       name,
       slug,
       description: description ?? null,
-      liveStartAt: new Date(liveStartAt),
-      liveEndAt: new Date(liveEndAt),
-      signupDeadline: new Date(signupDeadline),
+      liveStartAt: startAt,
+      liveEndAt: endAt,
+      signupDeadline: deadlineAt,
       theme: theme as never,
       config: config as never,
       ...(components !== undefined ? { components: components as never } : {}),
