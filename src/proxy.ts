@@ -70,5 +70,11 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  /**
+   * monitoring: Sentry 터널 경로(next.config 의 tunnelRoute)를 반드시 제외해야 한다.
+   * 여기 걸리면 비로그인 방문자의 POST 가 "/" 로 307 되고, 따라간 "/" 는 POST 를 안 받아 405 →
+   * **브라우저 에러 리포트가 전부 유실된다**(실측: POST /monitoring → 307 → / → 405).
+   * 시청자·랜딩 방문자는 전부 비로그인이라, 정작 봐야 할 공개 페이지 에러만 통째로 사라진다.
+   */
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|monitoring|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };
