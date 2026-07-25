@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { Download, Loader2, RefreshCw, BarChart3, MessageSquare, HelpCircle, Users } from "lucide-react";
+import { Download, Loader2, RefreshCw, BarChart3, MessageSquare, HelpCircle, Users, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { useUndoableDelete } from "@/components/ui/use-undoable-delete";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -259,6 +261,35 @@ const fmtSubmittedAt = (iso: string) =>
 function SurveyResponsesPanel({ webinarId, surveyId }: { webinarId: string; surveyId: string }) {
   const [data, setData] = useState<SurveyResponsesData | null>(null);
   const [failed, setFailed] = useState(false);
+  // 삭제 대기 중인 응답 — 낙관적으로 목록에서 감춘다(실행취소하면 되돌아온다)
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+  const { remove: undoableRemove } = useUndoableDelete();
+
+  /**
+   * 응답 삭제. 테스트 응답·중복 제출·본인 삭제 요청(개인정보 파기)을 처리할 방법이 없었다.
+   * 되돌릴 수 없는 동작이라 5초 실행취소 창을 둔다(세션·공지 삭제와 같은 방식) — 확인 모달을
+   * 한 번 더 띄우는 것보다 낫다: 실수는 즉시 되돌릴 수 있고, 의도한 삭제는 클릭 한 번으로 끝난다.
+   */
+  const deleteResponse = (r: SurveyResponseRow) => {
+    const who = r.registrant ? r.registrant.name : "익명";
+    undoableRemove({
+      key: r.id,
+      message: `${who} 응답을 삭제했어요`,
+      onOptimistic: () => setHiddenIds((prev) => new Set(prev).add(r.id)),
+      onUndo: () => setHiddenIds((prev) => { const n2 = new Set(prev); n2.delete(r.id); return n2; }),
+      commit: async () => {
+        const res = await fetch(`/api/webinars/${webinarId}/surveys/${surveyId}/responses/${r.id}`, { method: "DELETE" });
+        if (!res.ok) {
+          // 실패하면 목록에 되돌려 놓는다 — 지워진 척 남아 있으면 다시 지울 수도 없다
+          setHiddenIds((prev) => { const n2 = new Set(prev); n2.delete(r.id); return n2; });
+          toast.error("응답 삭제에 실패했어요");
+          return;
+        }
+        // 총 개수도 같이 줄인다(집계 카드는 다음 새로고침에 맞춰진다)
+        setData((prev) => (prev ? { ...prev, total: Math.max(0, prev.total - 1), responses: prev.responses.filter((x) => x.id !== r.id) } : prev));
+      },
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -302,20 +333,23 @@ function SurveyResponsesPanel({ webinarId, surveyId }: { webinarId: string; surv
   if (failed) return <p className="mt-4 border-t border-border pt-4 text-xs text-muted-foreground">개별 응답을 불러오지 못했어요. 잠시 후 다시 열어주세요.</p>;
   if (!data) return <div className="mt-4 flex justify-center border-t border-border pt-6 pb-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /></div>;
 
+  // 삭제 대기 중인 응답은 목록·개수에서 즉시 빠진다
+  const rows = data.responses.filter((r) => !hiddenIds.has(r.id));
+
   return (
     <div className="mt-4 border-t border-border pt-4">
       <div className="mb-2 flex items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground tabular-nums">
-          최근 {data.responses.length}건{data.total > data.responses.length && ` 표시 · 전체 ${n(data.total)}건 (전체는 CSV 기준 최근 ${data.responses.length}건)`}
+          최근 {rows.length}건{data.total > rows.length && ` 표시 · 전체 ${n(Math.max(data.total - hiddenIds.size, rows.length))}건 (전체는 CSV 기준 최근 ${rows.length}건)`}
         </p>
-        {data.responses.length > 0 && (
+        {rows.length > 0 && (
           <button type="button" onClick={downloadCsv} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
             <Download className="h-3.5 w-3.5" />CSV
           </button>
         )}
       </div>
 
-      {data.responses.length === 0 ? (
+      {rows.length === 0 ? (
         <p className="py-4 text-center text-xs text-muted-foreground">아직 응답이 없어요.</p>
       ) : (
         <div className="overflow-x-auto">
@@ -328,10 +362,11 @@ function SurveyResponsesPanel({ webinarId, surveyId }: { webinarId: string; surv
                 {data.questions.map((q) => (
                   <th key={q.id} className="max-w-[200px] truncate py-2 pr-4 font-medium" title={q.title}>{q.title || "(제목 없음)"}</th>
                 ))}
+                <th className="w-8 py-2 font-medium"><span className="sr-only">삭제</span></th>
               </tr>
             </thead>
             <tbody>
-              {data.responses.map((r) => (
+              {rows.map((r) => (
                 <tr key={r.id} className="border-b border-border/50 align-top last:border-0">
                   <td className="whitespace-nowrap py-2 pr-4">
                     {r.registrant ? (
@@ -350,6 +385,17 @@ function SurveyResponsesPanel({ webinarId, surveyId }: { webinarId: string; surv
                       <span className="line-clamp-3 whitespace-pre-wrap break-words">{formatAnswer(q.type, r.answers[q.id])}</span>
                     </td>
                   ))}
+                  <td className="py-2 align-middle">
+                    <button
+                      type="button"
+                      onClick={() => deleteResponse(r)}
+                      aria-label={`${r.registrant ? r.registrant.name : "익명"} 응답 삭제`}
+                      title="응답 삭제 (5초 안에 실행취소 가능)"
+                      className="rounded-lg p-1.5 text-muted-foreground/50 transition-colors hover:bg-red-500/10 hover:text-red-500"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

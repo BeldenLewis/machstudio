@@ -48,6 +48,7 @@ export type ActivityAction =
   | "webinar.session_updated"
   | "webinar.session_deleted"
   | "webinar.sessions_reordered"
+  | "webinar.survey_response_deleted"
   | "webinar.announcement_created"
   | "webinar.announcement_updated"
   | "webinar.announcement_deleted"
