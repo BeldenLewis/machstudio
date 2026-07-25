@@ -81,10 +81,21 @@ export function normalizeQaMode(components: unknown): QaMode {
 export interface LiveResource { title: string; meta: string; url: string }
 export interface LiveNextWebinar { title: string; when: string; url: string }
 
+/** 종료 화면 기본 문구 — 어드민이 비워 두면 이 값이 쓰인다(뷰어·미리보기 공통). */
+export const DEFAULT_ENDED_TITLE = "함께해주셔서\n감사합니다";
+export const DEFAULT_ENDED_DESCRIPTION =
+  "오늘 라이브는 마무리됐어요. 다시보기와 자료를 준비해 등록하신 이메일로 보내드릴게요.";
+
 export interface LivePageConfig {
   waiting: { agenda: boolean; social: boolean; calendar: boolean; share: boolean; notify: boolean };
   entry: { viewerCount: boolean };
-  ended: { replay: boolean; survey: boolean; resources: boolean; nextWebinar: boolean; share: boolean };
+  ended: {
+    replay: boolean; survey: boolean; resources: boolean; nextWebinar: boolean; share: boolean;
+    /** 종료 화면 인사말. 빈 문자열이면 DEFAULT_ENDED_TITLE. 줄바꿈을 그대로 살려 렌더한다. */
+    title: string;
+    /** 인사말 아래 설명. 빈 문자열이면 DEFAULT_ENDED_DESCRIPTION. */
+    description: string;
+  };
   resources: LiveResource[];
   nextWebinar: LiveNextWebinar | null;
 }
@@ -124,6 +135,10 @@ export function normalizeLivePageConfig(config: unknown): LivePageConfig {
       resources: bool(en.resources, false), // 자료는 파일이 없을 수 있어 기본 OFF
       nextWebinar: bool(en.nextWebinar, false), // 다음 웨비나 없을 수 있어 기본 OFF
       share: bool(en.share, true),
+      // 문구는 기본값을 여기서 채우지 않는다. 빈 값을 그대로 통과시켜 뷰어가 기본 문구를 쓰게 해야,
+      // 나중에 기본 문구를 고치면 "저장 안 한 웨비나"에도 같이 반영된다(저장 시점 값이 굳지 않게).
+      title: typeof en.title === "string" ? en.title : "",
+      description: typeof en.description === "string" ? en.description : "",
     },
     resources,
     nextWebinar,

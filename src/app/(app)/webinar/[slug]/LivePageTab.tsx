@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
-import { normalizeLivePageConfig, type LivePageConfig, type LiveResource, type LiveNextWebinar } from "@/lib/webinar-config";
+import {
+  normalizeLivePageConfig, DEFAULT_ENDED_TITLE, DEFAULT_ENDED_DESCRIPTION,
+  type LivePageConfig, type LiveResource, type LiveNextWebinar,
+} from "@/lib/webinar-config";
 import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
 import { getYouTubeVideoId } from "@/lib/youtube";
 
@@ -193,7 +196,11 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
   const [resources, setResources] = useState<LiveResource[]>(() => normalizeLivePageConfig(webinar.config).resources);
   const [nextWeb, setNextWeb] = useState<LiveNextWebinar>(() => normalizeLivePageConfig(webinar.config).nextWebinar ?? { title: "", when: "", url: "" });
   const setW = (k: keyof LivePageConfig["waiting"], v: boolean) => setScreens((s) => ({ ...s, waiting: { ...s.waiting, [k]: v } }));
-  const setEn = (k: keyof LivePageConfig["ended"], v: boolean) => setScreens((s) => ({ ...s, ended: { ...s.ended, [k]: v } }));
+  // ended 는 토글(boolean)과 문구(string)가 섞여 있어 세터를 나눈다 — 한 세터로 두면 타입이 풀린다.
+  const setEn = (k: "replay" | "survey" | "resources" | "nextWebinar" | "share", v: boolean) =>
+    setScreens((s) => ({ ...s, ended: { ...s.ended, [k]: v } }));
+  const setEnText = (k: "title" | "description", v: string) =>
+    setScreens((s) => ({ ...s, ended: { ...s.ended, [k]: v } }));
 
   const updateCta = (i: number, patch: Partial<CtaFormCard>) =>
     setCtaCards((prev) => prev.map((c, j) => (j === i ? { ...c, ...patch } : c)));
@@ -583,6 +590,40 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
       {/* ══════════ 종료 화면 ══════════ */}
       {section === "ended" && (
         <>
+          {/* 문구를 화면 구성보다 위에 둔다 — 종료 화면에서 시청자가 가장 먼저 읽는 부분이라
+              편집 순서도 화면 순서와 같게 맞춘다. */}
+          <section className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold">인사말</h3>
+              <p className="mt-1 text-xs text-muted-foreground">종료 화면 맨 위에 크게 보이는 문구예요. 비우면 기본 문구가 쓰여요.</p>
+            </div>
+            <div className="space-y-2">
+              <div>
+                <label htmlFor="ended-title" className="mb-1 block text-xs text-muted-foreground">제목</label>
+                <textarea
+                  id="ended-title"
+                  rows={2}
+                  value={screens.ended.title}
+                  onChange={(e) => setEnText("title", e.target.value)}
+                  placeholder={DEFAULT_ENDED_TITLE}
+                  className={`${inputCls} resize-y`}
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">줄바꿈한 위치에서 그대로 줄이 나뉘어요.</p>
+              </div>
+              <div>
+                <label htmlFor="ended-desc" className="mb-1 block text-xs text-muted-foreground">설명</label>
+                <textarea
+                  id="ended-desc"
+                  rows={2}
+                  value={screens.ended.description}
+                  onChange={(e) => setEnText("description", e.target.value)}
+                  placeholder={DEFAULT_ENDED_DESCRIPTION}
+                  className={`${inputCls} resize-y`}
+                />
+              </div>
+            </div>
+          </section>
+
           <section className="space-y-3">
             <div>
               <h3 className="text-sm font-semibold">화면 구성</h3>
