@@ -1,11 +1,14 @@
 "use client";
 
-import { useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Clock, Edit3, ImagePlus, Link2, Loader2, Plus, Save, Trash2, X } from "lucide-react";
+import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { Clock, Edit3, GripVertical, ImagePlus, Link2, Loader2, Plus, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useUndoableDelete } from "@/components/ui/use-undoable-delete";
-import { SPEAKER_PHOTO_ACCEPT, validateSpeakerPhoto } from "@/lib/webinar-speaker-photo";
+import { SPEAKER_PHOTO_ACCEPT, SPEAKER_PHOTO_MAX_LABEL, validateSpeakerPhoto } from "@/lib/webinar-speaker-photo";
 import { cleanSessionText, isRealSession } from "@/lib/webinar-sessions";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
@@ -71,6 +74,44 @@ function toForm(session: WebinarSession): SessionForm {
     startTime: session.startTime,
     endTime: session.endTime,
   };
+}
+
+/**
+ * 드래그 가능한 세션 행. 손잡이(GripVertical)에만 드래그를 걸어, 카드 아무 데나 잡아도
+ * 끌리는 일이 없게 한다(카드 안에 입력·버튼이 있어 오작동이 잦다).
+ * 편집 중이면 draggable=false — 입력하다 행이 끌려가면 입력이 날아간다.
+ */
+function SessionRow({
+  id, draggable, highlight, children,
+}: { id: string; draggable: boolean; highlight: boolean; children: ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: !draggable });
+  return (
+    <motion.div
+      ref={setNodeRef}
+      layout
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: -8 }}
+      whileHover={highlight ? { borderColor: "rgba(139, 92, 246, 0.18)" } : undefined}
+      transition={spring}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.55 : undefined }}
+      className={`relative rounded-2xl border bg-background p-4 ${isDragging ? "border-violet-400/60 shadow-lg" : "border-border"}`}
+    >
+      {draggable && (
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          aria-label="순서 변경 — 끌어서 옮기거나 포커스 후 방향키를 쓰세요"
+          title="끌어서 순서 변경"
+          className="absolute left-0 top-1/2 grid h-8 w-5 -translate-y-1/2 cursor-grab touch-none place-items-center rounded text-muted-foreground/40 transition-colors hover:text-muted-foreground active:cursor-grabbing"
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </button>
+      )}
+      {children}
+    </motion.div>
+  );
 }
 
 function SessionFormFields({
@@ -234,8 +275,8 @@ function SessionFormFields({
               <img src={form.speakerPhotoUrl} alt="선택한 연사 사진 미리보기" className="w-9 h-9 rounded-full object-cover border border-border" />
             )}
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium">JPG, PNG, WebP, GIF · 최대 5MB</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">올린 사진은 라이브 아젠다의 연사 프로필로 표시돼요.</p>
+              <p className="text-xs font-medium">JPG, PNG, WebP, GIF · 최대 {SPEAKER_PHOTO_MAX_LABEL}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">랜딩 세션 카드·상세 팝업과 라이브 아젠다에 함께 쓰여요.</p>
             </div>
             <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading}
               className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-secondary disabled:opacity-50">
@@ -280,10 +321,65 @@ export default function SessionsTab({
   const { remove: undoableRemove } = useUndoableDelete();
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(() => new Set());
 
-  const sortedSessions = [...sessions]
-    .filter((s) => !pendingDeleteIds.has(s.id))
-    .sort((a, b) => a.number - b.number);
+  // 드래그 중에는 서버 응답 전 순서를 먼저 보여준다(낙관적). 실패하면 null 로 되돌린다.
+  const [dragOrder, setDragOrder] = useState<string[] | null>(null);
+  const [isReordering, setIsReordering] = useState(false);
+  const sensors = useSensors(
+    // 5px 이상 움직여야 드래그로 본다 — 안 그러면 수정·삭제 버튼 클릭이 드래그로 먹힌다
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  /**
+   * 낙관적 순서 해제. 이게 없으면 dragOrder 가 영구히 남아서
+   *  - 서버 반영 후에도 옛 배열을 계속 렌더하고
+   *  - 이후 추가된 세션은 dragOrder 에 없으니 목록에서 아예 사라진다.
+   * 서버 순서가 요청과 같아졌거나 목록 구성이 바뀌면 버린다.
+   */
+  useEffect(() => {
+    if (!dragOrder) return;
+    const byNumber = [...sessions].sort((a, b) => a.number - b.number).map((s) => s.id);
+    const sameSet = byNumber.length === dragOrder.length && dragOrder.every((id) => byNumber.includes(id));
+    if (!sameSet || byNumber.join() === dragOrder.join()) setDragOrder(null);
+  }, [sessions, dragOrder]);
+
+  const visibleSessions = [...sessions].filter((s) => !pendingDeleteIds.has(s.id));
+  const sortedSessions = dragOrder
+    ? (dragOrder.map((id) => visibleSessions.find((s) => s.id === id)).filter(Boolean) as WebinarSession[])
+    : visibleSessions.sort((a, b) => a.number - b.number);
   const realSessionCount = sortedSessions.filter(isRealSession).length;
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const ids = sortedSessions.map((s) => s.id);
+    const from = ids.indexOf(String(active.id));
+    const to = ids.indexOf(String(over.id));
+    if (from < 0 || to < 0) return;
+    const next = arrayMove(ids, from, to);
+    setDragOrder(next);
+    setIsReordering(true);
+    try {
+      const res = await fetch(`/api/webinars/${webinarId}/sessions/reorder`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: next }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "순서 변경에 실패했어요");
+      }
+      // 서버가 재번호한 결과를 다시 불러온다. dragOrder 는 그 결과가 들어오면 필요 없어지지만,
+      // onUpdate 가 비동기 반영이라 먼저 null 로 돌리면 한 프레임 옛 순서가 보인다 → 순서 유지.
+      onUpdate();
+      toast.success("순서를 변경했어요");
+    } catch (e) {
+      setDragOrder(null); // 원래 number 순서로 복귀
+      toast.error(e instanceof Error ? e.message : "순서 변경에 실패했어요");
+    } finally {
+      setIsReordering(false);
+    }
+  };
 
   const resetCreate = () => {
     setCreateForm({ ...emptyForm, number: String((sortedSessions.at(-1)?.number ?? 0) + 1) });
@@ -390,6 +486,11 @@ export default function SessionsTab({
           <p className="text-sm text-muted-foreground">
             라이브 페이지와 임베드 코드에 표시될 세션 아젠다를 관리해요
           </p>
+          {/* 연사 사진이 여기 한 곳에서만 관리되고 랜딩까지 같이 간다는 걸 알려준다.
+              랜딩 설정에 따로 사진 항목이 있는 줄 알고 찾는 경우가 있었다. */}
+          <p className="mt-1 text-xs text-muted-foreground/70">
+            끌어서 순서를 바꿀 수 있어요. 연사 사진은 각 세션에서 올리면 랜딩 세션 카드·상세 팝업과 라이브 아젠다에 함께 쓰여요.
+          </p>
           {/* 세션 수와 진행 순서 항목 수를 나눠 보여준다 — 휴식·Q&A 는 순서를 차지하지만 세션이 아니다.
               둘이 다를 때만 뒤 문구를 붙여, 휴식이 없는 웨비나에선 군더더기가 없다. */}
           {sortedSessions.length > 0 && (
@@ -461,18 +562,18 @@ export default function SessionsTab({
           <p className="text-xs text-muted-foreground mt-1">세션을 추가하면 라이브 페이지 아젠다에 바로 표시됩니다.</p>
         </div>
       ) : (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={sortedSessions.map((s) => s.id)} strategy={verticalListSortingStrategy}>
         <div className="space-y-2">
           <AnimatePresence initial={false}>
           {sortedSessions.map((session) => (
-            <motion.div
+            <SessionRow
               key={session.id}
-              layout
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, x: -8 }}
-              whileHover={editingId === session.id ? undefined : { borderColor: "rgba(139, 92, 246, 0.18)" }}
-              transition={spring}
-              className="p-4 rounded-2xl border border-border bg-background"
+              id={session.id}
+              // 편집 중엔 드래그를 끈다(입력하다 행이 끌려가면 입력이 날아간다).
+              // 저장 중에도 끈다 — 연속으로 끌면 두 번째 요청이 첫 번째 결과를 덮어써 순서가 뒤엉킨다.
+              draggable={editingId !== session.id && !isReordering}
+              highlight={editingId !== session.id}
             >
               {editingId === session.id ? (
                 <div className="space-y-3">
@@ -501,7 +602,7 @@ export default function SessionsTab({
                   </div>
                 </div>
               ) : (
-                <div className="flex items-start gap-4">
+                <div className="flex items-start gap-3 pl-4">
                   {/* 진행 순서 번호(1..N) — 휴식·Q&A 도 순서를 차지하므로 번호는 그대로 보여준다.
                       다만 강조색은 실제 세션만. 휴식·Q&A 까지 같은 보라 배지를 달면
                       "세션 번호"처럼 읽혀서 세션이 6개인 줄 알게 된다. */}
@@ -515,6 +616,18 @@ export default function SessionsTab({
                   >
                     {session.number}
                   </div>
+                  {/* 연사 사진 썸네일 — 목록에서 사진이 붙었는지 바로 보이게. 예전엔 편집을 열어야만
+                      알 수 있어서 "사진 첨부 기능이 없다"고 읽혔다. 휴식엔 연사가 없으니 안 그린다. */}
+                  {session.type !== "break" && session.speakerPhotoUrl && (
+                    // 외부 URL 도 허용하므로 next/image 도메인 제한을 적용하지 않는다
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={session.speakerPhotoUrl}
+                      alt={`${cleanSessionText(session.speaker) || "연사"} 사진`}
+                      title="연사 사진 — 랜딩 세션 카드·상세 팝업과 라이브 아젠다에 표시돼요"
+                      className="h-9 w-9 shrink-0 rounded-full border border-border object-cover"
+                    />
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       {session.type && session.type !== "session" && (
@@ -559,10 +672,12 @@ export default function SessionsTab({
                   </div>
                 </div>
               )}
-            </motion.div>
+            </SessionRow>
           ))}
           </AnimatePresence>
         </div>
+        </SortableContext>
+        </DndContext>
       )}
     </div>
   );
