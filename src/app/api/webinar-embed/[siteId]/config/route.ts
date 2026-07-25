@@ -137,6 +137,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ siteId: 
       allowedOrigins: true,
       activeWebinar: {
         select: {
+          id: true, // 자체 설문(종료 화면 연결) 조회용
           slug: true,
           name: true,
           description: true,
@@ -180,6 +181,24 @@ export async function GET(req: Request, { params }: { params: Promise<{ siteId: 
   const registrationForm = normalizeRegistrationForm(webinar.config);
   const config = (webinar.config ?? {}) as Record<string, unknown>;
 
+  // 절대 URL 기준 — 스니펫/로더가 파트너 사이트에서 실행되므로 배포 오리진이어야 한다(w/l 라우트와 동일 방식).
+  const appOrigin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
+
+  // 종료 화면에 연결된 자체 설문 — 라이브 페이지(info 라우트)와 같은 우선순위를 임베드에도 적용한다.
+  // 이걸 안 실어 보내면 자체 설문만 설정한 웨비나는 아임웹 종료 배너·히어로가 통째로 비어 버린다.
+  const endedSurvey = await prisma.webinarSurvey.findFirst({
+    where: {
+      webinarId: webinar.id,
+      showOnEnded: true,
+      isOpen: true,
+      OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }],
+    },
+    select: { id: true },
+  });
+  const endedSurveyUrl = endedSurvey
+    ? `${appOrigin}/webinar/${encodeURIComponent(webinar.slug)}/survey/${endedSurvey.id}?src=ended`
+    : null;
+
   const payload = {
     slug: webinar.slug,
     name: webinar.name,
@@ -213,7 +232,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ siteId: 
     },
     links: {
       livePageUrl: site.livePageUrl ?? null,
-      surveyUrl: typeof config.surveyUrl === "string" ? config.surveyUrl : null,
+      surveyUrl: endedSurveyUrl ?? (typeof config.surveyUrl === "string" ? config.surveyUrl : null),
       calendarUrl: typeof config.calendarUrl === "string" ? config.calendarUrl : null,
     },
     ics: buildIcs(webinar),
