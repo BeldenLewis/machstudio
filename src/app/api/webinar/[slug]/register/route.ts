@@ -66,6 +66,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     }
   }
 
+  // 개인정보 동의는 config.fields 가 아니라 privacyText 별도 키라 위 필수 루프에 걸리지 않는다.
+  // 서버에서 명시적으로 요구한다 — 예전엔 미검증 + `?? true` 라서 동의 없이 들어온 등록이
+  // "동의함" 으로 기록됐다(두 렌더러 모두 이 값을 보낸다).
+  if (agreePrivacy !== true) {
+    return NextResponse.json(
+      { error: "개인정보 수집 및 이용에 동의해주세요" },
+      { status: 400, headers: CORS_HEADERS },
+    );
+  }
+
   if (!name?.trim()) {
     return NextResponse.json({ error: "이름을 입력해주세요" }, { status: 400, headers: CORS_HEADERS });
   }
@@ -131,16 +141,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     // - 동의: 명시적으로 체크한 경우에만 true 로 승격(다운그레이드 없음)
     // - 어트리뷰션: 기존 레코드가 비어 있을 때만 백필 (재방문 캠페인 성과 유실 방지)
     // 프로필 필드(회사·직함 등)는 소유권 증명이 없으므로 덮어쓰지 않는다.
-    const upgrades: Record<string, unknown> = {};
-    if (agreeMarketing === true && !duplicate.agreeMarketing) upgrades.agreeMarketing = true;
-    if (agreePrivacy === true && !duplicate.agreePrivacy) upgrades.agreePrivacy = true;
-    if (utm && !duplicate.utmSource && !duplicate.firstUtmSource) Object.assign(upgrades, utmData);
-    if (Object.keys(upgrades).length > 0) {
-      await prisma.webinarRegistration.update({ where: { id: duplicate.id }, data: upgrades }).catch(() => {
-        /* 보존 실패는 차단 응답을 막지 않는다 */
-      });
-    }
-
+    // 중복 제출은 차단만 한다. 예전엔 여기서 기존 레코드의 동의·어트리뷰션을 "업그레이드" 했는데,
+    // 소유권 증명이 없어서 **남의 전화번호만 알면 그 사람의 마케팅 동의를 켤 수 있었다**
+    // (409 를 받기 전에 update 가 실행됐다). 마케팅 수신 동의는 법적 효력이 있는 값이므로
+    // 본인 확인 없는 변경 경로를 없앤다. 어트리뷰션 백필도 같은 이유로 제거(캠페인 성과 위조 가능).
     const dupField = normalizedPhone && duplicate.phone === normalizedPhone ? "연락처" : "이메일";
     return NextResponse.json(
       {
@@ -163,7 +167,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       jobTitle: clean(jobTitle),
       industry: clean(industry),
       agreeMarketing: Boolean(agreeMarketing),
-      agreePrivacy: Boolean(agreePrivacy ?? true),
+      agreePrivacy: true, // 위에서 === true 를 강제했다
       memo: Object.keys(memoPayload).length ? JSON.stringify(memoPayload, null, 2) : null,
       ...utmData,
       userAgent,
