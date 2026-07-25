@@ -33,15 +33,22 @@ function setLinkHref(el: HTMLElement, url: string): void {
   if (safe) el.setAttribute("href", safe);
 }
 
-/** 목차 클릭 기본 동작 — 문서 전역이 아니라 자기 랜딩 루트 안에서만 대상 섹션을 찾는다. */
-function scrollWithinRoot(from: HTMLElement, fullId: string): void {
-  const root = from.closest<HTMLElement>(".lnd");
+/**
+ * 목차 클릭 스크롤 — 문서 전역이 아니라 **넘겨받은 랜딩 루트 안에서만** 대상 섹션을 찾는다.
+ * (document.getElementById 를 쓰면 한 호스트 문서에 랜딩이 둘 붙었을 때 남의 섹션으로 튄다.)
+ */
+export function scrollToSectionIn(root: HTMLElement | null, fullId: string): void {
   const selector =
     typeof CSS !== "undefined" && typeof CSS.escape === "function" ? `#${CSS.escape(fullId)}` : `[id="${fullId}"]`;
   const target = root ? root.querySelector<HTMLElement>(selector) : null;
   if (!target) return;
   const reduce = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   target.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+}
+
+/** onNavigate 를 안 준 경우의 기본 동작 — 목차가 루트 안에 있다는 전제로 closest 로 루트를 찾는다. */
+function scrollWithinRoot(from: HTMLElement, fullId: string): void {
+  scrollToSectionIn(from.closest<HTMLElement>(".lnd"), fullId);
 }
 
 /** 히어로 배경 영상 — muted 는 속성만으로 자동재생이 막히는 브라우저가 있어 프로퍼티도 함께 세팅. */
@@ -124,15 +131,16 @@ export function renderHero(m: LandingModel): HTMLElement {
 
 /**
  * 좌측 세로 목차. 항목이 2개 미만이면(=이동할 곳이 사실상 없음) 렌더하지 않는다.
- * 임베드에선 원본과 마찬가지로 아예 만들지 않는다 — position:fixed 가 호스트 조상 transform 에
- * 걸려 엉뚱한 위치에 떠 버린다.
  *
- * onNavigate 를 주면 스크롤 대상 결정을 호출자(마운트/effects)에게 넘긴다. 안 주면 자기
- * 랜딩 루트 안에서만 섹션을 찾아 스크롤한다(document.getElementById 를 쓰지 않는 이유:
- * 한 호스트 문서에 랜딩이 둘 붙으면 남의 섹션으로 튈 수 있다).
+ * 임베드에서도 만든다. 예전에 임베드에서 껐던 이유는 iframe 이었기 때문이다 —
+ * position:fixed 가 iframe 뷰포트에 갇혀 호스트 화면 기준으로 뜰 수 없었다. 지금은 호스트 DOM 에
+ * 직접 마운트하므로 fixed 가 네이티브로 동작한다. 다만 조상에 transform/filter 가 생기면
+ * containing block 이 그쪽으로 넘어가 어긋나므로, 마운트가 목차를 body 직계 레이어로 포털한다
+ * (createTocLayer). 그때 closest('.lnd') 는 레이어를 가리켜 섹션을 못 찾으니 반드시 onNavigate 로
+ * 실제 콘텐츠 루트를 넘겨야 한다.
  */
 export function renderToc(m: LandingModel, onNavigate?: (sectionId: string) => void): HTMLElement | null {
-  if (m.embedded || m.tocItems.length < 2) return null;
+  if (m.tocItems.length < 2) return null;
 
   const nav = h("nav", { class: "toc", "aria-label": "섹션 목차" });
 

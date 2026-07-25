@@ -6,6 +6,7 @@
  *  - .lnd 루트 + 키컬러 변수 + 스타일/폰트 주입
  *  - dark-zone 래퍼(지브라 밴드 + on-accent 시 하단 섹션을 덮는 불투명 배경)
  *  - 모달 수명주기: body 직계 레이어 포털 + 스크롤 잠금 + 포커스 트랩 + ESC
+ *  - 목차: 별도 body 직계 레이어 포털 + 랜딩 이탈 시 감춤 (fixed 가 호스트 조상에 안 걸리게)
  *  - 부분 재렌더(FAQ 탭) 후 reveal 재관찰
  *  - destroy(): 붙인 것 전부 원복 (호스트 문서를 더럽힌 채 떠나지 않는다)
  */
@@ -13,11 +14,11 @@
 import { LANDING_CSS } from "./css";
 import { buildLandingModel } from "./build-model";
 import { h, clearNode } from "./h";
-import { renderHero, renderToc } from "./view-hero";
+import { renderHero, renderToc, scrollToSectionIn } from "./view-hero";
 import { renderIntro, renderPrograms, renderHighlights, renderJoin, renderFaq } from "./view-sections";
 import { renderSessions, renderTimetable, createSessionDialog } from "./view-sessions";
-import { attachReveal, attachAccentZone, attachTocSpy } from "./effects";
-import { acquireLayer, releaseLayer, lockScroll, unlockScroll, trapFocus } from "./overlay";
+import { attachReveal, attachAccentZone, attachTocSpy, attachTocVisibility } from "./effects";
+import { acquireLayer, createTocLayer, releaseLayer, lockScroll, unlockScroll, trapFocus } from "./overlay";
 import type { LandingSession, LandingWebinar } from "./types";
 
 const STYLE_ID = "lnd-css";
@@ -202,8 +203,21 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
 
   if (darkZone.firstChild) body.appendChild(darkZone);
 
-  const toc = renderToc(m);
-  if (toc) root.appendChild(toc);
+  // 목차는 body 직계 전용 레이어로 포털한다. 지금 아임웹에는 fixed 를 가로채는 조상이 없지만
+  // (실측: transform/filter/contain 조상 0개), 호스트가 섹션 애니메이션을 켜면 조상에 transform 이
+  // 생겨 목차가 조용히 엉뚱한 곳에 떠 버린다. 모달과 같은 방식으로 미리 격리해 둔다.
+  // 포털하면 closest('.lnd') 가 레이어를 가리켜 섹션을 못 찾으므로 onNavigate 로 실제 루트를 넘긴다.
+  const toc = renderToc(m, (fullId) => scrollToSectionIn(root, fullId));
+  let tocLayer: HTMLElement | null = null;
+  if (toc) {
+    tocLayer = createTocLayer(uid, m.accent, m.onPrimary);
+    tocLayer.appendChild(toc);
+    // root.remove() 로는 안 지워진다(루트 밖에 있다) → 명시적으로 정리.
+    cleanups.push(() => {
+      toc.remove();
+      tocLayer?.remove();
+    });
+  }
   root.appendChild(body);
 
   clearNode(mount);
@@ -241,8 +255,11 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   // ── 이펙트 ────────────────────────────────────────────────────────────
   cleanups.push(attachReveal(root));
   const accentZones = [m.sectionId("lnd-sessions"), m.sectionId("lnd-timetable")];
-  cleanups.push(attachAccentZone(root, accentZones));
+  // 목차 레이어에도 on-accent 를 미러링한다 — 루트 밖으로 나갔으니 후손 선택자가 안 걸린다.
+  cleanups.push(attachAccentZone(root, accentZones, tocLayer ? [tocLayer] : []));
   cleanups.push(attachTocSpy(root, toc, m.tocItems.map((t) => m.sectionId(t.id))));
+  // 임베드는 랜딩 위아래로 호스트 콘텐츠가 있다 → 랜딩을 벗어나면 고정 목차를 감춘다.
+  cleanups.push(attachTocVisibility(body, toc));
 
   return {
     destroy() {

@@ -62,11 +62,15 @@ export function attachReveal(root: HTMLElement): () => void {
  * 세션~타임테이블 구간 키컬러 배경 — 화면 중앙 밴드(rootMargin -45%/-45%)에 구간이 걸치면
  * root 에 `.on-accent` 를 붙이고, 벗어나면 뗀다.
  * zoneIds 는 sectionId() 를 통과한 실제 DOM id 를 받는다.
+ *
+ * mirror: 같은 클래스를 함께 걸 요소들. 목차는 body 직계 레이어로 포털되어 root 의 후손이
+ * 아니게 되므로(`.lnd.on-accent .toc-link` 가 안 걸린다), 그 레이어를 여기로 넘겨 색을 맞춘다.
  */
-export function attachAccentZone(root: HTMLElement, zoneIds: string[]): () => void {
+export function attachAccentZone(root: HTMLElement, zoneIds: string[], mirror: HTMLElement[] = []): () => void {
   const zones = zoneIds
     .map((id) => findById(root, id))
     .filter((el): el is HTMLElement => Boolean(el));
+  const targets = [root, ...mirror];
   if (!zones.length || !hasIO()) return noop;
 
   const active = new Set<Element>();
@@ -76,7 +80,8 @@ export function attachAccentZone(root: HTMLElement, zoneIds: string[]): () => vo
         if (entry.isIntersecting) active.add(entry.target);
         else active.delete(entry.target);
       });
-      root.classList.toggle("on-accent", active.size > 0);
+      const on = active.size > 0;
+      targets.forEach((el) => el.classList.toggle("on-accent", on));
     },
     { rootMargin: "-45% 0px -45% 0px", threshold: 0 },
   );
@@ -84,7 +89,39 @@ export function attachAccentZone(root: HTMLElement, zoneIds: string[]): () => vo
   return () => {
     io.disconnect();
     active.clear();
-    root.classList.remove("on-accent");
+    targets.forEach((el) => el.classList.remove("on-accent"));
+  };
+}
+
+/**
+ * 목차 노출 게이트 — 랜딩 콘텐츠가 화면에서 벗어나면 목차를 감춘다.
+ *
+ * 단독 페이지는 랜딩이 문서 전체라 원래 문제가 없었다. 임베드는 위아래로 호스트 콘텐츠가 있어서,
+ * 목차가 viewport 고정이면 호스트 헤더/푸터를 보는 동안에도 그대로 떠 있게 된다.
+ * IO 미지원이면 감추지 않는다 — 랜딩 구간에서 목차가 아예 안 보이는 쪽이 더 나쁘다.
+ */
+export function attachTocVisibility(content: HTMLElement, toc: HTMLElement | null): () => void {
+  if (!toc || !hasIO()) return noop;
+  const OFF = "data-lnd-off";
+  // 초기 상태는 기하로 **동기 판정**한다. 무조건 감춰 놓고 IO 콜백이 풀어 주는 방식이면,
+  // 랜딩이 이미 화면에 있는 흔한 경우에 로드 직후 목차가 사라졌다 다시 나타난다(페이드 왕복).
+  // 스크롤이 이미 랜딩을 지난 상태로 진입하는 경우(임베드·새로고침)도 여기서 바로 감춰진다.
+  const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+  const rect = content.getBoundingClientRect();
+  if (!(rect.bottom > 0 && rect.top < vh)) toc.setAttribute(OFF, "");
+  const io = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) toc.removeAttribute(OFF);
+        else toc.setAttribute(OFF, "");
+      });
+    },
+    { threshold: 0 },
+  );
+  io.observe(content);
+  return () => {
+    io.disconnect();
+    toc.removeAttribute(OFF);
   };
 }
 

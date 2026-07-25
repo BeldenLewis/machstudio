@@ -45,6 +45,10 @@ export const LANDING_CSS = `
      랜딩 안에서만 되살아난다. 필요한 것만 명시한다. */
   -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
 }
+/* 호스트가 a { color: ... !important } 를 걸어 두므로 링크 색을 !important 로 되찾는다.
+   단 이 규칙은 "기본값"일 뿐이다 — 우리가 색을 명시하는 링크(.toc-link/.hero-cta)는
+   아래에서 다시 !important 로 못박아야 한다. 안 그러면 이 줄이 우리 색까지 덮어버려
+   목차 활성 표시와 CTA 대비색이 조용히 사라진다(실제로 그랬다). */
 .lnd a { color: inherit !important; text-decoration: none !important; }
 .lnd button {
   font: inherit; color: inherit; background: transparent; border: 0; border-radius: 0;
@@ -63,27 +67,34 @@ export const LANDING_CSS = `
   font-size: 12px; font-weight: 800;
 }
 
-/* ── 왼쪽 세로 목차 — 넓은 화면 전용(임베드에선 미표시) ── */
+/* ── 왼쪽 세로 목차 — 넓은 화면 전용(임베드 포함) ──
+   마운트가 body 직계 레이어(.lnd-toc-layer)로 포털한다. 여기 fixed/left/top 은 그 레이어 안에서도
+   그대로 유효하다(레이어가 viewport 를 덮으므로 기준이 같다).
+   [data-lnd-off] 는 랜딩이 화면을 벗어났을 때 effects 가 거는 표시 — display 를 건드리지 않고
+   숨겨서 미디어쿼리(display:flex)와 싸우지 않는다. */
 .lnd .toc {
   position: fixed; left: 24px; top: 50%; transform: translateY(-50%); z-index: 90;
   display: none; flex-direction: column; gap: 2px;
+  transition: opacity .3s ease, visibility .3s ease;
 }
 @media (min-width: 1280px) { .lnd .toc { display: flex; } }
+.lnd .toc[data-lnd-off] { opacity: 0; visibility: hidden; pointer-events: none; }
 .lnd .toc-link {
   display: flex; align-items: center; gap: 11px; min-height: 30px;
-  color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase;
+  /* !important: 위 .lnd a 방어 규칙(color:inherit !important)을 이겨야 한다. */
+  color: var(--muted) !important; font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase;
   transition: color .4s ease;
 }
 .lnd .toc-mark {
   flex: 0 0 auto; width: 16px; height: 2px; background: currentColor; opacity: .5;
   transition: width .25s ease, opacity .25s ease, background .4s ease;
 }
-.lnd .toc-link:hover { color: var(--paper); }
-.lnd .toc-link[aria-current="true"] { color: var(--primary-bright); }
+.lnd .toc-link:hover { color: var(--paper) !important; }
+.lnd .toc-link[aria-current="true"] { color: var(--primary-bright) !important; }
 .lnd .toc-link[aria-current="true"] .toc-mark { width: 30px; opacity: 1; background: var(--primary-bright); }
-.lnd.on-accent .toc-link { color: color-mix(in srgb, var(--on-primary) 58%, transparent); }
+.lnd.on-accent .toc-link { color: color-mix(in srgb, var(--on-primary) 58%, transparent) !important; }
 .lnd.on-accent .toc-link:hover,
-.lnd.on-accent .toc-link[aria-current="true"] { color: var(--on-primary); }
+.lnd.on-accent .toc-link[aria-current="true"] { color: var(--on-primary) !important; }
 .lnd.on-accent .toc-link[aria-current="true"] .toc-mark { background: var(--on-primary); }
 
 /* ── 히어로 ──
@@ -169,7 +180,9 @@ export const LANDING_CSS = `
   display: inline-flex; align-items: center; justify-content: space-between; gap: 20px;
   padding: 0 24px; border-radius: 999px;
   background: var(--primary);
-  color: var(--on-primary);
+  /* !important: .lnd a 방어 규칙에 덮이면 키컬러가 밝을 때(노랑 등) 흰 글자가 남아 대비가 깨진다.
+     accentColor 가 흰 글자를 쓰는 색이면 시각 변화가 없고, 어두운 글자를 써야 하는 색에서만 달라진다. */
+  color: var(--on-primary) !important;
   box-shadow: 0 16px 34px color-mix(in srgb, var(--primary) 34%, transparent);
   font-weight: 850;
   transition: transform .2s ease, box-shadow .2s ease;
@@ -270,6 +283,18 @@ export const LANDING_CSS = `
   pointer-events: none;
 }
 .lnd.lnd-layer > * { pointer-events: auto; }
+
+/* ── 목차 전용 레이어 (body 직계) ──
+   모달 레이어(999960)보다 **아래**로 못박아, 팝업이 열리면 목차가 백드롭 뒤로 들어간다.
+   on-accent 를 이 레이어에도 미러링하므로(목차 색 전환) 배경 규칙을 더 높은 특이도로 무효화한다
+   — 안 하면 .lnd.on-accent{background:var(--primary)} 가 화면 전체를 키컬러로 덮는다. */
+.lnd.lnd-toc-layer {
+  position: fixed; inset: 0; z-index: 999940;
+  background: none; min-height: 0; width: auto; margin: 0; overflow: visible;
+  pointer-events: none;
+}
+.lnd.lnd-toc-layer.on-accent { background: none; }
+.lnd.lnd-toc-layer > * { pointer-events: auto; }
 
 /* ── 세션 상세 팝업 (글래스모피즘) — 뷰포트 중앙 고정 ── */
 .lnd .lnd-modal-root {
