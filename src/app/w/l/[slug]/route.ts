@@ -53,6 +53,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
 
   let webinar: unknown = null;
+  let notFound = false;
   try {
     const row = await prisma.webinar.findUnique({
       where: { slug },
@@ -87,14 +88,27 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
       const rawConfig = (row.config ?? {}) as Record<string, unknown>;
       webinar = { ...row, config: { landingPage: rawConfig.landingPage } };
     }
+    else notFound = true; // 조회는 됐고 그런 웨비나가 없다
   } catch {
     // DB 장애여도 스크립트는 내려간다. 런타임이 /info 로 한 번 더 시도하고,
     // 그래도 실패하면 스니펫의 폴백 링크가 그대로 남는다.
     webinar = null;
   }
 
+  // 없는 slug 에 런타임 번들(50KB)을 서빙하지 않는다 — 매번 다른 slug 로 엣지 캐시를 우회해
+  // DB·대역폭을 때릴 수 있었다. 스니펫의 폴백 링크는 그대로 남으므로 진입 경로는 유지된다.
+  if (notFound) {
+    return new NextResponse('/* mach webinar landing: not found */\n', {
+      status: 404,
+      headers: { ...SCRIPT_HEADERS, "Cache-Control": "public, max-age=0, s-maxage=60" },
+    });
+  }
+
+  // 주석에 slug 를 넣지 않는다 — slug 는 URL 세그먼트라 %2F 로 `*/` 를 만들어 주석을 닫고
+  // 우리 오리진에서 서빙되는 스크립트 본문에 임의 JS 를 넣을 수 있었다(파트너 CSP allowlist 우회).
+  // slug 는 jsonForScript 로만 내보낸다.
   const body =
-    `/* mach webinar landing — ${slug} */\n` +
+    `/* mach webinar landing */\n` +
     LANDING_RUNTIME_JS +
     `\n__msLanding.boot(${jsonForScript({ slug, origin, webinar })});\n`;
 
