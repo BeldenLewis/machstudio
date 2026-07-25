@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Check, Play, ClipboardCheck, FileText, Download, Share2, Link2 } from "lucide-react";
 import { buildStkCss } from "./LiveContentStk";
-import type { LivePageConfig } from "@/lib/webinar-config";
+import { DEFAULT_ENDED_DESCRIPTION, DEFAULT_ENDED_TITLE, type LivePageConfig } from "@/lib/webinar-config";
 
 /**
  * 라이브 종료 화면 — 감사 + 다음 스텝 전환.
@@ -86,8 +86,14 @@ export default function EndedScreen({
       <div className="live-inner">
         <div className="en-hero">
           <div className="en-check"><Check strokeWidth={2.6} /></div>
-          <h1 className="live-title">함께해주셔서<br />감사합니다</h1>
-          <p className="live-desc">오늘 라이브는 마무리됐어요. 다시보기와 자료를 준비해 등록하신 이메일로 보내드릴게요.</p>
+          {/* 어드민이 입력한 문구 우선, 비어 있으면 기본값. 줄바꿈은 pre-line 으로 살린다
+              (제목의 줄바꿈 위치를 직접 정할 수 있어야 해서 <br /> 대신 실제 개행을 쓴다). */}
+          <h1 className="live-title" style={{ whiteSpace: "pre-line" }}>
+            {live.ended.title.trim() || DEFAULT_ENDED_TITLE}
+          </h1>
+          <p className="live-desc" style={{ whiteSpace: "pre-line" }}>
+            {live.ended.description.trim() || DEFAULT_ENDED_DESCRIPTION}
+          </p>
         </div>
 
         {actionCount > 0 && (
