@@ -829,7 +829,9 @@ ${ATTRIBUTION_CORE_JS}
     var bc = c.banner || {};
     var texts = bannerTexts();
 
-    if (status === "ended" && (endedMode() === "hidden" || !surveyUrl())) return;
+    // 설문 링크가 없어도 "종료됐다"는 안내는 남긴다(아래에서 설문 버튼만 조건부로 붙인다).
+    // 예전엔 !surveyUrl() 이면 배너를 포기해서, 어드민이 편집한 종료 문구가 영원히 렌더되지 않았다.
+    if (status === "ended" && endedMode() === "hidden") return;
     try { if (bc.dismissible !== false && sessionStorage.getItem(bannerDismissKey(status))) return; } catch (e) {}
 
     var banner = el("div", "mw-banner mw-reset");
@@ -841,11 +843,13 @@ ${ATTRIBUTION_CORE_JS}
 
     if (status === "ended") {
       title.textContent = texts.ended || ((CFG.name || "웨비나") + "가 종료되었습니다. 참여해주셔서 감사합니다!");
-      var sv = el("a", "mw-btn mw-btn-primary", "만족도 조사 참여하기");
-      sv.href = surveyUrl();
-      sv.target = "_blank";
-      sv.rel = "noopener noreferrer";
-      ctas.appendChild(sv);
+      if (surveyUrl()) {
+        var sv = el("a", "mw-btn mw-btn-primary", "만족도 조사 참여하기");
+        sv.href = surveyUrl();
+        sv.target = "_blank";
+        sv.rel = "noopener noreferrer";
+        ctas.appendChild(sv);
+      }
     } else if (entry) {
       var badge = el("span", "mw-live-badge");
       badge.appendChild(el("span", "mw-live-dot"));
@@ -885,7 +889,9 @@ ${ATTRIBUTION_CORE_JS}
     } else {
       title.textContent = texts.upcoming || ((CFG.name || "웨비나") + "가 곧 시작됩니다.");
       if (bc.showCalendarButton !== false) {
-        var calBtn2 = el("button", "mw-btn mw-btn-secondary mw-btn-cal", "캘린더 추가");
+        /* mw-btn-cal(PC 숨김)을 붙이지 않는다 — 이 분기에선 캘린더가 유일한 액션이라
+           숨기면 버튼 0개인 배너가 남는다. 사전등록 중 배너처럼 다른 CTA 가 있을 때만 숨긴다. */
+        var calBtn2 = el("button", "mw-btn mw-btn-secondary", "캘린더 추가");
         calBtn2.type = "button";
         calBtn2.addEventListener("click", openCalendar);
         ctas.appendChild(calBtn2);
