@@ -310,7 +310,12 @@ ${ATTRIBUTION_CORE_JS}
       ".mw-reg-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; margin-right: 6px; border-radius: 6px; background: rgba(251,191,36,0.16); border: 1px solid rgba(251,191,36,0.32); color: #fbbf24 !important; -webkit-text-fill-color: #fbbf24 !important; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; }",
       ".mw-modal-overlay { position: fixed; inset: 0; z-index: 999950; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.62); }",
       ".mw-modal-card { position: relative; width: 100%; max-width: 480px; max-height: 86vh; overflow-y: auto; border-radius: 16px; }",
-      ".mw-modal-close { position: absolute; top: 14px; right: 14px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(120,120,128,0.3); border-radius: 8px; background: #fff; color: #666; font-size: 17px; line-height: 1; cursor: pointer; z-index: 2; }",
+      ".mw-modal-close { position: absolute; top: 12px; right: 12px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(120,120,128,0.3); border-radius: 10px; background: #fff; color: #666; font-size: 19px; line-height: 1; cursor: pointer; z-index: 2; }",
+      /* 제목이 닫기 버튼 아래로 파고들지 않게 자리를 비운다 — 웨비나 이름이 길면 두 줄이 되면서
+         절대배치된 X 와 겹쳤다(모바일에서 특히). 모달로 열릴 때만 필요한 여백이라 여기서 건다. */
+      ".mw-modal-card .mw-form-title { padding-right: 44px; }",
+      /* 터치 최소 44px */
+      "@media (max-width: 600px) { .mw-modal-close { width: 44px; height: 44px; } .mw-modal-card .mw-form-title { padding-right: 48px; } }",
       // 캘린더 추가는 모바일에서만 — PC 는 네이티브 캘린더 연동이 없어 실효가 낮고 배너만 붐빈다.
       "@media (min-width: 601px) { .mw-banner .mw-btn-cal { display: none !important; } }",
       "@media (max-width: 600px) { .mw-banner { left: 12px !important; right: 12px !important; bottom: 12px !important; width: auto; transform: none !important; } .mw-banner-inner { flex-direction: column; align-items: stretch; gap: 10px; } .mw-banner-ctas { width: 100%; } .mw-banner .mw-btn { flex: 1; } }"
@@ -706,24 +711,118 @@ ${ATTRIBUTION_CORE_JS}
     return snap;
   }
 
-  /* ── 폼 모달 (폼 마운트가 없는 페이지에서 등록 CTA 클릭 시) ── */
+  /* ── 폼 모달 (폼 마운트가 없는 페이지에서 등록 CTA 클릭 시) ──
+     배너 CTA 와 랜딩 히어로 CTA 가 같이 쓴다(machstudio:open-register). 랜딩의 세션 팝업과
+     같은 수준으로 동작해야 하므로 배경 스크롤 잠금·ESC·포커스를 여기서 책임진다.
+     (예전엔 셋 다 없어서 팝업 뒤 페이지가 그대로 스크롤됐다.)
+     배너는 따로 감추지 않는다 — 오버레이(999950)가 배너(999900)보다 위라 이미 덮인다. */
+  var lockSavedStyle = null;
+  var lockSavedY = 0;
+  var scrollLocked = false;
+  var modalKeyHandler = null;
+  var modalOpener = null;
+
+  function lockPageScroll() {
+    if (scrollLocked) return;
+    /* 랜딩 팝업이 이미 잠근 상태면 손대지 않는다 — 두 번 잠그면 복원 값이 엉킨다 */
+    if (document.documentElement.getAttribute("data-ms-landing-modal") === "open") return;
+    var b = document.body;
+    lockSavedY = window.scrollY || document.documentElement.scrollTop || 0;
+    lockSavedStyle = b.getAttribute("style");
+    b.style.position = "fixed";
+    b.style.top = (-lockSavedY) + "px";
+    b.style.left = "0";
+    b.style.right = "0";
+    b.style.width = "100%";
+    b.style.overflow = "hidden";
+    scrollLocked = true;
+  }
+  function unlockPageScroll() {
+    if (!scrollLocked) return;
+    var b = document.body;
+    /* style 속성을 통째로 되돌린다 — 호스트가 body 에 걸어 둔 인라인 스타일을 지우지 않기 위해 */
+    if (lockSavedStyle === null) b.removeAttribute("style");
+    else b.setAttribute("style", lockSavedStyle);
+    scrollLocked = false;
+    window.scrollTo(0, lockSavedY);
+  }
+
+  var FOCUSABLE = "input:not([disabled]),select:not([disabled]),textarea:not([disabled]),button:not([disabled]),a[href]";
+
+  function closeFormModal() {
+    var overlay = document.getElementById("mw-form-modal");
+    /* display:none 으로 닫는다 — DOM 과 입력값을 살려 두어 다시 열면 이어서 쓸 수 있다 */
+    if (overlay) overlay.style.display = "none";
+    if (modalKeyHandler) {
+      document.removeEventListener("keydown", modalKeyHandler, true);
+      modalKeyHandler = null;
+    }
+    unlockPageScroll();
+    if (modalOpener && document.contains(modalOpener)) {
+      try { modalOpener.focus(); } catch (e) {}
+    }
+    modalOpener = null;
+  }
+
+  function activateFormModal(overlay) {
+    lockPageScroll();
+    modalKeyHandler = function(ev) {
+      if (ev.key === "Escape") { ev.stopPropagation(); closeFormModal(); return; }
+      if (ev.key !== "Tab") return;
+      /* 포커스를 모달 안에 가둔다 — 없으면 Tab 이 오버레이 뒤 호스트 페이지로 새어 나간다 */
+      var items = Array.prototype.slice.call(overlay.querySelectorAll(FOCUSABLE)).filter(function(n) {
+        return n.offsetParent !== null || n === document.activeElement;
+      });
+      if (!items.length) { ev.preventDefault(); return; }
+      var first = items[0], last = items[items.length - 1];
+      if (ev.shiftKey && (document.activeElement === first || !overlay.contains(document.activeElement))) {
+        ev.preventDefault(); last.focus();
+      } else if (!ev.shiftKey && document.activeElement === last) {
+        ev.preventDefault(); first.focus();
+      }
+    };
+    document.addEventListener("keydown", modalKeyHandler, true);
+    var firstField = overlay.querySelector("input:not([type=hidden]):not([disabled]),select,textarea");
+    try { (firstField || overlay.querySelector(".mw-modal-close")).focus(); } catch (e) {}
+  }
+
   function openFormModal() {
+    /* config 전이면 열지 않는다 — buildFormInto 가 CFG 를 읽어 throw 하고, 빈 오버레이만 남는다.
+       (배너·히어로 버튼은 config 후에만 생기지만 openRegister 는 외부에서 언제든 불릴 수 있다) */
+    if (!CFG) return;
+    modalOpener = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
     var existing = document.getElementById("mw-form-modal");
-    if (existing) { existing.style.display = "flex"; return; }
+    if (existing) { existing.style.display = "flex"; activateFormModal(existing); return; }
     var overlay = el("div", "mw-modal-overlay mw-reset");
     overlay.id = "mw-form-modal";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", (CFG && CFG.name ? CFG.name + " " : "") + "사전등록");
     var cardWrap = el("div", "mw-modal-card");
     var closeBtn = el("button", "mw-modal-close", "\\u00d7");
     closeBtn.type = "button";
-    closeBtn.addEventListener("click", function() { overlay.style.display = "none"; });
-    overlay.addEventListener("click", function(ev) { if (ev.target === overlay) overlay.style.display = "none"; });
+    closeBtn.setAttribute("aria-label", "닫기");
+    closeBtn.addEventListener("click", closeFormModal);
+    overlay.addEventListener("click", function(ev) { if (ev.target === overlay) closeFormModal(); });
     cardWrap.appendChild(closeBtn);
     var formHost = el("div", "");
     cardWrap.appendChild(formHost);
     overlay.appendChild(cardWrap);
     document.body.appendChild(overlay);
     buildFormInto(formHost, null);
+    activateFormModal(overlay);
   }
+
+  /* 랜딩 런타임(/w/l/{slug})은 별도 번들이라 함수를 직접 못 부른다 → 문서 이벤트로 연결한다.
+     cancelable: 우리가 처리하면 preventDefault 로 알린다. 로더가 없는 페이지(단독 랜딩·미리보기)
+     에서는 아무도 처리하지 않아 랜딩이 기존 링크 이동으로 폴백한다. */
+  document.addEventListener("machstudio:open-register", function(ev) {
+    try {
+      if (!CFG) return;          /* 아직 config 로딩 전 — 링크 이동에 맡긴다 */
+      openFormModal();
+      if (ev.cancelable) ev.preventDefault();
+    } catch (e) { warn("open-register failed", e); }
+  });
 
   function goRegister() {
     var formMounts = mounts("register-form");
@@ -986,6 +1085,7 @@ ${ATTRIBUTION_CORE_JS}
 
   window.MachWebinar = {
     refresh: function() { fetchConfig(true); },
+    openRegister: function() { openFormModal(); },
     getState: function() { return { cfg: CFG, status: computeStatus(), entryOpen: CFG ? isEntryOpen(computeStatus()) : null }; }
   };
 })();`;

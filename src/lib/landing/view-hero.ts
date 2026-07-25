@@ -102,6 +102,25 @@ export function renderHero(m: LandingModel): HTMLElement {
       // 임베드는 호스트 문서 안이라 등록 페이지를 새 탭으로 연다
       target: m.embedded ? "_blank" : null,
       rel: m.embedded ? "noopener" : null,
+      /**
+       * 같은 페이지에 /w 로더가 있으면 그쪽 등록 폼 모달을 띄운다 — 페이지를 떠나지 않는다.
+       * 폼을 새로 그리지 않고 로더 것을 쓰는 이유: 하단 배너가 이미 그 폼을 쓰고 있어
+       * 한 페이지 안에서 두 벌이 갈리면 안 되고, UTM 봉투·허니팟·중복확인이 이미 붙어 있다.
+       * 이벤트는 cancelable — 로더가 처리하면 preventDefault 로 알려 준다. 로더가 없으면
+       * (단독 랜딩·어드민 미리보기) 아무도 처리하지 않으므로 href 링크 이동으로 그냥 폴백한다.
+       * href 를 유지하는 이유: 새 탭으로 열기·JS 실패에서도 등록 경로가 살아 있어야 한다.
+       */
+      onclick: (e: Event) => {
+        // 상태가 등록중이 아닐 때(입장·종료·마감)는 손대지 않는다 — 링크가 알맞은 화면으로 보낸다.
+        if (!m.statusInfo.canRegister) return;
+        if (m.statusInfo.status === "ended" || m.statusInfo.status === "live" || m.statusInfo.entryOpen) return;
+        // 보조 클릭(새 탭/다운로드 의도)은 그대로 링크에 맡긴다.
+        const me = e as MouseEvent;
+        if (me.metaKey || me.ctrlKey || me.shiftKey || me.altKey || me.button === 1) return;
+        const req = new CustomEvent("machstudio:open-register", { cancelable: true, bubbles: true });
+        const handled = !document.dispatchEvent(req); // preventDefault 됐으면 처리된 것
+        if (handled) e.preventDefault();
+      },
     },
     h("span", null, m.ctaLabel), // 상태별 라벨(등록중이면 어드민 설정 ctaLabel)
     arrowIcon(),
