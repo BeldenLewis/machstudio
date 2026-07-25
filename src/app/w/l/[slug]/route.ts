@@ -86,7 +86,27 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
     if (row) {
       // config 는 랜딩이 실제로 쓰는 키만 — youtubeId 등 민감 키가 외부 사이트로 새지 않게.
       const rawConfig = (row.config ?? {}) as Record<string, unknown>;
-      webinar = { ...row, config: { landingPage: rawConfig.landingPage } };
+      const landingRaw = rawConfig.landingPage;
+      const landingEnabled =
+        landingRaw && typeof landingRaw === "object" && !Array.isArray(landingRaw)
+          ? (landingRaw as Record<string, unknown>).enabled === true
+          : false;
+      // 미공개 랜딩은 **서버에서** 콘텐츠를 뺀다. 예전엔 무조건 실어 보내고 브라우저 게이트에만
+      // 의존해서, curl 로 미공개 히어로·연사 약력·FAQ 를 그대로 읽을 수 있었다.
+      // 임베드에는 소유자 미리보기 개념이 없으므로 조건 없이 차단한다.
+      webinar = landingEnabled
+        ? { ...row, config: { landingPage: landingRaw } }
+        : {
+            // 렌더러가 "아직 공개되지 않은 페이지예요." 를 그릴 최소 정보만 남긴다.
+            id: row.id,
+            name: row.name,
+            slug: row.slug,
+            description: null,
+            liveStartAt: row.liveStartAt,
+            theme: row.theme,
+            config: { landingPage: { enabled: false } },
+            sessions: [],
+          };
     }
     else notFound = true; // 조회는 됐고 그런 웨비나가 없다
   } catch {
