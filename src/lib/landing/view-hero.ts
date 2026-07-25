@@ -96,7 +96,7 @@ export function renderHero(m: LandingModel): HTMLElement {
       target: m.embedded ? "_blank" : null,
       rel: m.embedded ? "noopener" : null,
     },
-    h("span", null, m.lp.ctaLabel),
+    h("span", null, m.ctaLabel), // 상태별 라벨(등록중이면 어드민 설정 ctaLabel)
     arrowIcon(),
   );
   setLinkHref(cta, m.registerUrl);
