@@ -55,7 +55,9 @@ interface EditorState {
 }
 
 function toEditorState(config: Record<string, unknown>): EditorState {
-  const lp = normalizeLandingPageConfig(config);
+  // keepEmptyRows: 편집 중에는 제목 없는 행도 살려둔다. 공개 렌더용 필터를 그대로 쓰면
+  // 아직 제목을 안 쓴 행이 리마운트 때 사라지고, 다음 자동저장이 그 배열을 덮어써 DB 에서도 없어진다.
+  const lp = normalizeLandingPageConfig(config, { keepEmptyRows: true });
   return {
     enabled: lp.enabled,
     heroMediaType: lp.heroMedia ? lp.heroMedia.type : "none",
@@ -199,6 +201,10 @@ export default function LandingPageTab({
       }
       patch({ heroMediaType: data.type === "video" ? "video" : "image", heroMediaUrl: data.url });
       toast.success("업로드했어요");
+    } catch {
+      // try/finally 만 있으면 네트워크 실패가 unhandled rejection 으로 사라져
+      // 어드민은 "눌렸는데 아무 일도 없다" 만 본다.
+      toast.error("업로드 중 문제가 생겼어요. 연결을 확인하고 다시 시도해주세요.");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -210,8 +216,10 @@ export default function LandingPageTab({
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ config: { landingPage: toConfigPayload(value) } }),
+      keepalive: true, // 페이지 이탈 중 flush 도 서버에 도달하도록 (탭 닫기 시 마지막 편집 유실 방지)
     });
     if (res.ok) onSilentUpdate();
+    else toast.error("랜딩 페이지 저장에 실패했어요. 잠시 후 다시 시도돼요.");
     return res.ok;
   });
 
