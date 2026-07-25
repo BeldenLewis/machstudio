@@ -514,11 +514,17 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   // 경량 /status 만 받아 정적 콘텐츠 재수신 egress 를 없앤다.
   useEffect(() => {
     if (isPreviewUrl()) return;
-    if (view === "live" || view === "ended") return; // 종료 후에도 30초 상태 폴링이 계속 돌던 것 중단
+    // 라이브 중에는 live-state 폴러가 상태를 본다 → 여기선 중복 폴링 안 함.
+    // 종료 상태에서는 예전에 폴링을 완전히 멈춰서, liveEndAt 을 넘겨 자동 종료된 뒤
+    // 운영자가 콘솔에서 "라이브" 로 되돌려도 시청자는 수동 새로고침 전까지 돌아올 수 없었다.
+    // 종료 화면에서만 저빈도(2분)로 확인해 복구 경로를 남긴다.
+    if (view === "live") return;
+    // 종료 화면은 복구 확인 목적이라 저빈도(2분)로 — 대기 화면은 전환 감지가 중요해 30초 유지.
+    const periodMs = view === "ended" ? 120_000 : 30_000;
     const interval = setInterval(() => {
       if (document.hidden) return;
       void fetchStatus();
-    }, 30000);
+    }, periodMs);
     return () => clearInterval(interval);
   }, [view, fetchStatus]);
 
@@ -1064,7 +1070,27 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               // 알림 구독은 등록 이메일이 필요하다 — 미등록자에겐 버튼을 숨기고(누르면 항상 실패) 등록 CTA 로 유도
               onNotify={hasRegistration ? handleNotifyToggle : undefined}
               notify={{ subscribed: notifySubscribed, pending: notifyPending, error: notifyError }}
-              centerAction={hasRegistration ? undefined : (
+              centerAction={hasRegistration ? (
+                // 등록자용 — ?view=signup 이 붙은 링크(리마인더·북마크)로 들어오면 상태와 무관하게
+                // 대기 화면이 고정된다. 입장이 열려 있으면 들어갈 길을 반드시 보여준다.
+                entryOpenNow ? (
+                  <div
+                    className="mx-auto w-full max-w-md p-6 text-center"
+                    style={{ backgroundColor: surface, borderRadius: radius, boxShadow: "0 1px 2px rgba(0,0,0,.06), 0 12px 32px rgba(0,0,0,.08)" }}
+                  >
+                    <h2 className="text-base font-bold">입장이 열렸어요</h2>
+                    <p className="mt-1 text-sm opacity-60">등록을 마치셨어요. 바로 입장할 수 있어요.</p>
+                    <button
+                      type="button"
+                      onClick={() => { setViewParam(null); void fetchStatus(); }}
+                      className="mt-4 flex w-full items-center justify-center font-bold text-white transition-opacity hover:opacity-90"
+                      style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)`, minHeight: 48 }}
+                    >
+                      웨비나 입장하기 →
+                    </button>
+                  </div>
+                ) : undefined
+              ) : (
                 <div
                   className="mx-auto w-full max-w-md p-6 text-center"
                   style={{ backgroundColor: surface, borderRadius: radius, boxShadow: "0 1px 2px rgba(0,0,0,.06), 0 12px 32px rgba(0,0,0,.08)" }}
