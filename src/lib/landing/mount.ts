@@ -25,7 +25,16 @@ const FONT_ID = "lnd-font";
 const FONT_HREF =
   "https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css";
 
-let uidCounter = 0;
+/**
+ * uid 카운터는 **문서 전역**에 둔다. 임베드는 소비처마다 별도 IIFE 번들이라 모듈 스코프
+ * 변수가 각자 0 에서 시작해, 랜딩 2개를 붙이면 둘 다 uid="lnd1" 을 받았다.
+ * 그러면 섹션 id·aria-labelledby 가 중복되고 모달 레이어(uid 셀렉터)를 공유해 키컬러가 섞인다.
+ */
+function nextUid(): string {
+  const w = globalThis as typeof globalThis & { __machLandingUid?: number };
+  w.__machLandingUid = (w.__machLandingUid ?? 0) + 1;
+  return `lnd${w.__machLandingUid}`;
+}
 
 export interface MountLandingOptions {
   mount: HTMLElement;
@@ -78,7 +87,7 @@ function ensureFont(): void {
 
 export function mountLanding(opts: MountLandingOptions): LandingHandle {
   const { mount, webinar, embedded, isPreview } = opts;
-  const uid = `lnd${++uidCounter}`;
+  const uid = nextUid();
 
   ensureStyles();
   ensureFont();

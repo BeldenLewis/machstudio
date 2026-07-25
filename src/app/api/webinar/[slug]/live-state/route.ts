@@ -119,9 +119,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     ? { id: pinnedRow.id, name: pinnedRow.isHost ? pinnedRow.name : maskName(pinnedRow.name), message: pinnedRow.message, isHost: pinnedRow.isHost, createdAt: pinnedRow.createdAt }
     : null;
 
-  // 실시간 동시 시청자 수 — 라이브 중에만(사회적 증거 배지). isActive 단일 인덱스 count(어드민 대시보드와 동일 기준).
+  // 실시간 동시 시청자 수 — 라이브 중에만(사회적 증거 배지).
+  // 주석은 "어드민과 동일 기준" 이었지만 실제로는 최근성 필터가 없어 isActive 가 한 번 서면
+  // leave 가 올 때까지 영원히 카운트됐다. 퇴장 신호는 pagehide/beforeunload 뿐이라 모바일에서
+  // 거의 오지 않아 수치가 한 방향(과대)으로 편향됐다 → 어드민 대시보드와 같은 최근성 창을 쓴다.
+  const PRESENCE_WINDOW_MS = 5 * 60_000; // 어드민 대시보드의 presenceSince 와 같은 창(5분)
+  const presenceSince = new Date(Date.now() - PRESENCE_WINDOW_MS);
   const viewerCount = statusInfo.status === "live"
-    ? await prisma.webinarRegistration.count({ where: { webinarId: wid, isActive: true } })
+    ? await prisma.webinarRegistration.count({
+        where: {
+          webinarId: wid,
+          isActive: true,
+          OR: [{ presencePingAt: { gte: presenceSince } }, { lastPingAt: { gte: presenceSince } }],
+        },
+      })
     : null;
 
   // 영상 동기화 — 유효 등록자에게만 현재 설정을 전달한다.

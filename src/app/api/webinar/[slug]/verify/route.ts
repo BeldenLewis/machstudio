@@ -5,7 +5,11 @@ import { normalizePhone, normalizeEmail } from "@/lib/webinar-config";
 
 // found=false 전용 한도 — 미스만 기록해 5분에 5회 넘는 실패 조회를 차단 (명단 enumeration 방지).
 // 성공 조회는 미스 버킷에 기록하지 않으므로 정상 참가자의 오타 1~2회는 영향 없음.
-const MISS_LIMIT = { limit: 5, windowMs: 300_000 };
+// 열거 방어용. 조회 **전에** 차단해야 found 여부가 새지 않으므로 IP 단위를 유지하되,
+// 한도가 5회면 같은 IP 를 쓰는 사내망·모바일 CGNAT 에서 누군가의 오타 몇 번으로 무고한
+// 등록자까지 5분간 입장 불가가 됐다(웨비나는 정시에 몰리는 서비스라 최악의 순간에 걸린다).
+// 30회/5분 이면 실사용자는 사실상 걸리지 않고, 번호 공간 열거에는 여전히 비현실적으로 느리다.
+const MISS_LIMIT = { limit: 30, windowMs: 300_000 };
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -15,7 +19,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
     request.headers.get("x-real-ip") ??
     "unknown";
-  const rl = await rateLimitAsync(`verify:${slug}:${ip}`, { limit: 10, windowMs: 60_000 });
+  // 웨비나는 정시에 트래픽이 몰린다. 사내망·모바일 CGNAT 처럼 IP 를 공유하는 정상 시청자가
+  // 최악의 순간에 막히던 문제 → 성공 경로 한도를 크게 올린다(무한은 아니되 단체 입장을 막지 않게).
+  const rl = await rateLimitAsync(`verify:${slug}:${ip}`, { limit: 120, windowMs: 60_000 });
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "요청이 너무 잦아요. 잠시 후 다시 시도해주세요." },

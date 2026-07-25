@@ -572,11 +572,15 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       if (!registrationId) return;
       navigator.sendBeacon(`/api/webinar/${slug}/ping`, JSON.stringify({ registrationId, event: "leave" }));
     };
+    // beforeunload 만 걸면 iOS Safari·모바일 앱 전환에서 거의 발화하지 않아 퇴장이 기록되지 않고
+    // 동시 시청자 수가 한 방향(과대)으로 편향됐다. pagehide 는 모바일에서 신뢰할 수 있는 신호다.
     window.addEventListener("beforeunload", handleLeave);
+    window.addEventListener("pagehide", handleLeave);
 
     return () => {
       if (pingRef.current) clearInterval(pingRef.current);
       window.removeEventListener("beforeunload", handleLeave);
+      window.removeEventListener("pagehide", handleLeave);
       // 라이브→종료 전환·SPA 이탈 등 beforeunload 가 안 뜨는 경로에서도 퇴장 기록(sendBeacon은 언로드에도 안전).
       handleLeave();
     };
@@ -680,8 +684,14 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: authMethod, value }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.found || !data.registration) {
+      const data = await res.json().catch(() => null);
+      // 429·5xx 를 "등록 내역 없음" 으로 뭉개면 정상 등록자가 미등록자로 오인되고,
+      // 안내대로 사전등록을 눌러도 중복으로 막혀 완전한 막다른 길이 된다 → 원인별로 구분한다.
+      if (res.status === 429) {
+        setVerifyError(data?.error ?? "요청이 잦아 잠시 막혔어요. 조금 뒤 다시 시도해주세요.");
+      } else if (!res.ok && res.status >= 500) {
+        setVerifyError("일시적인 오류예요. 잠시 후 다시 시도해주세요.");
+      } else if (!res.ok || !data?.found || !data?.registration) {
         setVerifyError("등록 내역을 찾지 못했습니다. 다른 인증 방법으로도 시도해보세요.");
         return;
       }
