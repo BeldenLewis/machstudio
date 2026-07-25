@@ -111,6 +111,13 @@ interface QAProps {
   answered?: AnsweredQA[];
   onVote?: (qaId: string) => void;
   votedIds?: string[];
+  /**
+   * 질문 공개 범위.
+   *  open   = 올라온 질문을 서로 보고 추천할 수 있다(기본)
+   *  closed = 질문은 주최자만 본다 → 시청자에겐 입력창만 남는다.
+   * 서버가 폐쇄형이면 목록을 아예 안 내려주므로 여기 분기는 화면 정리용이다(게이팅은 서버 몫).
+   */
+  mode?: "open" | "closed";
 }
 
 const DEFAULT_NOTICE =
@@ -417,7 +424,9 @@ export default function LiveContentStk({
     }
     if (btn.url && btn.open === "modal") setCtaFrameModal({ url: btn.url, title: btn.label });
   };
-  const answered = qa.answered ?? [];
+  // 폐쇄형이면 목록은 없는 것으로 취급한다(서버도 안 내려주지만, 모드 전환 직후 잔여 상태 방어).
+  const qaClosed = qa.mode === "closed";
+  const answered = qaClosed ? [] : (qa.answered ?? []);
 
   // 세션 상태 계산용 시계 — 클라이언트 전용 렌더라 Date.now() 초기화 안전. 30초 틱.
   const [now, setNow] = useState<number>(() => serverNowMs ?? Date.now());
@@ -675,7 +684,13 @@ export default function LiveContentStk({
                     {qa.sent && <p className="lv-hint" style={{ color: "#2f9e63" }}>질문이 전달됐어요!</p>}
                     {qa.error && <p className="lv-hint" role="alert" style={{ color: "#f87171" }}>{qa.error}</p>}
                   </div>
-                  {answered.length > 0 ? (
+                  {qaClosed ? (
+                    /* 폐쇄형 — 목록·추천 없이 "질문하기"만. 왜 목록이 없는지 한 줄로 알려준다
+                       (그냥 비어 있으면 고장으로 읽힌다). */
+                    <div className="lv-empty">
+                      남긴 질문은 주최자에게만 전달돼요.<br />다른 참여자에게는 보이지 않아요.
+                    </div>
+                  ) : answered.length > 0 ? (
                     <div className="lv-list" tabIndex={0} aria-label="질문 목록">
                       {answered.map((q) => {
                         const voted = qa.votedIds?.includes(q.id);

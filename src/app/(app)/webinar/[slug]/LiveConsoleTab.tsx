@@ -1753,6 +1753,27 @@ export default function LiveConsoleTab({
       .then((r) => { if (!r.ok) throw new Error(); toast.success(next ? "시청자 채팅을 켰어요" : "시청자 채팅을 껐어요"); })
       .catch(() => { chatPendingRef.current = null; setChatOn(!next); toast.error("변경에 실패했어요"); });
   };
+  // Q&A 공개 범위 — 채팅 스위치와 같은 방식(콘솔 프로퍼티로 초기화 + 낙관적 갱신 + 실패 시 되돌림).
+  // 폐쇄형은 서버(live-state·공개 GET·추천)에서 막히고, 여기 값은 그 스위치일 뿐이다.
+  const [qaMode, setQaMode] = useState<"open" | "closed">(
+    () => ((webinar?.components as { qaMode?: string } | null | undefined)?.qaMode === "closed" ? "closed" : "open"),
+  );
+  const setQaModeRemote = (next: "open" | "closed") => {
+    if (next === qaMode) return;
+    const prev = qaMode;
+    setQaMode(next);
+    fetch(`/api/webinars/${webinarId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      // components 는 서버가 최상위 키 단위로 병합한다 → chatEnabled 등 다른 키는 보존된다
+      body: JSON.stringify({ components: { qaMode: next } }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error();
+        toast.success(next === "closed" ? "폐쇄형으로 바꿨어요 — 시청자는 질문 목록을 볼 수 없어요" : "오픈형으로 바꿨어요 — 시청자끼리 질문을 볼 수 있어요");
+      })
+      .catch(() => { setQaMode(prev); toast.error("변경에 실패했어요"); });
+  };
   const statusRef = useRef<WebinarStatus>("registration");
   // 라이브 진입/이탈 시 폴링 루프를 다시 짜기 위한 신호 — ref 만으로는 이미 걸린 90초 타이머가 그대로 남는다.
   const [isLivePolling, setIsLivePolling] = useState(false);
@@ -2018,8 +2039,36 @@ export default function LiveConsoleTab({
         {summary && summary.pendingQuestions > 0 && (
           <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">{summary.pendingQuestions}</span>
         )}
-        <span className="ml-auto rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">추천순</span>
+        {/* 공개 범위 전환 — 라이브 중 1클릭 거리(채팅 켜기/끄기와 같은 자리·같은 무게).
+            시청자에게 보이는 게 달라지는 조작이라 결과를 문구로 못박아 토스트로 알린다. */}
+        <div className="ml-auto flex items-center gap-1.5">
+          <div className="flex items-center rounded-full bg-secondary p-0.5" role="radiogroup" aria-label="Q&A 공개 범위">
+            {([
+              { v: "open" as const, t: "오픈형" },
+              { v: "closed" as const, t: "폐쇄형" },
+            ]).map((o) => (
+              <button
+                key={o.v}
+                type="button"
+                role="radio"
+                aria-checked={qaMode === o.v}
+                onClick={() => setQaModeRemote(o.v)}
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition-all ${
+                  qaMode === o.v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {o.t}
+              </button>
+            ))}
+          </div>
+          <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">추천순</span>
+        </div>
       </div>
+      {qaMode === "closed" && (
+        <p className="shrink-0 border-b border-border bg-amber-500/10 px-4 py-1.5 text-[11px] text-amber-700 sm:px-5 dark:text-amber-400">
+          폐쇄형 — 시청자에게는 질문하기 입력만 보이고, 올라온 질문은 이 화면에서만 보여요.
+        </p>
+      )}
       <div className="min-h-0 flex-1 p-4 sm:p-5">
         <QATab webinarId={webinarId} embedded fillHeight tick={liveTick} />
       </div>

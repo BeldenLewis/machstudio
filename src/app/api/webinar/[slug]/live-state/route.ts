@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
+import { normalizeQaMode } from "@/lib/webinar-config";
 import { maskName } from "@/lib/mask";
 
 const CORS = { "Access-Control-Allow-Origin": "*" };
@@ -27,6 +28,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const statusInfo = resolveWebinarStatus(webinar);
   const components = (webinar.components ?? {}) as Record<string, unknown>;
   const chatEnabled = components.chatEnabled === true;
+  // 폐쇄형(주최자만 열람)이면 보드를 **조회조차 하지 않는다** — 뷰어에서 숨기는 건 게이팅이 아니다.
+  // (응답에 실리면 개발자도구에서 그대로 읽힌다). 겸사겸사 100행 전송도 사라져 egress 도 줄어든다.
+  const qaMode = normalizeQaMode(components);
   const wid = webinar.id;
 
   // 동시 병렬 조회 — 필요할 때만 (Q&A/채팅은 게이팅)
@@ -36,7 +40,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       orderBy: { createdAt: "desc" },
       select: { id: true, type: true, message: true, createdAt: true },
     }),
-    registrationId && wantQa
+    registrationId && wantQa && qaMode === "open"
       ? prisma.webinarQA.findMany({
           where: { webinarId: wid, status: { not: "dismissed" } },
           orderBy: [{ voteCount: "desc" }, { createdAt: "asc" }],
@@ -152,6 +156,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       entryOpen: statusInfo.entryOpen,
       serverNow: new Date().toISOString(),
       chatEnabled,
+      // 라이브 중 콘솔에서 모드를 바꿔도 이미 보고 있는 시청자가 다음 폴에서 따라오게(chatEnabled 와 동일 패턴)
+      qaMode,
       youtubeId,
       viewerCount,
       announcements,
