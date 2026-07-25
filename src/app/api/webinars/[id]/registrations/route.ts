@@ -191,6 +191,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       ? [body.registration]
       : [];
 
+  // 중복=업데이트 모드에서 "무엇을 갱신할지" — CSV 에 실제로 있던 열 목록.
+  // normalizeInput 은 항상 10개 키를 다 채워 돌려주므로(없는 값은 null/false), 그걸 그대로
+  // update 에 넘기면 CSV 에 없던 열이 기존 값을 **지운다**. 특히 agreeMarketing 이 false 로,
+  // agreePrivacy 는 반대로 true 로 강제돼 동의 상태가 뒤바뀐다.
+  // null = 목록 없음 → 전체 덮어쓰기(수동 입력 폼. 모든 칸이 화면에 보이니 입력값이 곧 진실).
+  const providedFields: Set<string> | null = Array.isArray(body.providedFields)
+    ? new Set((body.providedFields as unknown[]).filter((f): f is string => typeof f === "string"))
+    : null;
+
   if (!rows.length) {
     return NextResponse.json({ error: "등록할 데이터가 없습니다." }, { status: 400 });
   }
@@ -230,9 +239,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
 
       if (duplicate && duplicateMode === "update") {
+        const updateData = providedFields
+          ? Object.fromEntries(Object.entries(data).filter(([k]) => providedFields.has(k)))
+          : data;
         await prisma.webinarRegistration.update({
           where: { id: duplicate.id },
-          data,
+          data: updateData,
         });
         result.updated += 1;
         seenKeys.add(key);

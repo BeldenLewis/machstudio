@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatKst } from "@/lib/datetime";
+import { parseMemo } from "@/lib/webinar-memo";
 import type { SurveyQuestion } from "@/lib/webinar-survey";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { InlineError } from "@/components/ui/inline-error";
@@ -193,9 +194,21 @@ function findHeaderIndex(headers: string[], aliases: string[]) {
   return clean.findIndex((header) => aliases.some((alias) => header.includes(cleanHeader(alias))));
 }
 
+// 마케팅 수신 동의 파싱 — 부분문자열 검사는 뜻을 뒤집는다.
+// 예전 구현은 ["y","yes","true","1","동의","수신"].some(t => text.includes(t)) 였다. 그래서
+//   '미동의'.includes('동의') → true,  '수신거부'.includes('수신') → true,  '동의하지 않음' → true
+// 즉 **거부한 사람이 동의로 들어왔다**. 동의 여부는 되돌리기 어려운 법적 상태라
+// (1) 부정 표현을 먼저 배제하고 (2) 긍정은 정확 일치로만 인정한다. 애매하면 false(미동의).
+const NEGATIVE_CONSENT = /(미동의|비동의|동의하지|미수신|수신거부|거부|반대|아니|없음|no|false)/;
+const POSITIVE_CONSENT = new Set([
+  "y", "yes", "true", "1", "o", "ok",
+  "동의", "수신동의", "동의함", "수신", "예", "네", "허용", "찬성",
+]);
 function parseBoolean(value: string) {
   const text = value.trim().toLowerCase();
-  return ["y", "yes", "true", "1", "동의", "수신"].some((item) => text.includes(item));
+  if (!text) return false;
+  if (NEGATIVE_CONSENT.test(text)) return false; // 부정이 먼저다 — '미동의' 가 '동의'로 읽히지 않게
+  return POSITIVE_CONSENT.has(text.replace(/\s+/g, ""));
 }
 
 function rowsToDrafts(rows: string[]) {
@@ -212,15 +225,35 @@ function rowsToDrafts(rows: string[]) {
   };
 }
 
-function parseBulkText(text: string): RegistrationDraft[] {
+// 헤더 없이 붙여넣을 때의 열 순서 — rowsToDrafts 와 같은 순서여야 한다.
+const POSITIONAL_FIELDS = [
+  "name", "phone", "email", "company", "department", "jobTitle", "industry", "agreeMarketing", "memo",
+] as const;
+
+/**
+ * 붙여넣은 텍스트를 등록 초안으로 바꾼다.
+ *
+ * rows 만으로는 부족해서 providedFields 를 함께 돌려준다 — "CSV 에 그 열이 있었는가" 를 서버가
+ * 알아야 하기 때문이다. 중복=업데이트 모드에서 초안 객체를 통째로 update 에 넘기면, CSV 에 없던
+ * 열이 빈 문자열·false 로 채워져 **기존 값을 지운다**(특히 마케팅 수신 동의가 조용히 꺼진다).
+ * 열이 있었던 필드만 서버가 갱신하도록 목록을 같이 보낸다.
+ */
+function parseBulkText(text: string): { rows: RegistrationDraft[]; providedFields: string[] } {
   const rows = parseCSV(text);
-  if (!rows.length) return [];
+  if (!rows.length) return { rows: [], providedFields: [] };
 
   const headers = rows[0] ?? [];
   const nameIndex = findHeaderIndex(headers, headerAliases.name);
   const hasHeader = nameIndex > -1;
 
-  if (!hasHeader) return rows.map(rowsToDrafts).filter((row) => row.name.trim());
+  if (!hasHeader) {
+    // 위치 기반 — 실제로 붙여넣은 열 수까지만 "제공됨" 으로 본다.
+    const width = rows.reduce((max, row) => Math.max(max, row.length), 0);
+    return {
+      rows: rows.map(rowsToDrafts).filter((row) => row.name.trim()),
+      providedFields: POSITIONAL_FIELDS.slice(0, width) as unknown as string[],
+    };
+  }
 
   const indexes = {
     name: findHeaderIndex(headers, headerAliases.name),
@@ -234,7 +267,9 @@ function parseBulkText(text: string): RegistrationDraft[] {
     memo: findHeaderIndex(headers, headerAliases.memo),
   };
 
-  return rows.slice(1).map((row) => ({
+  return {
+    providedFields: Object.entries(indexes).filter(([, i]) => i > -1).map(([k]) => k),
+    rows: rows.slice(1).map((row) => ({
     name: indexes.name > -1 ? row[indexes.name] ?? "" : "",
     phone: indexes.phone > -1 ? row[indexes.phone] ?? "" : "",
     email: indexes.email > -1 ? row[indexes.email] ?? "" : "",
@@ -244,7 +279,8 @@ function parseBulkText(text: string): RegistrationDraft[] {
     industry: indexes.industry > -1 ? row[indexes.industry] ?? "" : "",
     agreeMarketing: indexes.agreeMarketing > -1 ? parseBoolean(row[indexes.agreeMarketing] ?? "") : false,
     memo: indexes.memo > -1 ? row[indexes.memo] ?? "" : "",
-  })).filter((row) => row.name.trim());
+    })).filter((row) => row.name.trim()),
+  };
 }
 
 function formatDate(value: string | null) {
@@ -516,7 +552,13 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
     };
   }, [modalOpen]);
 
-  const parsedBulk = useMemo(() => parseBulkText(bulkText), [bulkText]);
+  // 상세 패널의 읽기 전용 커스텀 답변 — memo 컬럼에서 분해해 온다(편집 대상 아님).
+  const detailCustomFields = useMemo(
+    () => parseMemo(selectedRegistration?.memo ?? null).customFields,
+    [selectedRegistration],
+  );
+  const bulkParsed = useMemo(() => parseBulkText(bulkText), [bulkText]);
+  const parsedBulk = bulkParsed.rows;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   // 마지막 페이지의 마지막 항목을 지우면 page 가 범위를 벗어나 가짜 '등록자 없음' 빈 화면에 갇힌다 — 범위 밖이면 마지막 페이지로 당김.
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
@@ -583,7 +625,9 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
       const res = await fetch(`/api/webinars/${webinarId}/registrations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ registrations: parsedBulk, duplicateMode }),
+        // providedFields — CSV 에 실제로 있던 열만 서버가 갱신한다(중복=업데이트 모드에서
+        // 없던 열이 빈 값으로 기존 데이터를 덮어쓰지 않게).
+        body: JSON.stringify({ registrations: parsedBulk, duplicateMode, providedFields: bulkParsed.providedFields }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok && !data.created && !data.updated && !data.skipped) {
@@ -636,7 +680,9 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
       industry: registration.industry ?? "",
       agreeMarketing: registration.agreeMarketing,
       agreePrivacy: registration.agreePrivacy,
-      memo: registration.memo ?? "",
+      // memo 컬럼은 { memo, customFields } JSON 이다 — 편집 칸에는 운영자 메모(note)만 넣는다.
+      // 예전엔 JSON 원문이 그대로 들어가 저장 시 커스텀 답변까지 덮어썼다.
+      memo: parseMemo(registration.memo).note,
     });
   };
 
@@ -1048,6 +1094,24 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                 </div>
                 <input className={inputClass} placeholder="업종" value={detailDraft.industry} onChange={(e) => setDetailDraft((p) => p ? { ...p, industry: e.target.value } : p)} />
                 <textarea className={`${inputClass} resize-none`} rows={4} placeholder="메모" value={detailDraft.memo} onChange={(e) => setDetailDraft((p) => p ? { ...p, memo: e.target.value } : p)} />
+
+                {/* 등록 폼 커스텀 문항 답변 — 응답자가 제출한 값이라 여기서 고치지 않는다(읽기 전용).
+                    같은 memo 컬럼에 저장되지만 위 메모 칸과 분리해 보여줘야 편집이 답변을 지우지 않는다. */}
+                {Object.keys(detailCustomFields).length > 0 && (
+                  <div className="rounded-2xl border border-border bg-secondary/20 p-3">
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">등록 시 추가 응답</p>
+                    <dl className="space-y-1.5">
+                      {Object.entries(detailCustomFields).map(([label, value]) => (
+                        <div key={label} className="flex gap-2 text-sm">
+                          <dt className="shrink-0 text-muted-foreground">{label}</dt>
+                          <dd className="whitespace-pre-wrap break-words text-foreground">
+                            {typeof value === "string" ? value : JSON.stringify(value)}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2 rounded-2xl border border-border bg-secondary/20 p-3">

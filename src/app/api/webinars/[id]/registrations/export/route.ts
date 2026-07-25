@@ -4,23 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { normalizeRegistrationForm } from "@/lib/webinar-config";
 import { assembleWebinarEngagement, SEGMENT_LABEL } from "@/lib/webinar-scoring";
-
-// memo 는 JSON 문자열({ memo, customFields }) 또는 평문일 수 있다 (register 라우트 참조)
-function parseMemo(memo: string | null): { note: string; customFields: Record<string, unknown> } {
-  if (!memo) return { note: "", customFields: {} };
-  try {
-    const parsed = JSON.parse(memo);
-    if (parsed && typeof parsed === "object") {
-      return {
-        note: typeof parsed.memo === "string" ? parsed.memo : "",
-        customFields: parsed.customFields && typeof parsed.customFields === "object" ? parsed.customFields : {},
-      };
-    }
-  } catch {
-    /* 평문 memo */
-  }
-  return { note: memo, customFields: {} };
-}
+import { parseMemo } from "@/lib/webinar-memo";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();

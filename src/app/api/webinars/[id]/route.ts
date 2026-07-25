@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import { logActivity } from "@/lib/activity";
 import { isWebinarStatusOverride } from "@/lib/webinar-status";
+import { assertScheduleOrder, parseWebinarDate, WebinarScheduleError } from "@/lib/webinar-schedule";
 
 async function getWebinarWithAuth(id: string, userId: string) {
   const webinar = await prisma.webinar.findUnique({ where: { id } });
@@ -57,12 +58,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "잘못된 상태 값이에요" }, { status: 400 });
   }
 
-  // 날짜는 무효 문자열이면 Prisma 가 500 을 내므로 여기서 걸러 400 으로 돌려준다.
-  const parseDate = (v: unknown, label: string) => {
-    const d = new Date(v as string);
-    if (Number.isNaN(d.getTime())) throw new Error(`${label} 형식이 올바르지 않아요`);
-    return d;
-  };
+  // 날짜 파싱·순서 규칙은 webinar-schedule 하나로 — 생성(POST /api/webinars)과 같은 규칙을 쓴다.
+  const parseDate = parseWebinarDate;
 
   // config·components 는 탭마다 자기 키만 보낸다 → 서버에서 최상위 키 단위로 병합한다.
   // 통째 교체하면 A 탭 저장 직후 B 탭이 옛 스냅샷으로 덮어써 방금 저장한 설정이 롤백된다.
@@ -115,8 +112,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const start = liveStartAt !== undefined ? parseDate(liveStartAt, "시작 시각") : webinar.liveStartAt;
       const end = liveEndAt !== undefined ? parseDate(liveEndAt, "종료 시각") : webinar.liveEndAt;
       const deadline = signupDeadline !== undefined ? parseDate(signupDeadline, "등록 마감") : webinar.signupDeadline;
-      if (start.getTime() >= end.getTime()) throw new Error("종료 시각은 시작 시각보다 뒤여야 해요");
-      if (deadline.getTime() > end.getTime()) throw new Error("등록 마감은 종료 시각보다 앞이어야 해요");
+      assertScheduleOrder(start, end, deadline);
     }
     updated = await prisma.webinar.update({
       where: { id },
@@ -137,7 +133,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       },
     });
   } catch (e) {
-    if (e instanceof Error && (e.message.includes("형식이 올바르지 않아요") || e.message.includes("여야 해요"))) {
+    // 문자열 대조가 아니라 타입으로 구분한다 — 문구를 다듬는 순간 400 이 500 으로 바뀌던 자리다.
+    if (e instanceof WebinarScheduleError) {
       return NextResponse.json({ error: e.message }, { status: 400 });
     }
     throw e;

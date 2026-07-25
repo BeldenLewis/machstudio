@@ -12,8 +12,11 @@ import { prisma } from "@/lib/prisma";
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   const auth = request.headers.get("authorization") ?? request.headers.get("Authorization");
-  // Vercel cron 은 Authorization 헤더로 호출. 수동 호출도 허용하되 secret 있으면 검증.
-  if (secret && auth && auth !== `Bearer ${secret}`) {
+  // 나머지 cron 4개와 **같은** 조건이어야 한다. 예전 조건은 `secret && auth && ...` 여서
+  // 헤더가 없으면 검사를 통째로 건너뛰었다 → 누구나 호출 가능. 그러면 (a) 요청 1건이 서버측
+  // 외부 fetch 여러 건 + Sentry 발사로 증폭되고, (b) 응답의 loaders 에 워크스페이스 구분 없이
+  // 최근 활성 소스의 id·이름이 실려 남의 소스 이름이 노출됐다.
+  if (!secret || auth !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
