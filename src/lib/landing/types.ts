@@ -17,6 +17,13 @@ export interface LandingSession {
   endTime: string;
 }
 
+/** 서버가 resolveWebinarStatus 로 판정한 값 — 랜딩 CTA 가 상태를 반영하는 근거. */
+export interface LandingStatusInfo {
+  status: "upcoming" | "registration" | "live" | "ended" | string;
+  entryOpen: boolean;
+  canRegister: boolean;
+}
+
 export interface LandingWebinar {
   id: string;
   name: string;
@@ -26,6 +33,11 @@ export interface LandingWebinar {
   theme: Record<string, string>;
   config: Record<string, unknown>;
   sessions: LandingSession[];
+  // 서버(resolveWebinarStatus) 판정값 — 히어로 CTA 가 등록/입장/종료를 구분하는 근거.
+  // optional: 구 페이로드(상태 없음)도 등록중으로 취급해 그대로 동작한다.
+  status?: string;
+  entryOpen?: boolean;
+  canRegister?: boolean;
 }
 
 export interface LandingTocItem {
@@ -49,7 +61,12 @@ export interface LandingModel {
   titleLines: string[];
   subtitle: string;
   dateStr: string;
+  /** 히어로 CTA 링크 — 상태에 따라 등록/입장/종료 화면으로 갈린다. */
   registerUrl: string;
+  /** 히어로 CTA 라벨 — 등록중에는 어드민이 설정한 ctaLabel, 그 외엔 상태 문구. */
+  ctaLabel: string;
+  /** 서버 판정 상태(없으면 등록중으로 가정 — 구 페이로드 호환). */
+  statusInfo: LandingStatusInfo;
   introTitle: string;
   introBody: string;
   sessionCards: LandingSession[];

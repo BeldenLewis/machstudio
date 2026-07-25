@@ -10,7 +10,7 @@
 import { formatKst } from "@/lib/datetime";
 import { normalizeLandingPageConfig, safeHttpUrl } from "@/lib/webinar-config";
 import { SAFE_HEX, TOC_DEF, onPrimaryFor } from "./model";
-import type { LandingModel, LandingSession, LandingTocItem, LandingWebinar } from "./types";
+import type { LandingModel, LandingSession, LandingStatusInfo, LandingTocItem, LandingWebinar } from "./types";
 
 export interface BuildLandingModelOptions {
   /** 인스턴스 고유 접두 — 한 페이지에 랜딩이 둘 이상 붙어도 DOM id 가 안 부딪히게. */
@@ -21,9 +21,9 @@ export interface BuildLandingModelOptions {
   origin?: string;
 }
 
-/** 등록 링크 — 원본과 같은 경로. origin 이 있으면 절대 URL(임베드용). */
-function buildRegisterUrl(slug: string, origin?: string): string {
-  const path = `/webinar/${encodeURIComponent(slug)}/live?view=signup`;
+/** 라이브 페이지 링크 — origin 이 있으면 절대 URL(임베드용). */
+function buildLiveUrl(slug: string, origin: string | undefined, view: "signup" | null): string {
+  const path = `/webinar/${encodeURIComponent(slug)}/live${view ? `?view=${view}` : ""}`;
   const base = (origin ?? "").trim();
   if (!base) return path;
   try {
@@ -47,7 +47,31 @@ export function buildLandingModel(webinar: LandingWebinar, opts: BuildLandingMod
   const titleLines = lp.titleLines.length ? lp.titleLines : [webinar.name];
   const subtitle = lp.subtitle.trim() || (webinar.description ?? "").split("\n")[0] || "";
   const dateStr = `${formatKst(webinar.liveStartAt, { year: "numeric", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false })} KST`;
-  const registerUrl = buildRegisterUrl(webinar.slug, origin);
+  // 상태별 CTA — 예전엔 상태와 무관하게 항상 "사전 등록하기 → ?view=signup" 이었다.
+  // 종료된 웨비나가 등록을 권하고, 라이브 중에는 ?view=signup 이 대기 화면을 고정해
+  // 등록자가 입장하지 못했다(배너는 상태별로 바뀌는데 히어로만 안 바뀜).
+  const statusInfo: LandingStatusInfo = {
+    status: typeof webinar.status === "string" ? webinar.status : "registration",
+    entryOpen: webinar.entryOpen === true,
+    // 구 페이로드(상태 없음) 호환 — 값이 없으면 등록 가능으로 본다.
+    canRegister: webinar.canRegister !== false,
+  };
+  const canEnter = statusInfo.status === "live" || statusInfo.entryOpen;
+  const registerUrl = buildLiveUrl(
+    webinar.slug,
+    origin,
+    // 실제로 등록할 수 있을 때만 ?view=signup 을 붙인다(이 쿼리는 대기 화면을 고정한다).
+    // 입장·종료·마감 상태에서는 라이브 페이지가 알아서 맞는 화면을 고른다.
+    statusInfo.canRegister && !canEnter && statusInfo.status !== "ended" ? "signup" : null,
+  );
+  const ctaLabel =
+    statusInfo.status === "ended"
+      ? "웨비나가 종료되었어요"
+      : canEnter
+        ? "웨비나 입장하기"
+        : statusInfo.canRegister
+          ? lp.ctaLabel
+          : "사전등록이 마감되었어요";
 
   // 임베드는 호출자가 만든 임의의 객체를 넘길 수 있어 세션 배열 부재를 방어한다(파트너 문서에서 throw 금지).
   const sessions: LandingSession[] = Array.isArray(webinar.sessions) ? webinar.sessions : [];
@@ -100,6 +124,8 @@ export function buildLandingModel(webinar: LandingWebinar, opts: BuildLandingMod
     subtitle,
     dateStr,
     registerUrl,
+    ctaLabel,
+    statusInfo,
     introTitle,
     introBody,
     sessionCards,

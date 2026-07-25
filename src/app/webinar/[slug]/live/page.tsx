@@ -19,6 +19,48 @@ const isPreviewUrl = () => typeof window !== "undefined" && new URLSearchParams(
 
 // 상태 폴링(fetchStatus)은 URL 의 ?view 만 보고 화면을 정한다 — state 로만 바꾼 화면은
 // 다음 폴에서 되돌아간다. "등록하러 가기" 같은 사용자의 명시적 이동은 여기에 남겨야 유지된다.
+/**
+ * UTM 봉투 — 서버 parseUtmEnvelope 와 같은 flat 키 계약.
+ * 임베드 로더는 방문 시점부터 first/last UTM 과 journey 를 저장해 함께 보내는데,
+ * 라이브 페이지 등록(공유 링크·QR·카카오 유입의 주 진입점)에는 이게 없어서
+ * utmSource·firstReferrer 가 전부 null 로 남고 대시보드 UTM 집계가 한쪽으로 편향됐다.
+ * 여기서는 로더의 sessionStorage 이력을 쓸 수 없으므로 **현재 URL·리퍼러**만 담는다
+ * (없는 것보다 정확하고, 로더 경로와 키 계약이 같아 서버 변경이 필요 없다).
+ */
+function buildUtmEnvelope(): Record<string, unknown> | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const q = new URLSearchParams(window.location.search);
+    const pick = (k: string) => q.get(k) || null;
+    const utm = {
+      utmSource: pick("utm_source"),
+      utmMedium: pick("utm_medium"),
+      utmCampaign: pick("utm_campaign"),
+      utmTerm: pick("utm_term"),
+      utmContent: pick("utm_content"),
+      utmId: pick("utm_id"),
+    };
+    const referrer = document.referrer || null;
+    const hasAny = Object.values(utm).some(Boolean) || Boolean(referrer);
+    if (!hasAny) return null; // 서버도 "정보 전무" 면 null 로 취급한다
+    return {
+      ...utm,
+      firstUtmSource: utm.utmSource,
+      firstUtmMedium: utm.utmMedium,
+      firstUtmCampaign: utm.utmCampaign,
+      firstUtmTerm: utm.utmTerm,
+      firstUtmContent: utm.utmContent,
+      firstUtmId: utm.utmId,
+      firstReferrer: referrer,
+      firstSeenAt: new Date().toISOString(),
+      journey: null,
+      referrer,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function setViewParam(value: "signup" | null) {
   if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
@@ -589,7 +631,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       const res = await fetch(`/api/webinar/${slug}/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, customFields }),
+        body: JSON.stringify({ ...form, customFields, _utm: buildUtmEnvelope() }),
       });
       const data = await res.json();
       if (!res.ok) {

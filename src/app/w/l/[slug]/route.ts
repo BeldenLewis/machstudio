@@ -15,6 +15,7 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resolveWebinarStatus } from "@/lib/webinar-status";
 import { LANDING_RUNTIME_JS } from "@/generated/landing-runtime";
 
 const CORS_HEADERS = {
@@ -63,6 +64,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
         slug: true,
         description: true,
         liveStartAt: true,
+        // 상태 판정에 필요 — 예전엔 이 3개가 select 에 없어서 랜딩 CTA 가 상태를 알 수 없었다.
+        liveEndAt: true,
+        signupDeadline: true,
+        statusOverride: true,
         theme: true,
         config: true,
         sessions: {
@@ -94,8 +99,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
       // 미공개 랜딩은 **서버에서** 콘텐츠를 뺀다. 예전엔 무조건 실어 보내고 브라우저 게이트에만
       // 의존해서, curl 로 미공개 히어로·연사 약력·FAQ 를 그대로 읽을 수 있었다.
       // 임베드에는 소유자 미리보기 개념이 없으므로 조건 없이 차단한다.
+      const st = resolveWebinarStatus(row);
+      const stateFields = { status: st.status, entryOpen: st.entryOpen, canRegister: st.canRegister };
       webinar = landingEnabled
-        ? { ...row, config: { landingPage: landingRaw } }
+        ? { ...row, ...stateFields, config: { landingPage: landingRaw } }
         : {
             // 렌더러가 "아직 공개되지 않은 페이지예요." 를 그릴 최소 정보만 남긴다.
             id: row.id,
@@ -106,6 +113,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
             theme: row.theme,
             config: { landingPage: { enabled: false } },
             sessions: [],
+            ...stateFields,
           };
     }
     else notFound = true; // 조회는 됐고 그런 웨비나가 없다

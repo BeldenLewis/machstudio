@@ -151,13 +151,18 @@ ${ATTRIBUTION_CORE_JS}
       return parsed;
     } catch (e) { return null; }
   }
-  function writeCachedCfg(cfg) {
-    try { sessionStorage.setItem(CFG_CACHE_KEY, JSON.stringify({ t: Date.now(), cfg: cfg })); } catch (e) {}
+  function writeCachedCfg(cfg, ageMs) {
+    try { sessionStorage.setItem(CFG_CACHE_KEY, JSON.stringify({ t: Date.now(), cfg: cfg, a: ageMs || 0 })); } catch (e) {}
   }
-  function applyConfig(cfg, fetchedAtMs) {
+  var lastAgeMs = 0; /* 마지막 응답의 CDN 캐시 경과(ms) */
+  function applyConfig(cfg, fetchedAtMs, ageMs) {
     if (!cfg || !cfg.slug) return;
     CFG = cfg;
     var serverNow = parseMs(cfg.serverNow);
+    /* serverNow 는 응답 **본문**에 있어 CDN 캐시와 함께 굳는다(s-maxage 60 + SWR 300).
+       보정 없이 쓰면 최대 6분 과거의 시각을 "지금"으로 믿어 serverOffsetMs 가 그만큼 음수가 되고,
+       경계 타이머가 늦게 잡혀 라이브 전환이 지연됐다. Age 헤더로 캐시에 머문 시간을 더해 되돌린다. */
+    if (serverNow !== null) serverNow += (typeof ageMs === "number" && ageMs > 0 ? ageMs : 0);
     if (serverNow !== null && fetchedAtMs) serverOffsetMs = serverNow - fetchedAtMs;
     renderAll();
     scheduleBoundary();
@@ -169,10 +174,13 @@ ${ATTRIBUTION_CORE_JS}
     // 브라우저 휴리스틱 캐시가 끼면 상태 전환이 페이지에 반영되지 않는다)
     fetch(CONFIG_URL, { method: "GET", cache: "no-store" }).then(function(res) {
       if (!res.ok) throw new Error("config " + res.status);
+      /* Age = 응답이 CDN 캐시에 머문 초. 본문의 serverNow 가 그만큼 과거라 보정에 쓴다. */
+      var ageSec = parseInt(res.headers.get("age") || "0", 10);
+      lastAgeMs = isNaN(ageSec) || ageSec < 0 ? 0 : ageSec * 1000;
       return res.json();
     }).then(function(cfg) {
-      writeCachedCfg(cfg);
-      applyConfig(cfg, fetchedAt);
+      writeCachedCfg(cfg, lastAgeMs);
+      applyConfig(cfg, fetchedAt, lastAgeMs);
     }).catch(function(e) {
       if (!CFG) warn("config fetch failed — 렌더 생략", e);
     });
@@ -182,7 +190,7 @@ ${ATTRIBUTION_CORE_JS}
     if (cached) {
       // cached.t(= fetch 시각)를 넘겨 serverNow 오프셋을 복원 — 캐시 신선(<60초)해서 재fetch 를
       // 건너뛰는 페이지뷰에서도 클럭 스큐 보정이 유지된다 (절대시각 차이라 경과시간 무관).
-      applyConfig(cached.cfg, cached.t);
+      applyConfig(cached.cfg, cached.t, cached.a);
       if (Date.now() - cached.t < CFG_CACHE_TTL) return;
     }
     fetchConfig(false);

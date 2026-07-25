@@ -31,7 +31,13 @@ export default function WebinarLandingPage({ params }: { params: Promise<{ slug:
           setError(data?.error ?? "웨비나를 찾을 수 없어요");
           return;
         }
-        setWebinar(data.webinar as LandingWebinar);
+        // info 는 상태를 webinar 밖(top-level)에 준다 → 모델이 읽는 자리로 합친다.
+        setWebinar({
+          ...(data.webinar as LandingWebinar),
+          status: data.status,
+          entryOpen: data.entryOpen,
+          canRegister: data.canRegister,
+        });
       } catch {
         if (alive) setError("불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
       }
