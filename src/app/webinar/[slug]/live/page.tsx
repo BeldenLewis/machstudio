@@ -818,7 +818,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     }
 
     return (
-      <div key={field.key} className={field.type === "select" ? "col-span-2" : ""}>
+      <div key={field.key}>
         <label className="text-xs opacity-50 mb-1 block">{commonLabel}</label>
         {field.type === "select" ? (
           <select
@@ -1079,7 +1079,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             <motion.div
               style={{ backgroundColor: surface, borderRadius: radius }}
               // 내용만 스크롤 — 긴 폼에서도 닫기(×)와 제출 버튼이 잘리지 않게(모바일).
-              className="relative max-h-[88vh] w-full max-w-2xl overflow-y-auto p-6 md:p-8"
+              className="relative max-h-[88vh] w-full max-w-[480px] overflow-y-auto p-6 md:p-7"
               initial={{ opacity: 0, y: 8, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.18 }}
@@ -1099,12 +1099,12 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
                 </div>
               ) : (
               <>
-                <h2 className="text-lg font-semibold mb-1">사전 등록</h2>
+                <h2 className="text-lg font-semibold mb-1">{webinar.name} 사전등록</h2>
                 <p className="text-xs opacity-50 mb-5">
                   등록 마감 {formatKst(webinar.signupDeadline, { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                 </p>
                 <div className="space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3">
                     {visibleFields.map(renderRegistrationField)}
                   </div>
 
