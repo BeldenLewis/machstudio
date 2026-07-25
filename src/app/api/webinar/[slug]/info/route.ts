@@ -55,6 +55,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     landingRaw && typeof landingRaw === "object" && !Array.isArray(landingRaw)
       ? (landingRaw as Record<string, unknown>).enabled === true
       : false;
+  // ?preview 를 존중할지는 **서버가** 정한다. 예전엔 쿼리스트링만 보고 렌더러가 게이트를 열어,
+  // 비로그인 방문자가 ?preview 를 붙이면 미공개 웨비나가 (기본값으로 채워진) 랜딩처럼 그려졌다.
+  let landingPreviewAllowed = false;
   if (landingEnabled) {
     config.landingPage = landingRaw;
   } else {
@@ -73,11 +76,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     }
     // 비소유자에게는 "비공개" 사실만 알린다 — 렌더러가 안내 문구를 그린다.
     config.landingPage = isOwner ? landingRaw : { enabled: false };
+    landingPreviewAllowed = isOwner;
   }
+
+  // workspaceId 는 위 멤버십 검사에만 쓰는 내부 식별자다 — 공개 응답에서 뺀다.
+  const { workspaceId: _workspaceId, ...publicWebinar } = webinar;
 
   return NextResponse.json(
     {
-      webinar: { ...webinar, config },
+      webinar: { ...publicWebinar, config },
+      landingPreviewAllowed,
       endedSurvey,
       status: statusInfo.status,
       entryOpen: statusInfo.entryOpen,

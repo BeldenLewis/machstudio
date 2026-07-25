@@ -17,6 +17,8 @@ import type { LandingWebinar } from "@/lib/landing/types";
 export default function WebinarLandingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
   const [webinar, setWebinar] = useState<LandingWebinar | null>(null);
+  // ?preview 는 요청만이고, 허용 여부는 서버(/info)가 멤버십으로 판정한다.
+  const [previewAllowed, setPreviewAllowed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
 
@@ -31,6 +33,7 @@ export default function WebinarLandingPage({ params }: { params: Promise<{ slug:
           setError(data?.error ?? "웨비나를 찾을 수 없어요");
           return;
         }
+        setPreviewAllowed(data.landingPreviewAllowed === true);
         // info 는 상태를 webinar 밖(top-level)에 준다 → 모델이 읽는 자리로 합친다.
         setWebinar({
           ...(data.webinar as LandingWebinar),
@@ -60,12 +63,12 @@ export default function WebinarLandingPage({ params }: { params: Promise<{ slug:
       mount: host,
       webinar,
       embedded,
-      isPreview: new URLSearchParams(window.location.search).has("preview"),
+      isPreview: previewAllowed && new URLSearchParams(window.location.search).has("preview"),
       origin: window.location.origin,
       legacyIframe: embedded,
     });
     return () => handle.destroy();
-  }, [webinar]);
+  }, [webinar, previewAllowed]);
 
   // 레거시 iframe 브리지 — 문서 높이를 부모로, 호스트 뷰포트 높이를 --lnd-vh 로.
   useEffect(() => {
