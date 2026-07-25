@@ -39,6 +39,24 @@ export function releaseLayer(uid: string): void {
   if (layer && !layer.firstChild) layer.remove();
 }
 
+/**
+ * 목차 전용 body 직계 고정 레이어. 모달 레이어(acquireLayer)와 **일부러 분리**했다:
+ *  - 수명이 다르다(목차는 마운트 내내 / 모달은 열려 있는 동안) → 공유하면 refcount 해제가 엉킨다.
+ *  - z-index 를 레이어 단위로 못박아 모달이 항상 목차 위에 온다(한 레이어 안에서 z-index 다툴 필요 없음).
+ *  - 키컬러 구간에서 목차 색을 바꾸려면 on-accent 를 레이어에 미러링해야 하는데,
+ *    모달과 공유하면 `.lnd.on-accent{background:var(--primary)}` 가 모달 레이어에 번진다.
+ * body 직계라 루트의 인라인 키컬러 변수를 못 받으므로 여기서 다시 심는다.
+ */
+export function createTocLayer(uid: string, accent: string, onPrimary: string): HTMLElement {
+  const layer = document.createElement("div");
+  layer.setAttribute("data-ms-landing-toc", uid);
+  layer.className = "lnd lnd-toc-layer";
+  layer.style.setProperty("--primary", accent);
+  layer.style.setProperty("--on-primary", onPrimary);
+  document.body.appendChild(layer);
+  return layer;
+}
+
 export function lockScroll(): void {
   const g = globalThis as WithLock;
   const state = g[LOCK_STATE] ?? (g[LOCK_STATE] = { locks: 0, savedStyle: null, savedY: 0, hadModalOpen: false });
