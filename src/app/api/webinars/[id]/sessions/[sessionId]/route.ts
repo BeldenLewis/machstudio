@@ -31,9 +31,11 @@ export async function PATCH(
 
   const body = await request.json();
   const number = body.number !== undefined ? Number(body.number) : undefined;
-  const title = body.title !== undefined ? String(body.title).trim() : undefined;
-  const startTime = body.startTime !== undefined ? String(body.startTime).trim() : undefined;
-  const endTime = body.endTime !== undefined ? String(body.endTime).trim() : undefined;
+  // 여기도 `?? ""` — null 이 오면 String(null)="null" 이 되고, "null" 은 truthy 라
+  // 아래 빈값 검증마저 통과해 제목이 "null" 인 세션이 저장된다.
+  const title = body.title !== undefined ? String(body.title ?? "").trim() : undefined;
+  const startTime = body.startTime !== undefined ? String(body.startTime ?? "").trim() : undefined;
+  const endTime = body.endTime !== undefined ? String(body.endTime ?? "").trim() : undefined;
 
   if (number !== undefined && (!Number.isInteger(number) || number < 1)) {
     return NextResponse.json({ error: "세션 번호를 확인해주세요" }, { status: 400 });
@@ -54,11 +56,15 @@ export async function PATCH(
       ...(number !== undefined && { number }),
       ...(["session", "qa", "break"].includes(String(body.type)) && { type: String(body.type) }),
       ...(title !== undefined && { title }),
-      ...(body.speaker !== undefined && { speaker: String(body.speaker).trim() || null }),
-      ...(body.speakerCompany !== undefined && { speakerCompany: String(body.speakerCompany).trim() || null }),
-      ...(body.speakerPhotoUrl !== undefined && { speakerPhotoUrl: String(body.speakerPhotoUrl).trim() || null }),
-      ...(body.description !== undefined && { description: String(body.description).trim() || null }),
-      ...(body.speakerBio !== undefined && { speakerBio: String(body.speakerBio).trim() || null }),
+      // `?? ""` 가 반드시 있어야 한다. body.speaker 가 JSON null 이면 null !== undefined 라 이 항목이
+      // 통과하고, String(null) === "null" 이 그대로 저장돼 화면에 "null" 이 찍힌다.
+      // (연사가 없는 Break/Q&A 행이 정확히 이렇게 speaker="null" 로 저장돼 있었다. POST 쪽은
+      //  원래 `?? ""` 가 있어 멀쩡했고 PATCH 에만 빠져 있었다.)
+      ...(body.speaker !== undefined && { speaker: String(body.speaker ?? "").trim() || null }),
+      ...(body.speakerCompany !== undefined && { speakerCompany: String(body.speakerCompany ?? "").trim() || null }),
+      ...(body.speakerPhotoUrl !== undefined && { speakerPhotoUrl: String(body.speakerPhotoUrl ?? "").trim() || null }),
+      ...(body.description !== undefined && { description: String(body.description ?? "").trim() || null }),
+      ...(body.speakerBio !== undefined && { speakerBio: String(body.speakerBio ?? "").trim() || null }),
       ...(startTime !== undefined && { startTime }),
       ...(endTime !== undefined && { endTime }),
     },

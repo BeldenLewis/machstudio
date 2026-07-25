@@ -6,6 +6,7 @@ import { CalendarPlus, Share2, Bell } from "lucide-react";
 import { buildStkCss } from "./LiveContentStk";
 import { formatKst } from "@/lib/datetime";
 import type { LivePageConfig } from "@/lib/webinar-config";
+import { buildSessionNumbering } from "@/lib/webinar-sessions";
 
 /**
  * 등록 완료 ~ 라이브 오픈 전 대기 화면.
@@ -133,6 +134,7 @@ export default function PreLiveWaiting({
   const showCalendar = live.waiting.calendar && hasCalendar && !!onCalendar;
   const showShare = live.waiting.share && !!onShare;
   const showNotify = live.waiting.notify && !!onNotify;
+  const agendaNumbering = useMemo(() => buildSessionNumbering(webinar.sessions), [webinar.sessions]);
   const showAgenda = live.waiting.agenda && webinar.sessions.length > 0;
   const showSocial = live.waiting.social && (registrantCount ?? 0) > 0;
   const showCenterAction = Boolean(centerAction) && (started || replaceCountdown);
@@ -213,10 +215,12 @@ export default function PreLiveWaiting({
 
             {showAgenda ? (
               <div className="plw-ag">
-                <div className="h"><h3>세션 순서</h3><span>{webinar.sessions.length}개 세션</span></div>
+                {/* 개수는 실제 세션만 — 휴식·Q&A 를 세면 "3개 세션"이 "5개 세션"으로 부풀었다 */}
+                <div className="h"><h3>세션 순서</h3><span>{agendaNumbering.realCount}개 세션</span></div>
                 {webinar.sessions.map((sn) => {
                   const brk = sn.type === "break";
-                  const kd = brk ? "Break" : sn.type === "qa" ? "Q&A" : `Session ${sn.number}`;
+                  // Session 번호도 표시 순번 — 원본 number 면 휴식이 낀 뒤로 "Session 4"부터 시작한다
+                  const kd = brk ? "Break" : sn.type === "qa" ? "Q&A" : `Session ${agendaNumbering.displayNumber(sn.number) ?? sn.number}`;
                   return (
                     <div className={`plw-row ${brk ? "brk" : ""}`} key={sn.id}>
                       <div className="tm">{sn.startTime}</div>

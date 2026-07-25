@@ -84,6 +84,7 @@ function SessionFormFields({
   const [photoSource, setPhotoSource] = useState<"upload" | "url">("upload");
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isBreak = form.type === "break";
 
   const uploadPhoto = async (file: File) => {
     const validationError = validateSpeakerPhoto(file);
@@ -141,26 +142,32 @@ function SessionFormFields({
           className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
         />
       </div>
-      <div className="col-span-12 sm:col-span-4">
-        <label className="text-xs text-muted-foreground mb-1 block">연사 이름</label>
-        <input
-          type="text"
-          value={form.speaker}
-          onChange={(e) => setForm((f) => ({ ...f, speaker: e.target.value }))}
-          placeholder="홍길동"
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
-        />
-      </div>
-      <div className="col-span-12 sm:col-span-4">
-        <label className="text-xs text-muted-foreground mb-1 block">소속·직책</label>
-        <input
-          type="text"
-          value={form.speakerCompany}
-          onChange={(e) => setForm((f) => ({ ...f, speakerCompany: e.target.value }))}
-          placeholder="예: 잡코리아 CEO"
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
-        />
-      </div>
+      {/* 휴식엔 연사가 없다 → 연사 입력칸을 아예 감춘다. 비워 두라고 안내하는 대신 안 보이게 하는 게
+          맞다(빈칸이 있으면 채우게 된다). Q&A 는 "전체 연사"처럼 적을 수 있어 그대로 둔다. */}
+      {!isBreak && (
+        <>
+          <div className="col-span-12 sm:col-span-4">
+            <label className="text-xs text-muted-foreground mb-1 block">연사 이름</label>
+            <input
+              type="text"
+              value={form.speaker}
+              onChange={(e) => setForm((f) => ({ ...f, speaker: e.target.value }))}
+              placeholder="홍길동"
+              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
+            />
+          </div>
+          <div className="col-span-12 sm:col-span-4">
+            <label className="text-xs text-muted-foreground mb-1 block">소속·직책</label>
+            <input
+              type="text"
+              value={form.speakerCompany}
+              onChange={(e) => setForm((f) => ({ ...f, speakerCompany: e.target.value }))}
+              placeholder="예: 잡코리아 CEO"
+              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
+            />
+          </div>
+        </>
+      )}
       <div className="col-span-6 sm:col-span-2">
         <label className="text-xs text-muted-foreground mb-1 block">시작</label>
         <input
@@ -189,6 +196,7 @@ function SessionFormFields({
           className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors resize-y"
         />
       </div>
+      {!isBreak && (
       <div className="col-span-12">
         <label className="text-xs text-muted-foreground mb-1 block">연사 약력·경력</label>
         <textarea
@@ -200,6 +208,8 @@ function SessionFormFields({
         />
         <p className="mt-1 text-[11px] text-muted-foreground">랜딩 상세 팝업의 &lsquo;약력&rsquo; 영역에 표시돼요. 줄바꿈이 그대로 유지됩니다.</p>
       </div>
+      )}
+      {!isBreak && (
       <div className="col-span-12">
         <label className="text-xs text-muted-foreground mb-1.5 block">연사 사진 (선택)</label>
         <div className="flex items-center gap-1 mb-2" role="group" aria-label="연사 사진 입력 방식">
@@ -240,6 +250,7 @@ function SessionFormFields({
             className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
         )}
       </div>
+      )}
     </div>
   );
 }
