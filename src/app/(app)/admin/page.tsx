@@ -109,6 +109,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   "webinar.session_created": "웨비나 세션 생성",
   "webinar.session_updated": "웨비나 세션 수정",
   "webinar.session_deleted": "웨비나 세션 삭제",
+  "webinar.sessions_reordered": "웨비나 세션 순서 변경",
   "webinar.announcement_created": "웨비나 공지 생성",
   "webinar.announcement_updated": "웨비나 공지 수정",
   "webinar.announcement_deleted": "웨비나 공지 삭제",
