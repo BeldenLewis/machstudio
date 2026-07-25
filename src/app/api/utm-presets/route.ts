@@ -2,12 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
+import { isWorkspaceMember, resolveMemberWorkspaceId } from "@/lib/workspace-scope";
 
-async function getWorkspaceId(workspaceId: string | null, userId: string) {
-  if (workspaceId) return workspaceId;
-  const m = await prisma.workspaceMember.findFirst({ where: { userId }, orderBy: { joinedAt: "asc" } });
-  return m?.workspaceId ?? null;
-}
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -15,7 +11,7 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: "인증 필요" }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
-  const wsId = await getWorkspaceId(searchParams.get("workspaceId"), user.id);
+  const wsId = await resolveMemberWorkspaceId(searchParams.get("workspaceId"), user.id);
   if (!wsId) return NextResponse.json({ presets: [] });
 
   const presets = await prisma.uTMPreset.findMany({
@@ -34,7 +30,7 @@ export async function POST(request: Request) {
   const { workspaceId, field, value, label } = await request.json();
   if (!field || !value) return NextResponse.json({ error: "field와 value는 필수입니다" }, { status: 400 });
 
-  const wsId = await getWorkspaceId(workspaceId, user.id);
+  const wsId = await resolveMemberWorkspaceId(workspaceId, user.id);
   if (!wsId) return NextResponse.json({ error: "워크스페이스 없음" }, { status: 400 });
 
   const trimmedValue = value.trim().toLowerCase();
@@ -100,6 +96,13 @@ export async function PATCH(request: Request) {
   const { id, value, label } = body;
   if (!id) return NextResponse.json({ error: "id 필수" }, { status: 400 });
 
+  // 대상 레코드의 워크스페이스에 내가 속해 있는지 확인한다 — 예전엔 로그인만 확인하고
+  // body 의 id 로 곧바로 update 를 실행해서, 남의 워크스페이스 프리셋을 고칠 수 있었다.
+  const target = await prisma.uTMPreset.findUnique({ where: { id }, select: { workspaceId: true } });
+  if (!target || !(await isWorkspaceMember(user.id, target.workspaceId))) {
+    return NextResponse.json({ error: "프리셋을 찾을 수 없어요" }, { status: 404 });
+  }
+
   try {
     const updated = await prisma.uTMPreset.update({
       where: { id },
@@ -127,9 +130,14 @@ export async function DELETE(request: Request) {
 
   const { id } = await request.json();
   const existing = await prisma.uTMPreset.findUnique({ where: { id } });
+  // 삭제는 되돌릴 수 없다 — 내 워크스페이스 것인지 반드시 확인한다. 예전엔 확인 없이 지웠고,
+  // 활동 로그마저 피해 워크스페이스에 남아 피해자는 자기 로그에서 남의 행위를 보게 됐다.
+  if (!existing || !(await isWorkspaceMember(user.id, existing.workspaceId))) {
+    return NextResponse.json({ error: "프리셋을 찾을 수 없어요" }, { status: 404 });
+  }
   await prisma.uTMPreset.delete({ where: { id } });
 
-  if (existing) {
+  {
     await logActivity({
       workspaceId: existing.workspaceId,
       userId: user.id,

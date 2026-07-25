@@ -36,6 +36,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "ADMIN 이상 필요" }, { status: 403 });
   }
 
+  // projectId 가 이 워크스페이스 소속인지 검증 — 교차 테넌트 FK 방지.
+  // (webinars/route.ts, webinar-embed-sites/route.ts 등은 이미 이 검사를 한다)
+  const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true } });
+  if (!project) return NextResponse.json({ error: "프로젝트를 찾을 수 없어요" }, { status: 400 });
+
   const src = backup.source ?? {};
   const fieldMappings = (src.fieldMappings as Array<Record<string, unknown>>) ?? [];
 
