@@ -38,6 +38,7 @@ import {
   YAxis,
   ZAxis,
 } from "recharts";
+import { useChartColors } from "@/components/ui/use-chart-colors";
 import { useWorkspace } from "@/contexts/workspace";
 import {
   type AdColumnKey,
@@ -326,6 +327,9 @@ function formatDetailPeriod(value: string | null | undefined, granularity: Detai
   return value;
 }
 export default function AnalyticsPage() {
+  // 차트 색을 토큰에서 읽는다 — 박아 둔 #8b5cf6 은 리브랜드로 팔레트에서 사라진 보라였고,
+  // 그래서 이 페이지의 그래프만 앱의 나머지(네이비)와 다른 색으로 보였다.
+  const chart = useChartColors();
   const { workspace, currentProject, isLoading: wsLoading } = useWorkspace();
   const hasLoadedRef = useRef(false);
   const [data, setData] = useState<PerformanceResponse | null>(null);
@@ -1012,8 +1016,8 @@ export default function AnalyticsPage() {
                   <ComposedChart data={chartRows}>
                     <defs>
                       <linearGradient id="adSpendFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={activeSourceTypes.length > 0 ? 0.1 : 0.28} />
-                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.02} />
+                        <stop offset="5%" stopColor={chart.viewers} stopOpacity={activeSourceTypes.length > 0 ? 0.1 : 0.28} />
+                        <stop offset="95%" stopColor={chart.viewers} stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -1049,7 +1053,7 @@ export default function AnalyticsPage() {
                     <Area
                       type="monotone"
                       dataKey="value"
-                      stroke="#8b5cf6"
+                      stroke={chart.viewers}
                       strokeWidth={activeSourceTypes.length > 0 ? 1 : 2}
                       strokeDasharray={activeSourceTypes.length > 0 ? "4 4" : undefined}
                       fill="url(#adSpendFill)"
@@ -1099,7 +1103,7 @@ export default function AnalyticsPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="flex items-center gap-1.5">
-                    <span className="inline-block h-2 w-2 rounded-full bg-[#8b5cf6]" />
+                    <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: chart.viewers }} />
                     <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-secondary/30 p-1">
                       {CHART_METRICS.map((metric) => (
                         <motion.button
@@ -1155,8 +1159,8 @@ export default function AnalyticsPage() {
                   <ComposedChart data={dualChartRows}>
                     <defs>
                       <linearGradient id="adDualFillA" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.25} />
-                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.02} />
+                        <stop offset="5%" stopColor={chart.viewers} stopOpacity={0.25} />
+                        <stop offset="95%" stopColor={chart.viewers} stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -1174,7 +1178,7 @@ export default function AnalyticsPage() {
                     />
                     <YAxis
                       yAxisId="left"
-                      tick={{ fontSize: 11, fill: "#8b5cf6" }}
+                      tick={{ fontSize: 11, fill: chart.axis }}
                       tickFormatter={(value) => formatMetricValue(dualMetricA, Number(value))}
                       width={82}
                     />
@@ -1196,7 +1200,7 @@ export default function AnalyticsPage() {
                       yAxisId="left"
                       type="monotone"
                       dataKey="valueA"
-                      stroke="#8b5cf6"
+                      stroke={chart.viewers}
                       strokeWidth={2}
                       fill="url(#adDualFillA)"
                       name="valueA"

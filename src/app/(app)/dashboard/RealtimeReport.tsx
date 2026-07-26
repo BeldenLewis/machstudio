@@ -5,6 +5,7 @@ import type { ElementType } from "react";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useChartColors, seriesColor } from "@/components/ui/use-chart-colors";
 import { formatKstDateTime } from "@/lib/datetime";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
@@ -224,6 +225,7 @@ function ChangeBadge({ rangeChange }: MetricChange) {
 }
 
 function CumulativeLineChart({ points }: { points: RealtimeReportData["cumulativeTrend"] }) {
+  const colors = useChartColors();
   if (!points.length) {
     return (
       <div className="flex h-[220px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
@@ -254,8 +256,8 @@ function CumulativeLineChart({ points }: { points: RealtimeReportData["cumulativ
         <AreaChart data={points} margin={{ top: 8, right: 10, bottom: 4, left: 0 }}>
           <defs>
             <linearGradient id="cumulativeGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.28} />
-              <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.02} />
+              <stop offset="5%" stopColor={colors.viewers} stopOpacity={0.28} />
+              <stop offset="95%" stopColor={colors.viewers} stopOpacity={0.02} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.45} />
@@ -289,7 +291,7 @@ function CumulativeLineChart({ points }: { points: RealtimeReportData["cumulativ
           <Area
             type="monotone"
             dataKey="cumulative"
-            stroke="#8b5cf6"
+            stroke={colors.viewers}
             strokeWidth={2.5}
             fill="url(#cumulativeGradient)"
             dot={false}
@@ -302,6 +304,7 @@ function CumulativeLineChart({ points }: { points: RealtimeReportData["cumulativ
 }
 
 function DailyBarChart({ points }: { points: RealtimeReportData["cumulativeTrend"] }) {
+  const colors = useChartColors();
   if (!points.length) return null;
 
   // 7일 이동평균 대비 급등(+50%) 감지 — 최소 5건 이상일 때만 (작은 수치 노이즈 방지)
@@ -388,7 +391,7 @@ function DailyBarChart({ points }: { points: RealtimeReportData["cumulativeTrend
           />
           <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={32}>
             {enriched.map((p) => (
-              <Cell key={p.date} fill={p.isSpike ? "#f59e0b" : "#8b5cf6"} fillOpacity={p.isSpike ? 0.9 : 0.75} />
+              <Cell key={p.date} fill={p.isSpike ? colors.series[3] : colors.viewers} fillOpacity={p.isSpike ? 0.9 : 0.75} />
             ))}
           </Bar>
         </BarChart>
@@ -423,10 +426,15 @@ function CompositionSection({ section }: { section: RealtimeReportData["composit
   );
 }
 
-const UTM_TREND_COLORS = ["#8b5cf6", "#ec4899", "#f59e0b", "#0a66c2", "#10b981"];
-
 function UtmTrendChart({ trend }: { trend: RealtimeReportData["dailyUtmTrend"] }) {
   const [tab, setTab] = useState<"source" | "medium" | "combined">("source");
+  /**
+   * 하드코딩 배열 ["#8b5cf6","#ec4899","#f59e0b","#0a66c2","#10b981"] 을 토큰으로 교체.
+   * 그 배열은 세 가지가 틀렸다 — 슬롯1 #8b5cf6 은 리브랜드로 팔레트에서 사라진 보라라
+   * 만들기·랜딩이 네이비인데 이 그래프만 보라로 보였고, 배열이 한 벌이라 다크에서
+   * 라이트 색이 그대로 나왔고, 슬롯4 #0a66c2 는 슬롯1을 네이비로 바꾸면 구분되지 않는다.
+   */
+  const colors = useChartColors();
 
   const view = trend?.[tab];
   const { topKeys = [], rows = [] } = view ?? {};
@@ -505,7 +513,7 @@ function UtmTrendChart({ trend }: { trend: RealtimeReportData["dailyUtmTrend"] }
                 key={key}
                 type="monotone"
                 dataKey={key}
-                stroke={UTM_TREND_COLORS[i % UTM_TREND_COLORS.length]}
+                stroke={seriesColor(colors, i)}
                 strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4 }}
