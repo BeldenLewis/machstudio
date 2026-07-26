@@ -9,7 +9,7 @@ import {
   normalizeLivePageConfig, DEFAULT_ENDED_TITLE, DEFAULT_ENDED_DESCRIPTION,
   type LivePageConfig, type LiveResource, type LiveNextWebinar,
 } from "@/lib/webinar-config";
-import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
+import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { getYouTubeVideoId } from "@/lib/youtube";
 
 /** 시청자에게 보이는 한 페이지의 네 순간. 어드민에서는 이 상태로 편집 대상을 고른다. */
@@ -305,6 +305,8 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
     } catch { return false; }
   };
   const { state: saveState, dirty, retry } = useAutosave({ form, ctaCards, screens, resources, nextWeb }, save);
+  // 표시는 껍데기 한 곳에서 그린다(만들기 화면당 1개) — 저장 경로는 그대로 각자.
+  useReportAutosave(saveState, retry);
 
   // 다른 창·다른 기기·운영 콘솔에서 같은 웨비나가 바뀌면 이 폼도 따라간다(편집 중이면 대기).
   // 특히 채팅·Q&A 는 콘솔과 같은 키를 공유하므로, 여기 표시가 낡으면 운영자가 사실과 다른 걸 본다.
@@ -711,7 +713,6 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
       )}
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-4">
-        <AutosaveIndicator state={saveState} onRetry={retry} />
         {/* 목업 라우트(/live-preview)가 아니라 **실제 공개 페이지**를 소유자 미리보기로 연다 —
             같은 컴포넌트·같은 데이터라 "미리보기와 실제가 다르다" 가 생기지 않는다.
             부작용(추적·전송)은 뷰어 쪽 isPreviewUrl 가드가 막는다. */}

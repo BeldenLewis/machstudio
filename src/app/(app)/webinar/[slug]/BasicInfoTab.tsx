@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
 import WebinarSchedulePicker from "@/components/webinar/WebinarSchedulePicker";
 import { useAutosave, useExternalSync } from "@/components/ui/use-autosave";
-import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
+import { useReportAutosave } from "@/components/ui/autosave-scope";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -71,6 +71,8 @@ export default function BasicInfoTab({ webinar, onSilentUpdate }: { webinar: Web
     } catch { return false; }
   };
   const { state: saveState, dirty, retry } = useAutosave(form, save);
+  // 표시는 껍데기 한 곳에서 그린다(만들기 화면당 1개) — 저장 경로는 그대로 각자.
+  useReportAutosave(saveState, retry);
 
   // 다른 창·다른 기기에서 이름·일정이 바뀌면 이 폼도 따라간다(편집 중이면 대기).
   // 예전엔 초기값 1회라, 열어둔 창의 다음 자동저장이 낡은 값으로 상대의 수정을 되돌렸다.
@@ -167,7 +169,6 @@ export default function BasicInfoTab({ webinar, onSilentUpdate }: { webinar: Web
       </section>
 
       <div className="flex items-center gap-3">
-        <AutosaveIndicator state={saveState} onRetry={retry} />
         {!form.name.trim() && <span className="text-[11px] text-red-500">이름을 입력해야 저장돼요</span>}
       </div>
 

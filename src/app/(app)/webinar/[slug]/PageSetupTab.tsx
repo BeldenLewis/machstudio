@@ -6,6 +6,7 @@ import { FileText, MonitorPlay, SlidersHorizontal, ClipboardCheck, Megaphone } f
 import SourceInfoTab from "./SourceInfoTab";
 import RegistrationFormTab from "./RegistrationFormTab";
 import LivePageTab, { type WatchState } from "./LivePageTab";
+import { AutosaveScope, AggregateAutosaveIndicator } from "@/components/ui/autosave-scope";
 import SurveyTab from "./SurveyTab";
 import LandingPageTab from "./LandingPageTab";
 
@@ -86,6 +87,7 @@ export default function PageSetupTab({
   };
 
   return (
+    <AutosaveScope>
     <div className="flex flex-col lg:grid lg:h-full lg:grid-cols-[230px_minmax(0,1fr)] lg:overflow-hidden">
       <aside className="border-b lg:border-r border-border bg-secondary/20 p-4 lg:p-5">
         <div className="mb-5">
@@ -146,9 +148,16 @@ export default function PageSetupTab({
               exit={{ opacity: 0, x: -10 }}
               transition={{ duration: 0.18 }}
             >
-              <div className="flex items-center gap-2">
-                <ActiveIcon className="h-4 w-4 text-violet-500" />
-                <h2 className="text-sm font-semibold">{activeMeta.label}</h2>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <div className="flex items-center gap-2">
+                  <ActiveIcon className="h-4 w-4 text-violet-500" />
+                  <h2 className="text-sm font-semibold">{activeMeta.label}</h2>
+                </div>
+                {/* 만들기 화면당 자동저장 표시 1개 — 각 편집 영역이 useReportAutosave 로 올려 보낸다.
+                    긴 화면에서 표시가 스크롤 밖으로 밀려 "저장됐나?" 를 알 수 없던 문제를 없앤다. */}
+                <span className="ml-auto shrink-0">
+                  <AggregateAutosaveIndicator />
+                </span>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">{activeMeta.desc}</p>
             </motion.div>
@@ -204,5 +213,6 @@ export default function PageSetupTab({
         </div>
       </div>
     </div>
+    </AutosaveScope>
   );
 }

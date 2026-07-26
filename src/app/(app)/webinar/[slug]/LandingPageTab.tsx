@@ -9,7 +9,7 @@ import { motion } from "framer-motion";
 import { ExternalLink, Clapperboard, Ban, Loader2, UploadCloud, Link2, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
-import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
+import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { Switch } from "@/components/ui/switch";
 import {
   normalizeLandingPageConfig,
@@ -195,6 +195,8 @@ export default function LandingPageTab({
     else toast.error("랜딩 페이지 저장에 실패했어요. 잠시 후 다시 시도돼요.");
     return res.ok;
   });
+  // 표시는 껍데기 한 곳에서 그린다(만들기 화면당 1개) — 저장 경로는 그대로 각자.
+  useReportAutosave(saveState, retry);
 
   // 저장 완료 시 미리보기 새로고침 — 공개 페이지가 저장된 값을 다시 읽는다
   useEffect(() => {
@@ -227,7 +229,6 @@ export default function LandingPageTab({
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <AutosaveIndicator state={saveState} onRetry={retry} />
               <a
                 href={previewUrl}
                 target="_blank"

@@ -19,7 +19,7 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { useAutosave, useExternalSync } from "@/components/ui/use-autosave";
-import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
+import { useReportAutosave } from "@/components/ui/autosave-scope";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -86,6 +86,8 @@ export default function BrandSection({
     }
   };
   const { state: saveState, dirty, retry } = useAutosave(theme, save);
+  // 표시는 껍데기 한 곳에서 그린다(만들기 화면당 1개) — 저장 경로는 그대로 각자.
+  useReportAutosave(saveState, retry);
 
   // 다른 창·다른 기기에서 테마가 바뀌면 따라간다(편집 중이면 대기).
   const incoming = useMemo(
@@ -103,7 +105,6 @@ export default function BrandSection({
             색상·폰트·모서리 — 공개 화면 전체에 함께 적용돼요(등록·대기·입장·시청·종료, 설문 응답 폼까지).
           </p>
         </div>
-        <AutosaveIndicator state={saveState} onRetry={retry} />
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

@@ -5,7 +5,7 @@ import { motion, Reorder, useDragControls } from "framer-motion";
 import { Plus, Trash2, GripVertical, Smartphone, AlignLeft, Mail, Phone, ListChecks, SquareCheck, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
-import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
+import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { Switch } from "@/components/ui/switch";
 import { normalizeRegistrationForm, type WebinarRegistrationField } from "@/lib/webinar-config";
 import { buildStkCss } from "@/app/webinar/[slug]/LiveContentStk";
@@ -429,6 +429,8 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
     { fields, privacyText, marketingText, privacyBody, marketingBody, privacyDefaultChecked, marketingDefaultChecked, submitLabel },
     save,
   );
+  // 표시는 껍데기 한 곳에서 그린다(만들기 화면당 1개) — 저장 경로는 그대로 각자.
+  useReportAutosave(saveState, retry);
 
   const hasTel = fields.some((f) => f.enabled && f.type === "tel");
 
@@ -514,8 +516,6 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
             </div>
           </div>
         </section>
-
-        <AutosaveIndicator state={saveState} onRetry={retry} />
       </div>
 
       <RegistrationFormPreview

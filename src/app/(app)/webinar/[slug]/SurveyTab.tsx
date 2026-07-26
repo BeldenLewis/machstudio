@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
-import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
+import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { Switch } from "@/components/ui/switch";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { isSurveyAcceptingResponses, normalizeSurveyQuestions, SURVEY_MAX_QUESTIONS, SURVEY_TYPE_LABELS, type SurveyQuestion, type SurveyQuestionType } from "@/lib/webinar-survey";
@@ -445,6 +445,8 @@ function SurveyEditor({
     } catch { return false; }
   };
   const { state: saveState, retry } = useAutosave({ title, description, questions, doneTitle, doneDescription }, save);
+  // 표시는 껍데기 한 곳에서 그린다(만들기 화면당 1개) — 저장 경로는 그대로 각자.
+  useReportAutosave(saveState, retry);
 
   const toggle = async (key: "isOpen" | "showOnEnded", value: boolean) => {
     const res = await fetch(`/api/webinars/${webinarId}/surveys/${survey.id}`, {
@@ -679,7 +681,6 @@ function SurveyEditor({
             <button type="button" onClick={copyLink} className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground">
               <Link2 className="h-3.5 w-3.5" />{copied ? "복사됨 ✓" : "응답 링크 복사"}
             </button>
-            <AutosaveIndicator state={saveState} onRetry={retry} />
           </div>
         </div>
 
