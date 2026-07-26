@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
+import { purgeRegistrantTraces } from "@/lib/webinar-registrant-purge";
 
 const MAX_IDS = 1000;
 
@@ -32,16 +33,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     : [];
   if (ids.length === 0) return NextResponse.json({ error: "선택된 등록자가 없어요" }, { status: 400 });
 
-  const result = await prisma.webinarRegistration.deleteMany({
-    where: { id: { in: ids as string[] }, webinarId: id },
+  const { deleted, purged } = await prisma.$transaction(async (tx) => {
+    // 실제로 이 웨비나에 속한 것만 골라 흔적을 정리한 뒤 지운다.
+    // 단건 삭제와 같은 규칙(webinar-registrant-purge) — 여기만 빼먹으면 리마인더가 남아
+    // 삭제된 사람에게 계속 메일이 간다.
+    const targets = await tx.webinarRegistration.findMany({
+      where: { id: { in: ids as string[] }, webinarId: id },
+      select: { id: true },
+    });
+    const targetIds = targets.map((t) => t.id);
+    const summary = await purgeRegistrantTraces(tx, id, targetIds);
+    const result = await tx.webinarRegistration.deleteMany({ where: { id: { in: targetIds }, webinarId: id } });
+    return { deleted: result.count, purged: summary };
   });
 
   await logActivity({
     workspaceId: auth.workspaceId,
     userId: auth.userId,
     action: "webinar.registrations_bulk_deleted",
-    meta: { webinarId: id, requested: ids.length, deleted: result.count },
+    meta: { webinarId: id, requested: ids.length, deleted, purged },
   });
 
-  return NextResponse.json({ deleted: result.count });
+  return NextResponse.json({ deleted });
 }

@@ -10,7 +10,19 @@ export interface SurveyQuestion {
   required: boolean;
   options: string[]; // single/multiple 만 사용
   maxSelect?: number; // multiple 전용 — 최대 선택 개수(없으면 무제한)
+  /**
+   * 보관된 문항 — 운영자가 편집기에서 지웠지만 **이미 수집된 답변이 있어** 정의를 남겨둔 것.
+   * 답변은 WebinarSurveyResponse.answers 의 questionId 키로 저장되므로, 정의에서 문항이
+   * 사라지면 분석·개별응답·CSV 가 그 열을 그리지 못해 수집된 답변이 조회 불가 상태가 된다.
+   * 시청자에게는 보이지 않고(응답 화면에서 제외), 관리자 화면에는 '보관' 으로 남는다.
+   */
+  retired?: boolean;
 }
+
+/** 활성 문항 상한 — 보관된 문항은 여기에 포함되지 않는다. */
+export const SURVEY_MAX_QUESTIONS = 30;
+/** 문항당 선택지 상한. */
+export const SURVEY_MAX_OPTIONS = 20;
 
 export const SURVEY_TYPE_LABELS: Record<SurveyQuestionType, string> = {
   rating: "별점 (1~5)",
@@ -35,7 +47,7 @@ export function normalizeSurveyQuestions(raw: unknown, opts?: { includeHidden?: 
   const normalized = raw
     .filter((q): q is Record<string, unknown> => !!q && typeof q === "object")
     .map((q, i) => {
-      const options = Array.isArray(q.options) ? q.options.map(String).filter(Boolean).slice(0, 20) : [];
+      const options = Array.isArray(q.options) ? q.options.map(String).filter(Boolean).slice(0, SURVEY_MAX_OPTIONS) : [];
       const type = QUESTION_TYPES.includes(q.type as SurveyQuestionType) ? (q.type as SurveyQuestionType) : "text";
       // maxSelect 는 복수응답에서만 의미 — 1~옵션수 범위로 클램프. 옵션 전체 이상이면 무제한과 같아 생략.
       const rawMax = Number(q.maxSelect);
@@ -43,12 +55,66 @@ export function normalizeSurveyQuestions(raw: unknown, opts?: { includeHidden?: 
         type === "multiple" && Number.isInteger(rawMax) && rawMax >= 1 && rawMax < options.length
           ? rawMax
           : undefined;
-      return { id: String(q.id ?? `q_${i}`), type, title: String(q.title ?? ""), required: q.required === true, options, ...(maxSelect !== undefined ? { maxSelect } : {}) };
+      return {
+        id: String(q.id ?? `q_${i}`),
+        type,
+        title: String(q.title ?? ""),
+        required: q.required === true,
+        options,
+        ...(maxSelect !== undefined ? { maxSelect } : {}),
+        ...(q.retired === true ? { retired: true as const } : {}),
+      };
     });
-  const visible = normalized.filter(
-    (q) => q.title.trim() !== "" && !((q.type === "single" || q.type === "multiple") && q.options.length === 0),
-  );
-  return (opts?.includeHidden ? normalized : visible).slice(0, 30);
+
+  if (opts?.includeHidden) {
+    // 관리자 경로 — 보관 문항까지 전부. 상한은 활성 문항에만 걸고(보관은 지난 답변 조회용이라
+    // 잘라내면 데이터가 다시 안 보인다) 총량은 넉넉한 값으로만 막는다.
+    const active = normalized.filter((q) => !q.retired).slice(0, SURVEY_MAX_QUESTIONS);
+    const retired = normalized.filter((q) => q.retired).slice(0, 200);
+    return [...active, ...retired];
+  }
+  // 뷰어 경로 — 그릴 수 없는 문항(빈 제목·선택지 0개)과 보관 문항을 제외한다.
+  return normalized
+    .filter(
+      (q) =>
+        !q.retired &&
+        q.title.trim() !== "" &&
+        !((q.type === "single" || q.type === "multiple") && q.options.length === 0),
+    )
+    .slice(0, SURVEY_MAX_QUESTIONS);
+}
+
+/**
+ * 저장 직전 검증 — 상한 초과를 **조용히 자르지 않고** 알린다.
+ * 예전엔 normalize 의 slice 가 31번째 문항·21번째 선택지를 버렸고, 저장은 200 을 반환해
+ * 화면에 '저장됨' 까지 떴다(운영자는 사라진 걸 나중에 발견한다).
+ */
+export function validateSurveyQuestionLimits(questions: SurveyQuestion[]): string | null {
+  const active = questions.filter((q) => !q.retired);
+  if (active.length > SURVEY_MAX_QUESTIONS) {
+    return `문항은 최대 ${SURVEY_MAX_QUESTIONS}개까지예요 (현재 ${active.length}개).`;
+  }
+  const over = active.find((q) => q.options.length > SURVEY_MAX_OPTIONS);
+  if (over) {
+    return `선택지는 문항당 최대 ${SURVEY_MAX_OPTIONS}개까지예요 ("${over.title || "제목 없는 문항"}").`;
+  }
+  return null;
+}
+
+/**
+ * 편집기에서 사라진 문항 중 **이미 답변이 있는 것**을 보관 상태로 되살려 뒤에 붙인다.
+ * answeredIds 는 응답의 answers 키 집합.
+ */
+export function retainAnsweredQuestions(
+  incoming: SurveyQuestion[],
+  previous: SurveyQuestion[],
+  answeredIds: ReadonlySet<string>,
+): SurveyQuestion[] {
+  const kept = new Set(incoming.map((q) => q.id));
+  const rescued = previous
+    .filter((q) => !kept.has(q.id) && answeredIds.has(q.id))
+    .map((q) => ({ ...q, retired: true as const }));
+  return rescued.length ? [...incoming, ...rescued] : incoming;
 }
 
 /** 응답 수집 중인가 — 수동 토글(isOpen)과 마감 예약(closesAt) 양쪽을 판정. 공개 GET/POST·노출면 게이트가 공유. */

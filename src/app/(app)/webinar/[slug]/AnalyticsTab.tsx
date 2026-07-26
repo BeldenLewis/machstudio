@@ -243,9 +243,15 @@ interface SurveyResponseRow {
 }
 interface SurveyResponsesData {
   survey: { id: string; title: string };
-  questions: { id: string; type: string; title: string }[];
+  questions: { id: string; type: string; title: string; retired?: boolean }[];
   total: number;
   responses: SurveyResponseRow[];
+}
+
+// 보관된 문항(편집기에서 지웠지만 답변이 남아 있는 것)은 열 제목에 표시한다.
+function questionLabel(q: { title: string; retired?: boolean }): string {
+  const base = q.title || "(제목 없음)";
+  return q.retired ? `${base} (보관)` : base;
 }
 
 function formatAnswer(type: string, v: number | string | string[] | undefined): string {
@@ -311,7 +317,7 @@ function SurveyResponsesPanel({ webinarId, surveyId }: { webinarId: string; surv
       const s = String(v);
       return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const headers = ["제출시각", "이름", "이메일", "전화", "회사", "소스", ...data.questions.map((q) => q.title || "(제목 없음)")];
+    const headers = ["제출시각", "이름", "이메일", "전화", "회사", "소스", ...data.questions.map(questionLabel)];
     const rows = data.responses.map((r) => [
       new Date(r.submittedAt).toLocaleString("ko-KR"),
       r.registrant?.name ?? "익명",
@@ -360,7 +366,7 @@ function SurveyResponsesPanel({ webinarId, surveyId }: { webinarId: string; surv
                 <th className="whitespace-nowrap py-2 pr-4 font-medium">소스</th>
                 <th className="whitespace-nowrap py-2 pr-4 font-medium">제출</th>
                 {data.questions.map((q) => (
-                  <th key={q.id} className="max-w-[200px] truncate py-2 pr-4 font-medium" title={q.title}>{q.title || "(제목 없음)"}</th>
+                  <th key={q.id} className="max-w-[200px] truncate py-2 pr-4 font-medium" title={questionLabel(q)}>{questionLabel(q)}</th>
                 ))}
                 <th className="w-8 py-2 font-medium"><span className="sr-only">삭제</span></th>
               </tr>

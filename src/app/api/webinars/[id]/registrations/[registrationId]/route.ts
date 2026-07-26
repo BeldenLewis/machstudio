@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { buildMemo, parseMemo } from "@/lib/webinar-memo";
 import { logActivity } from "@/lib/activity";
+import { purgeRegistrantTraces } from "@/lib/webinar-registrant-purge";
 
 interface RegistrationPatch {
   name?: string;
@@ -117,13 +118,19 @@ export async function DELETE(
     return NextResponse.json({ error: "등록자를 찾지 못했어요" }, { status: 404 });
   }
 
-  await prisma.webinarRegistration.delete({ where: { id: registration.id } });
+  // 등록 행만 지우면 리마인더·Q&A·채팅에 개인정보가 남는다(purge 헬퍼 주석 참고).
+  // 같은 트랜잭션에서 정리한다 — 중간에 실패해 리마인더만 남으면 다시 발송 대상이 된다.
+  const purged = await prisma.$transaction(async (tx) => {
+    const summary = await purgeRegistrantTraces(tx, id, [registration.id]);
+    await tx.webinarRegistration.delete({ where: { id: registration.id } });
+    return summary;
+  });
 
   await logActivity({
     workspaceId: auth.workspaceId,
     userId: auth.userId,
     action: "webinar.registration_deleted",
-    meta: { webinarId: id, registrationId },
+    meta: { webinarId: id, registrationId, purged },
   });
 
   return NextResponse.json({ ok: true });
