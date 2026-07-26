@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { ExternalLink, Plus, Trash2, Image as ImageIcon, Clapperboard, Ban, Loader2, UploadCloud, Link2 } from "lucide-react";
+import { ExternalLink, Clapperboard, Ban, Loader2, UploadCloud, Link2, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
@@ -19,6 +19,7 @@ import {
   type LandingProgramItem,
 } from "@/lib/webinar-config";
 import { LANDING_IMAGE_ACCEPT, LANDING_VIDEO_ACCEPT, validateLandingMedia } from "@/lib/webinar-landing-media";
+import { EditableList, ROW_KEY, withRowKeys, stripRowKeys, type WithRowKey } from "@/components/ui/editable-list";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 const inputCls =
@@ -48,10 +49,10 @@ interface EditorState {
   sessionsEnabled: boolean;
   sessionsDetailPopup: boolean;
   timetableEnabled: boolean;
-  programs: { enabled: boolean; items: LandingProgramItem[] };
-  highlights: { enabled: boolean; items: LandingHighlightItem[] };
-  join: { enabled: boolean; steps: LandingJoinStep[] };
-  faq: { enabled: boolean; items: LandingFaqItem[] };
+  programs: { enabled: boolean; items: WithRowKey<LandingProgramItem>[] };
+  highlights: { enabled: boolean; items: WithRowKey<LandingHighlightItem>[] };
+  join: { enabled: boolean; steps: WithRowKey<LandingJoinStep>[] };
+  faq: { enabled: boolean; items: WithRowKey<LandingFaqItem>[] };
 }
 
 function toEditorState(config: Record<string, unknown>): EditorState {
@@ -71,10 +72,11 @@ function toEditorState(config: Record<string, unknown>): EditorState {
     sessionsEnabled: lp.sessions.enabled,
     sessionsDetailPopup: lp.sessions.detailPopup,
     timetableEnabled: lp.timetable.enabled,
-    programs: lp.programs,
-    highlights: lp.highlights,
-    join: lp.join,
-    faq: lp.faq,
+    // 이 네 목록은 스키마에 id 가 없다 → 편집 중에만 클라이언트 키를 붙인다(저장 시 제거).
+    programs: { ...lp.programs, items: withRowKeys(lp.programs.items) },
+    highlights: { ...lp.highlights, items: withRowKeys(lp.highlights.items) },
+    join: { ...lp.join, steps: withRowKeys(lp.join.steps) },
+    faq: { ...lp.faq, items: withRowKeys(lp.faq.items) },
   };
 }
 
@@ -93,10 +95,10 @@ function toConfigPayload(s: EditorState) {
     intro: s.intro,
     sessions: { enabled: s.sessionsEnabled, detailPopup: s.sessionsDetailPopup },
     timetable: { enabled: s.timetableEnabled },
-    programs: s.programs,
-    highlights: s.highlights,
-    join: s.join,
-    faq: s.faq,
+    programs: { ...s.programs, items: stripRowKeys(s.programs.items) },
+    highlights: { ...s.highlights, items: stripRowKeys(s.highlights.items) },
+    join: { ...s.join, steps: stripRowKeys(s.join.steps) },
+    faq: { ...s.faq, items: stripRowKeys(s.faq.items) },
   };
 }
 
@@ -132,35 +134,6 @@ function SectionCard({
   );
 }
 
-function RowShell({ onRemove, children }: { onRemove: () => void; children: React.ReactNode }) {
-  return (
-    <div className="flex items-start gap-2 rounded-xl border border-border/70 bg-background/60 p-2.5">
-      <div className="min-w-0 flex-1 space-y-2">{children}</div>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="mt-0.5 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500"
-        aria-label="항목 삭제"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  );
-}
-
-function AddRowButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <motion.button
-      type="button"
-      whileTap={{ scale: 0.98 }}
-      transition={spring}
-      onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-violet-400 hover:text-violet-500"
-    >
-      <Plus className="h-3.5 w-3.5" /> {label}
-    </motion.button>
-  );
-}
 
 const MEDIA_TYPES: { id: HeroMediaType; label: string; icon: typeof Ban }[] = [
   { id: "none", label: "없음", icon: Ban },
@@ -432,32 +405,22 @@ export default function LandingPageTab({
             enabled={state.programs.enabled}
             onToggle={(v) => patch({ programs: { ...state.programs, enabled: v } })}
           >
-            {state.programs.items.map((item, index) => (
-              <RowShell key={index} onRemove={() => setRows("programs", state.programs.items.filter((_, i) => i !== index))}>
-                <div className="flex gap-2">
-                  <input
-                    className={`${inputCls} w-24 shrink-0`}
-                    value={item.icon}
-                    onChange={(e) => setRows("programs", state.programs.items.map((r, i) => (i === index ? { ...r, icon: e.target.value } : r)))}
-                    placeholder="배지 (예: Q&A)"
-                  />
-                  <input
-                    className={inputCls}
-                    value={item.title}
-                    onChange={(e) => setRows("programs", state.programs.items.map((r, i) => (i === index ? { ...r, title: e.target.value } : r)))}
-                    placeholder="제목"
-                  />
-                </div>
-                <textarea
-                  className={`${inputCls} resize-none`}
-                  rows={2}
-                  value={item.description}
-                  onChange={(e) => setRows("programs", state.programs.items.map((r, i) => (i === index ? { ...r, description: e.target.value } : r)))}
-                  placeholder="설명 (줄바꿈 유지)"
-                />
-              </RowShell>
-            ))}
-            <AddRowButton label="프로그램 추가" onClick={() => setRows("programs", [...state.programs.items, { icon: "", title: "", description: "" }])} />
+            <EditableList
+              listId="lp-programs" itemNoun="프로그램" reorderable
+              items={state.programs.items} onChange={(next) => setRows("programs", next)}
+              rowKey={(r) => r[ROW_KEY]}
+              makeItem={() => ({ icon: "", title: "", description: "", [ROW_KEY]: crypto.randomUUID() })}
+              addLabel="프로그램 추가" emptyState={<p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">아직 프로그램이 없어요. 아래에서 추가하면 랜딩 페이지에 표시돼요.</p>}
+              renderRow={({ item, patch: p }) => (
+                <>
+                  <div className="flex gap-2">
+                    <input className={`${inputCls} w-24 shrink-0`} value={item.icon} onChange={(e) => p({ icon: e.target.value })} placeholder="배지 (예: Q&A)" />
+                    <input className={inputCls} value={item.title} onChange={(e) => p({ title: e.target.value })} placeholder="제목" />
+                  </div>
+                  <textarea className={`${inputCls} resize-none`} rows={2} value={item.description} onChange={(e) => p({ description: e.target.value })} placeholder="설명 (줄바꿈 유지)" />
+                </>
+              )}
+            />
           </SectionCard>
 
           {/* 하이라이트 */}
@@ -467,24 +430,20 @@ export default function LandingPageTab({
             enabled={state.highlights.enabled}
             onToggle={(v) => patch({ highlights: { ...state.highlights, enabled: v } })}
           >
-            {state.highlights.items.map((item, index) => (
-              <RowShell key={index} onRemove={() => setRows("highlights", state.highlights.items.filter((_, i) => i !== index))}>
-                <input
-                  className={inputCls}
-                  value={item.title}
-                  onChange={(e) => setRows("highlights", state.highlights.items.map((r, i) => (i === index ? { ...r, title: e.target.value } : r)))}
-                  placeholder={`제목 (${String(index + 1).padStart(2, "0")})`}
-                />
-                <textarea
-                  className={`${inputCls} resize-none`}
-                  rows={2}
-                  value={item.description}
-                  onChange={(e) => setRows("highlights", state.highlights.items.map((r, i) => (i === index ? { ...r, description: e.target.value } : r)))}
-                  placeholder="설명"
-                />
-              </RowShell>
-            ))}
-            <AddRowButton label="하이라이트 추가" onClick={() => setRows("highlights", [...state.highlights.items, { title: "", description: "" }])} />
+            <EditableList
+              listId="lp-highlights" itemNoun="하이라이트" reorderable
+              items={state.highlights.items} onChange={(next) => setRows("highlights", next)}
+              rowKey={(r) => r[ROW_KEY]}
+              makeItem={() => ({ title: "", description: "", [ROW_KEY]: crypto.randomUUID() })}
+              addLabel="하이라이트 추가" emptyState={<p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">아직 하이라이트이 없어요. 아래에서 추가하면 랜딩 페이지에 표시돼요.</p>}
+              renderRow={({ item, index, patch: p }) => (
+                <>
+                  {/* 번호(01·02)는 입력값이 아니라 렌더 순서에서 파생 — 드래그로 순서를 바꾸면 즉시 재계산된다 */}
+                  <input className={inputCls} value={item.title} onChange={(e) => p({ title: e.target.value })} placeholder={`제목 (${String(index + 1).padStart(2, "0")})`} />
+                  <textarea className={`${inputCls} resize-none`} rows={2} value={item.description} onChange={(e) => p({ description: e.target.value })} placeholder="설명" />
+                </>
+              )}
+            />
           </SectionCard>
 
           {/* 참여 방법 */}
@@ -494,33 +453,19 @@ export default function LandingPageTab({
             enabled={state.join.enabled}
             onToggle={(v) => patch({ join: { ...state.join, enabled: v } })}
           >
-            {state.join.steps.map((step, index) => (
-              <RowShell
-                key={index}
-                onRemove={() => patch({ join: { ...state.join, steps: state.join.steps.filter((_, i) => i !== index) } })}
-              >
-                <input
-                  className={inputCls}
-                  value={step.title}
-                  onChange={(e) =>
-                    patch({ join: { ...state.join, steps: state.join.steps.map((r, i) => (i === index ? { ...r, title: e.target.value } : r)) } })
-                  }
-                  placeholder={`Step ${index + 1} 제목`}
-                />
-                <textarea
-                  className={`${inputCls} resize-none`}
-                  rows={2}
-                  value={step.description}
-                  onChange={(e) =>
-                    patch({
-                      join: { ...state.join, steps: state.join.steps.map((r, i) => (i === index ? { ...r, description: e.target.value } : r)) },
-                    })
-                  }
-                  placeholder="설명"
-                />
-              </RowShell>
-            ))}
-            <AddRowButton label="단계 추가" onClick={() => patch({ join: { ...state.join, steps: [...state.join.steps, { title: "", description: "" }] } })} />
+            <EditableList
+              listId="lp-join" itemNoun="단계" reorderable
+              items={state.join.steps} onChange={(steps) => patch({ join: { ...state.join, steps } })}
+              rowKey={(r) => r[ROW_KEY]}
+              makeItem={() => ({ title: "", description: "", [ROW_KEY]: crypto.randomUUID() })}
+              addLabel="단계 추가" emptyState={<p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">아직 단계이 없어요. 아래에서 추가하면 랜딩 페이지에 표시돼요.</p>}
+              renderRow={({ item, index, patch: p }) => (
+                <>
+                  <input className={inputCls} value={item.title} onChange={(e) => p({ title: e.target.value })} placeholder={`Step ${index + 1} 제목`} />
+                  <textarea className={`${inputCls} resize-none`} rows={2} value={item.description} onChange={(e) => p({ description: e.target.value })} placeholder="설명" />
+                </>
+              )}
+            />
           </SectionCard>
 
           {/* FAQ */}
@@ -530,32 +475,22 @@ export default function LandingPageTab({
             enabled={state.faq.enabled}
             onToggle={(v) => patch({ faq: { ...state.faq, enabled: v } })}
           >
-            {state.faq.items.map((item, index) => (
-              <RowShell key={index} onRemove={() => setRows("faq", state.faq.items.filter((_, i) => i !== index))}>
-                <div className="flex gap-2">
-                  <input
-                    className={`${inputCls} w-28 shrink-0`}
-                    value={item.category}
-                    onChange={(e) => setRows("faq", state.faq.items.map((r, i) => (i === index ? { ...r, category: e.target.value } : r)))}
-                    placeholder="카테고리"
-                  />
-                  <input
-                    className={inputCls}
-                    value={item.question}
-                    onChange={(e) => setRows("faq", state.faq.items.map((r, i) => (i === index ? { ...r, question: e.target.value } : r)))}
-                    placeholder="질문"
-                  />
-                </div>
-                <textarea
-                  className={`${inputCls} resize-none`}
-                  rows={2}
-                  value={item.answer}
-                  onChange={(e) => setRows("faq", state.faq.items.map((r, i) => (i === index ? { ...r, answer: e.target.value } : r)))}
-                  placeholder="답변 (줄바꿈 유지)"
-                />
-              </RowShell>
-            ))}
-            <AddRowButton label="질문 추가" onClick={() => setRows("faq", [...state.faq.items, { category: "참가신청", question: "", answer: "" }])} />
+            <EditableList
+              listId="lp-faq" itemNoun="질문" reorderable
+              items={state.faq.items} onChange={(next) => setRows("faq", next)}
+              rowKey={(r) => r[ROW_KEY]}
+              makeItem={() => ({ category: "참가신청", question: "", answer: "", [ROW_KEY]: crypto.randomUUID() })}
+              addLabel="질문 추가" emptyState={<p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">아직 질문이 없어요. 아래에서 추가하면 랜딩 페이지에 표시돼요.</p>}
+              renderRow={({ item, patch: p }) => (
+                <>
+                  <div className="flex gap-2">
+                    <input className={`${inputCls} w-28 shrink-0`} value={item.category} onChange={(e) => p({ category: e.target.value })} placeholder="카테고리" />
+                    <input className={inputCls} value={item.question} onChange={(e) => p({ question: e.target.value })} placeholder="질문" />
+                  </div>
+                  <textarea className={`${inputCls} resize-none`} rows={2} value={item.answer} onChange={(e) => p({ answer: e.target.value })} placeholder="답변 (줄바꿈 유지)" />
+                </>
+              )}
+            />
           </SectionCard>
         </div>
 
