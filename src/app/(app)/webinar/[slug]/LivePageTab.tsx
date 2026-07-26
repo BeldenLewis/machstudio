@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import { useAutosave, useExternalSync, diffPatch } from "@/components/ui/use-autosave";
+import { EditableList, ROW_KEY, withRowKeys, stripRowKeys, type WithRowKey } from "@/components/ui/editable-list";
 import {
   normalizeLivePageConfig, DEFAULT_ENDED_TITLE, DEFAULT_ENDED_DESCRIPTION,
   type LivePageConfig, type LiveResource, type LiveNextWebinar,
@@ -193,7 +194,11 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
 
   // 라이브 페이지 화면(대기·입장·종료) 섹션 on/off + 자료·다음웨비나 데이터
   const [screens, setScreens] = useState(() => normalizeLivePageConfig(webinar.config));
-  const [resources, setResources] = useState<LiveResource[]>(() => normalizeLivePageConfig(webinar.config).resources);
+  // 자료는 스키마에 id 가 없다 → 편집 중에만 클라이언트 키를 붙여 안정 키를 확보하고,
+  // 저장 직전 stripRowKeys 로 떼어낸다(저장 형태는 그대로).
+  const [resources, setResources] = useState<WithRowKey<LiveResource>[]>(
+    () => withRowKeys(normalizeLivePageConfig(webinar.config).resources),
+  );
   const [nextWeb, setNextWeb] = useState<LiveNextWebinar>(() => normalizeLivePageConfig(webinar.config).nextWebinar ?? { title: "", when: "", url: "" });
   const setW = (k: keyof LivePageConfig["waiting"], v: boolean) => setScreens((s) => ({ ...s, waiting: { ...s.waiting, [k]: v } }));
   // ended 는 토글(boolean)과 문구(string)가 섞여 있어 세터를 나눈다 — 한 세터로 두면 타입이 풀린다.
@@ -252,7 +257,7 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
     lp.waiting = screens.waiting;
     lp.entry = screens.entry;
     lp.ended = screens.ended;
-    const res = resources.filter((r) => r.url.trim());
+    const res = stripRowKeys(resources).filter((r) => r.url.trim());
     if (res.length) lp.resources = res.map((r) => ({ title: r.title.trim() || "자료", meta: r.meta.trim(), url: r.url.trim() }));
     if (nextWeb.title.trim()) lp.nextWebinar = { title: nextWeb.title.trim(), when: nextWeb.when.trim(), url: nextWeb.url.trim() };
     return lp;
@@ -688,20 +693,33 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
                 <h3 className="text-sm font-semibold">받아가세요 · 자료</h3>
                 <p className="mt-1 text-xs text-muted-foreground">종료 화면에서 다운로드 리스트로 표시돼요.</p>
               </div>
-              {resources.map((r, i) => (
-                <div key={i} className="rounded-xl border border-border p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">자료 {i + 1}</span>
-                    <button type="button" onClick={() => setResources((p) => p.filter((_, j) => j !== i))} className="text-[11px] text-muted-foreground transition-colors hover:text-red-500">삭제</button>
-                  </div>
-                  <input className={inputCls} placeholder="제목 (예: 발표자료)" value={r.title} onChange={(e) => setResources((p) => p.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))} />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <input className={inputCls} placeholder="설명 (예: PDF · 4.2MB)" value={r.meta} onChange={(e) => setResources((p) => p.map((x, j) => (j === i ? { ...x, meta: e.target.value } : x)))} />
-                    <input className={inputCls} type="url" placeholder="다운로드 URL" value={r.url} onChange={(e) => setResources((p) => p.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)))} />
-                  </div>
-                </div>
-              ))}
-              <button type="button" onClick={() => setResources((p) => [...p, { title: "", meta: "", url: "" }])} className="w-full rounded-xl border border-dashed border-border py-2 text-xs font-medium text-violet-500 transition-colors hover:bg-violet-500/5">+ 자료 추가</button>
+              {/* 공용 골격(EditableList)으로 통일 — 예전엔 key={i} 라 중간 행을 지우면 아래 행들의
+                  입력값·IME 조합이 엉켰고, 삭제는 "삭제" 텍스트 버튼에 되돌리기가 없었고, 순서도 못 바꿨다. */}
+              <EditableList
+                listId="live-resources"
+                itemNoun="자료"
+                items={resources}
+                onChange={setResources}
+                rowKey={(r) => r[ROW_KEY]}
+                makeItem={() => ({ title: "", meta: "", url: "", [ROW_KEY]: crypto.randomUUID() })}
+                addLabel="자료 추가"
+                reorderable
+                emptyState={
+                  <p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+                    아직 자료가 없어요. 아래에서 추가하면 종료 화면에 다운로드 리스트로 표시돼요.
+                  </p>
+                }
+                renderRow={({ item, index, patch }) => (
+                  <>
+                    <span className="text-[11px] text-muted-foreground">자료 {index + 1}</span>
+                    <input className={inputCls} placeholder="제목 (예: 발표자료)" value={item.title} onChange={(e) => patch({ title: e.target.value })} />
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <input className={inputCls} placeholder="설명 (예: PDF · 4.2MB)" value={item.meta} onChange={(e) => patch({ meta: e.target.value })} />
+                      <input className={inputCls} type="url" placeholder="다운로드 URL" value={item.url} onChange={(e) => patch({ url: e.target.value })} />
+                    </div>
+                  </>
+                )}
+              />
             </section>
           )}
 
