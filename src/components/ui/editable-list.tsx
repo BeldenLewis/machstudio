@@ -23,7 +23,7 @@
  * onChange(제거된 배열) 를 호출한다. 그래서 실행취소하면 자동저장 왕복이 **0회**다.
  */
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   DndContext, KeyboardSensor, PointerSensor, closestCenter,
   useSensor, useSensors, type DragEndEvent,
@@ -54,6 +54,32 @@ export function stripRowKeys<T>(items: readonly WithRowKey<T>[]): T[] {
     delete copy[ROW_KEY];
     return copy as T;
   });
+}
+
+/**
+ * 배열 연산 3종을 순수 함수로 빼 둔 이유: 이 컴포넌트의 버그는 전부 **어느 배열 스냅샷을 읽는가**
+ * 에서 나왔고(다중 삭제 부활), 브라우저 하니스로는 dnd-kit 의 비동기 경로(rAF 기반 측정)를
+ * 안정적으로 재현할 수 없다 — 이 pane 은 visibilityState=hidden 이라 rAF 가 조절된다.
+ * 순수 함수로 두면 vitest 가 매 커밋마다 지켜 준다.
+ */
+export function removeByKey<T>(items: readonly T[], rowKey: (item: T) => string, key: string): T[] {
+  return items.filter((it) => rowKey(it) !== key);
+}
+
+export function patchByKey<T>(
+  items: readonly T[], rowKey: (item: T) => string, key: string, next: Partial<T>,
+): T[] {
+  return items.map((it) => (rowKey(it) === key ? { ...it, ...next } : it));
+}
+
+/** activeId 를 overId 자리로. 둘 중 하나라도 없으면 원본을 그대로 돌려준다. */
+export function moveByKey<T>(
+  items: readonly T[], rowKey: (item: T) => string, activeId: string, overId: string,
+): T[] {
+  const from = items.findIndex((it) => rowKey(it) === activeId);
+  const to = items.findIndex((it) => rowKey(it) === overId);
+  if (from < 0 || to < 0) return items as T[];
+  return arrayMove(items as T[], from, to);
 }
 
 export interface EditableRowCtx<T> {
@@ -153,6 +179,36 @@ export function EditableList<T>({
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const { remove } = useUndoableDelete();
 
+  /**
+   * 배열을 바꾸는 코드는 **클로저가 아니라 이 ref 를 읽는다.**
+   *
+   * 이유: 삭제 클릭은 setHidden 만 부르므로 items prop 이 바뀌지 않는다. 그래서 5초 안에 두 행을
+   * 지우면 두 번째 커밋의 클로저도 **삭제 전 원본 배열**을 들고 있고, 나중에 도는 커밋이 먼저 도는
+   * 커밋의 결과를 덮어써서 **먼저 지운 행이 되살아난다.**
+   *
+   * 하니스 실측(A·B 를 150ms 간격으로 삭제 → 6.5초 후):
+   *   삭제1 후 화면 [B,C] / 배열 [A,B,C]   삭제2 후 화면 [C] / 배열 [A,B,C]
+   *   +6.5s   화면 [A,C] / 배열 [A,C]  ← A 가 되살아나고 그대로 자동저장된다
+   *
+   * onChange 를 함수형 업데이터로 넓히는 건 불가 — 호출하는 쪽 래퍼들이 전부 '배열만' 받는다
+   * (setRows("programs", next) / patch({ join: { ...state.join, steps } }) / setResources).
+   * ref 는 외부 시그니처를 한 글자도 바꾸지 않고 같은 문제를 없앤다.
+   */
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  /**
+   * 배열 변경의 유일한 출구. 다음 배열을 ref 에 **동기적으로 먼저 심고** 나서 onChange 를 부른다 —
+   * 두 커밋이 같은 틱에 겹쳐도(타이머가 거의 동시에 만료) 두 번째가 첫 번째의 결과 위에서 계산된다.
+   * 부모 리렌더를 기다리면 그 틈이 정확히 위 버그의 재발 경로다.
+   */
+  const commitItems = (next: T[]) => {
+    itemsRef.current = next;
+    onChangeRef.current(next);
+  };
+
   const sensors = useSensors(
     // distance:5 — 삭제·확장 버튼 클릭이 드래그로 먹히지 않게
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -174,7 +230,7 @@ export function EditableList<T>({
       commit: () => {
         // 유예가 끝났다 — 이제야 배열에서 뺀다(자동저장은 여기서 한 번만 돈다).
         // index 가 아니라 key 로 지운다 — 그 사이 순서가 바뀌었어도 정확한 행이 지워진다.
-        onChange(items.filter((it) => rowKey(it) !== key));
+        commitItems(removeByKey(itemsRef.current, rowKey, key));
         setHidden((prev) => { const n = new Set(prev); n.delete(key); return n; });
       },
     });
@@ -182,13 +238,12 @@ export function EditableList<T>({
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return;
-    const from = items.findIndex((it) => rowKey(it) === active.id);
-    const to = items.findIndex((it) => rowKey(it) === over.id);
-    if (from < 0 || to < 0) return;
-    onChange(arrayMove(items, from, to));
+    commitItems(moveByKey(itemsRef.current, rowKey, String(active.id), String(over.id)));
   };
 
-  const atMax = maxRows !== undefined && items.length >= maxRows;
+  // 유예 중 숨은 행은 정원을 차지하지 않는다 — 상한을 채운 뒤 하나 지우고 곧바로 새 행을 넣으려 할 때
+  // 5초를 기다리게 되는 걸 막는다. hidden 이 비면 items.length 와 같으므로 기존 동작의 일반화다.
+  const atMax = maxRows !== undefined && items.length - hidden.size >= maxRows;
 
   // AnimatePresence 를 쓰지 않는다. 직접 자식이 커스텀 컴포넌트(Row)면 exit 완료 신호를 받지 못해
   // **삭제된 행이 DOM 에 영구히 남는다**(하니스에서 확인: 배열 2개 / 화면 3개, 잔재는 opacity 1).
@@ -223,7 +278,8 @@ export function EditableList<T>({
             {renderRow({
               item,
               index,
-              patch: (next) => onChange(items.map((it) => (rowKey(it) === key ? { ...it, ...next } : it))),
+              // 여기도 클로저가 아니라 ref — 같은 틱에 두 행을 patch 해도 하나가 사라지지 않는다.
+              patch: (next) => commitItems(patchByKey(itemsRef.current, rowKey, key, next)),
               requestRemove: () => requestRemove(key),
             })}
         </Row>
@@ -250,7 +306,7 @@ export function EditableList<T>({
           type="button"
           whileTap={{ scale: 0.98 }}
           transition={spring}
-          onClick={() => onChange([...items, makeItem()])}
+          onClick={() => commitItems([...itemsRef.current, makeItem()])}
           className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-violet-400 hover:text-violet-500"
         >
           <Plus className="h-3.5 w-3.5" /> {addLabel}
