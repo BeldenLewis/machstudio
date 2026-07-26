@@ -31,9 +31,10 @@ import {
 import {
   SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { GripVertical, Plus, Trash2 } from "lucide-react";
 import { useUndoableDelete } from "@/components/ui/use-undoable-delete";
+import { objectParticle } from "@/lib/korean";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -96,34 +97,51 @@ function Row({
   });
 
   return (
-    <motion.div
+    /**
+     * 요소가 두 겹인 이유: transform 을 두 라이브러리가 동시에 쓸 수 없다.
+     *
+     * 한 겹으로 두고 motion.div 에 style={{transform}} 을 넘기면 **framer-motion 이 이긴다.**
+     * y 를 애니메이션하거나 layout 을 켜는 순간 framer 가 transform 문자열을 직접 만들어 쓰고,
+     * 넘긴 style.transform 은 버려진다(하니스 실측: 인라인이 `transform: none` — 이 코드가
+     * 낼 수 있는 값은 translate3d 문자열 아니면 undefined 뿐이라, 저 none 은 framer 가 쓴 것).
+     * 결과는 **드래그해도 행이 따라 움직이지 않는 상태**였다(놓으면 순서는 맞게 바뀌므로 눈에 안 띈다).
+     *
+     * 그래서 바깥은 순수 div — dnd-kit 의 ref·transform·transition 전용,
+     * 안쪽 motion.div 는 등장 페이드 전용. 서로 다른 요소라 충돌하지 않는다.
+     * layout 은 뺐다 — 그게 framer 를 transform 저자로 만든 원인이고, 순서 이동은 dnd-kit 의
+     * transition 이 이미 부드럽게 처리한다. 삭제 후 아래 행이 올라오는 건 즉시 이동인데,
+     * 되돌리기 토스트가 실수를 받쳐 주므로 그 편이 더 반응 좋게 읽힌다.
+     */
+    <div
       ref={setNodeRef}
-      layout
-      initial={{ opacity: 0, y: -4 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      transition={spring}
       // 세로 축만 반영한다 — @dnd-kit/modifiers 가 설치돼 있지 않아 x 는 버린다.
       style={{ transform: transform ? `translate3d(0, ${transform.y}px, 0)` : undefined, transition }}
-      className={`flex items-start gap-1.5 rounded-xl bg-background/60 p-2.5 shadow-sm transition-shadow ${
-        isDragging ? "relative z-10 shadow-lg" : ""
-      }`}
+      className={isDragging ? "relative z-10" : undefined}
     >
-      {reorderable && (
-        <button
-          type="button"
-          {...attributes}
-          {...listeners}
-          aria-label={handleLabel}
-          title={handleLabel}
-          className="mt-0.5 shrink-0 cursor-grab touch-none rounded-lg p-1 text-muted-foreground/50 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-violet-400"
-        >
-          <GripVertical className="h-3.5 w-3.5" />
-        </button>
-      )}
-      <div className="min-w-0 flex-1 space-y-2">{children}</div>
-      {trailing}
-    </motion.div>
+      <motion.div
+        initial={{ opacity: 0, y: -4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={spring}
+        className={`flex items-start gap-1.5 rounded-xl bg-background/60 p-2.5 transition-shadow ${
+          isDragging ? "shadow-lg" : "shadow-sm"
+        }`}
+      >
+        {reorderable && (
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            aria-label={handleLabel}
+            title={handleLabel}
+            className="mt-0.5 shrink-0 cursor-grab touch-none rounded-lg p-1 text-muted-foreground/50 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-violet-400"
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+          </button>
+        )}
+        <div className="min-w-0 flex-1 space-y-2">{children}</div>
+        {trailing}
+      </motion.div>
+    </div>
   );
 }
 
@@ -149,7 +167,8 @@ export function EditableList<T>({
   const requestRemove = (key: string) => {
     remove({
       key: `${listId}:${key}`,
-      message: `${itemNoun}을 삭제했어요`,
+      // 조사는 계산한다 — 하드코딩하면 "단계을"·"자료을" 처럼 틀린 말이 나온다.
+      message: `${objectParticle(itemNoun)} 삭제했어요`,
       onOptimistic: () => setHidden((prev) => new Set(prev).add(key)),
       onUndo: () => setHidden((prev) => { const n = new Set(prev); n.delete(key); return n; }),
       commit: () => {
@@ -171,10 +190,13 @@ export function EditableList<T>({
 
   const atMax = maxRows !== undefined && items.length >= maxRows;
 
+  // AnimatePresence 를 쓰지 않는다. 직접 자식이 커스텀 컴포넌트(Row)면 exit 완료 신호를 받지 못해
+  // **삭제된 행이 DOM 에 영구히 남는다**(하니스에서 확인: 배열 2개 / 화면 3개, 잔재는 opacity 1).
+  // 순서 변경의 부드러움은 motion.div 의 layout 이 담당하고, 삭제는 즉시 사라지는 게 맞다
+  // (되돌리기 토스트가 실수를 이미 받쳐 준다).
   const rows = (
     <div className="space-y-2">
-      <AnimatePresence initial={false}>
-        {visible.map(({ item, index, key }) => (
+      {visible.map(({ item, index, key }) => (
           <Row
             key={key}
             id={key}
@@ -204,9 +226,8 @@ export function EditableList<T>({
               patch: (next) => onChange(items.map((it) => (rowKey(it) === key ? { ...it, ...next } : it))),
               requestRemove: () => requestRemove(key),
             })}
-          </Row>
-        ))}
-      </AnimatePresence>
+        </Row>
+      ))}
     </div>
   );
 

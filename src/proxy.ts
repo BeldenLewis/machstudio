@@ -23,7 +23,10 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/share") ||
     pathname.startsWith("/s/") ||
     pathname.startsWith("/r/") ||
-    pathname.startsWith("/api/cron")
+    pathname.startsWith("/api/cron") ||
+    // 개발 전용 하니스(/dev/*) — 로그인 뒤에 있는 컴포넌트를 격리해 검증할 때 쓴다.
+    // 프로덕션에서는 이 조건이 false 이고, 각 페이지도 notFound() 로 한 번 더 막는다.
+    (process.env.NODE_ENV !== "production" && pathname.startsWith("/dev/"))
   ) {
     return NextResponse.next();
   }
