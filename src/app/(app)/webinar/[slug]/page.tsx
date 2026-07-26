@@ -14,9 +14,14 @@ import {
   ExternalLink,
   Eye,
   Loader2,
+  MoreHorizontal,
   Settings2,
+  Trash2,
   Video,
 } from "lucide-react";
+import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { btnCls, FINISH, R } from "@/components/ui/primitives";
 import Link from "next/link";
 import PageSetupTab from "./PageSetupTab";
 import { type WatchState } from "./LivePageTab";
@@ -373,6 +378,7 @@ function WebinarDetail({ id }: { id: string }) {
               <Eye className="w-3.5 h-3.5" />
               미리보기
             </motion.a>
+            <WebinarOverflowMenu webinar={{ id: webinar.id, name: webinar.name }} />
           </div>
         </div>
 
@@ -463,6 +469,87 @@ function WebinarDetail({ id }: { id: string }) {
           </motion.div>
         </AnimatePresence>
       </div>
+    </div>
+  );
+}
+
+/**
+ * 껍데기 ··· 메뉴 — 저빈도·고위험 액션의 집.
+ *
+ * IA 문서가 웨비나 삭제를 **만들기 밖 이 메뉴로** 보낸 이유를 그대로 옮긴다:
+ * "계정 수준 파괴 액션이 자동저장 표시 바로 다음 줄에 있었다 — 확인 단계는 있었지만
+ * **'멀리'가 아니었다**."
+ *
+ * 나는 이걸 원본 정보 화면 **맨 아래**로 옮기고 "화면 맨 끝에만" 이라고 적어 뒀는데,
+ * 화면 안에 있는 한 여전히 '멀리' 가 아니다(스크롤하면 지나간다). 여기로 옮긴다.
+ * 확인은 공용 모달의 requireText 게이트 — 웨비나 이름을 정확히 입력해야 열린다.
+ */
+function WebinarOverflowMenu({ webinar }: { webinar: { id: string; name: string } }) {
+  const router = useRouter();
+  const confirm = useConfirm();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+
+  const remove = async () => {
+    setOpen(false);
+    const ok = await confirm({
+      title: "웨비나를 삭제할까요?",
+      description: "모든 등록자, Q&A, 채팅, 공지, 설문 응답이 함께 삭제돼요. 되돌릴 수 없어요.",
+      confirmLabel: "삭제",
+      tone: "danger",
+      requireText: { label: `확인을 위해 웨비나 이름 "${webinar.name}" 을 입력하세요`, expected: webinar.name },
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/webinars/${webinar.id}`, { method: "DELETE" });
+      if (!res.ok) { toast.error("삭제 실패"); return; }
+      toast.success("웨비나가 삭제됐어요");
+      router.push("/webinar");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="웨비나 더보기"
+        title="더보기"
+        disabled={busy}
+        className={btnCls("quiet", "h-9 w-9 !px-0")}
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </button>
+      {open && (
+        <div role="menu" className={`absolute right-0 top-full z-30 mt-1.5 w-56 bg-popover p-1.5 ${R.surface} ${FINISH.overlay}`}>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={remove}
+            className={`w-full text-left ${btnCls("dangerQuiet", "justify-start")}`}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            웨비나 삭제
+          </button>
+        </div>
+      )}
     </div>
   );
 }

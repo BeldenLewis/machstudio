@@ -21,7 +21,7 @@
  */
 
 import { type ComponentProps } from "react";
-import BasicInfoTab, { WebinarDangerZone } from "./BasicInfoTab";
+import BasicInfoTab from "./BasicInfoTab";
 import SessionsTab from "./SessionsTab";
 import BrandSection from "./BrandSection";
 
@@ -100,10 +100,10 @@ export default function SourceInfoTab({
         <BrandSection webinarId={webinar.id} theme={webinar.theme} onSilentUpdate={onSilentUpdate} />
       </div>
 
-      {/* 위험 구역은 화면 **맨 끝**에만 — 예전엔 BasicInfoTab 안에 있어서 '웨비나 삭제' 가
-          진행 순서 구분선 바로 위, 세션을 편집하러 스크롤하는 경로에 끼어 있었다. */}
-      <AreaDivider label="위험 구역" hint="되돌릴 수 없는 작업이에요." tone="danger" />
-      <WebinarDangerZone webinar={{ id: webinar.id, name: webinar.name }} />
+      {/* 위험 구역은 이 화면에 없다 — IA 문서가 웨비나 삭제를 **만들기 밖 껍데기 ··· 메뉴**로
+          보낸다. 근거: "계정 수준 파괴 액션이 자동저장 표시 바로 다음 줄에 있었다 — 확인 단계는
+          있었지만 '멀리' 가 아니었다." 화면 맨 아래도 스크롤하면 지나가는 자리라 '멀리' 가
+          아니어서, 승인 설계대로 껍데기로 옮겼다(page.tsx 의 WebinarOverflowMenu). */}
     </div>
   );
 }

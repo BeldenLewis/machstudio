@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle } from "lucide-react";
+import { btnCls, FIELD_CLS_DANGER, FINISH, R } from "@/components/ui/primitives";
 
 /**
  * 앱 전역 확인 대화상자 — window.confirm() 을 대체하는 프로미스 기반 공용 컴포넌트.
@@ -18,6 +19,13 @@ export interface ConfirmOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   tone?: ConfirmTone;
+  /**
+   * 확인 문구 게이트 — 입력이 expected 와 정확히 같아질 때까지 확인 버튼을 잠근다.
+   * 계정 수준 파괴(웨비나 삭제)처럼 오클릭 한 번의 대가가 큰 액션에만 쓴다.
+   * 이걸 여기 넣은 이유: 그런 액션마다 전용 모달을 만들면 포커스 트랩·Escape·포커스
+   * 복원을 각자 다시 구현하게 된다(이 파일이 window.confirm 을 대체한 이유와 같다).
+   */
+  requireText?: { label: string; expected: string };
 }
 
 type ConfirmFn = (options: ConfirmOptions) => Promise<boolean>;
@@ -35,7 +43,9 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const resolverRef = useRef<((v: boolean) => void) | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const confirmBtnRef = useRef<HTMLButtonElement>(null);
+  const requireInputRef = useRef<HTMLInputElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const [typed, setTyped] = useState("");
 
   const confirm = useCallback<ConfirmFn>((opts) => {
     // 이전 확인이 아직 열려 있는데 새로 호출되면 앞선 promise 가 영영 안 풀린다(호출부가 멈춤).
@@ -43,6 +53,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     resolverRef.current?.(false);
     resolverRef.current = null;
     previousFocusRef.current = (document.activeElement as HTMLElement) ?? null;
+    setTyped(""); // 직전 확인의 입력이 남아 게이트가 이미 열린 상태로 보이지 않게
     setOptions(opts);
     return new Promise<boolean>((resolve) => { resolverRef.current = resolve; });
   }, []);
@@ -57,7 +68,9 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!options) return;
-    confirmBtnRef.current?.focus();
+    // 게이트가 있으면 잠긴 버튼이 아니라 입력으로 — 첫 타이핑이 바로 들어가게.
+    if (options.requireText) requireInputRef.current?.focus();
+    else confirmBtnRef.current?.focus();
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -112,11 +125,11 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.98 }}
               transition={{ type: "spring", stiffness: 420, damping: 30 }}
-              className="relative w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-xl"
+              className={`relative w-full max-w-sm bg-popover p-5 ${R.panel} ${FINISH.overlay}`}
             >
               <div className="flex gap-3">
                 {options.tone === "danger" && (
-                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-500">
+                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
                     <AlertTriangle className="h-4 w-4" />
                   </div>
                 )}
@@ -127,21 +140,34 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                   )}
                 </div>
               </div>
+              {options.requireText && (
+                <div className="mt-4">
+                  <label htmlFor="confirm-require-text" className="block text-[11px] text-muted-foreground">
+                    {options.requireText.label}
+                  </label>
+                  <input
+                    id="confirm-require-text"
+                    ref={requireInputRef}
+                    value={typed}
+                    onChange={(e) => setTyped(e.target.value)}
+                    placeholder={options.requireText.expected}
+                    autoComplete="off"
+                    className={`mt-1 ${FIELD_CLS_DANGER}`}
+                  />
+                </div>
+              )}
               <div className="mt-5 flex justify-end gap-2">
                 <button
                   onClick={() => close(false)}
-                  className="rounded-xl border border-border px-3.5 py-2 text-xs font-medium transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50"
+                  className={btnCls("quiet", "text-xs")}
                 >
                   {options.cancelLabel ?? "취소"}
                 </button>
                 <button
                   ref={confirmBtnRef}
+                  disabled={!!options.requireText && typed !== options.requireText.expected}
                   onClick={() => close(true)}
-                  className={`rounded-xl px-3.5 py-2 text-xs font-medium text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-card ${
-                    options.tone === "danger"
-                      ? "bg-red-500 hover:bg-red-600 focus-visible:ring-red-500/50"
-                      : "bg-violet-500 hover:bg-violet-600 focus-visible:ring-violet-500/50"
-                  }`}
+                  className={`${btnCls(options.tone === "danger" ? "danger" : "key", "text-xs disabled:cursor-not-allowed disabled:opacity-40")}`}
                 >
                   {options.confirmLabel ?? "확인"}
                 </button>

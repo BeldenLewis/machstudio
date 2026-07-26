@@ -57,7 +57,7 @@ const sections: { id: PageSetupSection; label: string; desc: string; icon: Eleme
   { id: "source", group: "사실", label: "원본 정보", desc: "이름·일정, 진행 순서, 브랜드 — 네 산출물이 모두 여기서 읽어갑니다.", icon: SlidersHorizontal },
   // 랜딩은 홍보 진입점이라 등록보다 앞 — 산출물 순서 = 시청자 여정 순서
   { id: "landing", group: "산출물", label: "랜딩 페이지", desc: "외부 사이트에 임베드하는 상세페이지 — 히어로·소개·프로그램·FAQ를 구성합니다.", icon: Megaphone },
-  { id: "registration", group: "산출물", label: "등록", desc: "사전등록에서 수집할 항목과 동의 문구를 설정합니다.", icon: FileText },
+  { id: "registration", group: "산출물", label: "등록 폼", desc: "사전등록에서 수집할 항목과 동의 문구를 설정합니다.", icon: FileText },
   // 대기·입장·라이브·종료는 **한 라우트의 네 순간**이라 메뉴 한 칸 + 상태 세그먼트로 합쳤다.
   { id: "watch", group: "산출물", label: "시청 화면", desc: "등록자가 라이브 전·중·후에 보는 한 몸의 화면 — 상태별로 골라 편집합니다.", icon: MonitorPlay },
   { id: "survey", group: "산출물", label: "설문", desc: "자체 설문을 만들어 종료 화면·라이브 푸시·링크로 응답을 모읍니다.", icon: ClipboardCheck },
