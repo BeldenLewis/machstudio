@@ -1,12 +1,13 @@
 "use client";
 
-import { Fragment, type ElementType } from "react";
+import { Fragment, useEffect, useMemo, useState, type ElementType } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FileText, MonitorPlay, SlidersHorizontal, ClipboardCheck, Megaphone } from "lucide-react";
 import SourceInfoTab from "./SourceInfoTab";
 import RegistrationFormTab from "./RegistrationFormTab";
 import LivePageTab, { type WatchState } from "./LivePageTab";
 import { AutosaveScope, AggregateAutosaveIndicator } from "@/components/ui/autosave-scope";
+import { checkWebinarReadiness, readinessBySection } from "@/lib/webinar-readiness";
 import SurveyTab from "./SurveyTab";
 import LandingPageTab from "./LandingPageTab";
 
@@ -67,6 +68,7 @@ export default function PageSetupTab({
   onSectionChange,
   watchState,
   onWatchStateChange,
+  isLive,
 }: {
   webinar: Webinar;
   onUpdate: () => void;
@@ -76,7 +78,30 @@ export default function PageSetupTab({
   /** 시청 화면의 편집 상태 — URL 이 단일 소스라 page.tsx 가 들고 있다. */
   watchState: WatchState;
   onWatchStateChange: (next: WatchState) => void;
+  /** 방송 중인가 — 상단 띠 표시용(상태 판정은 page.tsx 의 resolveWebinarStatus 가 단일 소스). */
+  isLive?: boolean;
 }) {
+  /**
+   * 종료 화면에 실제로 연결된 자체 설문이 있는가 — 준비 상태의 '설문 영역' 판정 근거.
+   * 서버(info 라우트)와 같은 조건을 쓴다: showOnEnded + isOpen + 마감 전.
+   */
+  const [hasLinkedEndedSurvey, setHasLinkedEndedSurvey] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/webinars/${webinar.id}/surveys`);
+        if (cancelled || !res.ok) return;
+        const data = await res.json();
+        const list = (data.surveys ?? []) as { showOnEnded?: boolean; isOpen?: boolean; closesAt?: string | null }[];
+        setHasLinkedEndedSurvey(list.some((v) =>
+          v.showOnEnded === true && v.isOpen === true &&
+          (!v.closesAt || new Date(v.closesAt).getTime() > Date.now())));
+      } catch { /* 준비 상태는 부가 정보라 실패해도 화면을 막지 않는다 */ }
+    })();
+    return () => { cancelled = true; };
+  }, [webinar.id]);
+
   /**
    * 종료 화면의 설문 영역이 켜져 있는가 — 설문 탭의 "켰는데 안 보인다" 안내 판정에 쓴다.
    * 저장 위치가 config 안쪽이라 여기서 읽어 내려보낸다(설문 탭은 config 를 받지 않는다).
@@ -84,6 +109,21 @@ export default function PageSetupTab({
   const endedSurveyAreaOn =
     ((((webinar.config?.livePage as Record<string, unknown> | undefined)?.screens as Record<string, unknown> | undefined)
       ?.ended as Record<string, unknown> | undefined)?.survey) === true;
+
+  /**
+   * 준비 상태 — "시청자에게 빈 화면은 없어요" 검사(순수 함수 + vitest 로 검증).
+   * 완성도가 아니라 **토글 ON + 내용 있음** 이중 게이트만 본다.
+   */
+  const issues = useMemo(
+    () => checkWebinarReadiness({
+      name: webinar.name,
+      sessionCount: webinar.sessions.length,
+      config: webinar.config,
+      hasLinkedEndedSurvey,
+    }),
+    [webinar.name, webinar.sessions.length, webinar.config, hasLinkedEndedSurvey],
+  );
+  const issuesBySection = useMemo(() => readinessBySection(issues), [issues]);
 
   const activeMeta = sections.find((item) => item.id === section) ?? sections[0];
   const ActiveIcon = activeMeta.icon;
@@ -96,7 +136,21 @@ export default function PageSetupTab({
 
   return (
     <AutosaveScope>
-    <div className="flex flex-col lg:grid lg:h-full lg:grid-cols-[230px_minmax(0,1fr)] lg:overflow-hidden">
+    <div className="flex min-h-0 flex-col lg:h-full lg:overflow-hidden">
+    {/**
+     * 방송 띠 — 라이브 중에는 이 화면의 자동저장이 **시청자에게 즉시 반영**된다.
+     * 평소와 똑같이 보이면 운영자는 그 사실을 모른 채 문구를 고친다. 순수 표시(저장 없음).
+     */}
+    {isLive && (
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 bg-red-600 px-4 py-2 text-xs text-white sm:px-6 lg:px-8">
+        <span className="inline-flex items-center gap-1.5 font-semibold tracking-wide">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden />
+          ON AIR
+        </span>
+        <span className="opacity-90">지금 고치는 값은 시청자 화면에 바로 반영돼요.</span>
+      </div>
+    )}
+    <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[230px_minmax(0,1fr)] lg:overflow-hidden">
       <aside className="border-b lg:border-r border-border bg-secondary/20 p-4 lg:p-5">
         <div className="mb-5">
           <h2 className="text-sm font-semibold">만들기</h2>
@@ -104,6 +158,44 @@ export default function PageSetupTab({
             외부 페이지와 운영 기본값을 정리합니다.
           </p>
         </div>
+        {/**
+         * 준비 상태 — 완성도 점수가 아니다. "켜 놨는데 내용이 없어서 시청자 화면에서 조용히
+         * 사라지는 것"만 모은다. 조용히 사라지는 게 문제인 이유: 운영자는 켰다고 믿는다.
+         * 순수 읽기 — 여기서 저장하는 것은 없다.
+         */}
+        {issues.length > 0 && (
+          <div className="mb-4 rounded-xl bg-background p-3 shadow-sm">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[11px] font-semibold">확인할 것</span>
+              <span className="text-[11px] font-semibold tabular-nums text-amber-700 dark:text-amber-400">{issues.length}건</span>
+            </div>
+            <ul className="mt-2 space-y-1.5">
+              {issues.slice(0, 4).map((it, i) => (
+                <li key={`${it.section}-${i}`}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSectionChange(it.section as PageSetupSection);
+                      if (it.watchState) onWatchStateChange(it.watchState);
+                    }}
+                    className="block w-full text-left text-[11px] leading-snug text-muted-foreground transition-colors hover:text-foreground"
+                    title={it.detail}
+                  >
+                    <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle ${it.severity === "blocking" ? "bg-red-500" : "bg-amber-500"}`} aria-hidden />
+                    {it.title}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {issues.length > 4 && (
+              <p className="mt-1.5 text-[10.5px] text-muted-foreground/70">그리고 {issues.length - 4}건 더</p>
+            )}
+            <p className="mt-2 border-t border-border pt-2 text-[10.5px] leading-relaxed text-muted-foreground/70">
+              완성도가 아니라 <b className="font-semibold">켜져 있는데 내용이 없는 것</b>만 봐요.
+            </p>
+          </div>
+        )}
+
         <nav className="flex gap-1 overflow-x-auto lg:flex-col lg:gap-0 lg:space-y-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {sections.map((item, i) => {
             const Icon = item.icon;
@@ -139,6 +231,15 @@ export default function PageSetupTab({
                 )}
                 <Icon className="relative z-10 h-4 w-4 shrink-0" />
                 <span className="relative z-10">{item.label}</span>
+                {/* 미완 개수 — 색만으로 알리지 않고 숫자를 함께 둔다(색각·흑백 출력) */}
+                {issuesBySection[item.id] > 0 && (
+                  <span
+                    className="relative z-10 ml-auto rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-amber-700 dark:text-amber-400"
+                    title={`이 섹션에 확인할 것 ${issuesBySection[item.id]}건`}
+                  >
+                    {issuesBySection[item.id]}
+                  </span>
+                )}
               </motion.button>
               </Fragment>
             );
@@ -239,6 +340,7 @@ export default function PageSetupTab({
           </AnimatePresence>
         </div>
       </div>
+    </div>
     </div>
     </AutosaveScope>
   );

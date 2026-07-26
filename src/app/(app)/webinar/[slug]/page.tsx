@@ -440,6 +440,7 @@ function WebinarDetail({ id }: { id: string }) {
                 onSectionChange={(section) => navigate("create", section, { replace: true })}
                 watchState={watchState}
                 onWatchStateChange={setWatchState}
+                isLive={resolveWebinarStatus(webinar).status === "live"}
               />
             )}
             {activeTab === "deploy" && <DeployTab
