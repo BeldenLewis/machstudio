@@ -231,6 +231,11 @@
   box-shadow: var(--shadow-card);
 }
 
+/* 마감(면 헤어라인 + 엘리베이션)은 여기 클래스로 두지 않는다 —
+   top-level 로 .finish-* 를 선언했더니 서브된 CSS 에 하나도 나타나지 않았다(하니스 실측).
+   대신 src/components/ui/primitives.tsx 의 FINISH 상수가 Tailwind 임의값으로 들고 있다.
+   값의 근거는 위 '면 경계 실측 기록' 참고. */
+
 .mach-toaster {
   pointer-events: none;
 }
