@@ -8,6 +8,7 @@ import { useAutosave } from "@/components/ui/use-autosave";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { SignupDeadlineField } from "@/components/webinar/WebinarSchedulePicker";
 import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
+import { resolveConsentBody, consentSourceLabel } from "@/lib/consent-template";
 import { Switch } from "@/components/ui/switch";
 import { normalizeRegistrationForm, type WebinarRegistrationField } from "@/lib/webinar-config";
 import { buildStkCss } from "@/app/webinar/[slug]/LiveContentStk";
@@ -26,6 +27,8 @@ interface Webinar {
   liveStartAt: string;
   signupDeadline: string;
   components?: Record<string, unknown> | null;
+  /** 약관 전문 템플릿 — 이 웨비나가 비워 두면 상속한다(IA 8단계). */
+  workspace?: { privacyBodyTemplate?: string | null; marketingBodyTemplate?: string | null } | null;
 }
 
 const inputCls = "w-full px-2.5 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors disabled:opacity-40";
@@ -367,6 +370,82 @@ function RegistrationFormPreview({
   );
 }
 
+/**
+ * 약관 전문 — 상속 요약 + 덮어쓰기.
+ *
+ * 예전엔 라벨 없는 큰 textarea 두 개가 **고빈도로 만지는 필드 빌더와 같은 스크롤**에 섞여
+ * 있었고, 웨비나마다 같은 전문을 다시 붙여넣어야 했다. 이제 워크스페이스 템플릿이 기본이고
+ * 이 웨비나만 다르게 할 때 펼쳐서 덮어쓴다(AGENTS: 저빈도 긴 세부는 가까운 확장으로).
+ */
+function ConsentBodyField({
+  label, value, onChange, template,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  template?: string | null;
+}) {
+  const resolved = resolveConsentBody(value, template);
+  const overriding = resolved.source === "webinar";
+  const [open, setOpen] = useState(overriding);
+
+  return (
+    <div className="mt-2 space-y-1.5 rounded-xl bg-secondary/25 p-2.5">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="text-[11px] text-muted-foreground">전문</span>
+        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+          resolved.source === "webinar" ? "bg-violet-500/10 text-violet-600 dark:text-violet-400"
+          : resolved.source === "workspace" ? "bg-secondary text-muted-foreground"
+          : "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+        }`}>
+          {consentSourceLabel(resolved.source)}
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="ml-auto text-[11px] font-medium text-violet-500 transition-colors hover:text-violet-600"
+        >
+          {open ? "접기" : overriding ? "전문 보기·수정" : "이 웨비나만 다르게"}
+        </button>
+      </div>
+
+      {!open && (
+        <p className="line-clamp-2 whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground/80">
+          {resolved.body || "전문이 없어요 — 동의 문구를 눌러도 팝업이 뜨지 않아요."}
+        </p>
+      )}
+
+      {open && (
+        <>
+          <textarea
+            rows={5}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            aria-label={`${label} 약관 전문 (이 웨비나 전용)`}
+            placeholder={template ? "비워 두면 워크스페이스 공통 전문을 씁니다." : "약관 전문 — 워크스페이스 설정 › 약관에 넣어 두면 모든 웨비나가 물려받아요."}
+            className="w-full resize-y rounded-lg border border-border bg-background px-2.5 py-1.5 text-[13px] leading-relaxed transition-colors focus:border-violet-400 focus:outline-none"
+          />
+          {overriding && template && (
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              className="text-[11px] text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground"
+            >
+              워크스페이스 공통으로 되돌리기
+            </button>
+          )}
+          {!template && (
+            <p className="text-[11px] leading-relaxed text-muted-foreground/70">
+              같은 전문을 웨비나마다 붙여넣고 있다면 워크스페이스 설정 › 약관에 한 번만 넣어 두세요.
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webinar: Webinar; onSilentUpdate: () => void }) {
   const initial = normalizeRegistrationForm(webinar.config ?? {}, { includeDisabled: true });
   const [fields, setFields] = useState<RegistrationField[]>(initial.fields);
@@ -556,12 +635,11 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">개인정보 동의 문구</label>
               <input value={privacyText} onChange={(e) => setPrivacyText(e.target.value)} className={inputCls} />
-              <textarea
-                rows={4}
+              <ConsentBodyField
+                label="개인정보 수집·이용"
                 value={privacyBody}
-                onChange={(e) => setPrivacyBody(e.target.value)}
-                placeholder="약관 전문 — 입력하면 폼에서 문구를 눌렀을 때 팝업으로 보여요. 비워두면 팝업 없음."
-                className={`${inputCls} mt-2 resize-y`}
+                onChange={setPrivacyBody}
+                template={webinar.workspace?.privacyBodyTemplate}
               />
               <label className="flex items-center gap-2 text-xs text-muted-foreground mt-2 select-none">
                 <Switch checked={privacyDefaultChecked} onChange={setPrivacyDefaultChecked} label="개인정보 동의 기본 체크" />
@@ -571,12 +649,11 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">마케팅 동의 문구</label>
               <input value={marketingText} onChange={(e) => setMarketingText(e.target.value)} className={inputCls} />
-              <textarea
-                rows={4}
+              <ConsentBodyField
+                label="마케팅 정보 수신"
                 value={marketingBody}
-                onChange={(e) => setMarketingBody(e.target.value)}
-                placeholder="약관 전문 — 입력하면 폼에서 문구를 눌렀을 때 팝업으로 보여요. 비워두면 팝업 없음."
-                className={`${inputCls} mt-2 resize-y`}
+                onChange={setMarketingBody}
+                template={webinar.workspace?.marketingBodyTemplate}
               />
               <label className="flex items-center gap-2 text-xs text-muted-foreground mt-2 select-none">
                 <Switch checked={marketingDefaultChecked} onChange={setMarketingDefaultChecked} label="마케팅 동의 기본 체크" />

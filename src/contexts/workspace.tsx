@@ -13,6 +13,12 @@ interface Workspace {
   name: string;
   slug: string;
   role?: string;
+  /**
+   * 등록 폼 약관 전문 템플릿 — 웨비나가 자기 값을 비워 두면 이 값을 상속한다.
+   * 목록 API(/api/workspace)에는 없고 상세(/api/workspace/[id])에만 있어 optional 이다.
+   */
+  privacyBodyTemplate?: string | null;
+  marketingBodyTemplate?: string | null;
 }
 
 interface WorkspaceContextType {

@@ -144,6 +144,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   "shortLink.deleted": "단축 URL 삭제",
   "workspace.created": "워크스페이스 생성",
   "workspace.renamed": "워크스페이스 이름 변경",
+  "workspace.consent_template_updated": "약관 템플릿 변경",
   "workspace.deleted": "워크스페이스 삭제",
   "invitation.redeemed": "초대 등록",
   "invitation.accepted": "초대 수락",

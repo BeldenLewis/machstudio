@@ -49,6 +49,12 @@ model Workspace {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  /// 등록 폼 약관 전문 템플릿 — 웨비나마다 다시 붙여넣을 값이 아니라 워크스페이스 자산이다.
+  /// 웨비나가 자기 값을 비워 두면 이 값을 상속하고, 채워 두면 그 웨비나만 덮어쓴다.
+  /// null = 아직 설정 안 함(기존 웨비나 값은 그대로 살아 있다 — 이 컬럼은 순수 추가다).
+  privacyBodyTemplate   String?
+  marketingBodyTemplate String?
+
   members              WorkspaceMember[]
   projects             Project[]
   utmLinks             UTMLink[]

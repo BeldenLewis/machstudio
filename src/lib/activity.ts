@@ -98,6 +98,7 @@ export type ActivityAction =
   | "shortLink.deleted"
   | "workspace.created"
   | "workspace.renamed"
+  | "workspace.consent_template_updated"
   | "workspace.deleted"
   | "invitation.redeemed"
   | "invitation.accepted"

@@ -37,6 +37,8 @@ interface Webinar {
   config: Record<string, unknown>;
   components?: Record<string, unknown> | null;
   sessions: WebinarSession[];
+  /** 약관 전문 템플릿 — 등록 폼이 "상속 중" 을 보여주려면 값이 필요하다(IA 8단계). */
+  workspace?: { id: string; name: string; privacyBodyTemplate?: string | null; marketingBodyTemplate?: string | null } | null;
 }
 
 type PageSetupSection = "source" | "landing" | "registration" | "watch" | "survey";
@@ -303,6 +305,7 @@ export default function PageSetupTab({
                       id: webinar.id, slug: webinar.slug, config: webinar.config, theme: webinar.theme,
                       // 접수 창(마감·라이브 중 접수)이 이 탭으로 옮겨와 일정·components 가 필요하다
                       liveStartAt: webinar.liveStartAt, signupDeadline: webinar.signupDeadline, components: webinar.components,
+                      workspace: webinar.workspace,
                     }}
                     onSilentUpdate={onSilentUpdate}
                   />
