@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction, type ElementType } from "react";
-import { motion, Reorder, useDragControls } from "framer-motion";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction, type ElementType, type ReactNode } from "react";
+import { motion } from "framer-motion";
 import {
   Plus, Trash2, GripVertical, Link2, Loader2, BarChart3,
   Star, CircleDot, ListChecks, Gauge, AlignLeft, Copy, ChevronDown, ChevronRight, ArrowLeft, Info, X, Smartphone, CalendarClock, CircleCheckBig, ClipboardList,
@@ -11,6 +11,7 @@ import { useAutosave } from "@/components/ui/use-autosave";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { FIELD_CLS, FINISH, R, SELECTED } from "@/components/ui/primitives";
 import { OptionRows } from "@/components/ui/option-rows";
+import { EditableList } from "@/components/ui/editable-list";
 import { Switch } from "@/components/ui/switch";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { isSurveyAcceptingResponses, normalizeSurveyQuestions, SURVEY_MAX_QUESTIONS, SURVEY_TYPE_LABELS, type SurveyQuestion, type SurveyQuestionType } from "@/lib/webinar-survey";
@@ -123,18 +124,21 @@ function QuestionRow({
   q,
   index,
   setQuestions,
-  onRemove,
+  handle,
+  removeButton,
   onDuplicate,
   onFocusQuestion,
 }: {
   q: SurveyQuestion;
   index: number;
   setQuestions: Dispatch<SetStateAction<SurveyQuestion[]>>;
-  onRemove: () => void;
+  /** 골격이 만든 드래그 핸들 — dnd-kit 배선(포인터+방향키)이 붙어 있다. */
+  handle: ReactNode | null;
+  /** 골격이 만든 삭제 컨트롤 — 5초 되돌리기까지 포함. */
+  removeButton: (opts?: { label?: string; onClick?: () => void }) => ReactNode | null;
   onDuplicate: () => void;
   onFocusQuestion: (qid: string) => void;
 }) {
-  const dragControls = useDragControls();
   const typePop = usePopover();
 
   const patch = (next: Partial<SurveyQuestion>) =>
@@ -162,17 +166,13 @@ function QuestionRow({
   const TypeIcon = meta.icon;
 
   return (
-    <Reorder.Item value={q} dragListener={false} dragControls={dragControls} layout className="rounded-xl bg-secondary/40 transition-colors focus-within:bg-secondary/60">
+    /* framer Reorder → 골격(dnd-kit). layout 프롭 제거가 핵심 — framer 가 transform 의
+       저자가 되면 dnd-kit 이 넘긴 값이 버려진다(SessionsTab 실측). 방향키 재정렬과
+       삭제 되돌리기가 함께 붙는다. */
+    <div className={`${R.surface} bg-secondary ${FINISH.s2} transition-colors focus-within:bg-secondary/70`}>
       <div onFocusCapture={() => onFocusQuestion(q.id)}>
         <div className="flex items-center gap-1 px-2 pt-2">
-          <button
-            type="button"
-            aria-label="순서 변경"
-            onPointerDown={(e) => { e.preventDefault(); dragControls.start(e); }}
-            className="grid h-8 w-7 shrink-0 cursor-grab place-items-center rounded-lg text-muted-foreground/40 transition-colors hover:text-muted-foreground active:cursor-grabbing touch-none"
-          >
-            <GripVertical className="h-4 w-4" />
-          </button>
+          {handle}
           <span className="w-7 shrink-0 text-center font-mono text-[10px] font-semibold text-muted-foreground/70">Q{index + 1}</span>
 
           <div className="relative" ref={typePop.ref}>
@@ -198,9 +198,7 @@ function QuestionRow({
           <button type="button" onClick={onDuplicate} aria-label="문항 복제" className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground/50 transition-colors hover:bg-background hover:text-foreground">
             <Copy className="h-3.5 w-3.5" />
           </button>
-          <button type="button" onClick={onRemove} aria-label="문항 삭제" className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive">
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          {removeButton({ label: `${q.title || `Q${index + 1}`} 문항 삭제` })}
         </div>
 
         <div className="px-3 pb-3 pl-[42px] pt-1">
@@ -273,7 +271,7 @@ function QuestionRow({
           )}
         </div>
       </div>
-    </Reorder.Item>
+    </div>
   );
 }
 
@@ -539,19 +537,30 @@ function SurveyEditor({
             </button>
           </div>
 
-          <Reorder.Group axis="y" values={activeQuestions} onReorder={setActiveOrder} className="space-y-2">
-            {activeQuestions.map((q, i) => (
+          {/* onChange 로 setActiveOrder 를 그대로 쓴다 — 재정렬과 삭제 **둘 다** 맞다.
+              보관(retired) 문항을 항상 뒤에 붙여 주는 함수라 활성 목록만 다루면 된다. */}
+          <EditableList<SurveyQuestion>
+            listId={`survey-${survey.id}-questions`}
+            itemNoun="문항"
+            items={activeQuestions}
+            onChange={setActiveOrder}
+            rowKey={(item) => item.id}
+            reorderable
+            rowChrome="bare"
+            // 추가는 유형을 먼저 고르는 팝오버라 목록 밖에 있다 — 골격은 그리지 않는다.
+            renderAdd={() => null}
+            renderRow={({ item, visibleIndex, handle, removeButton }) => (
               <QuestionRow
-                key={q.id}
-                q={q}
-                index={i}
+                q={item}
+                index={visibleIndex}
                 setQuestions={setQuestions}
-                onRemove={() => setQuestions((prev) => prev.filter((item) => item.id !== q.id))}
-                onDuplicate={() => duplicateQuestion(q.id)}
+                handle={handle}
+                removeButton={removeButton}
+                onDuplicate={() => duplicateQuestion(item.id)}
                 onFocusQuestion={focusQuestion}
               />
-            ))}
-          </Reorder.Group>
+            )}
+          />
 
           <div className="relative" ref={addPop.ref}>
             <button

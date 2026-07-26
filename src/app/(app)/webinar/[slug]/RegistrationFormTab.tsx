@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type Dispatch, type ElementType, type SetStateAction } from "react";
-import { motion, Reorder, useDragControls } from "framer-motion";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type ElementType, type ReactNode, type SetStateAction } from "react";
+import { motion } from "framer-motion";
 import { Plus, Trash2, GripVertical, Smartphone, AlignLeft, Mail, Phone, ListChecks, SquareCheck, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
@@ -12,6 +12,7 @@ import { resolveConsentBody, consentSourceLabel } from "@/lib/consent-template";
 import { Switch } from "@/components/ui/switch";
 import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 import { OptionRows } from "@/components/ui/option-rows";
+import { EditableList } from "@/components/ui/editable-list";
 import { normalizeRegistrationForm, type WebinarRegistrationField } from "@/lib/webinar-config";
 import { buildStkCss } from "@/app/webinar/[slug]/LiveContentStk";
 
@@ -91,13 +92,16 @@ function RegTypeMenu({ current, onPick }: { current: FieldType; onPick: (t: Fiel
 function FieldCard({
   field,
   setFields,
-  onRemove,
+  handle,
+  removeButton,
 }: {
   field: RegistrationField;
   setFields: Dispatch<SetStateAction<RegistrationField[]>>;
-  onRemove: () => void;
+  /** 골격이 만든 드래그 핸들 — dnd-kit 배선(포인터+방향키)이 이미 붙어 있다. */
+  handle: ReactNode | null;
+  /** 골격이 만든 삭제 컨트롤. removable 이 false 면 null 을 준다(기본 필드). */
+  removeButton: (opts?: { label?: string; onClick?: () => void }) => ReactNode | null;
 }) {
-  const dragControls = useDragControls();
   const typePop = useRegPopover();
   const patch = (next: Partial<RegistrationField>) =>
     setFields((fields) => fields.map((item) => (item.id === field.id ? { ...item, ...next } : item)));
@@ -118,23 +122,19 @@ function FieldCard({
   };
 
   return (
-    <Reorder.Item
-      value={field}
-      dragListener={false}
-      dragControls={dragControls}
-      layout
-      className={`rounded-xl bg-secondary/40 transition-colors focus-within:bg-secondary/60 ${field.enabled ? "" : "opacity-60"}`}
-    >
+    /**
+     * framer Reorder → 골격(EditableList/dnd-kit). layout 프롭이 없어진 게 핵심이다 —
+     * framer 가 layout 이나 y 를 애니메이션하는 순간 transform 문자열의 저자가 되고,
+     * dnd-kit 이 넘긴 transform 은 버려진다(SessionsTab 에서 실측한 그 조합). 끌어도
+     * 행이 따라오지 않고 놓으면 순서만 바뀌어서 눈에 잘 띄지 않는 종류의 고장이다.
+     *
+     * 함께 얻는 것: 방향키 재정렬(원래 0곳), 삭제 되돌리기(원래 즉시 소실 — 옵션까지
+     * 설정해 둔 필드가 한 번의 오클릭으로 사라졌다).
+     */
+    <div className={`${R.surface} bg-secondary ${FINISH.s2} transition-colors focus-within:bg-secondary/70 ${field.enabled ? "" : "opacity-60"}`}>
       <div>
         <div className="flex items-center gap-1 px-2 pt-2">
-          <button
-            type="button"
-            aria-label="순서 변경"
-            onPointerDown={(e) => { e.preventDefault(); dragControls.start(e); }}
-            className="grid h-8 w-7 shrink-0 cursor-grab place-items-center rounded-lg text-muted-foreground/40 transition-colors hover:text-muted-foreground active:cursor-grabbing touch-none"
-          >
-            <GripVertical className="h-4 w-4" />
-          </button>
+          {handle}
 
           <div className="relative" ref={typePop.ref}>
             <button
@@ -160,18 +160,9 @@ function FieldCard({
           <label className="flex shrink-0 select-none items-center gap-1 text-[11px] text-muted-foreground">
             표시<Switch checked={field.enabled} onChange={(v) => patch({ enabled: v })} disabled={isName} label={`${field.label} 표시`} />
           </label>
-          {field.system ? (
-            <span className="w-8 shrink-0" />
-          ) : (
-            <button
-              type="button"
-              onClick={onRemove}
-              aria-label={`${field.label} 삭제`}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          )}
+          {/* 기본 필드는 removable=false 라 골격이 null 을 준다 — 빈 자리는 우리가 그려
+              헤더 정렬을 유지한다(bare 모드에서 레이아웃은 호출자 책임). */}
+          {removeButton({ label: `${field.label || "필드"} 삭제` }) ?? <span className="w-8 shrink-0" />}
         </div>
 
         <div className="px-3 pb-3 pl-[42px] pt-1">
@@ -224,7 +215,7 @@ function FieldCard({
           )}
         </div>
       </div>
-    </Reorder.Item>
+    </div>
   );
 }
 
@@ -581,16 +572,22 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
           </motion.button>
         </div>
 
-        <Reorder.Group axis="y" values={fields} onReorder={setFields} className="space-y-2">
-          {fields.map((field) => (
-            <FieldCard
-              key={field.id}
-              field={field}
-              setFields={setFields}
-              onRemove={() => setFields((prev) => prev.filter((item) => item.id !== field.id))}
-            />
-          ))}
-        </Reorder.Group>
+        <EditableList<RegistrationField>
+          listId="reg-fields"
+          itemNoun="필드"
+          items={fields}
+          onChange={setFields}
+          rowKey={(f) => f.id}
+          reorderable
+          rowChrome="bare"
+          // 기본 필드(이름·연락처·이메일)는 지울 수 없다 — 골격이 삭제 컨트롤 자리에 null 을 준다.
+          removable={(f) => !f.system}
+          // 추가 버튼은 이 섹션 헤더에 이미 있다(유형을 먼저 고르는 흐름) — 골격은 그리지 않는다.
+          renderAdd={() => null}
+          renderRow={({ item, handle, removeButton }) => (
+            <FieldCard field={item} setFields={setFields} handle={handle} removeButton={removeButton} />
+          )}
+        />
         {hasTel && (
           <p className="text-[11px] text-muted-foreground/70 -mt-3">전화번호 필드는 하이픈(-) 없이 숫자만 입력받아요.</p>
         )}
