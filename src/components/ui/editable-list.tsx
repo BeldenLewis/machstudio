@@ -41,6 +41,18 @@
  * 삭제 계약(중요): 클릭 즉시 화면에서만 숨기고 배열은 그대로 둔다. 유예(5초)가 끝날 때 비로소
  * onChange(제거된 배열) 를 호출한다. 그래서 실행취소하면 자동저장 왕복이 **0회**다.
  *
+ * 터치 타깃: 두 컨트롤 다 **36×36**이다. 44 가 아닌 이유를 적어 둔다 —
+ * WCAG 2.2 의 기준은 두 단이다. AA(2.5.8 Target Size Minimum)가 24×24 CSS px,
+ * AAA(2.5.5 Enhanced)가 44×44 다. 44 는 Apple HIG 와 같은 값이고 AAA 다.
+ * 이 행의 높이는 36px(입력의 py-2 + 13px 텍스트)이라 버튼 박스를 44 로 키우면 행이
+ * 그만큼 높아진다 — 만들기의 모든 목록 밀도가 바뀌는 일이다.
+ * 히트 영역만 ::after 로 ±11px 넓히는 우회도 쓰지 않았다: 세로로 44 를 만들면 36px 행을
+ * 넘어 **위아래 행의 입력을 덮고**, 가로로 넓히면 바로 옆 텍스트 입력의 클릭을 가로챈다
+ * (선택지 행은 핸들 바로 오른쪽이 입력이다). 작은 타깃보다 나쁜 결과다.
+ * 그래서 겹침 없이 가능한 최대인 **행 높이 전체(36)** 로 맞췄다. 이전 값은 핸들 22×22 로
+ * AA 24 미달이었고 그건 실제 기준 위반이었다 — 그 부분이 해결된다.
+ * 44 로 가려면 행 높이 자체를 올려야 하고, 그건 조립된 화면을 보고 결정할 일이다.
+ *
  * 포커스 표시를 이 파일에서 다루지 않는 이유: globals.css 의 전역 규칙 한 곳이 소유한다.
  * 여기 있던 `focus-visible:outline-2 focus-visible:outline-violet-400` 두 벌은 지웠다 —
  * (1) 전역 규칙이 언레이어드라 @layer utilities 인 이 클래스들을 **항상 이긴다**(죽은 코드였다),
@@ -261,7 +273,7 @@ function Row<T>({
       {...SKELETON_CONTROL}
       aria-label={handleLabel}
       title={handleLabel}
-      className="shrink-0 cursor-grab touch-none rounded-lg p-1 text-muted-foreground/50 transition-colors hover:text-foreground active:cursor-grabbing"
+      className="grid h-9 w-9 shrink-0 cursor-grab touch-none place-items-center rounded-lg text-muted-foreground/50 transition-colors hover:text-foreground active:cursor-grabbing"
     >
       <GripVertical className="h-3.5 w-3.5" />
     </button>
@@ -277,7 +289,7 @@ function Row<T>({
         onClick={opts?.onClick ?? onRequestRemove}
         aria-label={label}
         title={label}
-        className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
       >
         <Trash2 className="h-3.5 w-3.5" />
       </button>
