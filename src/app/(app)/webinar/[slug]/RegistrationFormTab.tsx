@@ -11,6 +11,7 @@ import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
 import { resolveConsentBody, consentSourceLabel } from "@/lib/consent-template";
 import { Switch } from "@/components/ui/switch";
 import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
+import { OptionRows } from "@/components/ui/option-rows";
 import { normalizeRegistrationForm, type WebinarRegistrationField } from "@/lib/webinar-config";
 import { buildStkCss } from "@/app/webinar/[slug]/LiveContentStk";
 
@@ -97,8 +98,6 @@ function FieldCard({
   onRemove: () => void;
 }) {
   const dragControls = useDragControls();
-  const rootRef = useRef<HTMLDivElement>(null);
-  const pendingFocus = useRef<number | null>(null);
   const typePop = useRegPopover();
   const patch = (next: Partial<RegistrationField>) =>
     setFields((fields) => fields.map((item) => (item.id === field.id ? { ...item, ...next } : item)));
@@ -108,23 +107,7 @@ function FieldCard({
   const meta = REG_TYPE_META[field.type];
   const TypeIcon = meta.icon;
 
-  // 선택지 추가/삭제 후 해당 입력으로 포커스 이동 (설문 빌더와 동일)
-  useEffect(() => {
-    if (pendingFocus.current === null) return;
-    const el = rootRef.current?.querySelector<HTMLInputElement>(`input[data-opt-idx="${pendingFocus.current}"]`);
-    pendingFocus.current = null;
-    el?.focus();
-  });
-
   const options = field.options ?? [];
-  const setOption = (idx: number, v: string) => { const next = [...options]; next[idx] = v; patch({ options: next }); };
-  const addOption = (at: number) => { const next = [...options]; next.splice(at, 0, ""); patch({ options: next }); pendingFocus.current = at; };
-  const removeOption = (at: number, focusPrev = false) => {
-    const next = [...options];
-    if (next.length <= 1) next[at] = ""; else next.splice(at, 1);
-    patch({ options: next });
-    if (focusPrev) pendingFocus.current = Math.max(0, at - 1);
-  };
 
   const changeType = (t: FieldType) => {
     typePop.setOpen(false);
@@ -142,7 +125,7 @@ function FieldCard({
       layout
       className={`rounded-xl bg-secondary/40 transition-colors focus-within:bg-secondary/60 ${field.enabled ? "" : "opacity-60"}`}
     >
-      <div ref={rootRef}>
+      <div>
         <div className="flex items-center gap-1 px-2 pt-2">
           <button
             type="button"
@@ -220,35 +203,20 @@ function FieldCard({
 
           {field.type === "select" && (
             <div className="space-y-1.5">
-              {options.map((opt, idx) => (
-                <div key={idx} data-focus-shell className="group flex items-center gap-2 rounded-lg bg-background px-2.5 shadow-sm">
-                  <span className="h-3.5 w-3.5 shrink-0 rounded-full border-[1.5px] border-muted-foreground/40" />
-                  <input
-                    value={opt}
-                    data-opt-idx={idx}
-                    onChange={(e) => setOption(idx, e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.nativeEvent.isComposing) return;
-                      if (e.key === "Enter") { e.preventDefault(); addOption(idx + 1); }
-                      else if (e.key === "Backspace" && e.currentTarget.value === "" && options.length > 1) { e.preventDefault(); removeOption(idx, true); }
-                    }}
-                    placeholder={`선택지 ${idx + 1}`}
-                    aria-label={`${field.label || "필드"} 선택지 ${idx + 1}`}
-                    className="min-w-0 flex-1 bg-transparent py-2 text-[13px] outline-none placeholder:text-muted-foreground/40"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeOption(idx)}
-                    aria-label={`선택지 ${idx + 1} 삭제`}
-                    className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-muted-foreground/40 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-              <button type="button" onClick={() => addOption(options.length)} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-violet-500 transition-colors hover:bg-violet-500/10">
-                <Plus className="h-3.5 w-3.5" />선택지 추가 <span className="font-normal text-muted-foreground/60">— 입력 중 Enter 로도 추가돼요</span>
-              </button>
+              {/**
+               * 공용 OptionRows 로 이관 — 설문 탭의 선택지 코드와 사실상 같은 코드였다.
+               * 이관으로 얻는 것: 드래그·키보드 재정렬. 선택지 순서는 공개 폼 <select> 의
+               * option 순서인데, 여기서 순서를 바꾸는 방법이 **문구를 다시 타이핑하는 것**뿐이었다.
+               * 함께 없어진 것: 이 파일이 들고 있던 pendingFocus + data-opt-idx 쿼리 기반
+               * 포커스 이동(골격의 autoFocusNewRow·removeNow({focus}) 가 대신한다).
+               */}
+              <OptionRows
+                listId={`reg-field-${field.id}`}
+                value={options}
+                onChange={(next) => patch({ options: next })}
+                ownerLabel="필드"
+                ownerTitle={field.label}
+              />
               {options.filter(Boolean).length === 0 && field.enabled && (
                 <p className="text-[11px] text-amber-600">옵션이 없으면 등록 폼에 표시되지 않아요{field.required ? " — 필수 항목이라 등록도 막혀요" : ""}.</p>
               )}

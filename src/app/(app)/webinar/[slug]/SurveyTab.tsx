@@ -9,7 +9,8 @@ import {
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
-import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
+import { FIELD_CLS, FINISH, R, SELECTED } from "@/components/ui/primitives";
+import { OptionRows } from "@/components/ui/option-rows";
 import { Switch } from "@/components/ui/switch";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { isSurveyAcceptingResponses, normalizeSurveyQuestions, SURVEY_MAX_QUESTIONS, SURVEY_TYPE_LABELS, type SurveyQuestion, type SurveyQuestionType } from "@/lib/webinar-survey";
@@ -134,8 +135,6 @@ function QuestionRow({
   onFocusQuestion: (qid: string) => void;
 }) {
   const dragControls = useDragControls();
-  const rootRef = useRef<HTMLDivElement>(null);
-  const pendingFocus = useRef<number | null>(null);
   const typePop = usePopover();
 
   const patch = (next: Partial<SurveyQuestion>) =>
@@ -143,37 +142,11 @@ function QuestionRow({
   const hasOptions = q.type === "single" || q.type === "multiple";
   const optionCount = countOptions(q);
 
-  // 선택지 추가/삭제 후 해당 입력으로 포커스 이동 (리렌더 뒤 실행)
-  useEffect(() => {
-    if (pendingFocus.current === null) return;
-    const el = rootRef.current?.querySelector<HTMLInputElement>(`input[data-opt-idx="${pendingFocus.current}"]`);
-    pendingFocus.current = null;
-    el?.focus();
-  });
-
   // 옵션이 줄어 maxSelect 가 옵션수 이상이 되면 무제한과 같아진다 — 정규화 규칙·UI 표시와 어긋나지 않게 정리.
   const clampMax = (options: string[], next: Partial<SurveyQuestion>) => {
     const n = options.filter((o) => o.trim()).length;
     if (q.maxSelect !== undefined && q.maxSelect >= n) next.maxSelect = undefined;
     return next;
-  };
-  const setOption = (idx: number, v: string) => {
-    const options = [...q.options];
-    options[idx] = v;
-    patch(clampMax(options, { options }));
-  };
-  const addOption = (at: number) => {
-    const options = [...q.options];
-    options.splice(at, 0, "");
-    patch({ options });
-    pendingFocus.current = at;
-  };
-  const removeOption = (at: number, focusPrev = false) => {
-    const options = [...q.options];
-    if (options.length <= 1) options[at] = "";
-    else options.splice(at, 1);
-    patch(clampMax(options, { options }));
-    if (focusPrev) pendingFocus.current = Math.max(0, at - 1);
   };
 
   const changeType = (t: SurveyQuestionType) => {
@@ -190,7 +163,7 @@ function QuestionRow({
 
   return (
     <Reorder.Item value={q} dragListener={false} dragControls={dragControls} layout className="rounded-xl bg-secondary/40 transition-colors focus-within:bg-secondary/60">
-      <div ref={rootRef} onFocusCapture={() => onFocusQuestion(q.id)}>
+      <div onFocusCapture={() => onFocusQuestion(q.id)}>
         <div className="flex items-center gap-1 px-2 pt-2">
           <button
             type="button"
@@ -241,35 +214,23 @@ function QuestionRow({
 
           {hasOptions && (
             <div className="space-y-1.5">
-              {q.options.map((opt, idx) => (
-                <div key={idx} data-focus-shell className="group flex items-center gap-2 rounded-lg bg-background px-2.5 shadow-sm">
-                  <span className={`h-3.5 w-3.5 shrink-0 border-[1.5px] border-muted-foreground/40 ${q.type === "multiple" ? "rounded-[5px]" : "rounded-full"}`} />
-                  <input
-                    value={opt}
-                    data-opt-idx={idx}
-                    onChange={(e) => setOption(idx, e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.nativeEvent.isComposing) return; // 한글 조합 중 Enter 무시
-                      if (e.key === "Enter") { e.preventDefault(); addOption(idx + 1); }
-                      else if (e.key === "Backspace" && e.currentTarget.value === "" && q.options.length > 1) { e.preventDefault(); removeOption(idx, true); }
-                    }}
-                    placeholder={`선택지 ${idx + 1}`}
-                    aria-label={`${q.title || "문항"} 선택지 ${idx + 1}`}
-                    className="min-w-0 flex-1 bg-transparent py-2 text-[13px] outline-none placeholder:text-muted-foreground/40"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeOption(idx)}
-                    aria-label={`선택지 ${idx + 1} 삭제`}
-                    className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-muted-foreground/40 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-              <button type="button" onClick={() => addOption(q.options.length)} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-violet-500 transition-colors hover:bg-violet-500/10">
-                <Plus className="h-3.5 w-3.5" />선택지 추가 <span className="font-normal text-muted-foreground/60">— 입력 중 Enter 로도 추가돼요</span>
-              </button>
+              {/**
+               * 공용 OptionRows 로 이관 — 등록 탭의 선택지 코드와 사실상 같은 코드였다.
+               * 얻는 것: 드래그·키보드 재정렬(선택지 순서는 응답 화면의 표시 순서인데
+               * 바꾸는 방법이 문구를 다시 타이핑하는 것뿐이었다).
+               *
+               * clampMax 는 여기 남는다 — 이건 설문에만 있는 파생값이고, 계산 근거가
+               * 배열 길이가 아니라 **비어 있지 않은 옵션 수**다. 그래서 골격의 onCountChange
+               * (배열 길이)로는 못 맞춘다. 배열을 손에 든 onChange 에서 처리한다.
+               */}
+              <OptionRows
+                listId={`survey-q-${q.id}`}
+                value={q.options}
+                onChange={(options) => patch(clampMax(options, { options }))}
+                markerShape={q.type === "multiple" ? "square" : "circle"}
+                ownerLabel="문항"
+                ownerTitle={q.title}
+              />
 
               {optionCount === 0 && (
                 <p className="flex items-center gap-1.5 pt-0.5 text-[11px] text-amber-600">
@@ -284,7 +245,7 @@ function QuestionRow({
                     type="button"
                     aria-pressed={q.maxSelect === undefined}
                     onClick={() => patch({ maxSelect: undefined })}
-                    className={`h-6 rounded-lg px-2 text-[11px] font-semibold shadow-sm transition-colors ${q.maxSelect === undefined ? "bg-violet-500 text-white" : "bg-background text-muted-foreground hover:text-foreground"}`}
+                    className={`h-6 px-2 text-[11px] font-semibold transition-colors ${R.control} ${q.maxSelect === undefined ? SELECTED : `bg-background text-muted-foreground hover:text-foreground ${FINISH.s2}`}`}
                   >
                     무제한
                   </button>
@@ -295,7 +256,7 @@ function QuestionRow({
                       type="button"
                       aria-pressed={q.maxSelect === n}
                       onClick={() => patch({ maxSelect: n })}
-                      className={`h-6 min-w-7 rounded-lg px-2 text-[11px] font-semibold tabular-nums shadow-sm transition-colors ${q.maxSelect === n ? "bg-violet-500 text-white" : "bg-background text-muted-foreground hover:text-foreground"}`}
+                      className={`h-6 min-w-7 px-2 text-[11px] font-semibold tabular-nums transition-colors ${R.control} ${q.maxSelect === n ? SELECTED : `bg-background text-muted-foreground hover:text-foreground ${FINISH.s2}`}`}
                     >
                       {n}
                     </button>

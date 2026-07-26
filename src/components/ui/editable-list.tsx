@@ -393,7 +393,25 @@ export function EditableList<T>({
   // 유예 중 숨은 행은 정원을 차지하지 않는다 — 상한을 채운 뒤 하나 지우고 곧바로 새 행을 넣으려 할 때
   // 5초를 기다리게 되는 걸 막는다. hidden 이 비면 items.length 와 같으므로 기존 동작의 일반화다.
   const count = items.length - hidden.size;
+  /** 렌더 시점의 상한 도달 여부 — **표시용**(추가 버튼 보조문구 등). 게이트로는 쓰지 않는다. */
   const atMax = maxRows !== undefined && count >= maxRows;
+
+  /**
+   * 상한 게이트는 **ref 에서** 판정한다. 렌더 시점의 atMax 를 쓰면 한 프레임 안에 여러 번
+   * 추가될 때 전부 통과한다 — 변경은 itemsRef(최신)로 쓰는데 판정은 아직 리렌더되지 않은
+   * state 로 하기 때문이다. commitItems 주석에 적힌 것과 같은 종류의 어긋남이다.
+   *
+   * 하니스에서 실측: maxOptions=5 인 목록에서 한 프레임에 추가 6회를 보내면 7행이 되고
+   * onMaxReached 는 한 번도 불리지 않았다(보조문구는 "최대 5개까지예요" 를 표시하는 중).
+   * 클릭을 프레임마다 나누면 정확히 5에서 멈춘다 — 즉 버스트에서만 새는 구멍이었다.
+   *
+   * 사람이 6번 클릭을 한 프레임에 하지는 못하지만, **Enter 키를 누르고 있으면** insertAfter 가
+   * 키 반복 속도(~30/s)로 불려 커밋보다 빨라진다. 도달 가능한 경로다.
+   */
+  const hiddenRef = useRef(hidden);
+  hiddenRef.current = hidden;
+  const isAtMax = () =>
+    maxRows !== undefined && itemsRef.current.length - hiddenRef.current.size >= maxRows;
 
   const makeOne = (item?: T): T | undefined => {
     if (item !== undefined) return item;
@@ -406,7 +424,7 @@ export function EditableList<T>({
 
   /** 끝에 추가. 상한이면 false — 호출자가 이유를 말할 수 있게. */
   const append = (item?: T): boolean => {
-    if (atMax) return false;
+    if (isAtMax()) return false;
     const made = makeOne(item);
     if (made === undefined) return false;
     commitItems([...itemsRef.current, made]);
@@ -415,7 +433,7 @@ export function EditableList<T>({
   };
 
   const insertAfter = (afterKey: string, item?: T): boolean => {
-    if (atMax) return false;
+    if (isAtMax()) return false;
     const made = makeOne(item);
     if (made === undefined) return false;
     const current = itemsRef.current;
