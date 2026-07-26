@@ -40,6 +40,13 @@
  *
  * 삭제 계약(중요): 클릭 즉시 화면에서만 숨기고 배열은 그대로 둔다. 유예(5초)가 끝날 때 비로소
  * onChange(제거된 배열) 를 호출한다. 그래서 실행취소하면 자동저장 왕복이 **0회**다.
+ *
+ * 포커스 표시를 이 파일에서 다루지 않는 이유: globals.css 의 전역 규칙 한 곳이 소유한다.
+ * 여기 있던 `focus-visible:outline-2 focus-visible:outline-violet-400` 두 벌은 지웠다 —
+ * (1) 전역 규칙이 언레이어드라 @layer utilities 인 이 클래스들을 **항상 이긴다**(죽은 코드였다),
+ * (2) outline-violet-400 은 고정색이라 다크에서 --ring(oklch 0.66 0.07 252)과 어긋난다.
+ * 삭제 버튼의 hover 도 red-500 고정색이었다 — 호출부 9곳을 --destructive 로 바꿨는데
+ * 정작 공용 컴포넌트가 다크에서 묻히는 빨강을 쓰고 있었다.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -254,7 +261,7 @@ function Row<T>({
       {...SKELETON_CONTROL}
       aria-label={handleLabel}
       title={handleLabel}
-      className="shrink-0 cursor-grab touch-none rounded-lg p-1 text-muted-foreground/50 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-violet-400 active:cursor-grabbing"
+      className="shrink-0 cursor-grab touch-none rounded-lg p-1 text-muted-foreground/50 transition-colors hover:text-foreground active:cursor-grabbing"
     >
       <GripVertical className="h-3.5 w-3.5" />
     </button>
@@ -270,7 +277,7 @@ function Row<T>({
         onClick={opts?.onClick ?? onRequestRemove}
         aria-label={label}
         title={label}
-        className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500 focus-visible:outline-2 focus-visible:outline-violet-400"
+        className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
       >
         <Trash2 className="h-3.5 w-3.5" />
       </button>

@@ -12,6 +12,34 @@ import { SPEAKER_PHOTO_ACCEPT, SPEAKER_PHOTO_MAX_LABEL, validateSpeakerPhoto } f
 import { cleanSessionText, isRealSession } from "@/lib/webinar-sessions";
 import { btnCls, FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 
+/**
+ * 이 목록을 EditableList(골격)로 이관하지 않는다 — 판정 근거를 남긴다.
+ *
+ * 만들기의 나머지 반복 목록 5개(선택지 2, 등록 필드, 설문 문항, CTA 카드, 자료·다음웨비나)는
+ * 전부 골격으로 모았다. 여기만 남기는 이유는 "아직 안 했다" 가 아니라 **얻을 것이 없다** 다:
+ *
+ *   골격이 주는 것            세션 탭의 현재 상태
+ *   ────────────────────────  ─────────────────────────────────────────────
+ *   dnd-kit 드래그            이미 있음 (아래 SessionRow)
+ *   방향키 재정렬             이미 있음 (KeyboardSensor + sortableKeyboardCoordinates)
+ *   삭제 되돌리기             이미 있음 (useUndoableDelete)
+ *   transform 저자권 수정     이미 있음 — 실측 근거까지 아래 주석에 있다
+ *   핸들·삭제 아이콘 통일     이것만 남는다
+ *
+ * 반대로 치러야 할 값이 있다. 골격의 `reorderable` 은 **목록 단위 boolean** 인데 이 목록은
+ * **행 단위** 조건이 필요하다 — `editingId !== session.id`(편집 중인 행이 끌려가면 입력이
+ * 날아간다). `removable` 은 이미 (item) => boolean 인데 `reorderable` 만 boolean 인 비대칭을
+ * 고쳐야 하고, 소비자가 하나뿐인 API 를 위해 골격을 넓히는 건 이미 한 번 실수했다
+ * (onPendingRemoveChange — 만들어 놓고 소비자가 0곳이다).
+ *
+ * 게다가 이 목록만 저장 모델이 다르다: 배열 in/out 이 아니라 **행마다 서버 엔드포인트**이고
+ * 재정렬은 낙관적 갱신 + 실패 롤백이며, 행 안에 편집/보기 모드 전환이 있다. 만들기에서
+ * 가장 상태가 많은 목록을 이득 하나(아이콘 통일) 때문에 건드릴 이유가 없다.
+ *
+ * 다시 볼 조건: 행 단위 reorderable 이 **다른 목록에서도** 필요해지면, 그때 골격을 넓히고
+ * 여기까지 함께 옮긴다.
+ */
+
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
 // 세션 유형 — 라이브 Q&A 칩은 "세션"만, 아젠다엔 전부(유형 표시)
