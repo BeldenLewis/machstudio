@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { useAutosave, useExternalSync, diffPatch } from "@/components/ui/use-autosave";
 import { EditableList, ROW_KEY, withRowKeys, stripRowKeys, type WithRowKey } from "@/components/ui/editable-list";
@@ -11,7 +11,7 @@ import {
 } from "@/lib/webinar-config";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { getYouTubeVideoId } from "@/lib/youtube";
-import { btnCls, FIELD_CLS, FIELD_CLS_DANGER, FINISH, R, Segmented } from "@/components/ui/primitives";
+import { btnCls, FIELD_CLS, FIELD_CLS_DANGER, FINISH, R, SELECTED, Segmented } from "@/components/ui/primitives";
 
 /** 시청자에게 보이는 한 페이지의 네 순간. 어드민에서는 이 상태로 편집 대상을 고른다. */
 export type WatchState = "waiting" | "entry" | "live" | "ended";
@@ -71,8 +71,10 @@ function ModeChoice<T extends string>({ value, onChange, label, desc, options }:
               role="radio"
               aria-checked={on}
               onClick={() => onChange(o.value)}
-              className={`rounded-xl p-3 text-left transition-all ${
-                on ? "bg-violet-500/12 shadow-[0_0_0_1.5px_rgb(139_92_246)]" : "bg-secondary/40 hover:bg-secondary/70"
+              /* rgb(139 92 246) 는 리브랜드 이전 순보라 — 현재 팔레트에 없는 색이다(violet 계열이
+                 딥네이비로 재정의됨). 선택 표현도 여기만 또 달랐다(외곽 1.5px 그림자). SELECTED 로. */
+              className={`p-3 text-left transition-all ${R.surface} ${
+                on ? SELECTED : `bg-secondary hover:bg-secondary/70 ${FINISH.s2}`
               }`}
             >
               <span className="flex items-center gap-1.5 text-[13px] font-semibold">
@@ -208,8 +210,6 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
   const setEnText = (k: "title" | "description", v: string) =>
     setScreens((s) => ({ ...s, ended: { ...s.ended, [k]: v } }));
 
-  const updateCta = (i: number, patch: Partial<CtaFormCard>) =>
-    setCtaCards((prev) => prev.map((c, j) => (j === i ? { ...c, ...patch } : c)));
 
   // 자체 설문 목록 — CTA 폼형 버튼의 연결 대상이자, 종료 화면 '설문 연결' 의 선택지.
   // showOnEnded 를 함께 받는다: 종료 화면에 지금 무엇이 연결돼 있는지 판정하는 근거다.
@@ -497,28 +497,53 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                 <p className="mt-1 text-xs text-muted-foreground">시청 화면 하단에 표시돼요.</p>
               </div>
             </div>
-            {ctaCards.length === 0 && (
-              <p className="rounded-xl border border-dashed border-border p-3 text-xs text-muted-foreground">아직 CTA 카드가 없어요. 아래 버튼으로 추가하세요.</p>
-            )}
-            <AnimatePresence initial={false}>
-              {ctaCards.map((card, i) => (
-                <motion.div key={card.id} layout initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-                  className={`bg-secondary p-4 space-y-3 ${R.panel} ${FINISH.s2}`}>
+            {/**
+             * 골격 이관. 여기서 고쳐지는 실제 결함이 하나 있다: 카드는 key={card.id} 로
+             * 그려지는데 **수정·삭제는 인덱스**였다 — `updateCta(i, …)` 와 `filter((_, j) => j !== i)`.
+             * 지금은 순서를 바꿀 방법이 없어 드러나지 않았지만, 재정렬을 붙이는 순간
+             * 인덱스가 어긋나 **다른 카드가 수정되거나 지워진다**. 그래서 이관과 함께
+             * 골격의 id 기반 patch 로 갈아탄다 — 순서를 붙이려면 먼저 이걸 고쳐야 했다.
+             *
+             * layout 프롭도 함께 사라진다(framer 가 transform 저자가 되는 그 프롭).
+             */}
+            <EditableList<CtaFormCard>
+              listId="live-cta-cards"
+              itemNoun="CTA 카드"
+              items={ctaCards}
+              onChange={setCtaCards}
+              rowKey={(c) => c.id}
+              makeItem={emptyCta}
+              reorderable
+              rowChrome="bare"
+              emptyState={
+                <p className="rounded-xl border border-dashed border-border p-3 text-xs text-muted-foreground">아직 CTA 카드가 없어요. 아래 버튼으로 추가하세요.</p>
+              }
+              renderAdd={({ add }) => (
+                <motion.button type="button" whileTap={{ scale: 0.98 }} transition={spring}
+                  onClick={() => add()}
+                  className="w-full rounded-xl border border-dashed border-border py-2.5 text-xs font-medium text-violet-500 transition-colors hover:bg-violet-500/5">
+                  + CTA 카드 추가
+                </motion.button>
+              )}
+              renderRow={({ item: card, visibleIndex, patch: patchCard, handle, removeButton }) => (
+                <div className={`bg-secondary p-4 space-y-3 ${R.panel} ${FINISH.s2}`}>
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-medium text-muted-foreground">카드 {i + 1}</p>
-                    <button type="button" onClick={() => setCtaCards((prev) => prev.filter((_, j) => j !== i))}
-                      className="text-[11px] text-muted-foreground transition-colors hover:text-destructive">카드 삭제</button>
+                    <div className="flex items-center gap-1">
+                      {handle}
+                      <p className="text-xs font-medium text-muted-foreground">카드 {visibleIndex + 1}</p>
+                    </div>
+                    {removeButton({ label: `${card.title || `카드 ${visibleIndex + 1}`} 삭제` })}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <input type="text" placeholder="상단 라벨 (예: 세션 자료)" value={card.eyebrow} onChange={(e) => updateCta(i, { eyebrow: e.target.value })} className={inputCls} />
-                    <input type="text" placeholder="제목 (예: 발표 자료·템플릿 받기)" value={card.title} onChange={(e) => updateCta(i, { title: e.target.value })} className={inputCls} />
+                    <input type="text" placeholder="상단 라벨 (예: 세션 자료)" value={card.eyebrow} onChange={(e) => patchCard({ eyebrow: e.target.value })} className={inputCls} />
+                    <input type="text" placeholder="제목 (예: 발표 자료·템플릿 받기)" value={card.title} onChange={(e) => patchCard({ title: e.target.value })} className={inputCls} />
                   </div>
-                  <textarea rows={2} placeholder="설명" value={card.description} onChange={(e) => updateCta(i, { description: e.target.value })} className={`${inputCls} resize-none`} />
-                  <textarea rows={2} placeholder="혜택 목록 — 한 줄에 하나씩 (선택)" value={card.benefits} onChange={(e) => updateCta(i, { benefits: e.target.value })} className={`${inputCls} resize-none`} />
+                  <textarea rows={2} placeholder="설명" value={card.description} onChange={(e) => patchCard({ description: e.target.value })} className={`${inputCls} resize-none`} />
+                  <textarea rows={2} placeholder="혜택 목록 — 한 줄에 하나씩 (선택)" value={card.benefits} onChange={(e) => patchCard({ benefits: e.target.value })} className={`${inputCls} resize-none`} />
                   <div className="space-y-2">
                     {(["primary", "secondary"] as const).map((slot) => {
                       const btn = card[slot];
-                      const upd = (patch: Partial<CtaBtnForm>) => updateCta(i, { [slot]: { ...btn, ...patch } } as Partial<CtaFormCard>);
+                      const upd = (next: Partial<CtaBtnForm>) => patchCard({ [slot]: { ...btn, ...next } } as Partial<CtaFormCard>);
                       return (
                         <div key={slot} className={`space-y-2 bg-background p-2.5 ${R.surface} ${FINISH.s2}`}>
                           <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_130px_96px]">
@@ -564,14 +589,9 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                       );
                     })}
                   </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-            <motion.button type="button" whileTap={{ scale: 0.98 }} transition={spring}
-              onClick={() => setCtaCards((prev) => [...prev, emptyCta()])}
-              className="w-full rounded-xl border border-dashed border-border py-2.5 text-xs font-medium text-violet-500 transition-colors hover:bg-violet-500/5">
-              + CTA 카드 추가
-            </motion.button>
+                </div>
+              )}
+            />
           </section>
 
           {/* 알림 받고 이어보기 카드 */}
