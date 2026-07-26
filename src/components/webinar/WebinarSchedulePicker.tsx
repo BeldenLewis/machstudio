@@ -45,12 +45,92 @@ function fmtDay(ymd: string): string {
 
 type DeadlineMode = "atStart" | "dayBefore" | "custom";
 
+/**
+ * 사전등록 마감 — **라이브 시작 시각에 상대적인 값**이라(시작 시점 / 하루 전 / 직접) 시작 시각을
+ * 함께 받아야 한다. IA 3단계에서 이 컨트롤이 '등록 폼 › 접수 창' 으로 옮겨가면서, 만들기 폼과
+ * 등록 폼이 같은 UI 를 쓰도록 따로 떼어냈다.
+ */
+export function SignupDeadlineField({
+  liveStartAt, value, onChange, label = "사전등록 마감",
+}: {
+  /** "YYYY-MM-DDTHH:mm" — atStart/dayBefore 계산의 기준 */
+  liveStartAt: string;
+  value: string;
+  onChange: (next: string) => void;
+  label?: string;
+}) {
+  const [startDate, startTime] = splitLocal(liveStartAt);
+
+  const [mode, setMode] = useState<DeadlineMode>(() => {
+    if (!value) return "atStart";
+    if (value === liveStartAt) return "atStart";
+    if (startDate && value === joinLocal(addDaysYmd(startDate, -1), startTime)) return "dayBefore";
+    return "custom";
+  });
+  const [custom, setCustom] = useState(() => splitLocal(value));
+
+  const firstEmit = useRef(true);
+  useEffect(() => {
+    let next: string;
+    if (mode === "atStart") next = liveStartAt;
+    else if (mode === "dayBefore") next = startDate ? joinLocal(addDaysYmd(startDate, -1), startTime) : value;
+    else next = joinLocal(custom[0], custom[1]);
+    if (firstEmit.current) {
+      firstEmit.current = false;
+      if (next === value) return;
+    }
+    if (next && next !== value) onChange(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, custom, liveStartAt]);
+
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs text-muted-foreground">{label}</label>
+      <div className="flex flex-wrap gap-1.5">
+        {([
+          { m: "atStart", label: "라이브 시작 시점" },
+          { m: "dayBefore", label: "하루 전 같은 시각" },
+          { m: "custom", label: "직접 지정" },
+        ] as { m: DeadlineMode; label: string }[]).map(({ m, label: l }) => (
+          <motion.button
+            key={m}
+            type="button"
+            whileTap={{ scale: 0.96 }}
+            transition={spring}
+            aria-pressed={mode === m}
+            onClick={() => setMode(m)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium shadow-sm transition-colors ${
+              mode === m ? "bg-violet-500/10 text-violet-500" : "text-muted-foreground hover:bg-secondary"
+            }`}
+          >
+            {l}
+          </motion.button>
+        ))}
+      </div>
+      {mode === "custom" && (
+        <div className="mt-2 grid grid-cols-2 gap-3">
+          <input type="date" value={custom[0]} aria-label="마감 날짜"
+            onChange={(e) => setCustom([e.target.value, custom[1] || "23:59"])}
+            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm transition-colors focus:border-violet-400 focus:outline-none" />
+          <input type="time" step={300} value={custom[1]} aria-label="마감 시각"
+            onChange={(e) => setCustom([custom[0], e.target.value])}
+            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm transition-colors focus:border-violet-400 focus:outline-none" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function WebinarSchedulePicker({
   value,
   onChange,
+  /** 마감을 이 픽커에서 함께 고를지. 만들기 폼은 true(한 자리에서 전부),
+   *  기본 정보 탭은 false — 마감은 '등록 폼 › 접수 창' 소관이다(IA 3단계). */
+  showDeadline = true,
 }: {
   value: ScheduleValue;
   onChange: (v: ScheduleValue) => void;
+  showDeadline?: boolean;
 }) {
   const [initStartDate, initStartTime] = splitLocal(value.liveStartAt);
   const [initEndDate, initEndTime] = splitLocal(value.liveEndAt);
@@ -60,16 +140,6 @@ export default function WebinarSchedulePicker({
   const [startTime, setStartTime] = useState(initStartTime || "14:00");
   const [endTime, setEndTime] = useState(initEndTime || "16:00");
 
-  const [deadlineMode, setDeadlineMode] = useState<DeadlineMode>(() => {
-    const dl = value.signupDeadline;
-    if (!dl) return "atStart";
-    if (dl === value.liveStartAt) return "atStart";
-    const [sd, st] = splitLocal(value.liveStartAt);
-    if (sd && dl === joinLocal(addDaysYmd(sd, -1), st)) return "dayBefore";
-    return "custom";
-  });
-  const [customDeadline, setCustomDeadline] = useState(() => splitLocal(value.signupDeadline));
-
   // 상태 → 부모 값 전파
   const firstEmit = useRef(true);
   useEffect(() => {
@@ -77,10 +147,8 @@ export default function WebinarSchedulePicker({
     const liveStartAt = joinLocal(startDate, startTime);
     const endD = endDate || startDate;
     const liveEndAt = joinLocal(endD, endTime);
-    let signupDeadline: string;
-    if (deadlineMode === "atStart") signupDeadline = liveStartAt;
-    else if (deadlineMode === "dayBefore") signupDeadline = joinLocal(addDaysYmd(startDate, -1), startTime);
-    else signupDeadline = joinLocal(customDeadline[0], customDeadline[1]);
+    // 마감은 SignupDeadlineField 소유 — 여기서는 기존 값을 그대로 넘긴다.
+    const signupDeadline = value.signupDeadline;
     // 첫 렌더의 동일값 재전파는 건너뛴다
     if (firstEmit.current) {
       firstEmit.current = false;
@@ -88,7 +156,7 @@ export default function WebinarSchedulePicker({
     }
     onChange({ liveStartAt, liveEndAt, signupDeadline });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate, endDate, startTime, endTime, deadlineMode, customDeadline]);
+  }, [startDate, endDate, startTime, endTime]);
 
   const rangeSummary = startDate
     ? (startDate === (endDate || startDate)
@@ -121,38 +189,19 @@ export default function WebinarSchedulePicker({
         </div>
       </div>
 
-      {/* 사전등록 마감 */}
-      <div>
-        <label className="text-xs text-muted-foreground mb-1.5 block">사전등록 마감</label>
-        <div className="flex flex-wrap gap-1.5">
-          {([
-            { m: "atStart", label: "라이브 시작 시점" },
-            { m: "dayBefore", label: "하루 전 같은 시각" },
-            { m: "custom", label: "직접 지정" },
-          ] as { m: DeadlineMode; label: string }[]).map(({ m, label }) => (
-            <motion.button
-              key={m}
-              type="button"
-              whileTap={{ scale: 0.96 }}
-              transition={spring}
-              onClick={() => setDeadlineMode(m)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                deadlineMode === m ? "border-violet-500 bg-violet-500/10 text-violet-500" : "border-border text-muted-foreground hover:bg-secondary"
-              }`}
-            >
-              {label}
-            </motion.button>
-          ))}
-        </div>
-        {deadlineMode === "custom" && (
-          <div className="grid grid-cols-2 gap-3 mt-2">
-            <input type="date" value={customDeadline[0]} onChange={(e) => setCustomDeadline([e.target.value, customDeadline[1] || "23:59"])}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
-            <input type="time" step={300} value={customDeadline[1]} onChange={(e) => setCustomDeadline([customDeadline[0], e.target.value])}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
-          </div>
-        )}
-      </div>
+      {showDeadline && (
+        <SignupDeadlineField
+          liveStartAt={joinLocal(startDate, startTime)}
+          value={value.signupDeadline}
+          onChange={(next) =>
+            onChange({
+              liveStartAt: joinLocal(startDate, startTime),
+              liveEndAt: joinLocal(endDate || startDate, endTime),
+              signupDeadline: next,
+            })
+          }
+        />
+      )}
     </div>
   );
 }

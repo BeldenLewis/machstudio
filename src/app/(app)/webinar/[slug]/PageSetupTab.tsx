@@ -189,7 +189,14 @@ export default function PageSetupTab({
               )}
               {section === "registration" && (
                 <div className="lg:h-full overflow-auto">
-                  <RegistrationFormTab webinar={{ id: webinar.id, slug: webinar.slug, config: webinar.config, theme: webinar.theme }} onSilentUpdate={onSilentUpdate} />
+                  <RegistrationFormTab
+                    webinar={{
+                      id: webinar.id, slug: webinar.slug, config: webinar.config, theme: webinar.theme,
+                      // 접수 창(마감·라이브 중 접수)이 이 탭으로 옮겨와 일정·components 가 필요하다
+                      liveStartAt: webinar.liveStartAt, signupDeadline: webinar.signupDeadline, components: webinar.components,
+                    }}
+                    onSilentUpdate={onSilentUpdate}
+                  />
                 </div>
               )}
               {section === "watch" && (

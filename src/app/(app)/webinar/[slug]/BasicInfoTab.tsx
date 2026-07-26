@@ -34,13 +34,6 @@ export default function BasicInfoTab({ webinar, onSilentUpdate }: { webinar: Web
     description: webinar.description ?? "",
     liveStartAt: toLocal(webinar.liveStartAt),
     liveEndAt: toLocal(webinar.liveEndAt),
-    signupDeadline: toLocal(webinar.signupDeadline),
-    // 라이브 중 사전등록 정책 — 3상태.
-    // "auto"(값 없음)는 마감일까지만 받는 기존 동작이라, 마감일이 지난 뒤 들어온
-    // 미등록 시청자는 등록할 방법이 없었다. "open"으로 그 경우를 열 수 있게 한다.
-    liveReg: components.allowLiveRegistration === false ? "closed"
-      : components.allowLiveRegistration === true ? "open"
-      : "auto" as "auto" | "open" | "closed",
   });
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -59,10 +52,7 @@ export default function BasicInfoTab({ webinar, onSilentUpdate }: { webinar: Web
           description: form.description.trim() || null,
           liveStartAt: kstDateTimeLocalToIso(form.liveStartAt),
           liveEndAt: kstDateTimeLocalToIso(form.liveEndAt),
-          signupDeadline: kstDateTimeLocalToIso(form.signupDeadline),
-          // 이 탭이 소유한 키만 보낸다 — 다른 키(chatEnabled 등)는 서버가 병합으로 보존한다.
-          // auto 는 null 로 저장해 "마감일까지" 기존 동작을 유지한다.
-          components: { allowLiveRegistration: form.liveReg === "closed" ? false : form.liveReg === "open" ? true : null },
+          // 마감·라이브 중 접수는 등록 폼 탭이 소유한다 — 여기서 보내면 서로 덮어쓴다.
         }),
       });
       if (!res.ok) { toast.error("자동 저장 실패 — 잠시 후 다시 시도돼요", { id: "autosave-error" }); return false; }
@@ -82,13 +72,9 @@ export default function BasicInfoTab({ webinar, onSilentUpdate }: { webinar: Web
       description: webinar.description ?? "",
       liveStartAt: toLocal(webinar.liveStartAt),
       liveEndAt: toLocal(webinar.liveEndAt),
-      signupDeadline: toLocal(webinar.signupDeadline),
-      liveReg: (components.allowLiveRegistration === false ? "closed"
-        : components.allowLiveRegistration === true ? "open"
-        : "auto") as "auto" | "open" | "closed",
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [webinar.name, webinar.description, webinar.liveStartAt, webinar.liveEndAt, webinar.signupDeadline, webinar.components],
+    [webinar.name, webinar.description, webinar.liveStartAt, webinar.liveEndAt],
   );
   useExternalSync(incoming, setForm, dirty);
 
@@ -135,37 +121,17 @@ export default function BasicInfoTab({ webinar, onSilentUpdate }: { webinar: Web
       {/* 일정 */}
       <section className="space-y-4">
         <h3 className="text-sm font-semibold">일정</h3>
+        {/* 마감·라이브 중 접수는 '등록 폼 › 접수 창' 으로 옮겼다(IA 3단계) — 둘 다 접수 정책인데
+            여기와 저기로 쪼개져 있어서 모순 조합("마감=시작" + "계속 받기")을 경고할 자리가 없었다.
+            signupDeadline 은 이 탭이 더 이상 보내지 않는다(서버가 필드별로 병합하므로 안전). */}
         <WebinarSchedulePicker
-          value={{ liveStartAt: form.liveStartAt, liveEndAt: form.liveEndAt, signupDeadline: form.signupDeadline }}
-          onChange={(v) => setForm((f) => ({ ...f, liveStartAt: v.liveStartAt, liveEndAt: v.liveEndAt, signupDeadline: v.signupDeadline }))}
+          showDeadline={false}
+          // 마감은 이 탭의 state 가 아니다 — props 값을 그대로 넘겨 픽커의 값 형태만 맞춘다.
+          // state 로 들고 있으면 등록 폼에서 마감이 바뀔 때 useExternalSync 가 이 폼을 흔들어
+          // 마감과 무관한 PATCH 가 한 번 더 나간다.
+          value={{ liveStartAt: form.liveStartAt, liveEndAt: form.liveEndAt, signupDeadline: toLocal(webinar.signupDeadline) }}
+          onChange={(v) => setForm((f) => ({ ...f, liveStartAt: v.liveStartAt, liveEndAt: v.liveEndAt }))}
         />
-        <div className="pt-1 space-y-1.5">
-          <span className="text-xs font-medium">라이브 중 사전등록</span>
-          <div className="flex flex-wrap gap-1.5">
-            {([
-              { v: "auto", label: "마감일까지", hint: "설정한 등록 마감 시각이 지나면 접수를 닫아요." },
-              { v: "open", label: "계속 받기", hint: "마감일이 지나도 라이브 중 들어온 사람이 등록할 수 있어요." },
-              { v: "closed", label: "시작 시 마감", hint: "라이브가 시작되면 바로 접수를 닫아요." },
-            ] as const).map((opt) => (
-              <button
-                key={opt.v}
-                type="button"
-                aria-pressed={form.liveReg === opt.v}
-                onClick={() => setForm((f) => ({ ...f, liveReg: opt.v }))}
-                className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-                  form.liveReg === opt.v ? "bg-violet-500 text-white" : "bg-secondary text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          <span className="block text-[11px] text-muted-foreground/70 leading-relaxed">
-            {form.liveReg === "auto" ? "설정한 등록 마감 시각이 지나면 접수를 닫아요."
-              : form.liveReg === "open" ? "마감일이 지나도 라이브 중 들어온 사람이 등록할 수 있어요 — 입장 확인 화면에 사전등록 버튼이 보여요."
-              : "라이브가 시작되면 바로 접수를 닫아요. 입장 확인 화면에 사전등록 버튼이 보이지 않아요."}
-          </span>
-        </div>
       </section>
 
       <div className="flex items-center gap-3">

@@ -6,6 +6,8 @@ import { Plus, Trash2, GripVertical, Smartphone, AlignLeft, Mail, Phone, ListChe
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
+import { SignupDeadlineField } from "@/components/webinar/WebinarSchedulePicker";
+import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
 import { Switch } from "@/components/ui/switch";
 import { normalizeRegistrationForm, type WebinarRegistrationField } from "@/lib/webinar-config";
 import { buildStkCss } from "@/app/webinar/[slug]/LiveContentStk";
@@ -20,6 +22,10 @@ interface Webinar {
   slug?: string;
   config: Record<string, unknown>;
   theme?: Record<string, string>;
+  /** 접수 창 계산의 기준 — 마감 프리셋(시작 시점/하루 전)이 이 값에 상대적이다. */
+  liveStartAt: string;
+  signupDeadline: string;
+  components?: Record<string, unknown> | null;
 }
 
 const inputCls = "w-full px-2.5 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors disabled:opacity-40";
@@ -370,6 +376,17 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
   const [marketingBody, setMarketingBody] = useState(initial.marketingBody);
   const [privacyDefaultChecked, setPrivacyDefaultChecked] = useState(initial.privacyDefaultChecked);
   const [marketingDefaultChecked, setMarketingDefaultChecked] = useState(initial.marketingDefaultChecked);
+
+  /**
+   * 접수 창 — 언제까지, 그리고 라이브 중에도 받는가. IA 3단계에서 '기본 정보' 에서 옮겨 왔다.
+   * 둘 다 접수 정책인데 마감은 일정 카드 안, 라이브 중 정책은 그 밖에 있어서 **모순 조합을
+   * 경고할 자리가 없었다.** 한 블록으로 모으니 그 자리가 생긴다.
+   */
+  const liveStartLocal = kstDateTimeLocalInput(webinar.liveStartAt);
+  const [deadline, setDeadline] = useState(() => kstDateTimeLocalInput(webinar.signupDeadline));
+  const liveRegOf = (c: Record<string, unknown> | null | undefined) =>
+    c?.allowLiveRegistration === false ? "closed" : c?.allowLiveRegistration === true ? "open" : "auto";
+  const [liveReg, setLiveReg] = useState<"auto" | "open" | "closed">(() => liveRegOf(webinar.components));
   const [submitLabel, setSubmitLabel] = useState(initial.submitLabel);
 
   const previewTheme = useMemo(() => ({
@@ -405,6 +422,10 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
         keepalive: true, // 페이지 이탈 중 flush 도 서버에 도달하도록
         // 이 탭이 소유한 registrationForm 키만 보낸다(서버가 config 를 키 단위로 병합).
         body: JSON.stringify({
+          // 접수 창은 이 탭이 소유한다(기본 정보 탭은 더 이상 보내지 않는다).
+          // auto 는 null 로 저장해 "마감일까지" 기존 동작을 유지한다.
+          signupDeadline: kstDateTimeLocalToIso(deadline),
+          components: { allowLiveRegistration: liveReg === "closed" ? false : liveReg === "open" ? true : null },
           config: {
             registrationForm: {
               // 편집 중 빈 선택지 행은 로컬에만 두고 저장에서는 정리 — 공개 폼에 빈 옵션이 새지 않게
@@ -426,17 +447,74 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
     } catch { return false; }
   };
   const { state: saveState, retry } = useAutosave(
-    { fields, privacyText, marketingText, privacyBody, marketingBody, privacyDefaultChecked, marketingDefaultChecked, submitLabel },
+    { fields, privacyText, marketingText, privacyBody, marketingBody, privacyDefaultChecked, marketingDefaultChecked, submitLabel, deadline, liveReg },
     save,
   );
   // 표시는 껍데기 한 곳에서 그린다(만들기 화면당 1개) — 저장 경로는 그대로 각자.
   useReportAutosave(saveState, retry);
+
+  /**
+   * 접수 창의 두 값이 서로를 무의미하게 만드는 조합만 짚는다(에러가 아니라 안내).
+   * 서버 규칙은 "마감 ≤ 종료" 뿐이라 이 조합들은 저장은 되지만 운영자 의도와 어긋난다.
+   */
+  const intakeConflict =
+    liveReg === "open" && deadline === liveStartLocal
+      ? "마감을 ‘라이브 시작 시점’ 으로 두고 ‘계속 받기’ 를 골랐어요 — 마감 시각이 사실상 의미가 없어져요."
+      : liveReg === "closed" && deadline > liveStartLocal
+        ? "마감이 라이브 시작보다 뒤인데 ‘시작 시 마감’ 이에요 — 설정한 마감 시각에는 도달하지 못해요."
+        : null;
 
   const hasTel = fields.some((f) => f.enabled && f.type === "tel");
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] space-y-6 2xl:grid 2xl:grid-cols-[minmax(0,1fr)_440px] 2xl:gap-8 2xl:space-y-0 2xl:items-start">
       <div className="space-y-6 min-w-0">
+        {/* 접수 창 — 무엇을 받는지(아래)보다 상위 결정이라 위에 둔다. 두 줄이라 아래를 밀어내지 않는다. */}
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold">접수 창</h3>
+            <p className="mt-1 text-sm text-muted-foreground">언제까지 받고, 라이브가 시작된 뒤에도 받을지 정해요.</p>
+          </div>
+          <div className="space-y-3 rounded-2xl bg-secondary/20 p-4">
+            <SignupDeadlineField liveStartAt={liveStartLocal} value={deadline} onChange={setDeadline} />
+
+            <div className="space-y-1.5 pt-1">
+              <span className="text-xs font-medium">라이브 중 사전등록</span>
+              <div className="flex flex-wrap gap-1.5">
+                {([
+                  { v: "auto", label: "마감일까지" },
+                  { v: "open", label: "계속 받기" },
+                  { v: "closed", label: "시작 시 마감" },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    aria-pressed={liveReg === opt.v}
+                    onClick={() => setLiveReg(opt.v)}
+                    className={`rounded-lg px-3 py-2 text-xs font-medium shadow-sm transition-colors ${
+                      liveReg === opt.v ? "bg-violet-500 text-white" : "bg-background text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <span className="block text-[11px] leading-relaxed text-muted-foreground/70">
+                {liveReg === "auto" ? "설정한 마감 시각이 지나면 접수를 닫아요."
+                  : liveReg === "open" ? "마감이 지나도 라이브 중 들어온 사람이 등록할 수 있어요 — 입장 확인 화면에 사전등록 버튼이 보여요."
+                  : "라이브가 시작되면 바로 접수를 닫아요. 입장 확인 화면에 사전등록 버튼이 보이지 않아요."}
+              </span>
+            </div>
+
+            {/* 두 값이 서로를 무의미하게 만드는 조합 — 예전엔 두 컨트롤이 다른 화면에 있어 경고할 자리가 없었다. */}
+            {intakeConflict && (
+              <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-700 dark:text-amber-400">
+                {intakeConflict}
+              </p>
+            )}
+          </div>
+        </section>
+
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="text-sm font-semibold">입력 항목</h3>
