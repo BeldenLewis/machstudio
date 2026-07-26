@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useUndoableDelete } from "@/components/ui/use-undoable-delete";
 import { SPEAKER_PHOTO_ACCEPT, SPEAKER_PHOTO_MAX_LABEL, validateSpeakerPhoto } from "@/lib/webinar-speaker-photo";
 import { cleanSessionText, isRealSession } from "@/lib/webinar-sessions";
+import { btnCls, FIELD_CLS, FINISH } from "@/components/ui/primitives";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -176,7 +177,7 @@ function SessionFormFields({
           min={1}
           value={form.number}
           onChange={(e) => setForm((f) => ({ ...f, number: e.target.value }))}
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
+          className={FIELD_CLS}
         />
       </div>
       <div className="col-span-8 sm:col-span-3">
@@ -184,7 +185,7 @@ function SessionFormFields({
         <select
           value={form.type}
           onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
+          className={FIELD_CLS}
         >
           {SESSION_TYPES.map((t) => (
             <option key={t.value} value={t.value}>{t.label}</option>
@@ -198,7 +199,7 @@ function SessionFormFields({
           value={form.title}
           onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
           placeholder={form.type === "break" ? "예: 휴식" : form.type === "qa" ? "예: 라이브 Q&A" : "예: AI 기반 데이터 분석 플랫폼의 혁신"}
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
+          className={FIELD_CLS}
         />
       </div>
       {/* 휴식엔 연사가 없다 → 연사 입력칸을 아예 감춘다. 비워 두라고 안내하는 대신 안 보이게 하는 게
@@ -212,7 +213,7 @@ function SessionFormFields({
               value={form.speaker}
               onChange={(e) => setForm((f) => ({ ...f, speaker: e.target.value }))}
               placeholder="홍길동"
-              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
+              className={FIELD_CLS}
             />
           </div>
           <div className="col-span-12 sm:col-span-4">
@@ -222,7 +223,7 @@ function SessionFormFields({
               value={form.speakerCompany}
               onChange={(e) => setForm((f) => ({ ...f, speakerCompany: e.target.value }))}
               placeholder="예: 잡코리아 CEO"
-              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
+              className={FIELD_CLS}
             />
           </div>
         </>
@@ -233,7 +234,7 @@ function SessionFormFields({
           type="time"
           value={form.startTime}
           onChange={(e) => setForm((f) => ({ ...f, startTime: e.target.value }))}
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
+          className={FIELD_CLS}
         />
       </div>
       <div className="col-span-6 sm:col-span-2">
@@ -242,7 +243,7 @@ function SessionFormFields({
           type="time"
           value={form.endTime}
           onChange={(e) => setForm((f) => ({ ...f, endTime: e.target.value }))}
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
+          className={FIELD_CLS}
         />
       </div>
       <div className="col-span-12">
@@ -252,7 +253,7 @@ function SessionFormFields({
           onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
           placeholder="세션 주제에 대한 상세 설명 (선택) — 랜딩 상세 팝업에 표시돼요"
           rows={2}
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors resize-y"
+          className={`${FIELD_CLS} resize-y leading-relaxed`}
         />
       </div>
       {!isBreak && (
@@ -263,7 +264,7 @@ function SessionFormFields({
           onChange={(e) => setForm((f) => ({ ...f, speakerBio: e.target.value }))}
           placeholder={"예:\n전) 우아한청년들 CEO\n전) 우아한형제들 공동창업자 겸 CTO, COO"}
           rows={3}
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors resize-y"
+          className={`${FIELD_CLS} resize-y leading-relaxed`}
         />
         <p className="mt-1 text-[11px] text-muted-foreground">랜딩 상세 팝업의 &lsquo;약력&rsquo; 영역에 표시돼요. 줄바꿈이 그대로 유지됩니다.</p>
       </div>
@@ -286,14 +287,14 @@ function SessionFormFields({
             {form.speakerPhotoUrl && (
               // 외부 URL도 지원하므로 Next Image 최적화 도메인 제한을 적용하지 않는다.
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={form.speakerPhotoUrl} alt="선택한 연사 사진 미리보기" className="w-9 h-9 rounded-full object-cover border border-border" />
+              <img src={form.speakerPhotoUrl} alt="선택한 연사 사진 미리보기" className={`w-9 h-9 rounded-full object-cover ${FINISH.hairlineOut}`} />
             )}
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium">JPG, PNG, WebP, GIF · 최대 {SPEAKER_PHOTO_MAX_LABEL}</p>
               <p className="mt-0.5 text-[11px] text-muted-foreground">랜딩 세션 카드·상세 팝업과 라이브 아젠다에 함께 쓰여요.</p>
             </div>
             <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading}
-              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-secondary disabled:opacity-50">
+              className={btnCls("quiet", "shrink-0 px-2.5 py-1.5 text-xs disabled:opacity-50")}>
               {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5" />}
               {isUploading ? "업로드 중" : form.speakerPhotoUrl ? "사진 변경" : "사진 선택"}
             </button>
@@ -306,7 +307,7 @@ function SessionFormFields({
           <input type="url" value={form.speakerPhotoUrl}
             onChange={(e) => setForm((f) => ({ ...f, speakerPhotoUrl: e.target.value }))}
             placeholder="https://... (라이브 페이지 아젠다에 원형 사진으로 표시돼요)"
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
+            className={FIELD_CLS} />
         )}
       </div>
       )}
@@ -559,7 +560,7 @@ export default function SessionsTab({
                 whileTap={{ scale: 0.96 }}
                 transition={spring}
                 onClick={resetCreate}
-                className="px-4 py-2 rounded-xl border border-border text-sm hover:bg-secondary transition-colors"
+                className={btnCls("quiet", "px-4")}
               >
                 취소
               </motion.button>
@@ -611,7 +612,7 @@ export default function SessionsTab({
                       whileTap={{ scale: 0.96 }}
                       transition={spring}
                       onClick={() => setEditingId(null)}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-border text-sm hover:bg-secondary transition-colors"
+                      className={btnCls("quiet", "px-4")}
                     >
                       <X className="w-3.5 h-3.5" />취소
                     </motion.button>
@@ -641,7 +642,7 @@ export default function SessionsTab({
                       src={session.speakerPhotoUrl}
                       alt={`${cleanSessionText(session.speaker) || "연사"} 사진`}
                       title="연사 사진 — 랜딩 세션 카드·상세 팝업과 라이브 아젠다에 표시돼요"
-                      className="h-9 w-9 shrink-0 rounded-full border border-border object-cover"
+                      className={`h-9 w-9 shrink-0 rounded-full object-cover ${FINISH.hairlineOut}`}
                     />
                   )}
                   <div className="flex-1 min-w-0">
@@ -680,7 +681,7 @@ export default function SessionsTab({
                       whileTap={{ scale: 0.92 }}
                       transition={spring}
                       onClick={() => handleDelete(session)}
-                      className="p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-500 text-muted-foreground transition-colors"
+                      className="p-1.5 rounded-lg hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors"
                       title="삭제"
                     >
                       <Trash2 className="w-3.5 h-3.5" />

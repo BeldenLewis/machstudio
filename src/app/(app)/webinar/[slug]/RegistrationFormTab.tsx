@@ -10,6 +10,7 @@ import { SignupDeadlineField } from "@/components/webinar/WebinarSchedulePicker"
 import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
 import { resolveConsentBody, consentSourceLabel } from "@/lib/consent-template";
 import { Switch } from "@/components/ui/switch";
+import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 import { normalizeRegistrationForm, type WebinarRegistrationField } from "@/lib/webinar-config";
 import { buildStkCss } from "@/app/webinar/[slug]/LiveContentStk";
 
@@ -31,7 +32,7 @@ interface Webinar {
   workspace?: { privacyBodyTemplate?: string | null; marketingBodyTemplate?: string | null } | null;
 }
 
-const inputCls = "w-full px-2.5 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors disabled:opacity-40";
+const inputCls = FIELD_CLS;
 // 항목 형식 메타 — 설문 문항 타입 칩과 같은 결(아이콘+라벨)
 const REG_TYPE_META: Record<FieldType, { label: string; desc: string; icon: ElementType }> = {
   text: { label: "텍스트", desc: "한 줄 입력", icon: AlignLeft },
@@ -58,7 +59,7 @@ function useRegPopover() {
 
 function RegTypeMenu({ current, onPick }: { current: FieldType; onPick: (t: FieldType) => void }) {
   return (
-    <div className="absolute left-0 top-full z-30 mt-1.5 w-56 rounded-xl border border-border bg-background p-1.5 shadow-xl">
+    <div className={`absolute left-0 top-full z-30 mt-1.5 w-56 bg-popover p-1.5 ${R.surface} ${FINISH.overlay}`}>
       <p className="px-2 pb-1 pt-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">항목 형식</p>
       {REG_TYPE_ORDER.map((t) => {
         const meta = REG_TYPE_META[t];
@@ -183,7 +184,7 @@ function FieldCard({
               type="button"
               onClick={onRemove}
               aria-label={`${field.label} 삭제`}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground/50 transition-colors hover:bg-red-500/10 hover:text-red-500"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -220,7 +221,7 @@ function FieldCard({
           {field.type === "select" && (
             <div className="space-y-1.5">
               {options.map((opt, idx) => (
-                <div key={idx} className="group flex items-center gap-2 rounded-lg bg-background px-2.5 shadow-sm transition-shadow focus-within:ring-2 focus-within:ring-violet-400/50">
+                <div key={idx} data-focus-shell className="group flex items-center gap-2 rounded-lg bg-background px-2.5 shadow-sm">
                   <span className="h-3.5 w-3.5 shrink-0 rounded-full border-[1.5px] border-muted-foreground/40" />
                   <input
                     value={opt}
@@ -239,7 +240,7 @@ function FieldCard({
                     type="button"
                     onClick={() => removeOption(idx)}
                     aria-label={`선택지 ${idx + 1} 삭제`}
-                    className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted-foreground/40 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted-foreground/40 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
                   >
                     <Trash2 className="h-3 w-3" />
                   </button>
@@ -424,7 +425,7 @@ function ConsentBodyField({
             onChange={(e) => onChange(e.target.value)}
             aria-label={`${label} 약관 전문 (이 웨비나 전용)`}
             placeholder={template ? "비워 두면 워크스페이스 공통 전문을 씁니다." : "약관 전문 — 워크스페이스 설정 › 약관에 넣어 두면 모든 웨비나가 물려받아요."}
-            className="w-full resize-y rounded-lg border border-border bg-background px-2.5 py-1.5 text-[13px] leading-relaxed transition-colors focus:border-violet-400 focus:outline-none"
+            className={`${FIELD_CLS} resize-y leading-relaxed`}
           />
           {overriding && template && (
             <button

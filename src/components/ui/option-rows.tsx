@@ -108,7 +108,8 @@ export function OptionRows({
         const isLast = rows.length <= 1;
         return (
           <div
-            className={`flex items-center gap-2 rounded-lg bg-card px-2.5 transition-shadow focus-within:ring-2 focus-within:ring-violet-400/50 ${
+            data-focus-shell
+            className={`flex items-center gap-2 rounded-lg bg-card px-2.5 transition-shadow ${
               isDragging ? "shadow-lg" : "shadow-sm"
             }`}
           >

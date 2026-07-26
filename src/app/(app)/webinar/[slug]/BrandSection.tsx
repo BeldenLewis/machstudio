@@ -105,7 +105,10 @@ export default function BrandSection({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {COLOR_FIELDS.map(({ key, label }) => (
           <div key={key} className="flex items-center gap-3 rounded-xl bg-card p-3 shadow-card">
-            <div className="relative">
+            {/* 색 견본만은 포커스 링을 **감싼 쪽**에 그린다 — 실제 <input type=color> 는
+                opacity-0 로 견본 위에 덮여 있어서, 전역 focus-visible 링이 그려져도
+                투명 요소와 함께 사라진다(키보드로 색을 고를 때 위치가 안 보였다). */}
+            <div className="relative rounded-lg focus-within:[outline:2px_solid_var(--ring)] focus-within:[outline-offset:2px]">
               <div
                 className="h-9 w-9 cursor-pointer rounded-lg shadow-sm"
                 style={{ backgroundColor: theme[key] as string }}

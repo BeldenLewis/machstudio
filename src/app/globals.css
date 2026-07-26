@@ -259,9 +259,19 @@
 
 /* 키보드 포커스 링 — 다수 버튼/링크가 focus:outline-none 만 두고 대체 표시가 없어
    키보드 사용자가 현재 위치를 잃는다. focus-visible(키보드 탐색)에만 링을 부여해
-   마우스 클릭 시엔 나타나지 않게 한다. 입력요소는 기존 border 색 변화로 표시하므로 제외. */
+   마우스 클릭 시엔 나타나지 않게 한다.
+
+   입력요소도 포함한다. 예전 주석은 "입력은 border 색 변화로 표시하므로 제외" 였는데,
+   그 전제가 리디자인 스윕으로 깨졌다 — 헤어라인이 border 에서 inset shadow 로 옮겨가면서
+   focus 시 색이 바뀌는 border 가 더는 없다. 브라우저 기본 링이 남긴 하지만 그건
+   UA 마다 색·두께가 다르고 var(--ring) 과 무관해서, 같은 화면에서 버튼과 입력의
+   포커스 표시가 서로 다른 색으로 보인다. 여기서 한 벌로 묶는다. */
 a:focus-visible,
 button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[contenteditable]:focus-visible,
 [role="button"]:focus-visible,
 [role="tab"]:focus-visible,
 [tabindex="0"]:focus-visible,
@@ -274,4 +284,28 @@ summary:focus-visible {
   /* border-radius 를 지정하지 않는다 — 이 규칙은 언레이어드라 @layer utilities 의 rounded-* 를
      모두 이긴다. 6px 을 박아 두면 rounded-xl(14px) 버튼에 키보드 포커스가 닿는 순간 모서리가
      6px 로 튄다(육안으로 보인다). 빼면 링이 각 컨트롤 자기 반경을 따라간다. */
+}
+
+/* 포커스 껍데기 — **행/틀이 컨트롤**인 경우.
+
+   이 코드베이스에는 맨입력(bg-transparent + outline-none)이 크롬을 가진 행 안에 놓이는
+   패턴이 여러 곳 있다(선택지 행, 검색 상자, 인증 폼 필드). 위 규칙이 input 을 포함하게
+   되면서 그 행들은 링이 **두 겹**으로 그려진다 — 행의 focus-within 표시 + 입력 자기 아웃라인.
+   소유권을 행 하나로 넘겨서 정리한다. 부수 효과로 focus-within 관용구 4종
+   (ring-2/ring-violet-400·border-violet-400·border-violet-400/70·ring-violet-400/20)이
+   한 벌로 합쳐진다.
+
+   위 규칙은 언레이어드라 유틸리티 클래스로는 끌 수 없다. 그래서 같은 언레이어드 층에서
+   더 높은 특이도로 끈다 — (0,2,1) > (0,1,1). */
+[data-focus-shell]:focus-within {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+/* 껍데기 안에 껍데기가 있으면 바깥이 양보한다 — :focus-within 은 조상 **전부**에 매치되므로
+   중첩(선택지 행 ⊂ 필드 카드)에서 링이 두 겹이 된다. */
+[data-focus-shell]:has([data-focus-shell]:focus-within) {
+  outline: none;
+}
+[data-focus-shell] :is(input, textarea, select):focus-visible {
+  outline: none;
 }

@@ -36,12 +36,26 @@ export const FINISH = {
   s1: "shadow-[inset_0_0_0_1px_var(--border),var(--shadow-card)]",
   /** 2단 면·입력 — 헤어라인만 */
   s2: "shadow-[inset_0_0_0_1px_var(--border)]",
+  /**
+   * 2단 면의 오류 상태. s2 **대신** 쓴다 — 덧붙이면 안 된다.
+   * 둘 다 box-shadow 를 쓰는 같은 유틸(shadow-[…])이라, 한 요소에 둘을 얹으면
+   * 승자가 className 순서가 아니라 **생성된 CSS 안의 순서**로 정해진다(제어 불가).
+   * 그래서 조립부에서 하나를 고르게 만든다.
+   */
+  s2Danger: "shadow-[inset_0_0_0_1px_var(--destructive)]",
   /** 오버레이 — 다크 --popover 가 --card 와 같은 값이라 한 단 강한 --input 을 헤어라인으로 */
   overlay:
     "shadow-[inset_0_0_0_1px_var(--input),0_12px_32px_-12px_rgb(0_0_0/0.18)] " +
     "dark:shadow-[inset_0_0_0_1px_var(--input),0_16px_40px_-16px_rgb(0_0_0/0.75)]",
   /** 솔리드 컨트롤 — 헤어라인 없이 최소 리프트 */
   control: "shadow-[0_1px_1px_rgb(20_20_25/0.05)] dark:shadow-[0_1px_2px_rgb(0_0_0/0.45)]",
+  /**
+   * 대체 요소(img·video)용 헤어라인 — **밖으로** 그린다.
+   * inset 은 여기서 안 통한다: 페인트 순서가 배경 → inset 그림자 → 내용이라 이미지 픽셀이
+   * 헤어라인을 덮는다. 하니스에서 실측했다(120px 원형 img 에 inset 8px 빨강 = 아예 안 보임,
+   * 같은 조건 outset = 선명). border 대신 이걸 쓰는 이유는 레이아웃 크기를 바꾸지 않는 것.
+   */
+  hairlineOut: "shadow-[0_0_0_1px_var(--border)]",
 } as const;
 
 /**
@@ -106,13 +120,16 @@ export function Surface({
  * 각 파일의 로컬 선언을 이 import 로 바꾸면 JSX 를 건드리지 않고 값이 통일된다.
  * 최종 목표는 <Field> 컴포넌트지만, 그 이관은 파일별로 따로 한다.
  */
-export const FIELD_CLS =
+/** 마감을 뺀 몸통. 마감은 항상 **한 개만** 뒤에 붙는다(s2 또는 s2Danger). */
+const FIELD_BODY =
   "w-full min-h-9 bg-background px-3 py-2 text-sm text-foreground " +
   "placeholder:text-muted-foreground/50 transition-shadow " +
   "disabled:cursor-not-allowed disabled:opacity-50 " +
-  `${R.control} ${FINISH.s2}`;
+  R.control;
 
-const FIELD_BASE = FIELD_CLS;
+export const FIELD_CLS = `${FIELD_BODY} ${FINISH.s2}`;
+/** 오류 상태 입력 — FIELD_CLS 와 **둘 중 하나**만 쓴다(위 s2Danger 주석 참고). */
+export const FIELD_CLS_DANGER = `${FIELD_BODY} ${FINISH.s2Danger}`;
 
 export const Field = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }>(
   function Field({ className = "", invalid, ...rest }, ref) {
@@ -120,23 +137,31 @@ export const Field = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
       <input
         ref={ref}
         aria-invalid={invalid || undefined}
-        className={`${FIELD_BASE} ${invalid ? "shadow-[inset_0_0_0_1px_var(--destructive)]" : ""} ${className}`}
+        className={`${invalid ? FIELD_CLS_DANGER : FIELD_CLS} ${className}`}
         {...rest}
       />
     );
   },
 );
 
-export const FieldArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
-  function FieldArea({ className = "", ...rest }, ref) {
-    return <textarea ref={ref} className={`${FIELD_BASE} resize-y leading-relaxed ${className}`} {...rest} />;
-  },
-);
+export const FieldArea = forwardRef<
+  HTMLTextAreaElement,
+  TextareaHTMLAttributes<HTMLTextAreaElement> & { invalid?: boolean }
+>(function FieldArea({ className = "", invalid, ...rest }, ref) {
+  return (
+    <textarea
+      ref={ref}
+      aria-invalid={invalid || undefined}
+      className={`${invalid ? FIELD_CLS_DANGER : FIELD_CLS} resize-y leading-relaxed ${className}`}
+      {...rest}
+    />
+  );
+});
 
 export const FieldSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
   function FieldSelect({ className = "", children, ...rest }, ref) {
     return (
-      <select ref={ref} className={`${FIELD_BASE} ${className}`} {...rest}>
+      <select ref={ref} className={`${FIELD_CLS} ${className}`} {...rest}>
         {children}
       </select>
     );
@@ -147,7 +172,7 @@ export const FieldSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HT
 // Btn / Chip / Segmented — 컨트롤
 // ─────────────────────────────────────────────────────────────────────────────
 
-type BtnTone = "key" | "quiet" | "danger" | "ghost";
+type BtnTone = "key" | "quiet" | "danger" | "dangerQuiet" | "ghost";
 
 /**
  * tone 이 색을 정하고 마감은 자동. violet 리터럴을 화면에서 직접 쓰지 않게 하는 게 목적이다
@@ -164,22 +189,33 @@ const BTN_TONE: Record<BtnTone, string> = {
    * 하니스에서 눈으로 보고 계산해 잡았다 — 다크의 삭제 버튼이 연한 빨강에 흰 글자였다.
    */
   danger: `bg-destructive text-white dark:text-[oklch(0.205_0_0)] hover:opacity-90 ${FINISH.control}`,
+  /**
+   * 파괴적 동작을 **여는** 버튼(확인 단계를 띄우는 쪽). danger 와 다른 톤이 필요한 이유는
+   * AGENTS 의 "위험한 저빈도 액션은 멀리·작게" 다 — 채운 빨강을 쓰면 아직 아무것도 지우지
+   * 않는 버튼이 화면에서 가장 무거워진다. 색으로 위험을 말하고 무게는 낮춘다.
+   * 마감 없음: 리프트를 주면 다시 주요 액션처럼 읽힌다.
+   */
+  dangerQuiet: "text-destructive hover:bg-destructive/10",
   // ghost 만 마감이 없다 — 면 위에 얹히는 텍스트 액션이라 리프트가 거짓 신호가 된다.
   ghost: "text-muted-foreground hover:bg-secondary hover:text-foreground",
 };
 
+// min-h-9 — 이 코드베이스의 기존 컨트롤 높이. 44px 터치 타깃은 별건으로 남겨 둔다
+// (전 컨트롤 높이를 올리면 밀도가 통째로 바뀌어 리디자인 범위를 넘는다).
+const BTN_BASE = `inline-flex min-h-9 items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${R.control}`;
+
+/**
+ * 클래스 문자열만 필요한 곳을 위한 출구. 이 코드베이스의 버튼 상당수가 `motion.button`
+ * (whileHover/whileTap)이라 <Btn> 으로 갈아타면 그 프레스 모션을 잃는다. 톤만 빌려 쓰면
+ * 색·마감은 한 곳에서 오고 모션은 그대로 남는다.
+ */
+export function btnCls(tone: BtnTone = "quiet", extra = "") {
+  return `${BTN_BASE} ${BTN_TONE[tone]} ${extra}`;
+}
+
 export const Btn = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { tone?: BtnTone }>(
   function Btn({ tone = "quiet", className = "", type = "button", ...rest }, ref) {
-    return (
-      <button
-        ref={ref}
-        type={type}
-        // min-h-9 — 이 코드베이스의 기존 컨트롤 높이. 44px 터치 타깃은 별건으로 남겨 둔다
-        // (전 컨트롤 높이를 올리면 밀도가 통째로 바뀌어 리디자인 범위를 넘는다).
-        className={`inline-flex min-h-9 items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${R.control} ${BTN_TONE[tone]} ${className}`}
-        {...rest}
-      />
-    );
+    return <button ref={ref} type={type} className={btnCls(tone, className)} {...rest} />;
   },
 );
 

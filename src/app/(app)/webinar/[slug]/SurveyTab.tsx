@@ -9,6 +9,7 @@ import {
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
+import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 import { Switch } from "@/components/ui/switch";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { isSurveyAcceptingResponses, normalizeSurveyQuestions, SURVEY_MAX_QUESTIONS, SURVEY_TYPE_LABELS, type SurveyQuestion, type SurveyQuestionType } from "@/lib/webinar-survey";
@@ -72,7 +73,7 @@ const countOptions = (q: SurveyQuestion) => q.options.filter((o) => o.trim()).le
 /* ---------- 유형 선택 팝오버 (칩·문항 추가 버튼이 공유) ---------- */
 function TypeMenu({ current, onPick }: { current?: SurveyQuestionType; onPick: (t: SurveyQuestionType) => void }) {
   return (
-    <div className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border border-border bg-background p-1.5 shadow-xl">
+    <div className={`absolute left-0 top-full z-30 mt-1.5 w-64 bg-popover p-1.5 ${R.surface} ${FINISH.overlay}`}>
       <p className="px-2 pb-1 pt-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
         {current ? "질문 유형 변경" : "추가할 유형 선택"}
       </p>
@@ -224,7 +225,7 @@ function QuestionRow({
           <button type="button" onClick={onDuplicate} aria-label="문항 복제" className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground/50 transition-colors hover:bg-background hover:text-foreground">
             <Copy className="h-3.5 w-3.5" />
           </button>
-          <button type="button" onClick={onRemove} aria-label="문항 삭제" className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground/50 transition-colors hover:bg-red-500/10 hover:text-red-500">
+          <button type="button" onClick={onRemove} aria-label="문항 삭제" className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -241,7 +242,7 @@ function QuestionRow({
           {hasOptions && (
             <div className="space-y-1.5">
               {q.options.map((opt, idx) => (
-                <div key={idx} className="group flex items-center gap-2 rounded-lg bg-background px-2.5 shadow-sm transition-shadow focus-within:ring-2 focus-within:ring-violet-400/50">
+                <div key={idx} data-focus-shell className="group flex items-center gap-2 rounded-lg bg-background px-2.5 shadow-sm">
                   <span className={`h-3.5 w-3.5 shrink-0 border-[1.5px] border-muted-foreground/40 ${q.type === "multiple" ? "rounded-[5px]" : "rounded-full"}`} />
                   <input
                     value={opt}
@@ -260,7 +261,7 @@ function QuestionRow({
                     type="button"
                     onClick={() => removeOption(idx)}
                     aria-label={`선택지 ${idx + 1} 삭제`}
-                    className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted-foreground/40 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted-foreground/40 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -572,7 +573,7 @@ function SurveyEditor({
                 className="mt-0.5 w-full bg-transparent text-[13px] text-muted-foreground outline-none placeholder:text-muted-foreground/40"
               />
             </div>
-            <button type="button" onClick={remove} aria-label="설문 삭제" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground/50 transition-colors hover:bg-red-500/10 hover:text-red-500">
+            <button type="button" onClick={remove} aria-label="설문 삭제" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive">
               <Trash2 className="h-4 w-4" />
             </button>
           </div>
@@ -608,7 +609,7 @@ function SurveyEditor({
               응답 화면에는 안 나오고, 분석·개별응답·CSV 에서 지난 답변을 계속 볼 수 있다.
               편집 값이 아니라 읽는 값이므로 요약만 보여준다(원칙 1: 읽는 영역). */}
           {retiredQuestions.length > 0 && (
-            <div className="space-y-1.5 rounded-xl border border-border bg-secondary/20 p-3">
+            <div className={`space-y-1.5 bg-secondary p-3 ${R.surface} ${FINISH.s2}`}>
               <p className="text-[11px] font-semibold text-muted-foreground">
                 보관된 문항 {retiredQuestions.length}개
               </p>
@@ -629,7 +630,7 @@ function SurveyEditor({
           )}
 
           {/* 제출 완료 화면 — 응답 제출 후 보이는 문구(비우면 기본 문구). 응답 링크·라이브 푸시·CTA 모달 공통 적용. */}
-          <div className="space-y-2 rounded-xl border border-border bg-secondary/20 p-3">
+          <div className={`space-y-2 bg-secondary p-3 ${R.surface} ${FINISH.s2}`}>
             <p className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
               <CircleCheckBig className="h-3.5 w-3.5 text-violet-500" />제출 완료 화면
             </p>
@@ -690,14 +691,14 @@ function SurveyEditor({
                 onChange={(e) => setClosesDraft(e.target.value)}
                 onBlur={(e) => void commitClosesAt(e.target.value)}
                 aria-label="마감 예약 시각"
-                className="rounded-md border border-border bg-background px-1.5 py-1 text-[11px] tabular-nums transition-colors focus:border-violet-400 focus:outline-none"
+                className={`${FIELD_CLS} w-auto min-h-0 px-1.5 py-1 text-[11px] tabular-nums`}
               />
               {survey.closesAt && (
                 <button
                   type="button"
                   onClick={() => { setClosesDraft(""); void commitClosesAt(""); }}
                   aria-label="마감 예약 해제"
-                  className="grid h-5 w-5 place-items-center rounded text-muted-foreground/50 transition-colors hover:bg-red-500/10 hover:text-red-500"
+                  className="grid h-5 w-5 place-items-center rounded text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
                 >
                   <X className="h-3 w-3" />
                 </button>

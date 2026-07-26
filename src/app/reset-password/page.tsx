@@ -70,7 +70,7 @@ export default function ResetPasswordRequestPage() {
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div>
                 <label className="text-sm font-medium text-muted-foreground">이메일</label>
-                <div className="mt-1 rounded-2xl border border-border bg-foreground/5 backdrop-blur-sm transition-colors focus-within:border-violet-400/70 focus-within:bg-violet-500/10">
+                <div data-focus-shell className="mt-1 rounded-2xl border border-border bg-foreground/5 backdrop-blur-sm transition-colors focus-within:bg-violet-500/10">
                   <input
                     type="email"
                     placeholder="you@example.com"

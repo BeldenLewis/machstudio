@@ -98,6 +98,27 @@ function Catalog({ tag }: { tag: string }) {
         </Surface>
       </Row>
 
+      {/* 포커스 소유권 — 전역 규칙이 input 을 포함하게 되면서, 크롬을 가진 행 안의 맨입력은
+          링이 두 겹으로 그려졌다. [data-focus-shell] 이 소유권을 행으로 넘긴다.
+          중첩(행 ⊂ 카드)에서 바깥이 양보하는지도 같이 본다. */}
+      <Row label="포커스 껍데기 — 링은 행에 한 겹만">
+        <div data-focus-shell className={`bg-card p-3 ${FINISH.s1} ${R.panel}`} data-testid={`shell-outer-${tag}`}>
+          <p className="mb-2 text-[11px] text-muted-foreground">바깥 껍데기(카드)</p>
+          <div
+            data-focus-shell
+            className={`flex items-center gap-2 bg-secondary px-2.5 ${FINISH.s2} ${R.control}`}
+            data-testid={`shell-inner-${tag}`}
+          >
+            <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-muted-foreground/30" />
+            <input
+              data-testid={`shell-input-${tag}`}
+              placeholder="맨입력 — 자기 아웃라인은 꺼져야 한다"
+              className="min-w-0 flex-1 bg-transparent py-2 text-[13px] outline-none placeholder:text-muted-foreground/40"
+            />
+          </div>
+        </div>
+      </Row>
+
       <Row label="반경 3단">
         <div className="flex flex-wrap items-end gap-2">
           {(["control", "surface", "panel"] as const).map((k) => (

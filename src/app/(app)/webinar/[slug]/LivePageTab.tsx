@@ -11,6 +11,7 @@ import {
 } from "@/lib/webinar-config";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { getYouTubeVideoId } from "@/lib/youtube";
+import { FIELD_CLS, FIELD_CLS_DANGER, FINISH, R } from "@/components/ui/primitives";
 
 /** 시청자에게 보이는 한 페이지의 네 순간. 어드민에서는 이 상태로 편집 대상을 고른다. */
 export type WatchState = "waiting" | "entry" | "live" | "ended";
@@ -36,7 +37,7 @@ function Toggle({ checked, onChange, label, desc }: { checked: boolean; onChange
         aria-checked={checked}
         aria-label={label}
         onClick={() => onChange(!checked)}
-        className={`relative shrink-0 w-11 h-6 rounded-full transition-colors ${checked ? "bg-violet-500" : "bg-secondary border border-border"}`}
+        className={`relative shrink-0 w-11 h-6 rounded-full transition-colors ${checked ? "bg-violet-500" : `bg-secondary ${FINISH.s2}`}`}
       >
         <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-5" : ""}`} />
       </button>
@@ -78,7 +79,7 @@ function ModeChoice<T extends string>({ value, onChange, label, desc, options }:
                 <span
                   aria-hidden
                   className={`grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full transition-colors ${
-                    on ? "bg-violet-500" : "border border-border bg-transparent"
+                    on ? "bg-violet-500" : `bg-transparent ${FINISH.s2}`
                   }`}
                 >
                   {on && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
@@ -154,7 +155,7 @@ interface Webinar {
 }
 
 
-const inputCls = "w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors";
+const inputCls = FIELD_CLS;
 
 // 만들기 › 대기/라이브/종료 화면 편집.
 // ⚠️ 세 메뉴가 하나의 인스턴스를 공유한다(PageSetupTab 그룹 키) — livePage 를 통째로 재구성해 저장하므로
@@ -418,7 +419,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
               <h3 className="text-sm font-semibold">화면 구성</h3>
               <p className="mt-1 text-xs text-muted-foreground">대기 화면에 보여줄 요소예요. 데이터가 없으면 켜져 있어도 자동으로 숨겨져요.</p>
             </div>
-            <div className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-2.5">
+            <div className={`bg-secondary p-4 space-y-2.5 ${R.panel} ${FINISH.s2}`}>
               <Toggle label="세션 순서(아젠다)" checked={screens.waiting.agenda} onChange={(v) => setW("agenda", v)} desc="세션 탭에 등록한 시간표가 타임라인으로 표시돼요" />
               <Toggle label="등록자 수(사회적 증거)" checked={screens.waiting.social} onChange={(v) => setW("social", v)} />
               <Toggle label="캘린더에 추가" checked={screens.waiting.calendar} onChange={(v) => setW("calendar", v)} desc="아래 캘린더 URL이 있을 때만 표시" />
@@ -451,8 +452,8 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
               <label className="text-xs text-muted-foreground mb-1 block">YouTube 공유 링크 또는 영상 ID</label>
               <input type="text" placeholder="예: https://youtu.be/dQw4w9WgXcQ" value={form.youtubeId}
                 onChange={(e) => setForm((f) => ({ ...f, youtubeId: e.target.value }))}
-                className={`${inputCls} font-mono ${form.youtubeId.trim() && !youtubeVideoId ? "border-red-400 focus:border-red-400" : ""}`} />
-              <p className={`mt-1 text-[11px] ${form.youtubeId.trim() && !youtubeVideoId ? "text-red-500" : "text-muted-foreground"}`}>
+                className={`${form.youtubeId.trim() && !youtubeVideoId ? FIELD_CLS_DANGER : FIELD_CLS} font-mono`} />
+              <p className={`mt-1 text-[11px] ${form.youtubeId.trim() && !youtubeVideoId ? "text-destructive" : "text-muted-foreground"}`}>
                 {form.youtubeId.trim() && !youtubeVideoId
                   ? "YouTube 공유 링크 또는 11자리 영상 ID를 입력해 주세요."
                   : "공유 링크를 그대로 붙여 넣어도 자동으로 영상 ID로 저장돼요."}
@@ -494,11 +495,11 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
             <AnimatePresence initial={false}>
               {ctaCards.map((card, i) => (
                 <motion.div key={card.id} layout initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-                  className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3">
+                  className={`bg-secondary p-4 space-y-3 ${R.panel} ${FINISH.s2}`}>
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-medium text-muted-foreground">카드 {i + 1}</p>
                     <button type="button" onClick={() => setCtaCards((prev) => prev.filter((_, j) => j !== i))}
-                      className="text-[11px] text-muted-foreground transition-colors hover:text-red-500">카드 삭제</button>
+                      className="text-[11px] text-muted-foreground transition-colors hover:text-destructive">카드 삭제</button>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <input type="text" placeholder="상단 라벨 (예: 세션 자료)" value={card.eyebrow} onChange={(e) => updateCta(i, { eyebrow: e.target.value })} className={inputCls} />
@@ -511,7 +512,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                       const btn = card[slot];
                       const upd = (patch: Partial<CtaBtnForm>) => updateCta(i, { [slot]: { ...btn, ...patch } } as Partial<CtaFormCard>);
                       return (
-                        <div key={slot} className="space-y-2 rounded-xl border border-border/60 bg-background/60 p-2.5">
+                        <div key={slot} className={`space-y-2 bg-background p-2.5 ${R.surface} ${FINISH.s2}`}>
                           <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_130px_96px]">
                             <input
                               type="text"
@@ -566,7 +567,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
           </section>
 
           {/* 알림 받고 이어보기 카드 */}
-          <section className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3">
+          <section className={`bg-secondary p-4 space-y-3 ${R.panel} ${FINISH.s2}`}>
             <Toggle
               checked={form.notifyEnabled}
               onChange={(v) => setForm((f) => ({ ...f, notifyEnabled: v }))}
@@ -595,7 +596,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
               <h3 className="text-sm font-semibold">참여 구성</h3>
               <p className="mt-1 text-xs text-muted-foreground">시청 화면 참여 박스(Q&amp;A·채팅·세션) 구성이에요.</p>
             </div>
-            <div className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-4">
+            <div className={`bg-secondary p-4 space-y-4 ${R.panel} ${FINISH.s2}`}>
               <Toggle
                 checked={form.chatEnabled}
                 onChange={(v) => setForm((f) => ({ ...f, chatEnabled: v }))}
@@ -629,7 +630,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
               <h3 className="text-sm font-semibold">입장 화면</h3>
               <p className="mt-1 text-xs text-muted-foreground">라이브 중 미인증 방문자가 보는 입장 확인 화면이에요.</p>
             </div>
-            <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+            <div className={`bg-secondary p-4 ${R.panel} ${FINISH.s2}`}>
               <Toggle label="실시간 시청자 수" checked={screens.entry.viewerCount} onChange={(v) => setScreens((s) => ({ ...s, entry: { viewerCount: v } }))}
                 desc="'지금 N명이 함께 보고 있어요' — 입장을 유도하는 사회적 증거예요" />
             </div>
@@ -680,7 +681,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
               <h3 className="text-sm font-semibold">화면 구성</h3>
               <p className="mt-1 text-xs text-muted-foreground">종료 화면에 보여줄 요소예요. 데이터가 없으면 켜져 있어도 자동으로 숨겨져요.</p>
             </div>
-            <div className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-2.5">
+            <div className={`bg-secondary p-4 space-y-2.5 ${R.panel} ${FINISH.s2}`}>
               <Toggle label="다시보기 신청" checked={screens.ended.replay} onChange={(v) => setEn("replay", v)} desc="신청자는 알림 수신 목록에 담겨요 — 다시보기 링크를 이메일로 보내세요" />
               <Toggle label="자료 다운로드" checked={screens.ended.resources} onChange={(v) => setEn("resources", v)} desc="아래 자료를 1개 이상 추가해야 표시" />
               <Toggle label="다음 웨비나" checked={screens.ended.nextWebinar} onChange={(v) => setEn("nextWebinar", v)} desc="아래 제목을 입력해야 표시" />

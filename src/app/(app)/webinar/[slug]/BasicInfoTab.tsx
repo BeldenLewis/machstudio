@@ -8,6 +8,7 @@ import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
 import WebinarSchedulePicker from "@/components/webinar/WebinarSchedulePicker";
 import { useAutosave, useExternalSync } from "@/components/ui/use-autosave";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
+import { btnCls, FIELD_CLS, FIELD_CLS_DANGER, R } from "@/components/ui/primitives";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -96,7 +97,7 @@ export default function BasicInfoTab({ webinar, onSilentUpdate, embedded }: {
               type="text"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors"
+              className={FIELD_CLS}
             />
           </div>
           <div>
@@ -105,7 +106,7 @@ export default function BasicInfoTab({ webinar, onSilentUpdate, embedded }: {
               rows={2}
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm resize-none focus:outline-none focus:border-violet-400 transition-colors"
+              className={`${FIELD_CLS} resize-none leading-relaxed`}
             />
           </div>
         </div>
@@ -128,7 +129,7 @@ export default function BasicInfoTab({ webinar, onSilentUpdate, embedded }: {
       </section>
 
       <div className="flex items-center gap-3">
-        {!form.name.trim() && <span className="text-[11px] text-red-500">이름을 입력해야 저장돼요</span>}
+        {!form.name.trim() && <span className="text-[11px] text-destructive">이름을 입력해야 저장돼요</span>}
       </div>
 
     </div>
@@ -161,9 +162,10 @@ export function WebinarDangerZone({ webinar }: { webinar: { id: string; name: st
 
   return (
     <div className="max-w-2xl">
-      {/* 위험 구역 */}
-      <section className="space-y-3 pt-4 border-t border-border">
-        <h3 className="text-sm font-semibold text-red-500">위험 구역</h3>
+      {/* 제목·구분선은 부모(SourceInfoTab 의 AreaDivider)가 그린다 — 예전엔 여기서도
+          border-t + h3 "위험 구역" 을 그려서 같은 제목과 같은 수평선이 두 번 나왔다.
+          BrandSection 에서 잡은 것과 같은 종류의 중복이다. */}
+      <section className="space-y-3">
         <AnimatePresence mode="wait" initial={false}>
         {!showDeleteConfirm ? (
           <motion.button
@@ -175,7 +177,7 @@ export function WebinarDangerZone({ webinar }: { webinar: { id: string; name: st
             whileTap={{ scale: 0.97 }}
             transition={spring}
             onClick={() => setShowDeleteConfirm(true)}
-            className="px-4 py-2 rounded-xl border border-red-500/30 text-red-500 text-sm hover:bg-red-500/10 transition-colors"
+            className={btnCls("dangerQuiet", "px-4")}
           >
             웨비나 삭제
           </motion.button>
@@ -186,16 +188,19 @@ export function WebinarDangerZone({ webinar }: { webinar: { id: string; name: st
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={spring}
-            className="p-4 rounded-2xl border border-red-500/30 bg-red-500/5 space-y-3"
+            /* 빨강 경계는 장식이 아니라 신호라서 유지하되, 마감 규칙대로 헤어라인을 그림자
+               안에 넣는다. 색은 red-500 → --destructive 로 — 토큰은 다크에서 한 단 밝아지고
+               (0.577 → 0.704) red-500 은 고정이라, 다크에서 경고가 배경에 묻혔다. */
+            className={`p-4 ${R.panel} bg-destructive/5 shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--destructive)_30%,transparent)] space-y-3`}
           >
-            <p className="text-sm text-red-500">모든 등록자, Q&A, 공지 데이터가 삭제돼요. 되돌릴 수 없어요.</p>
+            <p className="text-sm text-destructive">모든 등록자, Q&A, 공지 데이터가 삭제돼요. 되돌릴 수 없어요.</p>
             <p className="text-xs text-muted-foreground">확인을 위해 웨비나 이름 <strong>{webinar.name}</strong>을 입력하세요</p>
             <input
               type="text"
               placeholder={webinar.name}
               value={deleteInput}
               onChange={(e) => setDeleteInput(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-red-500/30 bg-background text-sm focus:outline-none focus:border-red-500 transition-colors"
+              className={FIELD_CLS_DANGER}
             />
             <div className="flex gap-2">
               <motion.button
@@ -204,7 +209,7 @@ export function WebinarDangerZone({ webinar }: { webinar: { id: string; name: st
                 transition={spring}
                 onClick={handleDelete}
                 disabled={deleteInput !== webinar.name || isDeleting}
-                className="px-4 py-2 rounded-xl bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-40"
+                className={btnCls("danger", "px-4 disabled:opacity-40")}
               >
                 {isDeleting ? "삭제 중..." : "삭제"}
               </motion.button>
@@ -213,7 +218,7 @@ export function WebinarDangerZone({ webinar }: { webinar: { id: string; name: st
                 whileTap={{ scale: 0.96 }}
                 transition={spring}
                 onClick={() => { setShowDeleteConfirm(false); setDeleteInput(""); }}
-                className="px-4 py-2 rounded-xl border border-border text-sm hover:bg-secondary transition-colors"
+                className={btnCls("quiet", "px-4")}
               >
                 취소
               </motion.button>

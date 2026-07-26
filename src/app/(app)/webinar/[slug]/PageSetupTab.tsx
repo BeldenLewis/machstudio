@@ -183,7 +183,7 @@ export default function PageSetupTab({
                     className="block w-full text-left text-[11px] leading-snug text-muted-foreground transition-colors hover:text-foreground"
                     title={it.detail}
                   >
-                    <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle ${it.severity === "blocking" ? "bg-red-500" : "bg-amber-500"}`} aria-hidden />
+                    <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle ${it.severity === "blocking" ? "bg-destructive" : "bg-amber-500"}`} aria-hidden />
                     {it.title}
                   </button>
                 </li>
