@@ -19,6 +19,11 @@
  * **편집 state 를 만들 때 클라이언트 키를 붙이고 저장 시 떼는** 방식으로 해결한다
  * (withRowKeys / stripRowKeys 참고).
  *
+ * 면 색조 규칙(중요): 행 셸은 **bg-secondary**(2단)다. 예전엔 bg-background/60 이었는데
+ * 라이트에서 --background 와 --card 가 **둘 다 oklch(1 0 0) 로 완전히 같아서**(globals.css)
+ * 흰색 60% 를 흰 카드 위에 얹은 셈이 되어 경계가 0 이었다. 라이트의 경계는 그림자가,
+ * 다크의 경계는 색조가 만든다 — 그래서 면은 언제나 '색조 토큰 + 그림자 한 벌' 이다.
+ *
  * 삭제 계약(중요): 클릭 즉시 화면에서만 숨기고 배열은 그대로 둔다. 유예(5초)가 끝날 때 비로소
  * onChange(제거된 배열) 를 호출한다. 그래서 실행취소하면 자동저장 왕복이 **0회**다.
  */
@@ -288,7 +293,7 @@ function Row<T>({
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={spring}
-            className={`flex items-start gap-1.5 rounded-xl bg-background/60 p-2.5 transition-shadow ${
+            className={`flex items-start gap-1.5 rounded-xl bg-secondary p-2.5 transition-shadow ${
               isDragging ? "shadow-lg" : "shadow-sm"
             }`}
           >

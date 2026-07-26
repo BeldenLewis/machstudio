@@ -109,7 +109,7 @@ export default function BrandSection({
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {COLOR_FIELDS.map(({ key, label }) => (
-          <div key={key} className="flex items-center gap-3 rounded-xl bg-background p-3 shadow-sm">
+          <div key={key} className="flex items-center gap-3 rounded-xl bg-card p-3 shadow-card">
             <div className="relative">
               <div
                 className="h-9 w-9 cursor-pointer rounded-lg shadow-sm"

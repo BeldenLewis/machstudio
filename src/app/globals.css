@@ -140,7 +140,10 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  /* 다크 링을 무채색(0.556)에서 브랜드색으로 — 라이트는 딥네이비인데 다크만 회색이면
+     같은 컨트롤이 테마에 따라 다른 색으로 포커스된다. violet-300(0.66 0.07 252)은
+     --background(0.145)·--card(0.205) 양쪽에 충분한 명도차를 갖는다. */
+  --ring: oklch(0.66 0.07 252);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -245,7 +248,12 @@ button:focus-visible,
 [role="tab"]:focus-visible,
 [tabindex="0"]:focus-visible,
 summary:focus-visible {
-  outline: 2px solid rgb(139 92 246 / 0.65);
+  /* var(--ring) 을 쓴다 — 예전엔 rgb(139 92 246) 리터럴이었는데, 이 파일 위쪽에서 violet 팔레트를
+     딥네이비로 통째 재정의(--color-violet-400: oklch(0.50 0.08 252))했기 때문에 그 순보라는
+     **현재 팔레트에 존재하지 않는 색**이 되어 있었다. 포커스 링만 리브랜드 이전 색으로 남아 있었다. */
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
-  border-radius: 6px;
+  /* border-radius 를 지정하지 않는다 — 이 규칙은 언레이어드라 @layer utilities 의 rounded-* 를
+     모두 이긴다. 6px 을 박아 두면 rounded-xl(14px) 버튼에 키보드 포커스가 닿는 순간 모서리가
+     6px 로 튄다(육안으로 보인다). 빼면 링이 각 컨트롤 자기 반경을 따라간다. */
 }
