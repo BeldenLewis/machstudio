@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
-import { useAutosave } from "@/components/ui/use-autosave";
+import { useAutosave, useExternalSync, diffPatch } from "@/components/ui/use-autosave";
 import {
   normalizeLivePageConfig, DEFAULT_ENDED_TITLE, DEFAULT_ENDED_DESCRIPTION,
   type LivePageConfig, type LiveResource, type LiveNextWebinar,
@@ -264,6 +264,19 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
       // 입력이 비면 의도적 해제(null)지만, 값이 있는데 파싱 실패면 저장에서 제외한다.
       // 오타 한 글자로 방송 중인 영상 ID 가 지워지는 걸 막는다(경고는 입력란 아래 인라인).
       const youtubeTouched = form.youtubeId.trim() === "" || youtubeVideoId !== null;
+
+      // components 는 **운영 콘솔도 같은 키를 쓴다**(chatEnabled·qaMode). 그래서 바뀐 키만 보낸다.
+      // 바로 아래 주석의 규칙("옛 스냅샷을 스프레드하면 다른 탭이 방금 저장한 값을 되돌린다")이
+      // config 에는 지켜졌는데 components 에는 빠져 있었다 — 두 키를 항상 함께 쓰면
+      // 콘솔에서 Q&A 를 폐쇄형으로 바꾼 직후 만들기에서 문구 하나만 고쳐도 오픈형으로 복귀한다.
+      const componentsPatch = diffPatch(
+        {
+          chatEnabled: components.chatEnabled === true,
+          qaMode: components.qaMode === "closed" ? "closed" : "open",
+        },
+        { chatEnabled: form.chatEnabled, qaMode: form.qaMode },
+      );
+
       const res = await fetch(`/api/webinars/${webinar.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -278,8 +291,8 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
             livePage: buildLivePage(),
           },
           theme,
-          // 다른 components 키(allowLiveRegistration 등)는 보존
-          components: { chatEnabled: form.chatEnabled, qaMode: form.qaMode },
+          // 바뀐 키가 없으면 components 를 아예 보내지 않는다(다른 키·다른 창의 값 보존)
+          ...(Object.keys(componentsPatch).length ? { components: componentsPatch } : {}),
         }),
       });
       if (!res.ok) { toast.error("자동 저장 실패 — 잠시 후 다시 시도돼요", { id: "autosave-error" }); return false; }
@@ -287,7 +300,29 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
       return true;
     } catch { return false; }
   };
-  const { state: saveState, retry } = useAutosave({ form, ctaCards, theme, screens, resources, nextWeb }, save);
+  const { state: saveState, dirty, retry } = useAutosave({ form, ctaCards, theme, screens, resources, nextWeb }, save);
+
+  // 다른 창·다른 기기·운영 콘솔에서 같은 웨비나가 바뀌면 이 폼도 따라간다(편집 중이면 대기).
+  // 특히 채팅·Q&A 는 콘솔과 같은 키를 공유하므로, 여기 표시가 낡으면 운영자가 사실과 다른 걸 본다.
+  const incomingForm = useMemo(
+    () => ({
+      youtubeId: (webinar.config?.youtubeId as string) ?? "",
+      calendarUrl: (webinar.config?.calendarUrl as string) ?? "",
+      surveyUrl: (webinar.config?.surveyUrl as string) ?? "",
+      lpContact: (livePage.infoContact as string) ?? "",
+      lpNotice: (livePage.notice as string) ?? "",
+      chatEnabled: components.chatEnabled === true,
+      qaMode: components.qaMode === "closed" ? ("closed" as const) : ("open" as const),
+      notifyEnabled: notify.enabled === true,
+      notifyKicker: (notify.kicker as string) ?? "",
+      notifyTitle: (notify.title as string) ?? "",
+      notifyDescription: (notify.description as string) ?? "",
+      notifySwitchLabel: (notify.switchLabel as string) ?? "",
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [webinar.config, webinar.components],
+  );
+  useExternalSync(incomingForm, setForm, dirty);
 
   const colorFields: { key: keyof Theme; label: string }[] = [
     { key: "accentColor", label: "키 컬러" },

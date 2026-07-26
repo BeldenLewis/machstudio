@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
 import WebinarSchedulePicker from "@/components/webinar/WebinarSchedulePicker";
-import { useAutosave } from "@/components/ui/use-autosave";
+import { useAutosave, useExternalSync } from "@/components/ui/use-autosave";
 import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
@@ -70,7 +70,25 @@ export default function BasicInfoTab({ webinar, onSilentUpdate }: { webinar: Web
       return true;
     } catch { return false; }
   };
-  const { state: saveState, retry } = useAutosave(form, save);
+  const { state: saveState, dirty, retry } = useAutosave(form, save);
+
+  // 다른 창·다른 기기에서 이름·일정이 바뀌면 이 폼도 따라간다(편집 중이면 대기).
+  // 예전엔 초기값 1회라, 열어둔 창의 다음 자동저장이 낡은 값으로 상대의 수정을 되돌렸다.
+  const incoming = useMemo(
+    () => ({
+      name: webinar.name,
+      description: webinar.description ?? "",
+      liveStartAt: toLocal(webinar.liveStartAt),
+      liveEndAt: toLocal(webinar.liveEndAt),
+      signupDeadline: toLocal(webinar.signupDeadline),
+      liveReg: (components.allowLiveRegistration === false ? "closed"
+        : components.allowLiveRegistration === true ? "open"
+        : "auto") as "auto" | "open" | "closed",
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [webinar.name, webinar.description, webinar.liveStartAt, webinar.liveEndAt, webinar.signupDeadline, webinar.components],
+  );
+  useExternalSync(incoming, setForm, dirty);
 
   const handleDelete = async () => {
     if (deleteInput !== webinar.name) return;
