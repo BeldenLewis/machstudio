@@ -11,6 +11,7 @@ import { checkWebinarReadiness, readinessBySection } from "@/lib/webinar-readine
 import SurveyTab from "./SurveyTab";
 import LandingPageTab from "./LandingPageTab";
 import { FINISH, R, SELECTED_SURFACE, SELECTED_TEXT } from "@/components/ui/primitives";
+import SetupPreview from "./SetupPreview";
 
 interface WebinarSession {
   id: string;
@@ -127,6 +128,19 @@ export default function PageSetupTab({
     [webinar.name, webinar.sessions.length, webinar.config, hasLinkedEndedSurvey],
   );
   const issuesBySection = useMemo(() => readinessBySection(issues), [issues]);
+
+  /**
+   * 미리보기 패널 열림 — 레이아웃 취향이라 세션 간 유지한다(매번 다시 열게 하면 성가시다).
+   * 기본은 열림: AGENTS §2 가 요구하는 상태가 기본이어야 한다.
+   */
+  const [previewOpen, setPreviewOpen] = useState(true);
+  useEffect(() => {
+    const saved = typeof window !== "undefined" && window.localStorage.getItem("mach:setupPreview");
+    if (saved === "0") setPreviewOpen(false);
+  }, []);
+  useEffect(() => {
+    if (typeof window !== "undefined") window.localStorage.setItem("mach:setupPreview", previewOpen ? "1" : "0");
+  }, [previewOpen]);
 
   const activeMeta = sections.find((item) => item.id === section) ?? sections[0];
   const ActiveIcon = activeMeta.icon;
@@ -276,7 +290,23 @@ export default function PageSetupTab({
           </AnimatePresence>
         </div>
 
-        <div className="min-h-0 flex-1 lg:overflow-hidden">
+        {/**
+         * 폼 + 인접 미리보기 2단.
+         *
+         * 로그인해서 실제 화면을 보고 나서 고친 것 — 폼이 max-w-2xl(약 490px)인데 이 영역이
+         * 1050px 이라 **오른쪽 절반이 빈 흰 공간**이었다. AGENTS §2 는 고치는 영역에
+         * "자동저장 + 인접 실시간 미리보기" 를 요구하는데 미리보기가 링크 하나였다.
+         * 두 문제가 같은 자리에서 해결된다.
+         *
+         * 미리보기를 접으면 1단으로 돌아간다 — 넓은 폼이 필요한 작업(진행 순서 표 편집 등)을
+         * 막지 않는다. lg 미만에서는 패널을 아예 렌더하지 않는다(폭이 없다).
+         */}
+        <div
+          className={`relative min-h-0 flex-1 lg:overflow-hidden ${
+            previewOpen ? "lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,44%)]" : ""
+          }`}
+        >
+        <div className="min-h-0 lg:overflow-hidden">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={section}
@@ -342,6 +372,15 @@ export default function PageSetupTab({
               )}
             </motion.div>
           </AnimatePresence>
+        </div>
+
+        <SetupPreview
+          section={section}
+          slug={webinar.slug}
+          watchState={watchState}
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+        />
         </div>
       </div>
     </div>

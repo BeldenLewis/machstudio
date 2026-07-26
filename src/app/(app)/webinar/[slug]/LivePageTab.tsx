@@ -414,7 +414,9 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
             부작용(추적·전송)은 뷰어 쪽 isPreviewUrl 가드가 막는다. */}
         <a href={`/webinar/${encodeURIComponent(slug)}/live?preview=${PREVIEW_PARAM[state]}`} target="_blank" rel="noopener noreferrer"
           title="저장된 내용 기준으로 새 탭에서 실제 화면을 미리봅니다"
-          className={`ml-auto shrink-0 ${btnCls("quiet", "text-xs")}`}>
+          /* lg 이상에서는 인접 미리보기 패널이 같은 일을 하므로 숨긴다. lg 미만에서는 패널이
+             렌더되지 않으니(폭이 없다) 이 링크가 유일한 경로 — 그래서 지우지 않고 숨긴다. */
+          className={`ml-auto shrink-0 lg:hidden ${btnCls("quiet", "text-xs")}`}>
           {WATCH_STATES.find((w) => w.id === state)?.label} 화면 미리보기 ↗
         </a>
       </div>

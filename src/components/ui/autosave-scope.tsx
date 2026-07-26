@@ -82,11 +82,15 @@ export function useHasAutosaveReports() {
   return Object.keys(useContext(ReportsCtx)).length > 0;
 }
 
-/** 스코프 전체를 대표하는 표시 하나. */
-export function AggregateAutosaveIndicator() {
+/**
+ * 스코프의 집계 상태. 표시 말고도 이 값을 쓰는 곳이 생겼다 — 인접 미리보기가
+ * **저장이 끝난 순간** 새로고침해야 하는데, 그 신호가 여기 이미 있다.
+ * 규칙은 위 주석과 같다: 가장 나쁜 상태가 이긴다.
+ */
+export function useAggregateAutosave(): { state: AutosaveState; retry?: () => void } {
   const reports = useContext(ReportsCtx);
   const entries = Object.values(reports);
-  if (entries.length === 0) return null;
+  if (entries.length === 0) return { state: "idle" };
 
   const failed = entries.filter((r) => r.state === "error");
   const state: AutosaveState =
@@ -96,9 +100,14 @@ export function AggregateAutosaveIndicator() {
     : "idle";
 
   // 여러 영역이 동시에 실패했으면 전부 재시도한다 — 하나만 되살리면 남은 실패가 조용히 남는다.
-  const onRetry = failed.length
-    ? () => failed.forEach((r) => r.retry?.())
-    : undefined;
+  const retry = failed.length ? () => failed.forEach((r) => r.retry?.()) : undefined;
+  return { state, retry };
+}
 
-  return <AutosaveIndicator state={state} onRetry={onRetry} />;
+/** 스코프 전체를 대표하는 표시 하나. */
+export function AggregateAutosaveIndicator() {
+  const hasAny = useHasAutosaveReports();
+  const { state, retry } = useAggregateAutosave();
+  if (!hasAny) return null;
+  return <AutosaveIndicator state={state} onRetry={retry} />;
 }
