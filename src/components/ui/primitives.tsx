@@ -99,11 +99,20 @@ export function Surface({
  * 채운 배경: 다크에서 --background(0.145)는 카드(0.205)·행(0.269)보다 어두워 '움푹 파인 우물'로
  *           읽힌다 — 이 신호를 버리면 다크에서 입력·행·카드의 톤 사다리가 붕괴한다.
  */
-const FIELD_BASE =
+/**
+ * 입력 클래스 문자열 — 컴포넌트로 아직 못 바꾼 곳이 **값만이라도 하나를 쓰게** 하려고 export 한다.
+ * 지금 탭마다 로컬 inputCls 를 선언하고 실제 값이 3종으로 갈려 있어서(px-2.5 py-1.5 rounded-lg /
+ * px-3 py-2 rounded-xl / px-3 py-2 rounded-lg) 같은 입력칸이 탭마다 다르게 생겼다.
+ * 각 파일의 로컬 선언을 이 import 로 바꾸면 JSX 를 건드리지 않고 값이 통일된다.
+ * 최종 목표는 <Field> 컴포넌트지만, 그 이관은 파일별로 따로 한다.
+ */
+export const FIELD_CLS =
   "w-full min-h-9 bg-background px-3 py-2 text-sm text-foreground " +
   "placeholder:text-muted-foreground/50 transition-shadow " +
   "disabled:cursor-not-allowed disabled:opacity-50 " +
   `${R.control} ${FINISH.s2}`;
+
+const FIELD_BASE = FIELD_CLS;
 
 export const Field = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }>(
   function Field({ className = "", invalid, ...rest }, ref) {

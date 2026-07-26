@@ -19,11 +19,12 @@ import {
   type LandingProgramItem,
 } from "@/lib/webinar-config";
 import { LANDING_IMAGE_ACCEPT, LANDING_VIDEO_ACCEPT, validateLandingMedia } from "@/lib/webinar-landing-media";
+import { FINISH, FIELD_CLS } from "@/components/ui/primitives";
 import { EditableList, ROW_KEY, withRowKeys, stripRowKeys, type WithRowKey } from "@/components/ui/editable-list";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
-const inputCls =
-  "w-full px-2.5 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors";
+// 입력 값은 프리미티브 한 곳에서 온다 — 예전엔 탭마다 로컬 선언이라 값이 3종으로 갈렸다.
+const inputCls = FIELD_CLS;
 const labelCls = "block text-xs font-medium text-muted-foreground mb-1";
 
 interface Webinar {
@@ -116,7 +117,7 @@ function SectionCard({
   children?: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+    <section className={`rounded-2xl bg-card p-4 sm:p-5 ${FINISH.s1}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold">{title}</h3>
@@ -216,7 +217,7 @@ export default function LandingPageTab({
       <div className="max-w-[1600px] space-y-6 2xl:grid 2xl:grid-cols-[minmax(0,1fr)_440px] 2xl:items-start 2xl:gap-6 2xl:space-y-0">
         <div className="min-w-0 space-y-4">
           {/* 상단: 공개 스위치 + 저장 상태 + 미리보기 */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4 sm:p-5">
+          <div className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-card p-4 sm:p-5 ${FINISH.s1}`}>
             <div className="flex items-center gap-3">
               <Switch checked={state.enabled} onChange={(v) => patch({ enabled: v })} label="랜딩 페이지 공개" />
               <div>
@@ -233,7 +234,7 @@ export default function LandingPageTab({
                 href={previewUrl}
                 target="_blank"
                 rel="noopener"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-medium transition-colors hover:border-violet-400 hover:text-violet-500"
+                className={`inline-flex items-center gap-1.5 rounded-lg bg-secondary px-3 py-2 text-xs font-medium transition-colors hover:text-violet-500 ${FINISH.control}`}
               >
                 <ExternalLink className="h-3.5 w-3.5" /> 새 탭에서 미리보기
               </a>
@@ -280,7 +281,7 @@ export default function LandingPageTab({
             <div>
               <label className={labelCls}>배경 미디어</label>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex rounded-xl border border-border p-0.5">
+                <div className={`flex rounded-lg bg-secondary p-0.5 ${FINISH.s2}`}>
                   {MEDIA_TYPES.map((mediaType) => {
                     const Icon = mediaType.icon;
                     const active = state.heroMediaType === mediaType.id;
@@ -304,7 +305,7 @@ export default function LandingPageTab({
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={isUploading}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-medium transition-colors hover:border-violet-400 hover:text-violet-500 disabled:opacity-50"
+                      className={`inline-flex items-center gap-1.5 rounded-lg bg-secondary px-3 py-2 text-xs font-medium transition-colors hover:text-violet-500 disabled:opacity-50 ${FINISH.control}`}
                     >
                       {isUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="h-3.5 w-3.5" />}
                       {isUploading ? "올리는 중…" : "파일 올리기"}
@@ -332,7 +333,7 @@ export default function LandingPageTab({
                 )}
               </div>
               {state.heroMediaType !== "none" && state.heroMediaUrl.trim() && (
-                <div className="mt-2 overflow-hidden rounded-xl border border-border bg-black/40">
+                <div className={`mt-2 overflow-hidden rounded-xl bg-black/40 ${FINISH.s2}`}>
                   {state.heroMediaType === "video" ? (
                     <video src={state.heroMediaUrl} className="h-28 w-full object-cover" muted loop autoPlay playsInline />
                   ) : (
@@ -378,16 +379,16 @@ export default function LandingPageTab({
           {/* 세션 · 타임테이블 */}
           <SectionCard title="세션 · 타임테이블" hint="내용은 만들기 → 세션에서 관리해요. 여기서는 랜딩 노출만 켜고 끕니다.">
             <div className="grid gap-2 sm:grid-cols-2">
-              <label className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-background/60 px-3 py-2.5 text-sm">
+              <label className={`flex items-center justify-between gap-3 rounded-xl bg-secondary px-3 py-2.5 text-sm ${FINISH.s2}`}>
                 연사 카드 (세션 소개)
                 <Switch checked={state.sessionsEnabled} onChange={(v) => patch({ sessionsEnabled: v })} label="연사 카드 표시" />
               </label>
-              <label className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-background/60 px-3 py-2.5 text-sm">
+              <label className={`flex items-center justify-between gap-3 rounded-xl bg-secondary px-3 py-2.5 text-sm ${FINISH.s2}`}>
                 타임테이블
                 <Switch checked={state.timetableEnabled} onChange={(v) => patch({ timetableEnabled: v })} label="타임테이블 표시" />
               </label>
             </div>
-            <label className={`flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-background/60 px-3 py-2.5 text-sm transition-opacity ${state.sessionsEnabled ? "" : "opacity-50"}`}>
+            <label className={`flex items-center justify-between gap-3 rounded-xl bg-secondary px-3 py-2.5 text-sm ${FINISH.s2} transition-opacity ${state.sessionsEnabled ? "" : "opacity-50"}`}>
               <span>
                 카드 클릭 시 상세 팝업
                 <span className="mt-0.5 block text-[11px] text-muted-foreground">주제·세션 내용·연사 사진·소속·약력을 팝업으로 보여줘요.</span>
@@ -497,7 +498,7 @@ export default function LandingPageTab({
 
         {/* 미리보기 — 공개 페이지 자체를 iframe 으로(저장 완료 시 갱신). 2xl 미만에선 아래로 쌓임 */}
         <div className="2xl:sticky 2xl:top-6">
-          <div className="overflow-hidden rounded-2xl border border-border bg-[#06080d] shadow-sm">
+          <div className={`overflow-hidden rounded-2xl bg-[#06080d] ${FINISH.s2}`}>
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
               <span className="text-xs font-medium text-white/70">미리보기</span>
               <span className="text-[10px] text-white/40">저장되면 자동 갱신</span>
