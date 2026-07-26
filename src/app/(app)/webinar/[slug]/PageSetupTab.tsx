@@ -77,6 +77,14 @@ export default function PageSetupTab({
   watchState: WatchState;
   onWatchStateChange: (next: WatchState) => void;
 }) {
+  /**
+   * 종료 화면의 설문 영역이 켜져 있는가 — 설문 탭의 "켰는데 안 보인다" 안내 판정에 쓴다.
+   * 저장 위치가 config 안쪽이라 여기서 읽어 내려보낸다(설문 탭은 config 를 받지 않는다).
+   */
+  const endedSurveyAreaOn =
+    ((((webinar.config?.livePage as Record<string, unknown> | undefined)?.screens as Record<string, unknown> | undefined)
+      ?.ended as Record<string, unknown> | undefined)?.survey) === true;
+
   const activeMeta = sections.find((item) => item.id === section) ?? sections[0];
   const ActiveIcon = activeMeta.icon;
 
@@ -212,7 +220,19 @@ export default function PageSetupTab({
               )}
               {section === "survey" && (
                 <div className="lg:h-full overflow-auto">
-                  <SurveyTab webinarId={webinar.id} slug={webinar.slug} webinarName={webinar.name} theme={webinar.theme} />
+                  <SurveyTab
+                    webinarId={webinar.id}
+                    slug={webinar.slug}
+                    webinarName={webinar.name}
+                    theme={webinar.theme}
+                    // '종료 화면에 연결' 을 켜도 이 영역이 꺼져 있으면 시청자에게 안 보인다 —
+                    // 설문 탭이 그 사실을 알리고 고칠 자리로 보낼 수 있게 상태와 이동을 넘긴다.
+                    endedSurveyAreaOn={endedSurveyAreaOn}
+                    onGoToEndedScreen={() => {
+                      onSectionChange("watch");
+                      onWatchStateChange("ended");
+                    }}
+                  />
                 </div>
               )}
             </motion.div>

@@ -397,6 +397,8 @@ function SurveyEditor({
   survey,
   onDeleted,
   onMetaChanged,
+  endedSurveyAreaOn,
+  onGoToEndedScreen,
 }: {
   webinarId: string;
   slug: string;
@@ -405,6 +407,8 @@ function SurveyEditor({
   survey: AdminSurvey;
   onDeleted: () => void;
   onMetaChanged: (patch: Partial<AdminSurvey>) => void;
+  endedSurveyAreaOn?: boolean;
+  onGoToEndedScreen?: () => void;
 }) {
   const [title, setTitle] = useState(survey.title);
   const [description, setDescription] = useState(survey.description ?? "");
@@ -454,8 +458,19 @@ function SurveyEditor({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ [key]: value }),
     });
-    if (res.ok) onMetaChanged({ [key]: value });
-    else toast.error("변경에 실패했어요");
+    if (!res.ok) { toast.error("변경에 실패했어요"); return; }
+    onMetaChanged({ [key]: value });
+
+    /**
+     * 여기서 종료 화면 토글(config.livePage.screens.ended.survey)까지 켜고 싶지만 **할 수 없다.**
+     * 서버의 config 병합은 최상위 얕은 병합이라(mergeJson) `config: { livePage: { … } }` 를 보내면
+     * **livePage 전체가 교체**된다 — CTA·자료·공지·대기 화면 설정이 통째로 날아간다.
+     * livePage 를 온전히 보내려면 현재 값을 알아야 하고, 그건 이 탭이 들고 있지 않다(스냅샷을
+     * 새로 읽어 보내는 것도 다른 창의 편집을 되돌릴 위험이 있다).
+     *
+     * 그래서 쓰지 않고 **보이게 한다** — 아래 안내가 종료 화면 영역이 꺼져 있음을 알리고
+     * 그 자리로 보낸다. 결정을 한 자리로 모으는 쪽(3택)은 시청 화면 › 종료 가 담당한다.
+     */
   };
 
   // 마감 예약 — 입력 중엔 로컬 draft, 확정(blur/해제)에만 PATCH (datetime-local 은 필드 편집마다 change 가 발생)
@@ -653,6 +668,20 @@ function SurveyEditor({
               <Switch checked={survey.showOnEnded} onChange={(v) => toggle("showOnEnded", v)} label="종료 화면에 연결" />
               종료 화면에 연결
             </label>
+            {/* 이 스위치만 켜도 시청자에게는 아무것도 안 보일 수 있다 — 종료 화면의 설문 영역이
+                따로 꺼져 있으면 무시된다. 예전엔 그 사실이 어디에도 없어서 "켰는데 안 나온다" 가 됐다.
+                여기서 쓰지 않고 알리는 이유: config 병합이 최상위 얕은 병합이라 이 탭에서
+                livePage 를 건드리면 CTA·자료·공지가 통째로 날아간다. */}
+            {survey.showOnEnded && endedSurveyAreaOn === false && (
+              <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-relaxed text-amber-700 dark:text-amber-400">
+                종료 화면의 설문 영역이 꺼져 있어 시청자에게는 보이지 않아요.
+                {onGoToEndedScreen && (
+                  <button type="button" onClick={onGoToEndedScreen} className="font-semibold underline underline-offset-2">
+                    시청 화면 › 종료에서 켜기
+                  </button>
+                )}
+              </p>
+            )}
             <label className="flex select-none items-center gap-1.5 text-xs text-muted-foreground">
               <CalendarClock className="h-3.5 w-3.5" />마감 예약
               <input
@@ -706,11 +735,20 @@ export default function SurveyTab({
   slug,
   webinarName,
   theme,
+  endedSurveyAreaOn,
+  onGoToEndedScreen,
 }: {
   webinarId: string;
   slug: string;
   webinarName?: string;
   theme?: Record<string, string>;
+  /**
+   * 종료 화면의 설문 영역(config.livePage.screens.ended.survey)이 켜져 있는가.
+   * 꺼져 있으면 '종료 화면에 연결' 을 켜도 시청자에게 아무것도 보이지 않는다 —
+   * 이 탭은 그 사실을 알려 주기만 하고, 켜는 결정은 시청 화면 › 종료 › '설문 연결' 소관이다.
+   */
+  endedSurveyAreaOn?: boolean;
+  onGoToEndedScreen?: () => void;
 }) {
   const [surveys, setSurveys] = useState<AdminSurvey[] | null>(null);
   const [creating, setCreating] = useState(false);
@@ -760,6 +798,8 @@ export default function SurveyTab({
           <ArrowLeft className="h-4 w-4" />설문 목록
         </button>
         <SurveyEditor
+          endedSurveyAreaOn={endedSurveyAreaOn}
+          onGoToEndedScreen={onGoToEndedScreen}
           key={selected.id}
           webinarId={webinarId}
           slug={slug}

@@ -210,8 +210,9 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
   const updateCta = (i: number, patch: Partial<CtaFormCard>) =>
     setCtaCards((prev) => prev.map((c, j) => (j === i ? { ...c, ...patch } : c)));
 
-  // 폼형 버튼의 연결 대상(자체 설문 = 커스텀 폼) 목록 — CTA 편집에서 선택
-  const [surveyOptions, setSurveyOptions] = useState<{ id: string; title: string }[] | null>(null);
+  // 자체 설문 목록 — CTA 폼형 버튼의 연결 대상이자, 종료 화면 '설문 연결' 의 선택지.
+  // showOnEnded 를 함께 받는다: 종료 화면에 지금 무엇이 연결돼 있는지 판정하는 근거다.
+  const [surveyOptions, setSurveyOptions] = useState<{ id: string; title: string; showOnEnded: boolean }[] | null>(null);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -220,11 +221,48 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
         if (cancelled) return;
         if (!res.ok) { setSurveyOptions([]); return; }
         const data = await res.json();
-        setSurveyOptions(((data.surveys ?? []) as { id: string; title: string }[]).map((s) => ({ id: s.id, title: s.title })));
+        setSurveyOptions(((data.surveys ?? []) as { id: string; title: string; showOnEnded?: boolean }[])
+          .map((s) => ({ id: s.id, title: s.title, showOnEnded: s.showOnEnded === true })));
       } catch { if (!cancelled) setSurveyOptions([]); }
     })();
     return () => { cancelled = true; };
   }, [webinar.id]);
+
+  /**
+   * 종료 화면 설문 연결 — **3중 소유를 단일 결정으로**.
+   *
+   * 지금까지 종료 화면에 설문이 뜨려면 세 곳이 맞아야 했다:
+   *   ① config.livePage.screens.ended.survey 토글 (여기)
+   *   ② 자체 설문의 showOnEnded (설문 탭)  ‖  ③ config.surveyUrl (여기)
+   * 그래서 설문 탭에서 '종료 화면에 연결' 을 켜도 ①이 꺼져 있으면 **아무 일도 일어나지 않았다.**
+   * 게다가 자체 설문이 외부 URL 보다 우선하므로, 둘 다 있으면 URL 은 조용히 무시됐다.
+   * (그 토글의 설명은 "아래 설문 URL이 있을 때만 표시" 였는데 사실과 다르다.)
+   *
+   * 여기서는 셋을 하나의 3택으로 묶는다. 저장 위치는 그대로 두고 **결정만 한 자리로** 모은다.
+   */
+  const linkedSurvey = surveyOptions?.find((s) => s.showOnEnded) ?? null;
+  const surveyLink: "none" | "internal" | "external" =
+    !screens.ended.survey ? "none" : linkedSurvey ? "internal" : "external";
+
+  /** 자체 설문 연결/해제 — 설문은 별도 엔드포인트라 즉시 저장된다(설문 탭과 같은 방식). */
+  const setInternalSurvey = async (id: string | null) => {
+    const list = surveyOptions ?? [];
+    // 해제: 현재 연결된 것만 끈다. 연결: 서버가 나머지를 자동으로 끈다(웨비나당 1개).
+    const targets = id ? [{ id, on: true }] : list.filter((s) => s.showOnEnded).map((s) => ({ id: s.id, on: false }));
+    setSurveyOptions(list.map((s) => ({ ...s, showOnEnded: id ? s.id === id : false })));
+    for (const t of targets) {
+      const res = await fetch(`/api/webinars/${webinar.id}/surveys/${t.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showOnEnded: t.on }),
+      });
+      if (!res.ok) {
+        toast.error("설문 연결을 바꾸지 못했어요");
+        setSurveyOptions(list); // 낙관적 업데이트 되돌리기
+        return;
+      }
+    }
+  };
 
   const buildLivePage = () => {
     const ctas = ctaCards
@@ -644,7 +682,6 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
             </div>
             <div className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-2.5">
               <Toggle label="다시보기 신청" checked={screens.ended.replay} onChange={(v) => setEn("replay", v)} desc="신청자는 알림 수신 목록에 담겨요 — 다시보기 링크를 이메일로 보내세요" />
-              <Toggle label="만족도 설문" checked={screens.ended.survey} onChange={(v) => setEn("survey", v)} desc="아래 설문 URL이 있을 때만 표시" />
               <Toggle label="자료 다운로드" checked={screens.ended.resources} onChange={(v) => setEn("resources", v)} desc="아래 자료를 1개 이상 추가해야 표시" />
               <Toggle label="다음 웨비나" checked={screens.ended.nextWebinar} onChange={(v) => setEn("nextWebinar", v)} desc="아래 제목을 입력해야 표시" />
               <Toggle label="공유" checked={screens.ended.share} onChange={(v) => setEn("share", v)} />
@@ -653,11 +690,80 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
 
           <section className="space-y-3">
             <div>
-              <h3 className="text-sm font-semibold">만족도 설문</h3>
-              <p className="mt-1 text-xs text-muted-foreground">&ldquo;설문 참여하기&rdquo; 버튼이 여는 링크예요.</p>
+              <h3 className="text-sm font-semibold">설문 연결</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                종료 화면의 &ldquo;설문 참여하기&rdquo; 버튼이 무엇을 여는지 — 하나만 고르면 돼요.
+              </p>
             </div>
-            <input type="url" placeholder="https://tally.so/..." value={form.surveyUrl}
-              onChange={(e) => setForm((f) => ({ ...f, surveyUrl: e.target.value }))} className={inputCls} />
+            <div className="space-y-3 rounded-2xl bg-secondary/20 p-4">
+              <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="설문 연결">
+                {([
+                  { v: "none", label: "연결 안 함" },
+                  { v: "internal", label: "자체 설문" },
+                  { v: "external", label: "외부 링크" },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    role="radio"
+                    aria-checked={surveyLink === opt.v}
+                    onClick={() => {
+                      if (opt.v === "none") { setEn("survey", false); void setInternalSurvey(null); return; }
+                      setEn("survey", true);
+                      if (opt.v === "external") {
+                        // 자체 설문이 외부 URL 보다 우선하므로, 외부를 고르면 자체 연결을 반드시 끊는다 —
+                        // 안 끊으면 URL 을 입력해도 조용히 무시된다(예전의 그 혼란).
+                        void setInternalSurvey(null);
+                      } else if (!linkedSurvey && surveyOptions?.length) {
+                        void setInternalSurvey(surveyOptions[0].id);
+                      }
+                    }}
+                    className={`rounded-lg px-3 py-2 text-xs font-medium shadow-sm transition-colors ${
+                      surveyLink === opt.v ? "bg-violet-500 text-white" : "bg-background text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              {surveyLink === "internal" && (
+                surveyOptions === null ? (
+                  <p className="text-[11px] text-muted-foreground">설문 목록을 불러오는 중…</p>
+                ) : surveyOptions.length === 0 ? (
+                  <p className="text-[11px] text-amber-600">
+                    연결할 자체 설문이 없어요 — 만들기 → 설문에서 먼저 만들어 주세요.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    <label className="block text-xs text-muted-foreground" htmlFor="ended-survey-pick">연결할 설문</label>
+                    <select
+                      id="ended-survey-pick"
+                      value={linkedSurvey?.id ?? ""}
+                      onChange={(e) => void setInternalSurvey(e.target.value || null)}
+                      className={inputCls}
+                    >
+                      {surveyOptions.map((o) => <option key={o.id} value={o.id}>{o.title || "제목 없는 설문"}</option>)}
+                    </select>
+                    <p className="text-[11px] text-muted-foreground">
+                      웨비나당 하나만 연결돼요 — 다른 설문을 고르면 이전 연결은 자동으로 해제됩니다.
+                      설문이 닫혀 있거나 마감이 지나면 버튼도 표시되지 않아요.
+                    </p>
+                  </div>
+                )
+              )}
+
+              {surveyLink === "external" && (
+                <div className="space-y-1.5">
+                  <label className="block text-xs text-muted-foreground" htmlFor="ended-survey-url">설문 URL</label>
+                  <input id="ended-survey-url" type="url" placeholder="https://tally.so/..." value={form.surveyUrl}
+                    onChange={(e) => setForm((f) => ({ ...f, surveyUrl: e.target.value }))} className={inputCls} />
+                  {!form.surveyUrl.trim() && (
+                    <p className="text-[11px] text-amber-600">URL 을 입력해야 버튼이 표시돼요.</p>
+                  )}
+                </div>
+              )}
+            </div>
           </section>
 
           {screens.ended.resources && (
