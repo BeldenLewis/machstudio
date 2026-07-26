@@ -14,6 +14,41 @@
 import { useState } from "react";
 import { notFound } from "next/navigation";
 import { EditableList, ROW_KEY, withRowKeys, stripRowKeys, type WithRowKey } from "@/components/ui/editable-list";
+import { OptionRows } from "@/components/ui/option-rows";
+
+/**
+ * 선택지 목록 케이스 — rowChrome="bare" + insertAfter + removeNow + autoFocusNewRow +
+ * renderAdd + 마지막 행 비우기까지 새 API 를 한꺼번에 태운다.
+ * 저장 형태가 string[] 그대로인지(키가 payload 로 새지 않는지)가 핵심 확인 지점이다.
+ */
+function OptionRowsCase() {
+  const [options, setOptions] = useState<string[]>(["초급", "중급", "고급"]);
+  const [maxHit, setMaxHit] = useState<number | null>(null);
+
+  return (
+    <section className="space-y-2 rounded-xl bg-secondary/40 p-3">
+      <p className="text-[11px] font-semibold text-muted-foreground">
+        선택지 (bare · Enter 삽입 · 빈값 Backspace 즉시삭제 · 최대 5)
+      </p>
+      <OptionRows
+        listId="harness-opt"
+        value={options}
+        onChange={setOptions}
+        ownerLabel="필드"
+        ownerTitle="난이도"
+        markerShape="circle"
+        maxOptions={5}
+        onMaxReached={(m) => setMaxHit(m)}
+      />
+      <pre data-testid="opt-state" className="overflow-x-auto text-[11px]">
+        {JSON.stringify(options)}
+      </pre>
+      <pre data-testid="opt-max" className="text-[11px]">
+        {maxHit === null ? "상한알림 없음" : `상한알림 ${maxHit}`}
+      </pre>
+    </section>
+  );
+}
 
 type Step = { title: string; description: string };
 
@@ -70,6 +105,8 @@ export default function RowHarnessPage() {
           </>
         )}
       />
+
+      <OptionRowsCase />
 
       {/* 자동화가 읽는 상태 거울 — 화면의 입력값과 배열이 어긋나지 않는지 대조한다 */}
       <section className="space-y-1 rounded-xl bg-secondary/30 p-3">
