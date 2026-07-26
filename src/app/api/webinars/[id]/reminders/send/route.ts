@@ -39,7 +39,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "제목과 내용을 입력해주세요" }, { status: 400 });
   }
 
-  const reminders = await prisma.webinarReminder.findMany({ where: { webinarId: id }, select: { email: true } });
+  // 구독 행에는 두 종류가 섞여 있다: 등록자가 켠 것(registrationId 있음)과 등록 없이 신청한 것(null).
+  // 등록자가 삭제됐는데 구독이 남아 있으면 **파기를 요청한 사람에게 메일이 간다** → 끊긴 참조는 제외한다.
+  // (등록자 삭제 경로가 이제 구독을 함께 지우지만, 그 전에 쌓인 행도 여기서 걸러진다)
+  const allReminders = await prisma.webinarReminder.findMany({
+    where: { webinarId: id },
+    select: { email: true, registrationId: true },
+  });
+  const linkedIds = allReminders.map((r) => r.registrationId).filter((v): v is string => Boolean(v));
+  const aliveIds = new Set(
+    linkedIds.length
+      ? (await prisma.webinarRegistration.findMany({
+          where: { id: { in: linkedIds }, webinarId: id },
+          select: { id: true },
+        })).map((r) => r.id)
+      : [],
+  );
+  const reminders = allReminders.filter((r) => !r.registrationId || aliveIds.has(r.registrationId));
+  const orphaned = allReminders.length - reminders.length;
   const html = reminderEmailHtml({ title: subject, body: message, url, buttonLabel });
 
   let sent = 0;
@@ -65,8 +82,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     workspaceId: webinar.workspaceId,
     userId: user.id,
     action: "webinar.reminder_sent",
-    meta: { webinarId: id, total: reminders.length, sent, skipped, failed },
+    meta: { webinarId: id, total: reminders.length, sent, skipped, failed, orphaned },
   });
 
-  return NextResponse.json({ total: reminders.length, sent, skipped, failed, emailConfigured: configured });
+  // orphaned — 삭제된 등록자의 구독이라 제외한 건수. 운영자가 숫자 차이를 보고 의아해하지 않게 함께 돌려준다.
+  return NextResponse.json({ total: reminders.length, sent, skipped, failed, orphaned, emailConfigured: configured });
 }

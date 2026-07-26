@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { parseGrantableRole } from "@/lib/workspace-scope";
 import { logActivity } from "@/lib/activity";
 
 async function requireMembership(userId: string, workspaceId: string) {
@@ -40,8 +41,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "초대 권한이 없어요" }, { status: 403 });
   }
 
-  const { email, role = "MEMBER" } = await request.json();
+  const { email, role: rawRole } = await request.json();
   if (!email) return NextResponse.json({ error: "이메일을 입력해주세요" }, { status: 400 });
+
+  // 여기엔 role 검증이 **아예 없었다** — body 의 값이 그대로 invitation.role 로 들어가고,
+  // 수락 경로가 `role: invitation.role` 로 create 하므로 ADMIN 이 OWNER 를 만들 수 있었다.
+  // 아래 PATCH 는 `["ADMIN","MEMBER"]` 로 막는데 이 경로만 빠져 있었다.
+  const role = parseGrantableRole(rawRole, membership.role);
+  if (!role) {
+    return NextResponse.json({ error: "그 역할로 초대할 권한이 없어요" }, { status: 403 });
+  }
 
   const invitedUser = await prisma.user.findUnique({ where: { email } });
   if (!invitedUser) {

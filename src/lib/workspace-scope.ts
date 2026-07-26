@@ -11,6 +11,37 @@
 // (게다가 logActivity 가 피해자 워크스페이스에 기록돼 로그까지 오염됐다).
 import { prisma } from "@/lib/prisma";
 
+export type WorkspaceRole = "OWNER" | "ADMIN" | "MEMBER";
+
+/**
+ * 초대·역할 부여에서 **누가 어떤 역할을 줄 수 있는가**. 이 불변식이 한 곳에만 있어야 한다.
+ *
+ * 원래는 역할 변경(members PATCH)만 `['ADMIN','MEMBER']` 화이트리스트로 OWNER 부여를 막았고,
+ * 초대 경로 두 곳이 그걸 우회했다:
+ *   · invite-email — 화이트리스트에 OWNER 가 들어 있고 게이트는 `role !== "MEMBER"` 뿐이라
+ *     ADMIN 이 OWNER 로 초대할 수 있었다
+ *   · members POST — `const { email, role = "MEMBER" }` 로 검증 없이 upsert 의 role 로 직행
+ * 수락 경로는 `role: invitation.role` 을 그대로 create 하므로, 이렇게 만들어진 OWNER 는
+ * members PATCH/DELETE 의 OWNER 가드 때문에 강등·제거도 불가능했다.
+ *
+ * 규칙: OWNER 는 누구든 부여 가능, ADMIN 은 자기보다 낮거나 같은 것만(ADMIN·MEMBER).
+ */
+export function canGrantRole(actorRole: string, targetRole: WorkspaceRole): boolean {
+  if (actorRole === "OWNER") return true;
+  if (actorRole === "ADMIN") return targetRole === "ADMIN" || targetRole === "MEMBER";
+  return false; // MEMBER 는 초대 자체가 불가
+}
+
+/**
+ * 요청이 보낸 role 을 검증한다. 부여 권한이 없거나 알 수 없는 값이면 null →
+ * 호출자가 403 으로 끝낸다(조용히 MEMBER 로 낮추지 않는다 — 의도와 다른 결과를 만든다).
+ */
+export function parseGrantableRole(raw: unknown, actorRole: string): WorkspaceRole | null {
+  const role = raw === undefined || raw === null || raw === "" ? "MEMBER" : raw;
+  if (role !== "OWNER" && role !== "ADMIN" && role !== "MEMBER") return null;
+  return canGrantRole(actorRole, role) ? role : null;
+}
+
 /** 이 사용자가 해당 워크스페이스의 멤버인가. */
 export async function isWorkspaceMember(userId: string, workspaceId: string): Promise<boolean> {
   const m = await prisma.workspaceMember.findUnique({

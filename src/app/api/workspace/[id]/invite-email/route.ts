@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { parseGrantableRole } from "@/lib/workspace-scope";
 import { randomBytes } from "node:crypto";
 
 // 미가입자 이메일로 초대 — 가입 시 자동으로 워크스페이스 멤버십 부여.
@@ -16,13 +17,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "유효한 이메일 필요" }, { status: 400 });
   }
-  const validRole = role === "OWNER" || role === "ADMIN" || role === "MEMBER" ? role : "MEMBER";
-
   const membership = await prisma.workspaceMember.findUnique({
     where: { userId_workspaceId: { userId: user.id, workspaceId } },
   });
   if (!membership || membership.role === "MEMBER") {
     return NextResponse.json({ error: "ADMIN 이상 필요" }, { status: 403 });
+  }
+
+  // 역할 부여 권한을 확인한다 — 예전엔 화이트리스트에 OWNER 가 있고 게이트가 'MEMBER 아님'
+  // 뿐이라 ADMIN 이 OWNER 로 초대할 수 있었다(역할 변경 PATCH 는 OWNER 부여를 금지하는데
+  // 초대 경로가 그 불변식을 우회했다). 멤버십 확인 뒤에 판정해야 actorRole 을 알 수 있다.
+  const validRole = parseGrantableRole(role, membership.role);
+  if (!validRole) {
+    return NextResponse.json({ error: "그 역할로 초대할 권한이 없어요" }, { status: 403 });
   }
 
   const lowerEmail = email.trim().toLowerCase();

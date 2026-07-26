@@ -20,6 +20,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     return NextResponse.json({ messages: [], disabled: true }, { headers: { ...CORS, "Cache-Control": "no-store" } });
   }
 
+  // 등록자 게이트 — live-state 와 같은 규칙. 채팅은 등록자 전용 콘텐츠인데 이 GET 만
+  // 게이트가 없어서(chatEnabled 만 확인) live-state 를 막아 둔 의미가 이 경로로 무효화됐다.
+  const registrationId = new URL(request.url).searchParams.get("registrationId");
+  const viewer = registrationId
+    ? await prisma.webinarRegistration.findFirst({
+        where: { id: registrationId, webinarId: webinar.id },
+        select: { id: true },
+      })
+    : null;
+  if (!viewer) {
+    return NextResponse.json({ messages: [] }, { headers: { ...CORS, "Cache-Control": "no-store" } });
+  }
+
   const afterParamRaw = new URL(request.url).searchParams.get("after");
   const afterMs = afterParamRaw ? Date.parse(afterParamRaw) : NaN;
   const after = Number.isNaN(afterMs) ? null : new Date(afterMs);

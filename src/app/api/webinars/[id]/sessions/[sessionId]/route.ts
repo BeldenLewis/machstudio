@@ -92,13 +92,23 @@ export async function DELETE(
   const session = await authorize(id, sessionId, user.id);
   if (!session) return NextResponse.json({ error: "접근 권한 없음" }, { status: 403 });
 
-  await prisma.webinarSession.delete({ where: { id: session.id } });
+  // WebinarQA.sessionNumber 는 이 세션의 number 를 가리키는 참조 키다(reorder 라우트 주석 참고).
+  // 세션만 지우면 그 질문들이 고아 참조로 남고, 나중에 순서를 한 번 바꾸면 remap 을 타고
+  // **다른 세션의 질문**으로 바뀐다. 삭제와 같은 트랜잭션에서 참조를 끊는다.
+  const detached = await prisma.$transaction(async (tx) => {
+    const result = await tx.webinarQA.updateMany({
+      where: { webinarId: id, sessionNumber: session.number },
+      data: { sessionNumber: null },
+    });
+    await tx.webinarSession.delete({ where: { id: session.id } });
+    return result.count;
+  });
 
   await logActivity({
     workspaceId: session.webinar.workspaceId,
     userId: user.id,
     action: "webinar.session_deleted",
-    meta: { webinarId: id, sessionId, title: session.title },
+    meta: { webinarId: id, sessionId, title: session.title, detachedQuestions: detached },
   });
   return NextResponse.json({ ok: true });
 }

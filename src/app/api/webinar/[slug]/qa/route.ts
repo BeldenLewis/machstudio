@@ -19,8 +19,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     return NextResponse.json({ questions: [], qaMode }, { headers: { "Access-Control-Allow-Origin": "*" } });
   }
 
-  // 공개 GET — 라이브 Q&A 보드: 미채택(dismissed) 제외한 질문을 추천순으로.
-  // 이름은 서버에서 가운데 마스킹해 원본 PII 는 내보내지 않는다.
+  // 등록자 게이트 — live-state 와 같은 규칙. Q&A 보드는 등록자 전용 콘텐츠인데
+  // 이 GET 만 게이트가 없어서, live-state 를 막아 둔 의미가 이 경로로 무효화됐다.
+  const registrationId = new URL(request.url).searchParams.get("registrationId");
+  const viewer = registrationId
+    ? await prisma.webinarRegistration.findFirst({
+        where: { id: registrationId, webinarId: webinar.id },
+        select: { id: true },
+      })
+    : null;
+  if (!viewer) {
+    return NextResponse.json({ questions: [], qaMode }, { headers: { "Access-Control-Allow-Origin": "*" } });
+  }
+
+  // 미채택(dismissed) 제외한 질문을 추천순으로. 이름은 서버에서 가운데 마스킹한다.
   const rows = await prisma.webinarQA.findMany({
     where: { webinarId: webinar.id, status: { not: "dismissed" } },
     orderBy: [{ voteCount: "desc" }, { createdAt: "asc" }],

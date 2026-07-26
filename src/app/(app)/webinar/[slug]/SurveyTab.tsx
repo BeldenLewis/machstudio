@@ -11,7 +11,7 @@ import { useAutosave } from "@/components/ui/use-autosave";
 import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
 import { Switch } from "@/components/ui/switch";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { isSurveyAcceptingResponses, normalizeSurveyQuestions, type SurveyQuestion, type SurveyQuestionType } from "@/lib/webinar-survey";
+import { isSurveyAcceptingResponses, normalizeSurveyQuestions, SURVEY_MAX_QUESTIONS, SURVEY_TYPE_LABELS, type SurveyQuestion, type SurveyQuestionType } from "@/lib/webinar-survey";
 import SurveyForm, { SURVEY_FORM_CSS } from "@/app/webinar/[slug]/SurveyForm";
 import { buildStkCss } from "@/app/webinar/[slug]/LiveContentStk";
 
@@ -412,6 +412,12 @@ function SurveyEditor({
   const [doneTitle, setDoneTitle] = useState(survey.doneTitle ?? "");
   const [doneDescription, setDoneDescription] = useState(survey.doneDescription ?? "");
   const [copied, setCopied] = useState(false);
+  // 보관 문항(retired)은 편집 대상이 아니다 — 답변이 있어 정의만 남겨둔 것이라
+  // 편집 목록·드래그에서 빼고 아래 별도 섹션에 읽기 전용으로 보여준다.
+  const activeQuestions = useMemo(() => questions.filter((q) => !q.retired), [questions]);
+  const retiredQuestions = useMemo(() => questions.filter((q) => q.retired), [questions]);
+  // 순서 변경은 활성 문항에만 적용하고 보관 문항은 항상 뒤에 유지한다.
+  const setActiveOrder = (next: SurveyQuestion[]) => setQuestions([...next, ...retiredQuestions]);
   const confirm = useConfirm();
   const addPop = usePopover();
   const previewBodyRef = useRef<HTMLDivElement>(null);
@@ -489,6 +495,11 @@ function SurveyEditor({
 
   const addQuestion = (t: SurveyQuestionType) => {
     addPop.setOpen(false);
+    // 상한을 넘겨 저장하면 서버가 400 으로 막는다 → 누르기 전에 알려준다(예전엔 조용히 잘렸다).
+    if (activeQuestions.length >= SURVEY_MAX_QUESTIONS) {
+      toast.error(`문항은 최대 ${SURVEY_MAX_QUESTIONS}개까지예요.`);
+      return;
+    }
     const q: SurveyQuestion = { id: crypto.randomUUID(), type: t, title: "", required: false, options: t === "single" || t === "multiple" ? ["", ""] : [] };
     setQuestions((prev) => [...prev, q]);
   };
@@ -549,8 +560,8 @@ function SurveyEditor({
             </button>
           </div>
 
-          <Reorder.Group axis="y" values={questions} onReorder={setQuestions} className="space-y-2">
-            {questions.map((q, i) => (
+          <Reorder.Group axis="y" values={activeQuestions} onReorder={setActiveOrder} className="space-y-2">
+            {activeQuestions.map((q, i) => (
               <QuestionRow
                 key={q.id}
                 q={q}
@@ -575,6 +586,30 @@ function SurveyEditor({
             </button>
             {addPop.open && <TypeMenu onPick={addQuestion} />}
           </div>
+
+          {/* 보관된 문항 — 지웠지만 이미 받은 답변이 있어 정의를 남겨둔 것.
+              응답 화면에는 안 나오고, 분석·개별응답·CSV 에서 지난 답변을 계속 볼 수 있다.
+              편집 값이 아니라 읽는 값이므로 요약만 보여준다(원칙 1: 읽는 영역). */}
+          {retiredQuestions.length > 0 && (
+            <div className="space-y-1.5 rounded-xl border border-border bg-secondary/20 p-3">
+              <p className="text-[11px] font-semibold text-muted-foreground">
+                보관된 문항 {retiredQuestions.length}개
+              </p>
+              <p className="text-[11px] leading-relaxed text-muted-foreground/80">
+                지운 문항이지만 받은 답변이 있어 분석·CSV 에서 볼 수 있도록 남겨뒀어요. 응답 화면에는 나오지 않아요.
+              </p>
+              <ul className="space-y-1 pt-1">
+                {retiredQuestions.map((q) => (
+                  <li key={q.id} className="flex items-baseline gap-2 text-xs text-muted-foreground">
+                    <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                      {SURVEY_TYPE_LABELS[q.type]}
+                    </span>
+                    <span className="break-words">{q.title || "(제목 없음)"}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* 제출 완료 화면 — 응답 제출 후 보이는 문구(비우면 기본 문구). 응답 링크·라이브 푸시·CTA 모달 공통 적용. */}
           <div className="space-y-2 rounded-xl border border-border bg-secondary/20 p-3">
