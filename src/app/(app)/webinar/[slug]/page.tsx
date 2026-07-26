@@ -28,13 +28,23 @@ import { InlineError } from "@/components/ui/inline-error";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
-type SettingsSection = "general" | "landing" | "registration" | "sessions" | "waiting" | "livepage" | "ended" | "survey";
+type SettingsSection = "source" | "landing" | "registration" | "waiting" | "livepage" | "ended" | "survey";
 // 새 IA: 만들기(create=설정) / 배포(deploy) / 운영(operate=콘솔+등록자) / 분석(analytics)
 type Tab = "create" | "deploy" | "operate" | "analytics";
 type NavigationTarget = Tab | `create-${SettingsSection}` | "operate-registrants";
 
 const TAB_IDS: Tab[] = ["create", "deploy", "operate", "analytics"];
-const CREATE_SECTIONS: SettingsSection[] = ["general", "landing", "registration", "sessions", "waiting", "livepage", "ended", "survey"];
+const CREATE_SECTIONS: SettingsSection[] = ["source", "landing", "registration", "waiting", "livepage", "ended", "survey"];
+
+/**
+ * 옛 섹션 키 → 새 키. 북마크·공유 링크·외부 문서의 ?sec=general·?sec=sessions 가 죽지 않게 한다.
+ * 이 둘은 IA 1단계에서 '원본 정보'로 합쳐졌다. 매핑이 없으면 알 수 없는 키로 떨어져
+ * 기본 섹션으로 조용히 튕기는데, 사용자는 "세션이 사라졌다"고 읽는다.
+ */
+const SECTION_ALIASES: Record<string, SettingsSection> = {
+  general: "source",
+  sessions: "source",
+};
 const OPERATE_SECTIONS: OperateSection[] = ["console", "registrants"];
 
 interface WebinarSession {
@@ -121,7 +131,7 @@ function WebinarDetail({ id }: { id: string }) {
   const activeTab: Tab = TAB_IDS.includes(tabParam as Tab) ? (tabParam as Tab) : (computedDefaultTab ?? "operate");
   const settingsSection: SettingsSection = CREATE_SECTIONS.includes(secParam as SettingsSection)
     ? (secParam as SettingsSection)
-    : "general";
+    : (secParam && SECTION_ALIASES[secParam]) || "source";
   const operateSection: OperateSection = OPERATE_SECTIONS.includes(secParam as OperateSection)
     ? (secParam as OperateSection)
     : "console";

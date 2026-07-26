@@ -86,15 +86,28 @@ function SessionRow({
 }: { id: string; draggable: boolean; highlight: boolean; children: ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: !draggable });
   return (
-    <motion.div
+    /**
+     * 요소가 두 겹인 이유: transform 을 framer-motion 과 dnd-kit 이 동시에 쓸 수 없다.
+     *
+     * 한 겹으로 두고 motion.div 에 style={{transform}} 을 넘기면 **framer 가 이긴다** —
+     * y 를 애니메이션하거나 layout 을 켜는 순간 framer 가 transform 문자열을 직접 만들어 쓰고
+     * 넘긴 값은 버려진다. 결과는 **끌어도 행이 따라 움직이지 않는 상태**였다(놓으면 순서는
+     * 맞게 바뀌므로 눈에 잘 안 띈다). editable-list.tsx 에서 하니스로 실측해 확인한 조합과 같다.
+     *
+     * 그래서 바깥은 순수 div — dnd-kit 의 ref·transform·transition 전용,
+     * 안쪽 motion.div 는 등장 페이드·hover 전용. layout 은 뺐다(framer 를 transform 저자로
+     * 만든 원인이고, 순서 이동은 dnd-kit 의 transition 이 이미 처리한다).
+     */
+    <div
       ref={setNodeRef}
-      layout
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.55 : undefined }}
+      className={isDragging ? "relative z-10" : undefined}
+    >
+    <motion.div
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, x: -8 }}
       whileHover={highlight ? { borderColor: "rgba(139, 92, 246, 0.18)" } : undefined}
       transition={spring}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.55 : undefined }}
       className={`relative rounded-2xl border bg-background p-4 ${isDragging ? "border-violet-400/60 shadow-lg" : "border-border"}`}
     >
       {draggable && (
@@ -111,6 +124,7 @@ function SessionRow({
       )}
       {children}
     </motion.div>
+    </div>
   );
 }
 
@@ -565,7 +579,9 @@ export default function SessionsTab({
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={sortedSessions.map((s) => s.id)} strategy={verticalListSortingStrategy}>
         <div className="space-y-2">
-          <AnimatePresence initial={false}>
+          {/* AnimatePresence 를 쓰지 않는다 — 직접 자식이 커스텀 컴포넌트(SessionRow)면
+              exit 완료 신호를 받지 못해 삭제된 행이 DOM 에 영구히 남는다.
+              삭제는 즉시 사라지고, 되돌리기 토스트가 실수를 받쳐 준다. */}
           {sortedSessions.map((session) => (
             <SessionRow
               key={session.id}
@@ -674,7 +690,6 @@ export default function SessionsTab({
               )}
             </SessionRow>
           ))}
-          </AnimatePresence>
         </div>
         </SortableContext>
         </DndContext>

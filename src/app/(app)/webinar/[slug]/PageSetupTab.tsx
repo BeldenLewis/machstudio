@@ -1,11 +1,10 @@
 "use client";
 
-import { type ElementType } from "react";
+import { Fragment, type ElementType } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FileText, ListChecks, MonitorPlay, SlidersHorizontal, Hourglass, Flag, ClipboardCheck, Megaphone } from "lucide-react";
-import BasicInfoTab from "./BasicInfoTab";
+import { FileText, MonitorPlay, SlidersHorizontal, Hourglass, Flag, ClipboardCheck, Megaphone } from "lucide-react";
+import SourceInfoTab from "./SourceInfoTab";
 import RegistrationFormTab from "./RegistrationFormTab";
-import SessionsTab from "./SessionsTab";
 import LivePageTab from "./LivePageTab";
 import SurveyTab from "./SurveyTab";
 import LandingPageTab from "./LandingPageTab";
@@ -38,18 +37,25 @@ interface Webinar {
   sessions: WebinarSession[];
 }
 
-type PageSetupSection = "general" | "landing" | "registration" | "sessions" | "waiting" | "livepage" | "ended" | "survey";
+type PageSetupSection = "source" | "landing" | "registration" | "waiting" | "livepage" | "ended" | "survey";
 
-const sections: { id: PageSetupSection; label: string; desc: string; icon: ElementType }[] = [
-  { id: "general", label: "기본 정보", desc: "웨비나 이름·설명·일정과 삭제를 관리합니다.", icon: SlidersHorizontal },
-  // 랜딩은 홍보 진입점이라 등록보다 앞 — 만들기 순서 = 시청자 여정 순서
-  { id: "landing", label: "랜딩 페이지", desc: "외부 사이트에 임베드하는 상세페이지 — 히어로·소개·프로그램·FAQ를 구성합니다.", icon: Megaphone },
-  { id: "registration", label: "등록", desc: "사전등록에서 수집할 항목과 동의 문구를 설정합니다.", icon: FileText },
-  { id: "sessions", label: "세션", desc: "라이브 페이지에 표시될 아젠다와 시간표를 정리합니다.", icon: ListChecks },
-  { id: "waiting", label: "대기 화면", desc: "라이브 전 등록자가 보는 화면 — 카운트다운·아젠다·알림을 구성합니다.", icon: Hourglass },
-  { id: "livepage", label: "라이브 페이지", desc: "시청 화면의 영상·콘텐츠·CTA·참여와 입장 화면·디자인을 꾸밉니다.", icon: MonitorPlay },
-  { id: "ended", label: "종료 화면", desc: "방송 후 화면 — 다시보기·설문·자료·다음 웨비나를 구성합니다.", icon: Flag },
-  { id: "survey", label: "설문", desc: "자체 설문을 만들어 종료 화면·라이브 푸시·링크로 응답을 모읍니다.", icon: ClipboardCheck },
+/**
+ * 승인된 IA 재설계 — 축을 하나로 바꿨다: **"사실인가, 표현인가"**.
+ * "이 값이 어느 화면에 보이나"는 여러 화면에 나가는 값(테마·세션)에 답이 없어서
+ * 그 값들이 마지막에 손댄 섹션에 얹혀 있었다.
+ *
+ * 1단계에서 합친 것: 기본 정보 + 세션 + (라이브 페이지 안의) 디자인 → '원본 정보'.
+ * 2단계에서 대기·라이브·종료가 '시청 화면' 4상태로 합쳐지면 산출물이 4개가 된다.
+ */
+const sections: { id: PageSetupSection; label: string; desc: string; icon: ElementType; group: "사실" | "산출물" }[] = [
+  { id: "source", group: "사실", label: "원본 정보", desc: "이름·일정, 진행 순서, 브랜드 — 네 산출물이 모두 여기서 읽어갑니다.", icon: SlidersHorizontal },
+  // 랜딩은 홍보 진입점이라 등록보다 앞 — 산출물 순서 = 시청자 여정 순서
+  { id: "landing", group: "산출물", label: "랜딩 페이지", desc: "외부 사이트에 임베드하는 상세페이지 — 히어로·소개·프로그램·FAQ를 구성합니다.", icon: Megaphone },
+  { id: "registration", group: "산출물", label: "등록", desc: "사전등록에서 수집할 항목과 동의 문구를 설정합니다.", icon: FileText },
+  { id: "waiting", group: "산출물", label: "대기 화면", desc: "라이브 전 등록자가 보는 화면 — 카운트다운·아젠다·알림을 구성합니다.", icon: Hourglass },
+  { id: "livepage", group: "산출물", label: "라이브 페이지", desc: "시청 화면의 영상·콘텐츠·CTA·참여와 입장 화면을 꾸밉니다.", icon: MonitorPlay },
+  { id: "ended", group: "산출물", label: "종료 화면", desc: "방송 후 화면 — 다시보기·설문·자료·다음 웨비나를 구성합니다.", icon: Flag },
+  { id: "survey", group: "산출물", label: "설문", desc: "자체 설문을 만들어 종료 화면·라이브 푸시·링크로 응답을 모읍니다.", icon: ClipboardCheck },
 ];
 
 // 대기/라이브/종료는 하나의 LivePageTab 인스턴스를 공유(전환 시 언마운트 없이 section 만 교체) —
@@ -88,13 +94,23 @@ export default function PageSetupTab({
           </p>
         </div>
         <nav className="flex gap-1 overflow-x-auto lg:flex-col lg:gap-0 lg:space-y-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {sections.map((item) => {
+          {sections.map((item, i) => {
             const Icon = item.icon;
             const active = item.id === section;
+            // 묶음이 바뀌는 첫 항목 앞에만 라벨을 넣는다 — 데스크톱에서만(모바일은 가로 스크롤 한 줄).
+            const groupStart = i === 0 || sections[i - 1].group !== item.group;
 
             return (
+              // Fragment 라 DOM 노드를 만들지 않는다 — 라벨과 버튼이 nav 의 **직접 자식**이 되어야
+              // lg:space-y-1 이 먹는다. 래퍼 div 에 display:contents 를 주면 박스가 없어서
+              // space-y 의 margin-top 이 적용되지 않고 항목 간격이 사라진다.
+              <Fragment key={item.id}>
+              {groupStart && (
+                <p className={`hidden px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.13em] text-muted-foreground/70 lg:block ${i === 0 ? "pt-0" : "pt-3"}`}>
+                  {item.group}
+                </p>
+              )}
               <motion.button
-                key={item.id}
                 type="button"
                 onClick={() => changeSection(item.id)}
                 whileTap={{ scale: 0.98 }}
@@ -113,6 +129,7 @@ export default function PageSetupTab({
                 <Icon className="relative z-10 h-4 w-4 shrink-0" />
                 <span className="relative z-10">{item.label}</span>
               </motion.button>
+              </Fragment>
             );
           })}
         </nav>
@@ -147,9 +164,9 @@ export default function PageSetupTab({
               transition={{ duration: 0.18 }}
               className="h-full"
             >
-              {section === "general" && (
+              {section === "source" && (
                 <div className="lg:h-full overflow-auto">
-                  <BasicInfoTab webinar={webinar} onSilentUpdate={onSilentUpdate} />
+                  <SourceInfoTab webinar={webinar} onUpdate={onUpdate} onSilentUpdate={onSilentUpdate} />
                 </div>
               )}
               {section === "landing" && (
@@ -163,11 +180,6 @@ export default function PageSetupTab({
               {section === "registration" && (
                 <div className="lg:h-full overflow-auto">
                   <RegistrationFormTab webinar={{ id: webinar.id, slug: webinar.slug, config: webinar.config, theme: webinar.theme }} onSilentUpdate={onSilentUpdate} />
-                </div>
-              )}
-              {section === "sessions" && (
-                <div className="lg:h-full overflow-auto">
-                  <SessionsTab webinarId={webinar.id} sessions={webinar.sessions} onUpdate={onUpdate} />
                 </div>
               )}
               {LIVE_GROUP.includes(section) && (

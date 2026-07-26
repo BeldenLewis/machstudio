@@ -136,16 +136,6 @@ function btnToConfig(b: CtaBtnForm, style: "white" | "ghost"): Record<string, un
   return o;
 }
 
-interface Theme {
-  accentColor: string; bgColor: string; surfaceColor: string; textColor: string; font: string; borderRadius?: string;
-}
-const FONTS = ["Pretendard", "Noto Sans KR", "Inter", "Roboto", "Spoqa Han Sans Neo"];
-const RADIUS_OPTIONS = [
-  { value: "0px", label: "각진" },
-  { value: "8px", label: "약간" },
-  { value: "16px", label: "기본" },
-  { value: "24px", label: "둥근" },
-];
 
 interface Webinar {
   id: string;
@@ -185,11 +175,6 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
     notifySwitchLabel: (notify.switchLabel as string) ?? "",
   });
   const [ctaCards, setCtaCards] = useState<CtaFormCard[]>(initialCtas);
-  const [theme, setTheme] = useState<Theme>({
-    accentColor: "#6d28d9", bgColor: "#0f0f0f", surfaceColor: "#1a1a1a", textColor: "#ffffff", font: "Pretendard", borderRadius: "16px",
-    ...(webinar.theme as Partial<Theme>),
-  });
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const youtubeVideoId = getYouTubeVideoId(form.youtubeId);
 
   // 라이브 페이지 화면(대기·입장·종료) 섹션 on/off + 자료·다음웨비나 데이터
@@ -295,7 +280,6 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
             surveyUrl: form.surveyUrl.trim() || null,
             livePage: buildLivePage(),
           },
-          theme,
           // 바뀐 키가 없으면 components 를 아예 보내지 않는다(다른 키·다른 창의 값 보존)
           ...(Object.keys(componentsPatch).length ? { components: componentsPatch } : {}),
         }),
@@ -305,7 +289,7 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
       return true;
     } catch { return false; }
   };
-  const { state: saveState, dirty, retry } = useAutosave({ form, ctaCards, theme, screens, resources, nextWeb }, save);
+  const { state: saveState, dirty, retry } = useAutosave({ form, ctaCards, screens, resources, nextWeb }, save);
 
   // 다른 창·다른 기기·운영 콘솔에서 같은 웨비나가 바뀌면 이 폼도 따라간다(편집 중이면 대기).
   // 특히 채팅·Q&A 는 콘솔과 같은 키를 공유하므로, 여기 표시가 낡으면 운영자가 사실과 다른 걸 본다.
@@ -329,12 +313,6 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
   );
   useExternalSync(incomingForm, setForm, dirty);
 
-  const colorFields: { key: keyof Theme; label: string }[] = [
-    { key: "accentColor", label: "키 컬러" },
-    { key: "bgColor", label: "배경 컬러" },
-    { key: "surfaceColor", label: "서피스 컬러" },
-    { key: "textColor", label: "텍스트 컬러" },
-  ];
 
   const previewState = section === "live" ? "live" : section;
 
@@ -559,71 +537,6 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
             </div>
           </section>
 
-          {/* 디자인 */}
-          <section className="space-y-4">
-            <div>
-              <h3 className="text-sm font-semibold">디자인</h3>
-              <p className="mt-1 text-xs text-muted-foreground">색상·폰트·톤 — 대기·입장·종료 화면과 등록 페이지에 공통 적용돼요.</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {colorFields.map(({ key, label }) => (
-                <div key={key} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-background">
-                  <div className="relative">
-                    <div className="w-9 h-9 rounded-lg border border-border/50 cursor-pointer" style={{ backgroundColor: theme[key] as string }} />
-                    <input type="color" value={theme[key] as string} onChange={(e) => setTheme((t) => ({ ...t, [key]: e.target.value }))}
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium">{label}</p>
-                    <p className="text-xs text-muted-foreground font-mono">{theme[key] as string}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">폰트</p>
-              <div className="flex flex-wrap gap-2">
-                {FONTS.map((font) => (
-                  <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }} transition={spring} key={font}
-                    onClick={() => setTheme((t) => ({ ...t, font }))}
-                    className={`px-3 py-2 rounded-xl border text-sm transition-colors ${theme.font === font ? "border-violet-500 bg-violet-500/10 text-violet-500" : "border-border hover:bg-secondary text-muted-foreground"}`}
-                    style={{ fontFamily: font }}>
-                    {font}
-                  </motion.button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <button onClick={() => setShowAdvanced(!showAdvanced)} className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5">
-                <motion.span animate={{ rotate: showAdvanced ? 90 : 0 }} transition={{ duration: 0.15 }} className="inline-block">▶</motion.span>
-                테두리 둥글기 {showAdvanced ? "접기" : "펼치기"}
-              </button>
-              {showAdvanced && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mt-3">
-                  <div className="flex gap-2">
-                    {RADIUS_OPTIONS.map(({ value, label }) => (
-                      <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }} transition={spring} key={value}
-                        onClick={() => setTheme((t) => ({ ...t, borderRadius: value }))}
-                        className={`px-3 py-2 rounded-xl border text-sm transition-colors ${theme.borderRadius === value ? "border-violet-500 bg-violet-500/10 text-violet-500" : "border-border hover:bg-secondary text-muted-foreground"}`}>
-                        {label}
-                      </motion.button>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </div>
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">미리보기</p>
-              <div className="rounded-2xl p-6 space-y-3" style={{ backgroundColor: theme.bgColor, fontFamily: theme.font, borderRadius: theme.borderRadius }}>
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs font-bold"
-                  style={{ backgroundColor: theme.accentColor, borderRadius: theme.borderRadius ? `calc(${theme.borderRadius} * 0.6)` : undefined }}>W</div>
-                <p className="font-semibold" style={{ color: theme.textColor }}>웨비나 제목 예시</p>
-                <p className="text-sm opacity-70" style={{ color: theme.textColor }}>웨비나 설명 텍스트가 여기에 표시돼요</p>
-                <button className="px-4 py-2 text-sm font-medium text-white"
-                  style={{ backgroundColor: theme.accentColor, borderRadius: theme.borderRadius ? `calc(${theme.borderRadius} * 0.7)` : "8px" }}>사전 등록하기</button>
-              </div>
-            </div>
-          </section>
         </>
       )}
 
