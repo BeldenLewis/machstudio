@@ -12,6 +12,15 @@ import {
 import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
 import { getYouTubeVideoId } from "@/lib/youtube";
 
+/** 시청자에게 보이는 한 페이지의 네 순간. 어드민에서는 이 상태로 편집 대상을 고른다. */
+export type WatchState = "waiting" | "entry" | "live" | "ended";
+const WATCH_STATES: { id: WatchState; label: string; hint: string }[] = [
+  { id: "waiting", label: "대기", hint: "라이브 전 등록자가 보는 화면" },
+  { id: "entry", label: "입장", hint: "라이브 중 미인증 방문자가 보는 입장 확인 화면" },
+  { id: "live", label: "라이브", hint: "방송 중 시청 화면" },
+  { id: "ended", label: "종료", hint: "방송이 끝난 뒤 화면" },
+];
+
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
 function Toggle({ checked, onChange, label, desc }: { checked: boolean; onChange: (v: boolean) => void; label: string; desc?: string }) {
@@ -144,14 +153,20 @@ interface Webinar {
   components?: Record<string, unknown> | null;
 }
 
-export type LivePageSection = "waiting" | "live" | "ended";
 
 const inputCls = "w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors";
 
 // 만들기 › 대기/라이브/종료 화면 편집.
 // ⚠️ 세 메뉴가 하나의 인스턴스를 공유한다(PageSetupTab 그룹 키) — livePage 를 통째로 재구성해 저장하므로
 // 상태를 쪼개면 다른 화면 데이터가 유실된다. 렌더만 section 으로 게이트.
-export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: { webinar: Webinar; slug: string; section: LivePageSection; onSilentUpdate: () => void }) {
+export default function LivePageTab({ webinar, slug, state, onStateChange, onSilentUpdate }: {
+  webinar: Webinar;
+  slug: string;
+  /** 편집 중인 시청 화면 상태. URL 이 단일 소스라 부모가 들고 있다(새로고침·딥링크 복원). */
+  state: WatchState;
+  onStateChange: (next: WatchState) => void;
+  onSilentUpdate: () => void;
+}) {
   const livePage = (webinar.config?.livePage ?? {}) as Record<string, unknown>;
   const notify = (livePage.notify ?? {}) as Record<string, unknown>;
   const components = (webinar.components ?? {}) as Record<string, unknown>;
@@ -314,12 +329,49 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
   useExternalSync(incomingForm, setForm, dirty);
 
 
-  const previewState = section === "live" ? "live" : section;
+  /**
+   * 어드민 상태 → 뷰어 미리보기 파라미터.
+   *
+   * 이름이 어긋나는 건 뷰어 쪽 기존 계약이다 — `?preview=registration` 이 실제로 렌더하는 것은
+   * **등록자 관점의 대기 화면**(PreLiveWaiting)이다(live/page.tsx 의 주석이 그렇게 적어 두었다).
+   * 여기서 한 번 매핑해 두고 링크는 이 표만 쓴다.
+   */
+  const PREVIEW_PARAM: Record<WatchState, string> = {
+    waiting: "registration",
+    entry: "entry",
+    live: "live",
+    ended: "ended",
+  };
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-2xl space-y-8">
-      {/* ══════════ 대기 화면 ══════════ */}
-      {section === "waiting" && (
+      {/**
+       * 상태 세그먼트 — 옛 메뉴에서 '대기 화면 / 라이브 페이지 / 종료 화면' 세 항목이던 것.
+       * 시청자에게는 URL 하나(/webinar/[slug]/live)이고 상태만 바뀌는데 메뉴가 나란한 세 페이지처럼
+       * 보여 주고 있었다. 코드도 이미 한 인스턴스를 공유했으니(옛 LIVE_GROUP) 이건 구조를 바꾸는
+       * 게 아니라 구조를 드러내는 것이다. '입장'은 원래 라이브 안에 묶여 있어 메뉴에도 미리보기
+       * 경로에도 없었는데, 별개 공개 화면이라 상태로 승격했다.
+       */}
+      <div className="-mt-1 flex flex-wrap gap-1 rounded-xl bg-secondary/40 p-1" role="tablist" aria-label="시청 화면 상태">
+        {WATCH_STATES.map(({ id, label, hint }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={state === id}
+            title={hint}
+            onClick={() => onStateChange(id)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+              state === id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ══════════ 대기 ══════════ */}
+      {state === "waiting" && (
         <>
           <section className="space-y-3">
             <div>
@@ -346,8 +398,8 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
         </>
       )}
 
-      {/* ══════════ 라이브 페이지 (시청 + 입장) ══════════ */}
-      {section === "live" && (
+      {/* ══════════ 라이브 ══════════ */}
+      {state === "live" && (
         <>
           {/* 영상 */}
           <section className="space-y-3">
@@ -385,18 +437,6 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
                 <textarea rows={2} placeholder="비워두면 기본 안내 문구가 표시돼요." value={form.lpNotice}
                   onChange={(e) => setForm((f) => ({ ...f, lpNotice: e.target.value }))} className={`${inputCls} resize-none`} />
               </div>
-            </div>
-          </section>
-
-          {/* 입장 화면 */}
-          <section className="space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold">입장 화면</h3>
-              <p className="mt-1 text-xs text-muted-foreground">라이브 중 미인증 방문자가 보는 입장 확인 화면이에요.</p>
-            </div>
-            <div className="rounded-2xl border border-border bg-secondary/20 p-4">
-              <Toggle label="실시간 시청자 수" checked={screens.entry.viewerCount} onChange={(v) => setScreens((s) => ({ ...s, entry: { viewerCount: v } }))}
-                desc="'지금 N명이 함께 보고 있어요' — 입장을 유도하는 사회적 증거예요" />
             </div>
           </section>
 
@@ -540,8 +580,26 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
         </>
       )}
 
-      {/* ══════════ 종료 화면 ══════════ */}
-      {section === "ended" && (
+      {/* ══════════ 입장 — 라이브 중 미인증 방문자가 보는 화면(별개 공개 화면이라 상태로 승격) ══════════ */}
+      {state === "entry" && (
+        <>
+          {/* 입장 화면 */}
+          <section className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold">입장 화면</h3>
+              <p className="mt-1 text-xs text-muted-foreground">라이브 중 미인증 방문자가 보는 입장 확인 화면이에요.</p>
+            </div>
+            <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+              <Toggle label="실시간 시청자 수" checked={screens.entry.viewerCount} onChange={(v) => setScreens((s) => ({ ...s, entry: { viewerCount: v } }))}
+                desc="'지금 N명이 함께 보고 있어요' — 입장을 유도하는 사회적 증거예요" />
+            </div>
+          </section>
+
+        </>
+      )}
+
+      {/* ══════════ 종료 ══════════ */}
+      {state === "ended" && (
         <>
           {/* 문구를 화면 구성보다 위에 둔다 — 종료 화면에서 시청자가 가장 먼저 읽는 부분이라
               편집 순서도 화면 순서와 같게 맞춘다. */}
@@ -654,8 +712,11 @@ export default function LivePageTab({ webinar, slug, section, onSilentUpdate }: 
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-4">
         <AutosaveIndicator state={saveState} onRetry={retry} />
-        <a href={`/live-preview?slug=${encodeURIComponent(slug)}&state=${previewState}`} target="_blank" rel="noopener noreferrer"
-          title="저장된 내용 기준으로 새 탭에서 이 화면을 미리봅니다 (영상은 보안상 미표시)"
+        {/* 목업 라우트(/live-preview)가 아니라 **실제 공개 페이지**를 소유자 미리보기로 연다 —
+            같은 컴포넌트·같은 데이터라 "미리보기와 실제가 다르다" 가 생기지 않는다.
+            부작용(추적·전송)은 뷰어 쪽 isPreviewUrl 가드가 막는다. */}
+        <a href={`/webinar/${encodeURIComponent(slug)}/live?preview=${PREVIEW_PARAM[state]}`} target="_blank" rel="noopener noreferrer"
+          title="저장된 내용 기준으로 새 탭에서 실제 화면을 미리봅니다"
           className="ml-auto text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1.5">
           이 화면 미리보기 ↗
         </a>

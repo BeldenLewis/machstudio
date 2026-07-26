@@ -2139,7 +2139,7 @@ export default function LiveConsoleTab({
           { done: (summary?.totalRegistered ?? 0) > 0, icon: Users, label: "등록자 확보", target: "operate-registrants" },
           // 세션은 IA 1단계에서 '원본 정보'로 합쳐졌다 — 옛 키는 alias 로 살아 있지만 새 링크는 새 키로 쓴다.
           { done: hasSessions, icon: ListChecks, label: "세션 구성", target: "create-source" },
-          { done: hasVideo, icon: Eye, label: "라이브 영상 연결", target: "create-livepage" },
+          { done: hasVideo, icon: Eye, label: "라이브 영상 연결", target: "create-watch" },
         ].map((item) => (
           <motion.button
             key={item.label}

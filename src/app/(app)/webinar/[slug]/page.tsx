@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import PageSetupTab from "./PageSetupTab";
+import { type WatchState } from "./LivePageTab";
 import AnalyticsTab from "./AnalyticsTab";
 import DeployTab from "./DeployTab";
 import OperateTab, { type OperateSection } from "./OperateTab";
@@ -28,13 +29,13 @@ import { InlineError } from "@/components/ui/inline-error";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
-type SettingsSection = "source" | "landing" | "registration" | "waiting" | "livepage" | "ended" | "survey";
+type SettingsSection = "source" | "landing" | "registration" | "watch" | "survey";
 // 새 IA: 만들기(create=설정) / 배포(deploy) / 운영(operate=콘솔+등록자) / 분석(analytics)
 type Tab = "create" | "deploy" | "operate" | "analytics";
 type NavigationTarget = Tab | `create-${SettingsSection}` | "operate-registrants";
 
 const TAB_IDS: Tab[] = ["create", "deploy", "operate", "analytics"];
-const CREATE_SECTIONS: SettingsSection[] = ["source", "landing", "registration", "waiting", "livepage", "ended", "survey"];
+const CREATE_SECTIONS: SettingsSection[] = ["source", "landing", "registration", "watch", "survey"];
 
 /**
  * 옛 섹션 키 → 새 키. 북마크·공유 링크·외부 문서의 ?sec=general·?sec=sessions 가 죽지 않게 한다.
@@ -44,7 +45,22 @@ const CREATE_SECTIONS: SettingsSection[] = ["source", "landing", "registration",
 const SECTION_ALIASES: Record<string, SettingsSection> = {
   general: "source",
   sessions: "source",
+  // 2단계: 대기·라이브·종료는 '시청 화면' 한 칸의 상태가 됐다.
+  waiting: "watch",
+  livepage: "watch",
+  ended: "watch",
 };
+
+/**
+ * 옛 섹션 키가 가리키던 상태로 정확히 착지시킨다 — alias 만 있으면 ?sec=ended 북마크가
+ * 시청 화면의 기본 상태(라이브)로 떨어져 "종료 화면 설정이 사라졌다"로 읽힌다.
+ */
+const WATCH_STATE_FROM_ALIAS: Record<string, WatchState> = {
+  waiting: "waiting",
+  livepage: "live",
+  ended: "ended",
+};
+const WATCH_STATES_ALL: WatchState[] = ["waiting", "entry", "live", "ended"];
 const OPERATE_SECTIONS: OperateSection[] = ["console", "registrants"];
 
 interface WebinarSession {
@@ -132,6 +148,12 @@ function WebinarDetail({ id }: { id: string }) {
   const settingsSection: SettingsSection = CREATE_SECTIONS.includes(secParam as SettingsSection)
     ? (secParam as SettingsSection)
     : (secParam && SECTION_ALIASES[secParam]) || "source";
+  // 시청 화면의 편집 상태 — ?st= 이 단일 소스. 옛 섹션 키로 들어오면 그 키가 뜻하던 상태로.
+  const stParam = searchParams.get("st");
+  const watchState: WatchState = WATCH_STATES_ALL.includes(stParam as WatchState)
+    ? (stParam as WatchState)
+    : (secParam && WATCH_STATE_FROM_ALIAS[secParam]) || "live";
+
   const operateSection: OperateSection = OPERATE_SECTIONS.includes(secParam as OperateSection)
     ? (secParam as OperateSection)
     : "console";
@@ -146,6 +168,18 @@ function WebinarDetail({ id }: { id: string }) {
       // 탭 전환은 push(뒤로가기로 이전 탭 복귀), 서브섹션은 replace(히스토리 소음 방지)
       if (opts?.replace) router.replace(url, { scroll: false });
       else router.push(url, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  /** 시청 화면 상태 전환 — replace 로 히스토리 소음을 막는다(섹션 전환과 같은 규칙). */
+  const setWatchState = useCallback(
+    (next: WatchState) => {
+      const sp = new URLSearchParams(searchParams.toString());
+      sp.set("tab", "create");
+      sp.set("sec", "watch");
+      sp.set("st", next);
+      router.replace(`${pathname}?${sp.toString()}`, { scroll: false });
     },
     [pathname, router, searchParams],
   );
@@ -404,6 +438,8 @@ function WebinarDetail({ id }: { id: string }) {
                 onSilentUpdate={() => fetchWebinar(true)}
                 section={settingsSection}
                 onSectionChange={(section) => navigate("create", section, { replace: true })}
+                watchState={watchState}
+                onWatchStateChange={setWatchState}
               />
             )}
             {activeTab === "deploy" && <DeployTab

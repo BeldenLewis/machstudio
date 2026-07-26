@@ -2,10 +2,10 @@
 
 import { Fragment, type ElementType } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FileText, MonitorPlay, SlidersHorizontal, Hourglass, Flag, ClipboardCheck, Megaphone } from "lucide-react";
+import { FileText, MonitorPlay, SlidersHorizontal, ClipboardCheck, Megaphone } from "lucide-react";
 import SourceInfoTab from "./SourceInfoTab";
 import RegistrationFormTab from "./RegistrationFormTab";
-import LivePageTab from "./LivePageTab";
+import LivePageTab, { type WatchState } from "./LivePageTab";
 import SurveyTab from "./SurveyTab";
 import LandingPageTab from "./LandingPageTab";
 
@@ -37,7 +37,7 @@ interface Webinar {
   sessions: WebinarSession[];
 }
 
-type PageSetupSection = "source" | "landing" | "registration" | "waiting" | "livepage" | "ended" | "survey";
+type PageSetupSection = "source" | "landing" | "registration" | "watch" | "survey";
 
 /**
  * 승인된 IA 재설계 — 축을 하나로 바꿨다: **"사실인가, 표현인가"**.
@@ -52,15 +52,11 @@ const sections: { id: PageSetupSection; label: string; desc: string; icon: Eleme
   // 랜딩은 홍보 진입점이라 등록보다 앞 — 산출물 순서 = 시청자 여정 순서
   { id: "landing", group: "산출물", label: "랜딩 페이지", desc: "외부 사이트에 임베드하는 상세페이지 — 히어로·소개·프로그램·FAQ를 구성합니다.", icon: Megaphone },
   { id: "registration", group: "산출물", label: "등록", desc: "사전등록에서 수집할 항목과 동의 문구를 설정합니다.", icon: FileText },
-  { id: "waiting", group: "산출물", label: "대기 화면", desc: "라이브 전 등록자가 보는 화면 — 카운트다운·아젠다·알림을 구성합니다.", icon: Hourglass },
-  { id: "livepage", group: "산출물", label: "라이브 페이지", desc: "시청 화면의 영상·콘텐츠·CTA·참여와 입장 화면을 꾸밉니다.", icon: MonitorPlay },
-  { id: "ended", group: "산출물", label: "종료 화면", desc: "방송 후 화면 — 다시보기·설문·자료·다음 웨비나를 구성합니다.", icon: Flag },
+  // 대기·입장·라이브·종료는 **한 라우트의 네 순간**이라 메뉴 한 칸 + 상태 세그먼트로 합쳤다.
+  { id: "watch", group: "산출물", label: "시청 화면", desc: "등록자가 라이브 전·중·후에 보는 한 몸의 화면 — 상태별로 골라 편집합니다.", icon: MonitorPlay },
   { id: "survey", group: "산출물", label: "설문", desc: "자체 설문을 만들어 종료 화면·라이브 푸시·링크로 응답을 모읍니다.", icon: ClipboardCheck },
 ];
 
-// 대기/라이브/종료는 하나의 LivePageTab 인스턴스를 공유(전환 시 언마운트 없이 section 만 교체) —
-// livePage 설정이 통째로 저장되므로 인스턴스를 쪼개면 입력 중 데이터가 유실된다.
-const LIVE_GROUP: PageSetupSection[] = ["waiting", "livepage", "ended"];
 
 export default function PageSetupTab({
   webinar,
@@ -68,12 +64,17 @@ export default function PageSetupTab({
   onSilentUpdate,
   section,
   onSectionChange,
+  watchState,
+  onWatchStateChange,
 }: {
   webinar: Webinar;
   onUpdate: () => void;
   onSilentUpdate: () => void;
   section: PageSetupSection;
   onSectionChange: (section: PageSetupSection) => void;
+  /** 시청 화면의 편집 상태 — URL 이 단일 소스라 page.tsx 가 들고 있다. */
+  watchState: WatchState;
+  onWatchStateChange: (next: WatchState) => void;
 }) {
   const activeMeta = sections.find((item) => item.id === section) ?? sections[0];
   const ActiveIcon = activeMeta.icon;
@@ -157,7 +158,7 @@ export default function PageSetupTab({
         <div className="min-h-0 flex-1 lg:overflow-hidden">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
-              key={LIVE_GROUP.includes(section) ? "livepage-group" : section}
+              key={section}
               initial={{ opacity: 0, x: 12 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -12 }}
@@ -182,12 +183,13 @@ export default function PageSetupTab({
                   <RegistrationFormTab webinar={{ id: webinar.id, slug: webinar.slug, config: webinar.config, theme: webinar.theme }} onSilentUpdate={onSilentUpdate} />
                 </div>
               )}
-              {LIVE_GROUP.includes(section) && (
+              {section === "watch" && (
                 <div className="lg:h-full overflow-auto">
                   <LivePageTab
                     webinar={webinar}
                     slug={webinar.slug}
-                    section={section === "livepage" ? "live" : (section as "waiting" | "ended")}
+                    state={watchState}
+                    onStateChange={onWatchStateChange}
                     onSilentUpdate={onSilentUpdate}
                   />
                 </div>
