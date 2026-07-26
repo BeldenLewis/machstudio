@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { useUndoableDelete } from "@/components/ui/use-undoable-delete";
 import { SPEAKER_PHOTO_ACCEPT, SPEAKER_PHOTO_MAX_LABEL, validateSpeakerPhoto } from "@/lib/webinar-speaker-photo";
 import { cleanSessionText, isRealSession } from "@/lib/webinar-sessions";
-import { btnCls, FIELD_CLS, FINISH } from "@/components/ui/primitives";
+import { btnCls, FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -107,9 +107,15 @@ function SessionRow({
     <motion.div
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={highlight ? { borderColor: "rgba(139, 92, 246, 0.18)" } : undefined}
       transition={spring}
-      className={`relative rounded-2xl border bg-background p-4 ${isDragging ? "border-violet-400/60 shadow-lg" : "border-border"}`}
+      /* 끌고 있을 때만 마감이 세진다 — 헤어라인을 --ring 으로 올리고 그림자를 띄운다.
+         hover 로 border 색을 애니메이션하던 코드를 지웠다: border 자체가 없어졌고,
+         그 값 rgba(139,92,246) 은 violet 을 딥네이비로 재정의한 뒤로 팔레트에 없는 색이었다. */
+      className={`relative ${R.panel} bg-card p-4 transition-shadow ${
+        isDragging
+          ? "shadow-[inset_0_0_0_1px_var(--ring),0_14px_32px_-12px_rgb(0_0_0/0.28)]"
+          : `${FINISH.s1} ${highlight ? "hover:shadow-[inset_0_0_0_1px_var(--ring),var(--shadow-card)]" : ""}`
+      }`}
     >
       {draggable && (
         <button
@@ -118,7 +124,7 @@ function SessionRow({
           {...listeners}
           aria-label="순서 변경 — 끌어서 옮기거나 포커스 후 방향키를 쓰세요"
           title="끌어서 순서 변경"
-          className="absolute left-0 top-1/2 grid h-8 w-5 -translate-y-1/2 cursor-grab touch-none place-items-center rounded text-muted-foreground/40 transition-colors hover:text-muted-foreground active:cursor-grabbing"
+          className="absolute left-0 top-1/2 grid h-8 w-5 -translate-y-1/2 cursor-grab touch-none place-items-center rounded-lg text-muted-foreground/40 transition-colors hover:text-muted-foreground active:cursor-grabbing"
         >
           <GripVertical className="h-3.5 w-3.5" />
         </button>
@@ -541,7 +547,7 @@ export default function SessionsTab({
           transition={spring}
           className="overflow-hidden"
         >
-          <div className="p-4 rounded-2xl border border-violet-400/30 bg-violet-500/5 space-y-3">
+          <div className={`p-4 ${R.panel} bg-violet-500/5 space-y-3 shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--ring)_45%,transparent)]`}>
             <SessionFormFields webinarId={webinarId} form={createForm} setForm={setCreateForm} />
             <div className="flex gap-2">
               <motion.button

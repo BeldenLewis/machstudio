@@ -196,7 +196,7 @@ function QuestionRow({
             type="button"
             aria-label="순서 변경"
             onPointerDown={(e) => { e.preventDefault(); dragControls.start(e); }}
-            className="grid h-8 w-7 shrink-0 cursor-grab place-items-center rounded-md text-muted-foreground/40 transition-colors hover:text-muted-foreground active:cursor-grabbing touch-none"
+            className="grid h-8 w-7 shrink-0 cursor-grab place-items-center rounded-lg text-muted-foreground/40 transition-colors hover:text-muted-foreground active:cursor-grabbing touch-none"
           >
             <GripVertical className="h-4 w-4" />
           </button>
@@ -210,7 +210,7 @@ function QuestionRow({
               aria-expanded={typePop.open}
               className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-background px-2 py-1.5 text-xs font-semibold shadow-sm transition-shadow hover:shadow"
             >
-              <span className="grid h-5 w-5 place-items-center rounded-md bg-violet-500/10 text-violet-500"><TypeIcon className="h-3 w-3" /></span>
+              <span className="grid h-5 w-5 place-items-center rounded-lg bg-violet-500/10 text-violet-500"><TypeIcon className="h-3 w-3" /></span>
               {meta.label}
               <ChevronDown className="h-3 w-3 text-muted-foreground/60" />
             </button>
@@ -222,10 +222,10 @@ function QuestionRow({
             필수
             <Switch checked={q.required} onChange={(v) => patch({ required: v })} label={`${q.title || "문항"} 필수`} />
           </label>
-          <button type="button" onClick={onDuplicate} aria-label="문항 복제" className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground/50 transition-colors hover:bg-background hover:text-foreground">
+          <button type="button" onClick={onDuplicate} aria-label="문항 복제" className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground/50 transition-colors hover:bg-background hover:text-foreground">
             <Copy className="h-3.5 w-3.5" />
           </button>
-          <button type="button" onClick={onRemove} aria-label="문항 삭제" className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive">
+          <button type="button" onClick={onRemove} aria-label="문항 삭제" className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -261,7 +261,7 @@ function QuestionRow({
                     type="button"
                     onClick={() => removeOption(idx)}
                     aria-label={`선택지 ${idx + 1} 삭제`}
-                    className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted-foreground/40 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-muted-foreground/40 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -284,7 +284,7 @@ function QuestionRow({
                     type="button"
                     aria-pressed={q.maxSelect === undefined}
                     onClick={() => patch({ maxSelect: undefined })}
-                    className={`h-6 rounded-md px-2 text-[11px] font-semibold shadow-sm transition-colors ${q.maxSelect === undefined ? "bg-violet-500 text-white" : "bg-background text-muted-foreground hover:text-foreground"}`}
+                    className={`h-6 rounded-lg px-2 text-[11px] font-semibold shadow-sm transition-colors ${q.maxSelect === undefined ? "bg-violet-500 text-white" : "bg-background text-muted-foreground hover:text-foreground"}`}
                   >
                     무제한
                   </button>
@@ -295,7 +295,7 @@ function QuestionRow({
                       type="button"
                       aria-pressed={q.maxSelect === n}
                       onClick={() => patch({ maxSelect: n })}
-                      className={`h-6 min-w-7 rounded-md px-2 text-[11px] font-semibold tabular-nums shadow-sm transition-colors ${q.maxSelect === n ? "bg-violet-500 text-white" : "bg-background text-muted-foreground hover:text-foreground"}`}
+                      className={`h-6 min-w-7 rounded-lg px-2 text-[11px] font-semibold tabular-nums shadow-sm transition-colors ${q.maxSelect === n ? "bg-violet-500 text-white" : "bg-background text-muted-foreground hover:text-foreground"}`}
                     >
                       {n}
                     </button>
@@ -698,13 +698,13 @@ function SurveyEditor({
                   type="button"
                   onClick={() => { setClosesDraft(""); void commitClosesAt(""); }}
                   aria-label="마감 예약 해제"
-                  className="grid h-5 w-5 place-items-center rounded text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  className="grid h-5 w-5 place-items-center rounded-lg text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
                 >
                   <X className="h-3 w-3" />
                 </button>
               )}
               {scheduledClosed && (
-                <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">예약 시각이 지나 마감됨</span>
+                <span className="rounded-lg bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">예약 시각이 지나 마감됨</span>
               )}
             </label>
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground/70"><BarChart3 className="h-3 w-3" />응답 {survey._count?.responses ?? 0}건</span>

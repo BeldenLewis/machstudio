@@ -290,7 +290,7 @@ export default function LandingPageTab({
                         key={mediaType.id}
                         type="button"
                         onClick={() => patch({ heroMediaType: mediaType.id })}
-                        className={`inline-flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
                           active ? "bg-violet-500 text-white" : "text-muted-foreground hover:text-foreground"
                         }`}
                       >

@@ -148,7 +148,7 @@ function FieldCard({
             type="button"
             aria-label="순서 변경"
             onPointerDown={(e) => { e.preventDefault(); dragControls.start(e); }}
-            className="grid h-8 w-7 shrink-0 cursor-grab place-items-center rounded-md text-muted-foreground/40 transition-colors hover:text-muted-foreground active:cursor-grabbing touch-none"
+            className="grid h-8 w-7 shrink-0 cursor-grab place-items-center rounded-lg text-muted-foreground/40 transition-colors hover:text-muted-foreground active:cursor-grabbing touch-none"
           >
             <GripVertical className="h-4 w-4" />
           </button>
@@ -162,7 +162,7 @@ function FieldCard({
               disabled={typeLocked}
               className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-background px-2 py-1.5 text-xs font-semibold shadow-sm transition-shadow hover:shadow disabled:cursor-default disabled:opacity-90"
             >
-              <span className="grid h-5 w-5 place-items-center rounded-md bg-violet-500/10 text-violet-500"><TypeIcon className="h-3 w-3" /></span>
+              <span className="grid h-5 w-5 place-items-center rounded-lg bg-violet-500/10 text-violet-500"><TypeIcon className="h-3 w-3" /></span>
               {meta.label}
               {!typeLocked && <ChevronDown className="h-3 w-3 text-muted-foreground/60" />}
             </button>
@@ -184,7 +184,7 @@ function FieldCard({
               type="button"
               onClick={onRemove}
               aria-label={`${field.label} 삭제`}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -240,7 +240,7 @@ function FieldCard({
                     type="button"
                     onClick={() => removeOption(idx)}
                     aria-label={`선택지 ${idx + 1} 삭제`}
-                    className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted-foreground/40 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-muted-foreground/40 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
                   >
                     <Trash2 className="h-3 w-3" />
                   </button>
