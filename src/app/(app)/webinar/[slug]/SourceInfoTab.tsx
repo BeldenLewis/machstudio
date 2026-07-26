@@ -21,7 +21,7 @@
  */
 
 import { type ComponentProps } from "react";
-import BasicInfoTab from "./BasicInfoTab";
+import BasicInfoTab, { WebinarDangerZone } from "./BasicInfoTab";
 import SessionsTab from "./SessionsTab";
 import BrandSection from "./BrandSection";
 
@@ -43,7 +43,9 @@ type Webinar = BasicWebinar & {
 function AreaDivider({ label, hint }: { label: string; hint: string }) {
   return (
     <div className="border-t border-border pt-6">
-      <h2 className="text-[13px] font-semibold tracking-tight">{label}</h2>
+      {/* 15px — 이 안의 하위 섹션 제목이 h3 text-sm(14px)이라, 예전의 13px 은 위계가
+          크기로 **역전**돼 '진행 순서'·'브랜드' 가 '기본 정보' 의 하위처럼 보였다. */}
+      <h2 className="text-[15px] font-semibold tracking-tight">{label}</h2>
       <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{hint}</p>
     </div>
   );
@@ -58,23 +60,34 @@ export default function SourceInfoTab({
   onUpdate: () => void;
   onSilentUpdate: () => void;
 }) {
+  /**
+   * 패딩은 **이 컨테이너 한 곳**이 소유한다.
+   *
+   * 예전엔 자식마다 달랐다: BasicInfoTab 은 자기 p-4/sm:p-6/lg:p-8 + max-w-2xl,
+   * SessionsTab 은 패딩이 **아예 없어서**(루트가 grid grid-cols-12) 진행 순서가 화면 끝에 붙었고,
+   * 브랜드만 부모가 감쌌다. 그 결과 구분선 두 개가 서로 다른 폭에서 끝나 정렬되지 않았다.
+   * 이제 구분선은 전부 컨테이너 폭이고, 좁아야 하는 내용만 자기 안에서 max-w-2xl 을 쓴다.
+   */
   return (
-    <div className="space-y-8 pb-10">
-      {/* 정체성·일정 — BasicInfoTab 이 자기 패딩·자기 자동저장 표시를 갖고 있어 그대로 얹는다 */}
-      <BasicInfoTab webinar={webinar} onSilentUpdate={onSilentUpdate} />
+    <div className="space-y-8 px-4 pb-10 sm:px-6 lg:px-8">
+      {/* 정체성·일정 — embedded 로 자기 패딩·위험 구역을 끈다(둘 다 이 화면이 소유) */}
+      <BasicInfoTab webinar={webinar} onSilentUpdate={onSilentUpdate} embedded />
 
-      <div className="px-4 sm:px-6 lg:px-8">
-        <AreaDivider
-          label="진행 순서"
-          hint="랜딩 카드·타임테이블·대기 화면 아젠다·시청 화면이 모두 이 표를 읽어가요."
-        />
-      </div>
+      <AreaDivider
+        label="진행 순서"
+        hint="랜딩 카드·타임테이블·대기 화면 아젠다·시청 화면이 모두 이 표를 읽어가요."
+      />
       <SessionsTab webinarId={webinar.id} sessions={webinar.sessions} onUpdate={onUpdate} />
 
-      <div className="max-w-2xl space-y-6 px-4 sm:px-6 lg:px-8">
-        <AreaDivider label="브랜드" hint="한 번 정하면 공개 화면 전체가 같은 색과 폰트를 씁니다." />
+      <AreaDivider label="브랜드" hint="한 번 정하면 공개 화면 전체가 같은 색과 폰트를 씁니다." />
+      <div className="max-w-2xl">
         <BrandSection webinarId={webinar.id} theme={webinar.theme} onSilentUpdate={onSilentUpdate} />
       </div>
+
+      {/* 위험 구역은 화면 **맨 끝**에만 — 예전엔 BasicInfoTab 안에 있어서 '웨비나 삭제' 가
+          진행 순서 구분선 바로 위, 세션을 편집하러 스크롤하는 경로에 끼어 있었다. */}
+      <AreaDivider label="위험 구역" hint="되돌릴 수 없는 작업이에요." />
+      <WebinarDangerZone webinar={{ id: webinar.id, name: webinar.name }} />
     </div>
   );
 }

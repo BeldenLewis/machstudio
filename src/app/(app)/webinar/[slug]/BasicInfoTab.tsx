@@ -24,8 +24,16 @@ interface Webinar {
 
 // 만들기 › 기본 정보 — 정체성(이름·설명) + 일정 + 위험 구역만.
 // 라이브 페이지 콘텐츠·디자인·참여 설정은 '라이브 페이지' 섹션(LivePageTab)으로 분리됨.
-export default function BasicInfoTab({ webinar, onSilentUpdate }: { webinar: Webinar; onSilentUpdate: () => void }) {
-  const router = useRouter();
+export default function BasicInfoTab({ webinar, onSilentUpdate, embedded }: {
+  webinar: Webinar;
+  onSilentUpdate: () => void;
+  /**
+   * 다른 화면 안에 얹힐 때 true — 자기 좌우 패딩을 빼고(부모가 소유) 위험 구역도 그리지 않는다.
+   * 위험 구역이 여기 남으면 원본 정보 화면에서 '웨비나 삭제' 가 화면 **중간**(진행 순서 바로 위)에
+   * 놓인다. AGENTS: 위험한 저빈도 액션은 멀리·작게·확인 뒤에 — 그래서 부모가 맨 끝에 놓는다.
+   */
+  embedded?: boolean;
+}) {
   const toLocal = (iso: string) => kstDateTimeLocalInput(iso);
   const components = (webinar.components ?? {}) as Record<string, unknown>;
 
@@ -35,9 +43,6 @@ export default function BasicInfoTab({ webinar, onSilentUpdate }: { webinar: Web
     liveStartAt: toLocal(webinar.liveStartAt),
     liveEndAt: toLocal(webinar.liveEndAt),
   });
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleteInput, setDeleteInput] = useState("");
 
   // 자동저장 — 이름·설명·일정·마감옵션 변경 시 디바운스 후 PATCH. 이름이 비면 저장하지 않는다(필수).
   const save = async () => {
@@ -78,21 +83,9 @@ export default function BasicInfoTab({ webinar, onSilentUpdate }: { webinar: Web
   );
   useExternalSync(incoming, setForm, dirty);
 
-  const handleDelete = async () => {
-    if (deleteInput !== webinar.name) return;
-    setIsDeleting(true);
-    try {
-      const res = await fetch(`/api/webinars/${webinar.id}`, { method: "DELETE" });
-      if (!res.ok) { toast.error("삭제 실패"); return; }
-      toast.success("웨비나가 삭제됐어요");
-      router.push("/webinar");
-    } finally {
-      setIsDeleting(false);
-    }
-  };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-2xl space-y-8">
+    <div className={`max-w-2xl space-y-8 ${embedded ? "" : "p-4 sm:p-6 lg:p-8"}`}>
       {/* 기본 정보 */}
       <section className="space-y-4">
         <h3 className="text-sm font-semibold">기본 정보</h3>
@@ -138,6 +131,36 @@ export default function BasicInfoTab({ webinar, onSilentUpdate }: { webinar: Web
         {!form.name.trim() && <span className="text-[11px] text-red-500">이름을 입력해야 저장돼요</span>}
       </div>
 
+    </div>
+  );
+}
+
+/**
+ * 웨비나 삭제 — 파괴적이고 저빈도라 **화면 맨 끝**에만 놓는다.
+ * 예전엔 BasicInfoTab 안에 있었는데, 그 컴포넌트가 원본 정보의 첫 블록으로 얹히면서
+ * 삭제 버튼이 '진행 순서' 구분선 바로 위, 즉 세션을 편집하러 스크롤하는 경로에 끼어 있었다.
+ */
+export function WebinarDangerZone({ webinar }: { webinar: { id: string; name: string } }) {
+  const router = useRouter();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteInput, setDeleteInput] = useState("");
+
+  const handleDelete = async () => {
+    if (deleteInput !== webinar.name) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/webinars/${webinar.id}`, { method: "DELETE" });
+      if (!res.ok) { toast.error("삭제 실패"); return; }
+      toast.success("웨비나가 삭제됐어요");
+      router.push("/webinar");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <div className="max-w-2xl">
       {/* 위험 구역 */}
       <section className="space-y-3 pt-4 border-t border-border">
         <h3 className="text-sm font-semibold text-red-500">위험 구역</h3>

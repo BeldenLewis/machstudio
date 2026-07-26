@@ -16,6 +16,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { onAccentColor } from "@/app/webinar/[slug]/LiveContentStk";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { useAutosave, useExternalSync } from "@/components/ui/use-autosave";
@@ -98,14 +99,8 @@ export default function BrandSection({
 
   return (
     <section className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold">브랜드</h3>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            색상·폰트·모서리 — 공개 화면 전체에 함께 적용돼요(등록·대기·입장·시청·종료, 설문 응답 폼까지).
-          </p>
-        </div>
-      </div>
+      {/* 제목·설명은 부모(SourceInfoTab 의 AreaDivider)가 그린다 — 예전엔 여기서도
+          h3 "브랜드" + 거의 같은 설명을 그려 같은 제목이 24px 간격으로 두 번 나왔다. */}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {COLOR_FIELDS.map(({ key, label }) => (
@@ -197,8 +192,9 @@ export default function BrandSection({
           style={{ backgroundColor: theme.bgColor, fontFamily: theme.font, borderRadius: theme.borderRadius }}
         >
           <div
-            className="flex h-10 w-10 items-center justify-center text-xs font-bold text-white"
+            className="flex h-10 w-10 items-center justify-center text-xs font-bold"
             style={{
+              color: onAccentColor(theme.accentColor),
               backgroundColor: theme.accentColor,
               borderRadius: theme.borderRadius ? `calc(${theme.borderRadius} * 0.6)` : undefined,
             }}
@@ -209,8 +205,9 @@ export default function BrandSection({
           <p className="text-sm opacity-70" style={{ color: theme.textColor }}>웨비나 설명 텍스트가 여기에 표시돼요</p>
           <button
             type="button"
-            className="px-4 py-2 text-sm font-medium text-white"
+            className="px-4 py-2 text-sm font-medium"
             style={{
+              color: onAccentColor(theme.accentColor),
               backgroundColor: theme.accentColor,
               borderRadius: theme.borderRadius ? `calc(${theme.borderRadius} * 0.7)` : "8px",
             }}
