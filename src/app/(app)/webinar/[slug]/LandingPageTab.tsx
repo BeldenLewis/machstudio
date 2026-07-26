@@ -19,7 +19,7 @@ import {
   type LandingProgramItem,
 } from "@/lib/webinar-config";
 import { LANDING_IMAGE_ACCEPT, LANDING_VIDEO_ACCEPT, validateLandingMedia } from "@/lib/webinar-landing-media";
-import { FINISH, FIELD_CLS } from "@/components/ui/primitives";
+import { FINISH, FIELD_CLS, Segmented } from "@/components/ui/primitives";
 import { EditableList, ROW_KEY, withRowKeys, stripRowKeys, type WithRowKey } from "@/components/ui/editable-list";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
@@ -281,24 +281,21 @@ export default function LandingPageTab({
             <div>
               <label className={labelCls}>배경 미디어</label>
               <div className="flex flex-wrap items-center gap-2">
-                <div className={`flex rounded-lg bg-secondary p-0.5 ${FINISH.s2}`}>
-                  {MEDIA_TYPES.map((mediaType) => {
-                    const Icon = mediaType.icon;
-                    const active = state.heroMediaType === mediaType.id;
-                    return (
-                      <button
-                        key={mediaType.id}
-                        type="button"
-                        onClick={() => patch({ heroMediaType: mediaType.id })}
-                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                          active ? "bg-violet-500 text-white" : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        <Icon className="h-3.5 w-3.5" /> {mediaType.label}
-                      </button>
-                    );
+                {/* 선택 칸이 bg-violet-500 + 흰 글자였다 — 그건 Btn tone="key", 즉 **주요 버튼**의
+                    모양이다. 세그먼트 칸은 액션이 아니라 상태라서 잘못된 신호였고, 선택 관용구도
+                    한 개 더 늘리고 있었다. SELECTED 를 쓰는 Segmented 로 흡수. */}
+                <Segmented
+                  label="배경 미디어"
+                  value={state.heroMediaType}
+                  onChange={(next) => patch({ heroMediaType: next })}
+                  options={MEDIA_TYPES.map((m) => {
+                    const Icon = m.icon;
+                    return {
+                      value: m.id,
+                      label: (<><Icon className="h-3.5 w-3.5" /> {m.label}</>),
+                    };
                   })}
-                </div>
+                />
                 {state.heroMediaType !== "none" && (
                   <>
                     <button

@@ -39,14 +39,30 @@ type Webinar = BasicWebinar & {
   sessions: Sessions;
 };
 
-/** 영역 사이 구분 — 한 화면에 셋이 쌓이므로 어디서 무엇이 끝나는지 보이게 한다. */
-function AreaDivider({ label, hint }: { label: string; hint: string }) {
+/**
+ * 영역 사이 구분 — 한 화면에 넷이 쌓이므로 어디서 무엇이 끝나는지 보이게 한다.
+ *
+ * 크기 경쟁을 그만두고 **종류**를 다르게 했다. 이 화면의 제목 크기는 세 단이었는데
+ * 화면 16px / 영역 15px / 그룹 14px 로 1px 씩이었다 — 1px 차이는 스케일이 아니라 잡음이라
+ * 어느 게 상위인지 눈으로 구분되지 않았다(그래서 예전에 13px 로 줬다가 역전이 나서 15px 로
+ * 올린 이력이 있다. 크기만으로는 이 문제가 안 풀린다).
+ *
+ * 영역 라벨은 제목이 아니라 **구조 표지**다. 그래서 작게·대문자·자간·흐리게 — 내비 레일이
+ * '사실 / 산출물' 을 이미 같은 방식으로 표시하고 있어서 이 화면 안에서 일관된다.
+ * 결과: 화면 16px 반굵게 / 영역 12px 대문자 표지 / 그룹 14px 반굵게 — 서로 다투지 않는다.
+ */
+function AreaDivider({ label, hint, tone = "neutral" }: { label: string; hint: string; tone?: "neutral" | "danger" }) {
   return (
     <div className="border-t border-border pt-6">
-      {/* 15px — 이 안의 하위 섹션 제목이 h3 text-sm(14px)이라, 예전의 13px 은 위계가
-          크기로 **역전**돼 '진행 순서'·'브랜드' 가 '기본 정보' 의 하위처럼 보였다. */}
-      <h2 className="text-[15px] font-semibold tracking-tight">{label}</h2>
-      <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{hint}</p>
+      <h2
+        className={`text-[11.5px] font-semibold uppercase tracking-[0.12em] ${
+          // 위험 구역만 표지 자체가 경고여야 한다 — 흐린 회색이면 지나친다
+          tone === "danger" ? "text-destructive" : "text-muted-foreground"
+        }`}
+      >
+        {label}
+      </h2>
+      <p className="mt-1 text-[13px] leading-relaxed text-foreground/80">{hint}</p>
     </div>
   );
 }
@@ -86,7 +102,7 @@ export default function SourceInfoTab({
 
       {/* 위험 구역은 화면 **맨 끝**에만 — 예전엔 BasicInfoTab 안에 있어서 '웨비나 삭제' 가
           진행 순서 구분선 바로 위, 세션을 편집하러 스크롤하는 경로에 끼어 있었다. */}
-      <AreaDivider label="위험 구역" hint="되돌릴 수 없는 작업이에요." />
+      <AreaDivider label="위험 구역" hint="되돌릴 수 없는 작업이에요." tone="danger" />
       <WebinarDangerZone webinar={{ id: webinar.id, name: webinar.name }} />
     </div>
   );

@@ -11,7 +11,7 @@ import {
 } from "@/lib/webinar-config";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { getYouTubeVideoId } from "@/lib/youtube";
-import { FIELD_CLS, FIELD_CLS_DANGER, FINISH, R } from "@/components/ui/primitives";
+import { btnCls, FIELD_CLS, FIELD_CLS_DANGER, FINISH, R, Segmented } from "@/components/ui/primitives";
 
 /** 시청자에게 보이는 한 페이지의 네 순간. 어드민에서는 이 상태로 편집 대상을 고른다. */
 export type WatchState = "waiting" | "entry" | "live" | "ended";
@@ -393,22 +393,30 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
        * 게 아니라 구조를 드러내는 것이다. '입장'은 원래 라이브 안에 묶여 있어 메뉴에도 미리보기
        * 경로에도 없었는데, 별개 공개 화면이라 상태로 승격했다.
        */}
-      <div className="-mt-1 flex flex-wrap gap-1 rounded-xl bg-secondary/40 p-1" role="tablist" aria-label="시청 화면 상태">
-        {WATCH_STATES.map(({ id, label, hint }) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={state === id}
-            title={hint}
-            onClick={() => onStateChange(id)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-              state === id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+      {/**
+       * 상태 선택 + 그 상태의 미리보기를 **한 줄에** 둔다.
+       * 미리보기 링크는 원래 이 화면 맨 아래, 설정 400여 줄 뒤에 있었다. 그런데 이건
+       * 상태를 고른 **직후**에 가장 쓰고 싶은 동작이다 — 고른 상태가 실제로 어떻게 보이는지
+       * 확인하려고 고르는 것이니까. 상태에 종속된 액션이라 상태 선택기 옆이 제 자리다.
+       *
+       * 세그먼트는 손으로 짜여 있었고 선택 칸이 bg-background + shadow-sm(승격)이었다 —
+       * primitives 의 SELECTED 주석에 적은 이유로 다크에서 방향이 뒤집힌다. Segmented 로 교체.
+       */}
+      <div className="-mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <Segmented
+          label="시청 화면 상태"
+          value={state}
+          onChange={onStateChange}
+          options={WATCH_STATES.map(({ id, label, hint }) => ({ value: id, label, hint }))}
+        />
+        {/* 목업 라우트(/live-preview)가 아니라 **실제 공개 페이지**를 소유자 미리보기로 연다 —
+            같은 컴포넌트·같은 데이터라 "미리보기와 실제가 다르다" 가 생기지 않는다.
+            부작용(추적·전송)은 뷰어 쪽 isPreviewUrl 가드가 막는다. */}
+        <a href={`/webinar/${encodeURIComponent(slug)}/live?preview=${PREVIEW_PARAM[state]}`} target="_blank" rel="noopener noreferrer"
+          title="저장된 내용 기준으로 새 탭에서 실제 화면을 미리봅니다"
+          className={`ml-auto shrink-0 ${btnCls("quiet", "text-xs")}`}>
+          {WATCH_STATES.find((w) => w.id === state)?.label} 화면 미리보기 ↗
+        </a>
       </div>
 
       {/* ══════════ 대기 ══════════ */}
@@ -819,16 +827,6 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
         </>
       )}
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-4">
-        {/* 목업 라우트(/live-preview)가 아니라 **실제 공개 페이지**를 소유자 미리보기로 연다 —
-            같은 컴포넌트·같은 데이터라 "미리보기와 실제가 다르다" 가 생기지 않는다.
-            부작용(추적·전송)은 뷰어 쪽 isPreviewUrl 가드가 막는다. */}
-        <a href={`/webinar/${encodeURIComponent(slug)}/live?preview=${PREVIEW_PARAM[state]}`} target="_blank" rel="noopener noreferrer"
-          title="저장된 내용 기준으로 새 탭에서 실제 화면을 미리봅니다"
-          className="ml-auto text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1.5">
-          이 화면 미리보기 ↗
-        </a>
-      </div>
     </div>
   );
 }

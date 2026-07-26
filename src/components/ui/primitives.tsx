@@ -282,7 +282,8 @@ export function Segmented<T extends string>({
 }: {
   value: T;
   onChange: (next: T) => void;
-  options: { value: T; label: string; hint?: string }[];
+  /** label 은 ReactNode — 아이콘+글자 칸(랜딩의 '배경 미디어')도 이 컴포넌트로 흡수하려고 넓혔다. */
+  options: { value: T; label: ReactNode; hint?: string }[];
   label: string;
   className?: string;
 }) {
