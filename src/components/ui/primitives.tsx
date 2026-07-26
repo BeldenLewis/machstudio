@@ -49,6 +49,8 @@ export const FINISH = {
     "dark:shadow-[inset_0_0_0_1px_var(--input),0_16px_40px_-16px_rgb(0_0_0/0.75)]",
   /** 솔리드 컨트롤 — 헤어라인 없이 최소 리프트 */
   control: "shadow-[0_1px_1px_rgb(20_20_25/0.05)] dark:shadow-[0_1px_2px_rgb(0_0_0/0.45)]",
+  /** 선택된 것의 헤어라인 — 중립 --border 대신 키 컬러로 (아래 SELECTED 참고) */
+  s2Key: "shadow-[inset_0_0_0_1px_var(--ring)]",
   /**
    * 대체 요소(img·video)용 헤어라인 — **밖으로** 그린다.
    * inset 은 여기서 안 통한다: 페인트 순서가 배경 → inset 그림자 → 내용이라 이미지 픽셀이
@@ -70,6 +72,30 @@ export const R = {
   /** 섹션 카드·팝오버·모달처럼 가장 바깥 면. rounded-3xl 을 흡수. */
   panel: "rounded-2xl",
 } as const;
+
+/**
+ * 선택 상태 — **면 색조가 아니라 키 컬러**로 표시한다.
+ *
+ * 승격(bg-card)으로 표현하면 테마에 따라 방향이 뒤집힌다. 레일(bg-secondary) 위에서
+ * bg-card 의 명도는 라이트 L* 96.52 → 100 으로 **올라가지만** 다크는 15.20 → 7.78 로
+ * **내려간다**(하니스 실측). 즉 라이트에서 솟고 다크에서 파인다. 다크에서 레일보다 밝은
+ * 면이 필요한데 색조 사다리에 그런 값이 없다 — secondary 가 이미 그 사다리의 위쪽이다.
+ *
+ * 그래서 선택은 승격이 아니라 **정체**로 말한다. 승격은 "이건 떠 있다" 고, 선택은
+ * "이거다" 다 — 애초에 다른 말이다. Segmented 가 이미 이 방식이었고, 여기로 끌어올렸다.
+ *
+ * 경계를 지는 건 틴트가 아니라 **키 헤어라인(s2Key)** 이다. 하니스에서 캔버스 합성으로 실측:
+ *                       라이트        다크
+ *   레일                245,245,245  38,38,38
+ *   선택면(틴트 합성)    217,222,228  35,40,46
+ *   면 대비              1.24         1.02   ← 다크는 틴트만으로는 사실상 안 보인다
+ *   키 헤어라인 vs 레일  5.47:1       4.87:1 ← 실제 경계는 이것 (WCAG 1.4.11 의 3:1 통과)
+ *   중립 헤어라인 vs 레일 1.16         1.37   ← --border 로는 애초에 불가능했다
+ *   선택 글자 대비       10.76:1      4.78:1 (둘 다 AA 통과)
+ */
+export const SELECTED_SURFACE = `bg-violet-500/12 ${FINISH.s2Key}`;
+export const SELECTED_TEXT = "text-violet-600 dark:text-violet-300";
+export const SELECTED = `${SELECTED_SURFACE} ${SELECTED_TEXT}`;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Surface — 면. level 로 색조를 고르고 마감은 자동.
@@ -274,7 +300,7 @@ export function Segmented<T extends string>({
             onClick={() => onChange(o.value)}
             className={`min-h-8 px-3 py-1.5 text-xs font-medium transition-colors ${R.control} ${
               on
-                ? "bg-violet-500/12 text-violet-600 shadow-[inset_0_0_0_1px_var(--ring)] dark:text-violet-300"
+                ? SELECTED
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >

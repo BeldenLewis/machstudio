@@ -18,7 +18,7 @@
 
 import { useState } from "react";
 import { notFound } from "next/navigation";
-import { Surface, Field, FieldArea, FieldSelect, Btn, Chip, Segmented, R, FINISH } from "@/components/ui/primitives";
+import { Surface, Field, FieldArea, FieldSelect, Btn, Chip, Segmented, R, FINISH, SELECTED } from "@/components/ui/primitives";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -96,6 +96,22 @@ function Catalog({ tag }: { tag: string }) {
             <p className="text-xs">팝오버·모달 — finish-overlay</p>
           </div>
         </Surface>
+      </Row>
+
+      {/**
+       * 레일 위의 선택 항목 — 여기서 색조 사다리가 고갈된다는 걸 실측으로 확인한 자리다.
+       * 처음엔 bg-card(level 1)를 bg-secondary 레일 위에 얹었는데 명도 방향이 테마마다 뒤집혔다:
+       * 라이트 L* 96.52 → 100(솟음), 다크 15.20 → 7.78(파임). 다크에서 레일보다 밝은 면이
+       * 팔레트에 없다. 그래서 선택은 승격이 아니라 키 컬러 틴트(SELECTED)로 말한다.
+       */}
+      <Row label="레일 위의 선택 항목 — 승격이 아니라 키 컬러로">
+        <div className={`space-y-1 bg-secondary p-2 ${FINISH.s2} ${R.panel}`} data-testid={`rail-${tag}`}>
+          <div className={`px-3 py-2 text-sm ${SELECTED} ${R.surface}`} data-testid={`rail-active-${tag}`}>
+            원본 정보 <span className="text-muted-foreground">— 활성</span>
+          </div>
+          <div className="px-3 py-2 text-sm text-muted-foreground">랜딩 페이지</div>
+          <div className="px-3 py-2 text-sm text-muted-foreground">등록</div>
+        </div>
       </Row>
 
       {/* 포커스 소유권 — 전역 규칙이 input 을 포함하게 되면서, 크롬을 가진 행 안의 맨입력은

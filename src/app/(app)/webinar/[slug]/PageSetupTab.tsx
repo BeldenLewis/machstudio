@@ -10,6 +10,7 @@ import { AutosaveScope, AggregateAutosaveIndicator } from "@/components/ui/autos
 import { checkWebinarReadiness, readinessBySection } from "@/lib/webinar-readiness";
 import SurveyTab from "./SurveyTab";
 import LandingPageTab from "./LandingPageTab";
+import { FINISH, R, SELECTED_SURFACE, SELECTED_TEXT } from "@/components/ui/primitives";
 
 interface WebinarSession {
   id: string;
@@ -144,16 +145,16 @@ export default function PageSetupTab({
      * 평소와 똑같이 보이면 운영자는 그 사실을 모른 채 문구를 고친다. 순수 표시(저장 없음).
      */}
     {isLive && (
-      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 bg-red-600 px-4 py-2 text-xs text-white sm:px-6 lg:px-8">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 bg-destructive px-4 py-2 text-xs text-white dark:text-[oklch(0.205_0_0)] sm:px-6 lg:px-8">
         <span className="inline-flex items-center gap-1.5 font-semibold tracking-wide">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden />
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" aria-hidden />
           ON AIR
         </span>
         <span className="opacity-90">지금 고치는 값은 시청자 화면에 바로 반영돼요.</span>
       </div>
     )}
     <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[230px_minmax(0,1fr)] lg:overflow-hidden">
-      <aside className="border-b lg:border-r border-border bg-secondary/20 p-4 lg:p-5">
+      <aside className="border-b lg:border-r border-border bg-secondary p-4 lg:p-5">
         <div className="mb-5">
           <h2 className="text-sm font-semibold">만들기</h2>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
@@ -166,7 +167,7 @@ export default function PageSetupTab({
          * 순수 읽기 — 여기서 저장하는 것은 없다.
          */}
         {issues.length > 0 && (
-          <div className="mb-4 rounded-xl bg-background p-3 shadow-sm">
+          <div className={`mb-4 bg-card p-3 ${R.surface} ${FINISH.s1}`}>
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-[11px] font-semibold">확인할 것</span>
               <span className="text-[11px] font-semibold tabular-nums text-amber-700 dark:text-amber-400">{issues.length}건</span>
@@ -220,13 +221,13 @@ export default function PageSetupTab({
                 onClick={() => changeSection(item.id)}
                 whileTap={{ scale: 0.98 }}
                 className={`relative flex w-auto lg:w-full shrink-0 items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm whitespace-nowrap transition-colors ${
-                  active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                  active ? SELECTED_TEXT : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {active && (
                   <motion.div
                     layoutId="page-setup-section-bg"
-                    className="absolute inset-0 rounded-xl bg-background shadow-sm"
+                    className={`absolute inset-0 ${R.surface} ${SELECTED_SURFACE}`}
                     transition={{ type: "spring", stiffness: 420, damping: 30 }}
                     style={{ zIndex: 0 }}
                   />
@@ -261,8 +262,8 @@ export default function PageSetupTab({
             >
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <div className="flex items-center gap-2">
-                  <ActiveIcon className="h-4 w-4 text-violet-500" />
-                  <h2 className="text-sm font-semibold">{activeMeta.label}</h2>
+                  <ActiveIcon className="h-[18px] w-[18px] text-violet-500" />
+                  <h2 className="text-base font-semibold tracking-tight">{activeMeta.label}</h2>
                 </div>
                 {/* 만들기 화면당 자동저장 표시 1개 — 각 편집 영역이 useReportAutosave 로 올려 보낸다.
                     긴 화면에서 표시가 스크롤 밖으로 밀려 "저장됐나?" 를 알 수 없던 문제를 없앤다. */}
@@ -270,7 +271,7 @@ export default function PageSetupTab({
                   <AggregateAutosaveIndicator />
                 </span>
               </div>
-              <p className="mt-1 text-sm text-muted-foreground">{activeMeta.desc}</p>
+              <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">{activeMeta.desc}</p>
             </motion.div>
           </AnimatePresence>
         </div>
