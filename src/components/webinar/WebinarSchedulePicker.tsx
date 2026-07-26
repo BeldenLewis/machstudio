@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { CalendarDays } from "lucide-react";
 import RangeCalendar from "./RangeCalendar";
+import { btnCls, FIELD_CLS, FINISH, R, SELECTED } from "@/components/ui/primitives";
 
 /**
  * 웨비나 일정 픽커 — 달력 하나에서 라이브 시작일~종료일을 범위로 선택하고,
@@ -37,6 +38,15 @@ function weekdayOf(ymd: string): number {
   const [y, m, d] = ymd.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
+/** "14:05" → "오후 2:05". 요약 한 줄에 쓰려고 — 24시간 표기는 훑을 때 한 번 더 계산해야 한다. */
+function fmtTime(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  if (Number.isNaN(h)) return hhmm;
+  const ampm = h < 12 ? "오전" : "오후";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${ampm} ${h12}:${String(m ?? 0).padStart(2, "0")}`;
+}
+
 function fmtDay(ymd: string): string {
   if (!ymd) return "";
   const [, m, d] = ymd.split("-").map(Number);
@@ -99,8 +109,9 @@ export function SignupDeadlineField({
             transition={spring}
             aria-pressed={mode === m}
             onClick={() => setMode(m)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium shadow-sm transition-colors ${
-              mode === m ? "bg-violet-500/10 text-violet-500" : "text-muted-foreground hover:bg-secondary"
+            /* 선택 표현이 여기만 또 달랐다(bg-violet-500/10 + text-violet-500) → SELECTED 한 벌로. */
+            className={`px-3 py-1.5 text-xs font-medium transition-colors ${R.control} ${
+              mode === m ? SELECTED : "text-muted-foreground hover:bg-secondary"
             }`}
           >
             {l}
@@ -111,10 +122,10 @@ export function SignupDeadlineField({
         <div className="mt-2 grid grid-cols-2 gap-3">
           <input type="date" value={custom[0]} aria-label="마감 날짜"
             onChange={(e) => setCustom([e.target.value, custom[1] || "23:59"])}
-            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm transition-colors focus:border-violet-400 focus:outline-none" />
+            className={FIELD_CLS} />
           <input type="time" step={300} value={custom[1]} aria-label="마감 시각"
             onChange={(e) => setCustom([custom[0], e.target.value])}
-            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm transition-colors focus:border-violet-400 focus:outline-none" />
+            className={FIELD_CLS} />
         </div>
       )}
     </div>
@@ -164,28 +175,78 @@ export default function WebinarSchedulePicker({
         : `${fmtDay(startDate)} ~ ${fmtDay(endDate)}`)
     : "날짜를 선택하세요";
 
+  /**
+   * 정해진 일정은 접는다.
+   *
+   * IA 문서가 지시한 건 아니고 AGENTS 판별질문 2 에 근거한 판단이다 —
+   * "노출 정도 = 사용 빈도 × 값 확인 필요성. 저빈도 긴 세부는 가까운 확장으로."
+   * 일정은 만들 때 한 번 정하고 거의 안 고치는데, 월 달력이 원본 정보 첫 화면의
+   * 약 500px 을 차지해 정체성·진행 순서·브랜드를 전부 스크롤 밖으로 밀어냈다(실물 확인).
+   * 값 확인 필요성은 남으므로 **숨기지 않고 한 줄 요약으로** 보여 준다.
+   *
+   * 날짜가 없으면(새 웨비나) 펼친 상태로 시작한다 — 요약할 값이 없다.
+   */
+  const [editing, setEditing] = useState(!initStartDate);
+  const timeSummary = `${fmtTime(startTime)} ~ ${fmtTime(endTime)}`;
+
+  if (!editing) {
+    return (
+      <div className="space-y-3">
+        <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 bg-secondary px-3 py-2.5 ${R.surface} ${FINISH.s2}`}>
+          <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="text-sm font-medium">{rangeSummary}</span>
+          <span className="text-sm tabular-nums text-muted-foreground">{timeSummary}</span>
+          <button type="button" onClick={() => setEditing(true)} className={`ml-auto ${btnCls("quiet", "text-xs")}`}>
+            일정 고치기
+          </button>
+        </div>
+        {showDeadline && (
+          <SignupDeadlineField
+            liveStartAt={joinLocal(startDate, startTime)}
+            value={value.signupDeadline}
+            onChange={(next) =>
+              onChange({
+                liveStartAt: joinLocal(startDate, startTime),
+                liveEndAt: joinLocal(endDate || startDate, endTime),
+                signupDeadline: next,
+              })
+            }
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="rounded-2xl border border-border bg-background/60 p-4 space-y-4">
+    <div className={`bg-secondary p-4 space-y-4 ${R.panel} ${FINISH.s2}`}>
       {/* 달력 — 범위 선택 (시작일 클릭 → 종료일 클릭) */}
       <div>
         <RangeCalendar start={startDate} end={endDate} onChange={(s, e) => { setStartDate(s); setEndDate(e); }} />
-        <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <CalendarDays className="w-3.5 h-3.5" />
-          {rangeSummary}
-        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <CalendarDays className="w-3.5 h-3.5" />
+            {rangeSummary}
+          </p>
+          {/* 날짜가 정해졌으면 접을 수 있다 — 새 웨비나에서는 아직 접을 게 없다 */}
+          {startDate && (
+            <button type="button" onClick={() => setEditing(false)} className={`ml-auto ${btnCls("ghost", "text-xs")}`}>
+              접기
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 시간 */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-muted-foreground mb-1 block">라이브 시작 시각</label>
-          <input type="time" step={300} value={startTime} onChange={(e) => setStartTime(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
+          <label htmlFor="sched-start-time" className="text-xs text-muted-foreground mb-1 block">라이브 시작 시각</label>
+          <input id="sched-start-time" type="time" step={300} value={startTime}
+            onChange={(e) => setStartTime(e.target.value)} className={FIELD_CLS} />
         </div>
         <div>
-          <label className="text-xs text-muted-foreground mb-1 block">라이브 종료 시각</label>
-          <input type="time" step={300} value={endTime} onChange={(e) => setEndTime(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors" />
+          <label htmlFor="sched-end-time" className="text-xs text-muted-foreground mb-1 block">라이브 종료 시각</label>
+          <input id="sched-end-time" type="time" step={300} value={endTime}
+            onChange={(e) => setEndTime(e.target.value)} className={FIELD_CLS} />
         </div>
       </div>
 
