@@ -11,7 +11,8 @@ import {
 } from "@/lib/webinar-config";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { getYouTubeVideoId } from "@/lib/youtube";
-import { btnCls, FIELD_CLS, FIELD_CLS_DANGER, FINISH, R, SELECTED, Segmented } from "@/components/ui/primitives";
+import { Switch } from "@/components/ui/switch";
+import { Blk, btnCls, FIELD_CLS, FIELD_CLS_DANGER, FINISH, R, SELECTED, Segmented } from "@/components/ui/primitives";
 
 /** 시청자에게 보이는 한 페이지의 네 순간. 어드민에서는 이 상태로 편집 대상을 고른다. */
 export type WatchState = "waiting" | "entry" | "live" | "ended";
@@ -424,28 +425,20 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
       {/* ══════════ 대기 ══════════ */}
       {state === "waiting" && (
         <>
-          <section className="space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold">화면 구성</h3>
-              <p className="mt-1 text-xs text-muted-foreground">대기 화면에 보여줄 요소예요. 데이터가 없으면 켜져 있어도 자동으로 숨겨져요.</p>
-            </div>
-            <div className={`bg-secondary p-4 space-y-2.5 ${R.panel} ${FINISH.s2}`}>
+          <Blk title="화면 구성" tag="read" goes={["대기 화면"]} hint="대기 화면에 보여줄 요소예요. 데이터가 없으면 켜져 있어도 자동으로 숨겨져요.">
+            <div className="space-y-2.5">
               <Toggle label="세션 순서(아젠다)" checked={screens.waiting.agenda} onChange={(v) => setW("agenda", v)} desc="세션 탭에 등록한 시간표가 타임라인으로 표시돼요" />
               <Toggle label="등록자 수(사회적 증거)" checked={screens.waiting.social} onChange={(v) => setW("social", v)} />
               <Toggle label="캘린더에 추가" checked={screens.waiting.calendar} onChange={(v) => setW("calendar", v)} desc="아래 캘린더 URL이 있을 때만 표시" />
               <Toggle label="초대 공유" checked={screens.waiting.share} onChange={(v) => setW("share", v)} />
               <Toggle label="시작 알림 받기" checked={screens.waiting.notify} onChange={(v) => setW("notify", v)} desc="이메일 등록자에게 시작 리마인더를 보낼 수 있어요" />
             </div>
-          </section>
+          </Blk>
 
-          <section className="space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold">캘린더</h3>
-              <p className="mt-1 text-xs text-muted-foreground">&ldquo;캘린더에 추가&rdquo; 버튼이 여는 링크예요.</p>
-            </div>
+          <Blk title="캘린더" goes={["대기 화면"]} hint="&ldquo;캘린더에 추가&rdquo; 버튼이 여는 링크예요.">
             <input type="url" placeholder="https://calendar.google.com/..." value={form.calendarUrl}
               onChange={(e) => setForm((f) => ({ ...f, calendarUrl: e.target.value }))} className={inputCls} />
-          </section>
+          </Blk>
         </>
       )}
 
@@ -453,11 +446,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
       {state === "live" && (
         <>
           {/* 영상 */}
-          <section className="space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold">영상</h3>
-              <p className="mt-1 text-xs text-muted-foreground">시청 화면에 재생될 라이브 방송 소스예요.</p>
-            </div>
+          <Blk title="영상" tag="risk" goes={["라이브 시청"]} pinned hint="시청 화면에 재생될 라이브 방송 소스예요.">
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">YouTube 공유 링크 또는 영상 ID</label>
               <input type="text" placeholder="예: https://youtu.be/dQw4w9WgXcQ" value={form.youtubeId}
@@ -469,14 +458,10 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                   : "공유 링크를 그대로 붙여 넣어도 자동으로 영상 ID로 저장돼요."}
               </p>
             </div>
-          </section>
+          </Blk>
 
           {/* 콘텐츠 */}
-          <section className="space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold">콘텐츠</h3>
-              <p className="mt-1 text-xs text-muted-foreground">시청 화면의 정보·안내 문구예요. 비워두면 표시되지 않아요.</p>
-            </div>
+          <Blk title="콘텐츠" goes={["라이브 시청"]} hint="시청 화면의 정보·안내 문구예요. 비워두면 표시되지 않아요.">
             <div className="space-y-3">
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">문의처 (정보 카드)</label>
@@ -489,16 +474,10 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                   onChange={(e) => setForm((f) => ({ ...f, lpNotice: e.target.value }))} className={`${inputCls} resize-none`} />
               </div>
             </div>
-          </section>
+          </Blk>
 
           {/* 자료 받기 카드 (CTA) — 여러 장 */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-semibold">자료 받기 카드 (CTA)</h3>
-                <p className="mt-1 text-xs text-muted-foreground">시청 화면 하단에 표시돼요.</p>
-              </div>
-            </div>
+          <Blk title="자료 받기 카드 (CTA)" goes={["라이브 시청"]} hint="시청 화면 하단에 표시돼요.">
             {/**
              * 골격 이관. 여기서 고쳐지는 실제 결함이 하나 있다: 카드는 key={card.id} 로
              * 그려지는데 **수정·삭제는 인덱스**였다 — `updateCta(i, …)` 와 `filter((_, j) => j !== i)`.
@@ -594,16 +573,22 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                 </div>
               )}
             />
-          </section>
+          </Blk>
 
-          {/* 알림 받고 이어보기 카드 */}
-          <section className={`bg-secondary p-4 space-y-3 ${R.panel} ${FINISH.s2}`}>
-            <Toggle
-              checked={form.notifyEnabled}
-              onChange={(v) => setForm((f) => ({ ...f, notifyEnabled: v }))}
-              label="알림 받고 이어보기 카드 표시"
-              desc="시청 화면 하단에 다음 세션 알림·다시보기 안내 카드를 보여줘요."
-            />
+          {/* 이 블록만 제목이 토글 라벨이었다 — 다른 블록과 같은 헤더를 갖도록 Blk 으로 통일하고
+              켜고 끄는 스위치는 헤더 우측 action 으로 올린다(제목과 스위치가 한 줄). */}
+          <Blk
+            title="알림 받고 이어보기 카드"
+            goes={["라이브 시청"]}
+            hint="시청 화면 하단에 다음 세션 알림·다시보기 안내 카드를 보여줘요."
+            action={
+              <Switch
+                checked={form.notifyEnabled}
+                onChange={(v) => setForm((f) => ({ ...f, notifyEnabled: v }))}
+                label="알림 받고 이어보기 카드 표시"
+              />
+            }
+          >
             {form.notifyEnabled && (
               <div className="space-y-3 pt-1">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -618,15 +603,11 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                   onChange={(e) => setForm((f) => ({ ...f, notifySwitchLabel: e.target.value }))} className={inputCls} />
               </div>
             )}
-          </section>
+          </Blk>
 
           {/* 참여 구성 */}
-          <section className="space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold">참여 구성</h3>
-              <p className="mt-1 text-xs text-muted-foreground">시청 화면 참여 박스(Q&amp;A·채팅·세션) 구성이에요.</p>
-            </div>
-            <div className={`bg-secondary p-4 space-y-4 ${R.panel} ${FINISH.s2}`}>
+          <Blk title="참여 구성" tag="sync" goes={["라이브 시청"]} hint="시청 화면 참여 박스(Q&amp;A·채팅·세션) 구성이에요.">
+            <div className="space-y-4">
               <Toggle
                 checked={form.chatEnabled}
                 onChange={(v) => setForm((f) => ({ ...f, chatEnabled: v }))}
@@ -646,7 +627,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                 />
               </div>
             </div>
-          </section>
+          </Blk>
 
         </>
       )}
@@ -655,16 +636,12 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
       {state === "entry" && (
         <>
           {/* 입장 화면 */}
-          <section className="space-y-3">
+          <Blk title="입장 화면" goes={["입장 확인"]} hint="라이브 중 미인증 방문자가 보는 입장 확인 화면이에요.">
             <div>
-              <h3 className="text-sm font-semibold">입장 화면</h3>
-              <p className="mt-1 text-xs text-muted-foreground">라이브 중 미인증 방문자가 보는 입장 확인 화면이에요.</p>
-            </div>
-            <div className={`bg-secondary p-4 ${R.panel} ${FINISH.s2}`}>
               <Toggle label="실시간 시청자 수" checked={screens.entry.viewerCount} onChange={(v) => setScreens((s) => ({ ...s, entry: { viewerCount: v } }))}
                 desc="'지금 N명이 함께 보고 있어요' — 입장을 유도하는 사회적 증거예요" />
             </div>
-          </section>
+          </Blk>
 
         </>
       )}
@@ -674,11 +651,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
         <>
           {/* 문구를 화면 구성보다 위에 둔다 — 종료 화면에서 시청자가 가장 먼저 읽는 부분이라
               편집 순서도 화면 순서와 같게 맞춘다. */}
-          <section className="space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold">인사말</h3>
-              <p className="mt-1 text-xs text-muted-foreground">종료 화면 맨 위에 크게 보이는 문구예요. 비우면 기본 문구가 쓰여요.</p>
-            </div>
+          <Blk title="인사말" goes={["종료 화면"]} hint="종료 화면 맨 위에 크게 보이는 문구예요. 비우면 기본 문구가 쓰여요.">
             <div className="space-y-2">
               <div>
                 <label htmlFor="ended-title" className="mb-1 block text-xs text-muted-foreground">제목</label>
@@ -704,28 +677,18 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                 />
               </div>
             </div>
-          </section>
+          </Blk>
 
-          <section className="space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold">화면 구성</h3>
-              <p className="mt-1 text-xs text-muted-foreground">종료 화면에 보여줄 요소예요. 데이터가 없으면 켜져 있어도 자동으로 숨겨져요.</p>
-            </div>
-            <div className={`bg-secondary p-4 space-y-2.5 ${R.panel} ${FINISH.s2}`}>
+          <Blk title="화면 구성" tag="read" goes={["종료 화면"]} hint="종료 화면에 보여줄 요소예요. 데이터가 없으면 켜져 있어도 자동으로 숨겨져요.">
+            <div className="space-y-2.5">
               <Toggle label="다시보기 신청" checked={screens.ended.replay} onChange={(v) => setEn("replay", v)} desc="신청자는 알림 수신 목록에 담겨요 — 다시보기 링크를 이메일로 보내세요" />
               <Toggle label="자료 다운로드" checked={screens.ended.resources} onChange={(v) => setEn("resources", v)} desc="아래 자료를 1개 이상 추가해야 표시" />
               <Toggle label="다음 웨비나" checked={screens.ended.nextWebinar} onChange={(v) => setEn("nextWebinar", v)} desc="아래 제목을 입력해야 표시" />
               <Toggle label="공유" checked={screens.ended.share} onChange={(v) => setEn("share", v)} />
             </div>
-          </section>
+          </Blk>
 
-          <section className="space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold">설문 연결</h3>
-              <p className="mt-1 text-xs text-muted-foreground">
-                종료 화면의 &ldquo;설문 참여하기&rdquo; 버튼이 무엇을 여는지 — 하나만 고르면 돼요.
-              </p>
-            </div>
+          <Blk title="설문 연결" tag="sync" goes={["종료 화면"]} hint={<>종료 화면의 &ldquo;설문 참여하기&rdquo; 버튼이 무엇을 여는지 — 하나만 고르면 돼요.</>}>
             <div className="space-y-3 rounded-2xl bg-secondary/20 p-4">
               <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="설문 연결">
                 {([
@@ -795,14 +758,10 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                 </div>
               )}
             </div>
-          </section>
+          </Blk>
 
           {screens.ended.resources && (
-            <section className="space-y-3">
-              <div>
-                <h3 className="text-sm font-semibold">받아가세요 · 자료</h3>
-                <p className="mt-1 text-xs text-muted-foreground">종료 화면에서 다운로드 리스트로 표시돼요.</p>
-              </div>
+            <Blk title="받아가세요 · 자료" goes={["종료 화면"]} hint="종료 화면에서 다운로드 리스트로 표시돼요.">
               {/* 공용 골격(EditableList)으로 통일 — 예전엔 key={i} 라 중간 행을 지우면 아래 행들의
                   입력값·IME 조합이 엉켰고, 삭제는 "삭제" 텍스트 버튼에 되돌리기가 없었고, 순서도 못 바꿨다. */}
               <EditableList
@@ -830,21 +789,17 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                   </>
                 )}
               />
-            </section>
+            </Blk>
           )}
 
           {screens.ended.nextWebinar && (
-            <section className="space-y-3">
-              <div>
-                <h3 className="text-sm font-semibold">다음 웨비나</h3>
-                <p className="mt-1 text-xs text-muted-foreground">종료 화면 하단에 사전등록 티저로 표시돼요.</p>
-              </div>
+            <Blk title="다음 웨비나" goes={["종료 화면"]} hint="종료 화면 하단에 사전등록 티저로 표시돼요.">
               <input className={inputCls} placeholder="제목 (예: 미국 아마존 입점 A to Z)" value={nextWeb.title} onChange={(e) => setNextWeb((n) => ({ ...n, title: e.target.value }))} />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input className={inputCls} placeholder="일시 (예: 8월 21일 오후 2시)" value={nextWeb.when} onChange={(e) => setNextWeb((n) => ({ ...n, when: e.target.value }))} />
                 <input className={inputCls} type="url" placeholder="사전등록 URL" value={nextWeb.url} onChange={(e) => setNextWeb((n) => ({ ...n, url: e.target.value }))} />
               </div>
-            </section>
+            </Blk>
           )}
         </>
       )}

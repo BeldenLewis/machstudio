@@ -129,6 +129,94 @@ export function Surface({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Blk — 편집 블록. IA 문서 프로토타입의 `.blk` 패턴.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 값의 성격을 라벨로 말한다. IA 진단의 핵심이 "여러 화면에 걸치는 값은 집이 없어진다" 였고,
+ * 문서는 그 답으로 블록마다 **이게 어떤 종류의 값인지** 를 붙였다.
+ *   fact — 사실. 여러 산출물이 읽어가는 원본.
+ *   read — 읽기. 다른 곳이 소유한 값의 거울(여기서는 못 고친다).
+ *   risk — 위험. 라이브 중이면 시청자에게 즉시 반영되는 값.
+ *   sync — 연동. 다른 화면(운영 콘솔)과 양방향으로 같은 키를 쓴다.
+ */
+export type BlkTag = "fact" | "read" | "risk" | "sync";
+const BLK_TAG: Record<BlkTag, { label: string; cls: string }> = {
+  fact: { label: "사실", cls: "bg-violet-500/12 text-violet-600 dark:text-violet-300" },
+  read: { label: "읽기", cls: "bg-secondary text-muted-foreground" },
+  risk: { label: "위험", cls: "bg-amber-500/12 text-amber-700 dark:text-amber-400" },
+  sync: { label: "연동", cls: "bg-emerald-500/12 text-emerald-700 dark:text-emerald-400" },
+};
+
+/**
+ * 편집 블록 한 칸.
+ *
+ * 왜 필요했나: 로그인해서 실제 화면을 보니 시청 화면의 섹션 5개가 제목 14px + 설명 12px +
+ * 입력의 **같은 반복**이라 400여 줄이 하나의 벽으로 읽혔다. 앞서 나는 "고치는 영역에서
+ * 동등한 항목은 같은 무게가 맞다" 고 판단했는데, 5개가 쌓이면 훑을 수가 없다 — 실물이 반증했다.
+ *
+ * `goes` 는 이 값이 **어느 공개 면에 나가는지** 를 적는다. IA 진단이 지적한 바로 그 구멍
+ * ("테마 6컨트롤은 6개 공개 면 전부에 적용되는데 '라이브 페이지' 안에만 있었다")을
+ * 화면에서 메꾸는 장치다. 주석이 아니라 UI 로 답한다.
+ */
+export function Blk({
+  title,
+  hint,
+  tag,
+  goes,
+  pinned = false,
+  action,
+  className = "",
+  children,
+}: {
+  title: string;
+  hint?: ReactNode;
+  tag?: BlkTag;
+  /** 이 값이 나가는 공개 면 (예: ["랜딩", "대기", "종료"]) */
+  goes?: string[];
+  /** 가장 위험하고 자주 만지는 블록 — 한 화면에 하나만. 마감을 한 단 올린다. */
+  pinned?: boolean;
+  /** 헤더 우측 컨트롤(토글·링크 등). goes 와 함께 쓰면 goes 가 아래로 내려간다. */
+  action?: ReactNode;
+  className?: string;
+  children?: ReactNode;
+}) {
+  const t = tag ? BLK_TAG[tag] : null;
+  return (
+    <section
+      className={`bg-card p-4 ${R.panel} ${
+        pinned ? "shadow-[inset_0_0_0_1px_var(--ring),var(--shadow-card)]" : FINISH.s1
+      } ${className}`}
+    >
+      <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+        {/* 제목 크기는 14px 그룹 단을 유지한다 — 문서 프로토타입은 12.5px 이지만 이 앱의
+            제목 스케일은 화면 16 / 영역 12 표지 / 그룹 14 로 이미 고정했고, 여기서 네 번째
+            크기를 만들면 그 스케일이 다시 갈린다. 구분은 카드 면과 태그가 맡는다. */}
+        <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
+        {t && (
+          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${t.cls}`}>
+            {t.label}
+          </span>
+        )}
+        {action && <span className="ml-auto shrink-0">{action}</span>}
+        {goes && goes.length > 0 && (
+          <span className={`flex flex-wrap items-center gap-1 ${action ? "" : "ml-auto"}`}>
+            <span className="text-[10px] text-muted-foreground/70">나가는 곳</span>
+            {goes.map((g) => (
+              <span key={g} className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                {g}
+              </span>
+            ))}
+          </span>
+        )}
+      </div>
+      {hint && <p className="mb-3 -mt-1.5 text-xs leading-relaxed text-muted-foreground">{hint}</p>}
+      {children}
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Field — 입력 한 벌. 여기가 유일한 선언 위치.
 // ─────────────────────────────────────────────────────────────────────────────
 
