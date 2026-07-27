@@ -14,11 +14,17 @@ import {
   ExternalLink,
   Eye,
   Loader2,
+  MoreHorizontal,
   Settings2,
+  Trash2,
   Video,
 } from "lucide-react";
+import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { btnCls, FINISH, R } from "@/components/ui/primitives";
 import Link from "next/link";
 import PageSetupTab from "./PageSetupTab";
+import { type WatchState } from "./LivePageTab";
 import AnalyticsTab from "./AnalyticsTab";
 import DeployTab from "./DeployTab";
 import OperateTab, { type OperateSection } from "./OperateTab";
@@ -28,13 +34,38 @@ import { InlineError } from "@/components/ui/inline-error";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
-type SettingsSection = "general" | "landing" | "registration" | "sessions" | "waiting" | "livepage" | "ended" | "survey";
+type SettingsSection = "source" | "landing" | "registration" | "watch" | "survey" | "check";
 // 새 IA: 만들기(create=설정) / 배포(deploy) / 운영(operate=콘솔+등록자) / 분석(analytics)
 type Tab = "create" | "deploy" | "operate" | "analytics";
 type NavigationTarget = Tab | `create-${SettingsSection}` | "operate-registrants";
 
 const TAB_IDS: Tab[] = ["create", "deploy", "operate", "analytics"];
-const CREATE_SECTIONS: SettingsSection[] = ["general", "landing", "registration", "sessions", "waiting", "livepage", "ended", "survey"];
+const CREATE_SECTIONS: SettingsSection[] = ["source", "landing", "registration", "watch", "survey", "check"];
+
+/**
+ * 옛 섹션 키 → 새 키. 북마크·공유 링크·외부 문서의 ?sec=general·?sec=sessions 가 죽지 않게 한다.
+ * 이 둘은 IA 1단계에서 '원본 정보'로 합쳐졌다. 매핑이 없으면 알 수 없는 키로 떨어져
+ * 기본 섹션으로 조용히 튕기는데, 사용자는 "세션이 사라졌다"고 읽는다.
+ */
+const SECTION_ALIASES: Record<string, SettingsSection> = {
+  general: "source",
+  sessions: "source",
+  // 2단계: 대기·라이브·종료는 '시청 화면' 한 칸의 상태가 됐다.
+  waiting: "watch",
+  livepage: "watch",
+  ended: "watch",
+};
+
+/**
+ * 옛 섹션 키가 가리키던 상태로 정확히 착지시킨다 — alias 만 있으면 ?sec=ended 북마크가
+ * 시청 화면의 기본 상태(라이브)로 떨어져 "종료 화면 설정이 사라졌다"로 읽힌다.
+ */
+const WATCH_STATE_FROM_ALIAS: Record<string, WatchState> = {
+  waiting: "waiting",
+  livepage: "live",
+  ended: "ended",
+};
+const WATCH_STATES_ALL: WatchState[] = ["waiting", "entry", "live", "ended"];
 const OPERATE_SECTIONS: OperateSection[] = ["console", "registrants"];
 
 interface WebinarSession {
@@ -45,6 +76,7 @@ interface WebinarSession {
   speaker: string | null;
   speakerCompany: string | null;
   speakerPhotoUrl: string | null;
+  logoUrl: string | null;
   description: string | null;
   speakerBio: string | null;
   startTime: string;
@@ -121,7 +153,13 @@ function WebinarDetail({ id }: { id: string }) {
   const activeTab: Tab = TAB_IDS.includes(tabParam as Tab) ? (tabParam as Tab) : (computedDefaultTab ?? "operate");
   const settingsSection: SettingsSection = CREATE_SECTIONS.includes(secParam as SettingsSection)
     ? (secParam as SettingsSection)
-    : "general";
+    : (secParam && SECTION_ALIASES[secParam]) || "source";
+  // 시청 화면의 편집 상태 — ?st= 이 단일 소스. 옛 섹션 키로 들어오면 그 키가 뜻하던 상태로.
+  const stParam = searchParams.get("st");
+  const watchState: WatchState = WATCH_STATES_ALL.includes(stParam as WatchState)
+    ? (stParam as WatchState)
+    : (secParam && WATCH_STATE_FROM_ALIAS[secParam]) || "live";
+
   const operateSection: OperateSection = OPERATE_SECTIONS.includes(secParam as OperateSection)
     ? (secParam as OperateSection)
     : "console";
@@ -136,6 +174,18 @@ function WebinarDetail({ id }: { id: string }) {
       // 탭 전환은 push(뒤로가기로 이전 탭 복귀), 서브섹션은 replace(히스토리 소음 방지)
       if (opts?.replace) router.replace(url, { scroll: false });
       else router.push(url, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  /** 시청 화면 상태 전환 — replace 로 히스토리 소음을 막는다(섹션 전환과 같은 규칙). */
+  const setWatchState = useCallback(
+    (next: WatchState) => {
+      const sp = new URLSearchParams(searchParams.toString());
+      sp.set("tab", "create");
+      sp.set("sec", "watch");
+      sp.set("st", next);
+      router.replace(`${pathname}?${sp.toString()}`, { scroll: false });
     },
     [pathname, router, searchParams],
   );
@@ -238,7 +288,9 @@ function WebinarDetail({ id }: { id: string }) {
   }
 
   // 상태 머신 기준 — statusOverride(수동 전환) 반영. 헤더 배지/아이콘 색이 운영 콘솔과 일치.
-  const status = resolveWebinarStatus(webinar).status;
+  // 상태는 여기서 한 번만 푼다 — 자식이 다시 계산하면 statusOverride 를 못 보고 헤더와 어긋난다.
+  const webinarStatus = resolveWebinarStatus(webinar);
+  const status = webinarStatus.status;
   const isLive = status === "live";
   const isEnded = status === "ended";
   const statusMeta = WEBINAR_STATUS_META[status];
@@ -329,6 +381,7 @@ function WebinarDetail({ id }: { id: string }) {
               <Eye className="w-3.5 h-3.5" />
               미리보기
             </motion.a>
+            <WebinarOverflowMenu webinar={{ id: webinar.id, name: webinar.name }} />
           </div>
         </div>
 
@@ -394,6 +447,15 @@ function WebinarDetail({ id }: { id: string }) {
                 onSilentUpdate={() => fetchWebinar(true)}
                 section={settingsSection}
                 onSectionChange={(section) => navigate("create", section, { replace: true })}
+                watchState={watchState}
+                onWatchStateChange={setWatchState}
+                isLive={isLive}
+                // 레일 상태 점의 근거 — 같은 판정을 두 번 하지 않는다
+                canRegister={webinarStatus.canRegister}
+                isEnded={isEnded}
+                // 안내 문구의 "운영 → 라이브 콘솔에서" 같은 문장을 누를 수 있게 —
+                // 목적지가 다른 탭이라 만들기 혼자서는 이동할 수 없다(navigate 는 이 껍데기 소유).
+                onJumpToTab={navigate}
               />
             )}
             {activeTab === "deploy" && <DeployTab
@@ -416,6 +478,87 @@ function WebinarDetail({ id }: { id: string }) {
           </motion.div>
         </AnimatePresence>
       </div>
+    </div>
+  );
+}
+
+/**
+ * 껍데기 ··· 메뉴 — 저빈도·고위험 액션의 집.
+ *
+ * IA 문서가 웨비나 삭제를 **만들기 밖 이 메뉴로** 보낸 이유를 그대로 옮긴다:
+ * "계정 수준 파괴 액션이 자동저장 표시 바로 다음 줄에 있었다 — 확인 단계는 있었지만
+ * **'멀리'가 아니었다**."
+ *
+ * 나는 이걸 원본 정보 화면 **맨 아래**로 옮기고 "화면 맨 끝에만" 이라고 적어 뒀는데,
+ * 화면 안에 있는 한 여전히 '멀리' 가 아니다(스크롤하면 지나간다). 여기로 옮긴다.
+ * 확인은 공용 모달의 requireText 게이트 — 웨비나 이름을 정확히 입력해야 열린다.
+ */
+function WebinarOverflowMenu({ webinar }: { webinar: { id: string; name: string } }) {
+  const router = useRouter();
+  const confirm = useConfirm();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+
+  const remove = async () => {
+    setOpen(false);
+    const ok = await confirm({
+      title: "웨비나를 삭제할까요?",
+      description: "모든 등록자, Q&A, 채팅, 공지, 설문 응답이 함께 삭제돼요. 되돌릴 수 없어요.",
+      confirmLabel: "삭제",
+      tone: "danger",
+      requireText: { label: `확인을 위해 웨비나 이름 "${webinar.name}" 을 입력하세요`, expected: webinar.name },
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/webinars/${webinar.id}`, { method: "DELETE" });
+      if (!res.ok) { toast.error("삭제 실패"); return; }
+      toast.success("웨비나가 삭제됐어요");
+      router.push("/webinar");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="웨비나 더보기"
+        title="더보기"
+        disabled={busy}
+        className={btnCls("quiet", "h-9 w-9 !px-0")}
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </button>
+      {open && (
+        <div role="menu" className={`absolute right-0 top-full z-30 mt-1.5 w-56 bg-popover p-1.5 ${R.surface} ${FINISH.overlay}`}>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={remove}
+            className={`w-full text-left ${btnCls("dangerQuiet", "justify-start")}`}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            웨비나 삭제
+          </button>
+        </div>
+      )}
     </div>
   );
 }

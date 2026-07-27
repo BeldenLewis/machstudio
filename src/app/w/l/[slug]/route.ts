@@ -80,6 +80,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
             speaker: true,
             speakerCompany: true,
             speakerPhotoUrl: true,
+            logoUrl: true,
             description: true,
             speakerBio: true,
             startTime: true,

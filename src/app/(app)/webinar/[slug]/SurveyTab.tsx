@@ -1,14 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction, type ElementType } from "react";
-import { motion, Reorder, useDragControls } from "framer-motion";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction, type ElementType, type ReactNode } from "react";
+import { motion } from "framer-motion";
 import {
   Plus, Trash2, GripVertical, Link2, Loader2, BarChart3,
   Star, CircleDot, ListChecks, Gauge, AlignLeft, Copy, ChevronDown, ChevronRight, ArrowLeft, Info, X, Smartphone, CalendarClock, CircleCheckBig, ClipboardList,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
-import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
+import { useReportAutosave } from "@/components/ui/autosave-scope";
+import { FIELD_CLS, FINISH, R, SELECTED } from "@/components/ui/primitives";
+import { OptionRows } from "@/components/ui/option-rows";
+import { EditableList } from "@/components/ui/editable-list";
 import { Switch } from "@/components/ui/switch";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { isSurveyAcceptingResponses, normalizeSurveyQuestions, SURVEY_MAX_QUESTIONS, SURVEY_TYPE_LABELS, type SurveyQuestion, type SurveyQuestionType } from "@/lib/webinar-survey";
@@ -72,7 +75,7 @@ const countOptions = (q: SurveyQuestion) => q.options.filter((o) => o.trim()).le
 /* ---------- 유형 선택 팝오버 (칩·문항 추가 버튼이 공유) ---------- */
 function TypeMenu({ current, onPick }: { current?: SurveyQuestionType; onPick: (t: SurveyQuestionType) => void }) {
   return (
-    <div className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border border-border bg-background p-1.5 shadow-xl">
+    <div className={`absolute left-0 top-full z-30 mt-1.5 w-64 bg-popover p-1.5 ${R.surface} ${FINISH.overlay}`}>
       <p className="px-2 pb-1 pt-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
         {current ? "질문 유형 변경" : "추가할 유형 선택"}
       </p>
@@ -121,20 +124,21 @@ function QuestionRow({
   q,
   index,
   setQuestions,
-  onRemove,
+  handle,
+  removeButton,
   onDuplicate,
   onFocusQuestion,
 }: {
   q: SurveyQuestion;
   index: number;
   setQuestions: Dispatch<SetStateAction<SurveyQuestion[]>>;
-  onRemove: () => void;
+  /** 골격이 만든 드래그 핸들 — dnd-kit 배선(포인터+방향키)이 붙어 있다. */
+  handle: ReactNode | null;
+  /** 골격이 만든 삭제 컨트롤 — 5초 되돌리기까지 포함. */
+  removeButton: (opts?: { label?: string; onClick?: () => void }) => ReactNode | null;
   onDuplicate: () => void;
   onFocusQuestion: (qid: string) => void;
 }) {
-  const dragControls = useDragControls();
-  const rootRef = useRef<HTMLDivElement>(null);
-  const pendingFocus = useRef<number | null>(null);
   const typePop = usePopover();
 
   const patch = (next: Partial<SurveyQuestion>) =>
@@ -142,37 +146,11 @@ function QuestionRow({
   const hasOptions = q.type === "single" || q.type === "multiple";
   const optionCount = countOptions(q);
 
-  // 선택지 추가/삭제 후 해당 입력으로 포커스 이동 (리렌더 뒤 실행)
-  useEffect(() => {
-    if (pendingFocus.current === null) return;
-    const el = rootRef.current?.querySelector<HTMLInputElement>(`input[data-opt-idx="${pendingFocus.current}"]`);
-    pendingFocus.current = null;
-    el?.focus();
-  });
-
   // 옵션이 줄어 maxSelect 가 옵션수 이상이 되면 무제한과 같아진다 — 정규화 규칙·UI 표시와 어긋나지 않게 정리.
   const clampMax = (options: string[], next: Partial<SurveyQuestion>) => {
     const n = options.filter((o) => o.trim()).length;
     if (q.maxSelect !== undefined && q.maxSelect >= n) next.maxSelect = undefined;
     return next;
-  };
-  const setOption = (idx: number, v: string) => {
-    const options = [...q.options];
-    options[idx] = v;
-    patch(clampMax(options, { options }));
-  };
-  const addOption = (at: number) => {
-    const options = [...q.options];
-    options.splice(at, 0, "");
-    patch({ options });
-    pendingFocus.current = at;
-  };
-  const removeOption = (at: number, focusPrev = false) => {
-    const options = [...q.options];
-    if (options.length <= 1) options[at] = "";
-    else options.splice(at, 1);
-    patch(clampMax(options, { options }));
-    if (focusPrev) pendingFocus.current = Math.max(0, at - 1);
   };
 
   const changeType = (t: SurveyQuestionType) => {
@@ -188,17 +166,13 @@ function QuestionRow({
   const TypeIcon = meta.icon;
 
   return (
-    <Reorder.Item value={q} dragListener={false} dragControls={dragControls} layout className="rounded-xl bg-secondary/40 transition-colors focus-within:bg-secondary/60">
-      <div ref={rootRef} onFocusCapture={() => onFocusQuestion(q.id)}>
+    /* framer Reorder → 골격(dnd-kit). layout 프롭 제거가 핵심 — framer 가 transform 의
+       저자가 되면 dnd-kit 이 넘긴 값이 버려진다(SessionsTab 실측). 방향키 재정렬과
+       삭제 되돌리기가 함께 붙는다. */
+    <div className={`${R.surface} bg-secondary ${FINISH.s2} transition-colors focus-within:bg-secondary/70`}>
+      <div onFocusCapture={() => onFocusQuestion(q.id)}>
         <div className="flex items-center gap-1 px-2 pt-2">
-          <button
-            type="button"
-            aria-label="순서 변경"
-            onPointerDown={(e) => { e.preventDefault(); dragControls.start(e); }}
-            className="grid h-8 w-7 shrink-0 cursor-grab place-items-center rounded-md text-muted-foreground/40 transition-colors hover:text-muted-foreground active:cursor-grabbing touch-none"
-          >
-            <GripVertical className="h-4 w-4" />
-          </button>
+          {handle}
           <span className="w-7 shrink-0 text-center font-mono text-[10px] font-semibold text-muted-foreground/70">Q{index + 1}</span>
 
           <div className="relative" ref={typePop.ref}>
@@ -209,7 +183,7 @@ function QuestionRow({
               aria-expanded={typePop.open}
               className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-background px-2 py-1.5 text-xs font-semibold shadow-sm transition-shadow hover:shadow"
             >
-              <span className="grid h-5 w-5 place-items-center rounded-md bg-violet-500/10 text-violet-500"><TypeIcon className="h-3 w-3" /></span>
+              <span className="grid h-5 w-5 place-items-center rounded-lg bg-violet-500/10 text-violet-500"><TypeIcon className="h-3 w-3" /></span>
               {meta.label}
               <ChevronDown className="h-3 w-3 text-muted-foreground/60" />
             </button>
@@ -221,12 +195,10 @@ function QuestionRow({
             필수
             <Switch checked={q.required} onChange={(v) => patch({ required: v })} label={`${q.title || "문항"} 필수`} />
           </label>
-          <button type="button" onClick={onDuplicate} aria-label="문항 복제" className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground/50 transition-colors hover:bg-background hover:text-foreground">
+          <button type="button" onClick={onDuplicate} aria-label="문항 복제" className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground/50 transition-colors hover:bg-background hover:text-foreground">
             <Copy className="h-3.5 w-3.5" />
           </button>
-          <button type="button" onClick={onRemove} aria-label="문항 삭제" className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground/50 transition-colors hover:bg-red-500/10 hover:text-red-500">
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          {removeButton({ label: `${q.title || `Q${index + 1}`} 문항 삭제` })}
         </div>
 
         <div className="px-3 pb-3 pl-[42px] pt-1">
@@ -240,35 +212,23 @@ function QuestionRow({
 
           {hasOptions && (
             <div className="space-y-1.5">
-              {q.options.map((opt, idx) => (
-                <div key={idx} className="group flex items-center gap-2 rounded-lg bg-background px-2.5 shadow-sm transition-shadow focus-within:ring-2 focus-within:ring-violet-400/50">
-                  <span className={`h-3.5 w-3.5 shrink-0 border-[1.5px] border-muted-foreground/40 ${q.type === "multiple" ? "rounded-[5px]" : "rounded-full"}`} />
-                  <input
-                    value={opt}
-                    data-opt-idx={idx}
-                    onChange={(e) => setOption(idx, e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.nativeEvent.isComposing) return; // 한글 조합 중 Enter 무시
-                      if (e.key === "Enter") { e.preventDefault(); addOption(idx + 1); }
-                      else if (e.key === "Backspace" && e.currentTarget.value === "" && q.options.length > 1) { e.preventDefault(); removeOption(idx, true); }
-                    }}
-                    placeholder={`선택지 ${idx + 1}`}
-                    aria-label={`${q.title || "문항"} 선택지 ${idx + 1}`}
-                    className="min-w-0 flex-1 bg-transparent py-2 text-[13px] outline-none placeholder:text-muted-foreground/40"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeOption(idx)}
-                    aria-label={`선택지 ${idx + 1} 삭제`}
-                    className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted-foreground/40 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-              <button type="button" onClick={() => addOption(q.options.length)} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-violet-500 transition-colors hover:bg-violet-500/10">
-                <Plus className="h-3.5 w-3.5" />선택지 추가 <span className="font-normal text-muted-foreground/60">— 입력 중 Enter 로도 추가돼요</span>
-              </button>
+              {/**
+               * 공용 OptionRows 로 이관 — 등록 탭의 선택지 코드와 사실상 같은 코드였다.
+               * 얻는 것: 드래그·키보드 재정렬(선택지 순서는 응답 화면의 표시 순서인데
+               * 바꾸는 방법이 문구를 다시 타이핑하는 것뿐이었다).
+               *
+               * clampMax 는 여기 남는다 — 이건 설문에만 있는 파생값이고, 계산 근거가
+               * 배열 길이가 아니라 **비어 있지 않은 옵션 수**다. 그래서 골격의 onCountChange
+               * (배열 길이)로는 못 맞춘다. 배열을 손에 든 onChange 에서 처리한다.
+               */}
+              <OptionRows
+                listId={`survey-q-${q.id}`}
+                value={q.options}
+                onChange={(options) => patch(clampMax(options, { options }))}
+                markerShape={q.type === "multiple" ? "square" : "circle"}
+                ownerLabel="문항"
+                ownerTitle={q.title}
+              />
 
               {optionCount === 0 && (
                 <p className="flex items-center gap-1.5 pt-0.5 text-[11px] text-amber-600">
@@ -283,7 +243,7 @@ function QuestionRow({
                     type="button"
                     aria-pressed={q.maxSelect === undefined}
                     onClick={() => patch({ maxSelect: undefined })}
-                    className={`h-6 rounded-md px-2 text-[11px] font-semibold shadow-sm transition-colors ${q.maxSelect === undefined ? "bg-violet-500 text-white" : "bg-background text-muted-foreground hover:text-foreground"}`}
+                    className={`h-6 px-2 text-[11px] font-semibold transition-colors ${R.control} ${q.maxSelect === undefined ? SELECTED : `bg-background text-muted-foreground hover:text-foreground ${FINISH.s2}`}`}
                   >
                     무제한
                   </button>
@@ -294,7 +254,7 @@ function QuestionRow({
                       type="button"
                       aria-pressed={q.maxSelect === n}
                       onClick={() => patch({ maxSelect: n })}
-                      className={`h-6 min-w-7 rounded-md px-2 text-[11px] font-semibold tabular-nums shadow-sm transition-colors ${q.maxSelect === n ? "bg-violet-500 text-white" : "bg-background text-muted-foreground hover:text-foreground"}`}
+                      className={`h-6 min-w-7 px-2 text-[11px] font-semibold tabular-nums transition-colors ${R.control} ${q.maxSelect === n ? SELECTED : `bg-background text-muted-foreground hover:text-foreground ${FINISH.s2}`}`}
                     >
                       {n}
                     </button>
@@ -311,7 +271,7 @@ function QuestionRow({
           )}
         </div>
       </div>
-    </Reorder.Item>
+    </div>
   );
 }
 
@@ -397,6 +357,8 @@ function SurveyEditor({
   survey,
   onDeleted,
   onMetaChanged,
+  endedSurveyAreaOn,
+  onGoToEndedScreen,
 }: {
   webinarId: string;
   slug: string;
@@ -405,6 +367,8 @@ function SurveyEditor({
   survey: AdminSurvey;
   onDeleted: () => void;
   onMetaChanged: (patch: Partial<AdminSurvey>) => void;
+  endedSurveyAreaOn?: boolean;
+  onGoToEndedScreen?: () => void;
 }) {
   const [title, setTitle] = useState(survey.title);
   const [description, setDescription] = useState(survey.description ?? "");
@@ -445,6 +409,8 @@ function SurveyEditor({
     } catch { return false; }
   };
   const { state: saveState, retry } = useAutosave({ title, description, questions, doneTitle, doneDescription }, save);
+  // 표시는 껍데기 한 곳에서 그린다(만들기 화면당 1개) — 저장 경로는 그대로 각자.
+  useReportAutosave(saveState, retry);
 
   const toggle = async (key: "isOpen" | "showOnEnded", value: boolean) => {
     const res = await fetch(`/api/webinars/${webinarId}/surveys/${survey.id}`, {
@@ -452,8 +418,19 @@ function SurveyEditor({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ [key]: value }),
     });
-    if (res.ok) onMetaChanged({ [key]: value });
-    else toast.error("변경에 실패했어요");
+    if (!res.ok) { toast.error("변경에 실패했어요"); return; }
+    onMetaChanged({ [key]: value });
+
+    /**
+     * 여기서 종료 화면 토글(config.livePage.ended.survey)까지 켜고 싶지만 **할 수 없다.**
+     * 서버의 config 병합은 최상위 얕은 병합이라(mergeJson) `config: { livePage: { … } }` 를 보내면
+     * **livePage 전체가 교체**된다 — CTA·자료·공지·대기 화면 설정이 통째로 날아간다.
+     * livePage 를 온전히 보내려면 현재 값을 알아야 하고, 그건 이 탭이 들고 있지 않다(스냅샷을
+     * 새로 읽어 보내는 것도 다른 창의 편집을 되돌릴 위험이 있다).
+     *
+     * 그래서 쓰지 않고 **보이게 한다** — 아래 안내가 종료 화면 영역이 꺼져 있음을 알리고
+     * 그 자리로 보낸다. 결정을 한 자리로 모으는 쪽(3택)은 시청 화면 › 종료 가 담당한다.
+     */
   };
 
   // 마감 예약 — 입력 중엔 로컬 draft, 확정(blur/해제)에만 PATCH (datetime-local 은 필드 편집마다 change 가 발생)
@@ -555,24 +532,35 @@ function SurveyEditor({
                 className="mt-0.5 w-full bg-transparent text-[13px] text-muted-foreground outline-none placeholder:text-muted-foreground/40"
               />
             </div>
-            <button type="button" onClick={remove} aria-label="설문 삭제" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground/50 transition-colors hover:bg-red-500/10 hover:text-red-500">
+            <button type="button" onClick={remove} aria-label="설문 삭제" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive">
               <Trash2 className="h-4 w-4" />
             </button>
           </div>
 
-          <Reorder.Group axis="y" values={activeQuestions} onReorder={setActiveOrder} className="space-y-2">
-            {activeQuestions.map((q, i) => (
+          {/* onChange 로 setActiveOrder 를 그대로 쓴다 — 재정렬과 삭제 **둘 다** 맞다.
+              보관(retired) 문항을 항상 뒤에 붙여 주는 함수라 활성 목록만 다루면 된다. */}
+          <EditableList<SurveyQuestion>
+            listId={`survey-${survey.id}-questions`}
+            itemNoun="문항"
+            items={activeQuestions}
+            onChange={setActiveOrder}
+            rowKey={(item) => item.id}
+            reorderable
+            rowChrome="bare"
+            // 추가는 유형을 먼저 고르는 팝오버라 목록 밖에 있다 — 골격은 그리지 않는다.
+            renderAdd={() => null}
+            renderRow={({ item, visibleIndex, handle, removeButton }) => (
               <QuestionRow
-                key={q.id}
-                q={q}
-                index={i}
+                q={item}
+                index={visibleIndex}
                 setQuestions={setQuestions}
-                onRemove={() => setQuestions((prev) => prev.filter((item) => item.id !== q.id))}
-                onDuplicate={() => duplicateQuestion(q.id)}
+                handle={handle}
+                removeButton={removeButton}
+                onDuplicate={() => duplicateQuestion(item.id)}
                 onFocusQuestion={focusQuestion}
               />
-            ))}
-          </Reorder.Group>
+            )}
+          />
 
           <div className="relative" ref={addPop.ref}>
             <button
@@ -591,7 +579,7 @@ function SurveyEditor({
               응답 화면에는 안 나오고, 분석·개별응답·CSV 에서 지난 답변을 계속 볼 수 있다.
               편집 값이 아니라 읽는 값이므로 요약만 보여준다(원칙 1: 읽는 영역). */}
           {retiredQuestions.length > 0 && (
-            <div className="space-y-1.5 rounded-xl border border-border bg-secondary/20 p-3">
+            <div className={`space-y-1.5 bg-secondary p-3 ${R.surface} ${FINISH.s2}`}>
               <p className="text-[11px] font-semibold text-muted-foreground">
                 보관된 문항 {retiredQuestions.length}개
               </p>
@@ -612,7 +600,7 @@ function SurveyEditor({
           )}
 
           {/* 제출 완료 화면 — 응답 제출 후 보이는 문구(비우면 기본 문구). 응답 링크·라이브 푸시·CTA 모달 공통 적용. */}
-          <div className="space-y-2 rounded-xl border border-border bg-secondary/20 p-3">
+          <div className={`space-y-2 bg-secondary p-3 ${R.surface} ${FINISH.s2}`}>
             <p className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
               <CircleCheckBig className="h-3.5 w-3.5 text-violet-500" />제출 완료 화면
             </p>
@@ -651,6 +639,20 @@ function SurveyEditor({
               <Switch checked={survey.showOnEnded} onChange={(v) => toggle("showOnEnded", v)} label="종료 화면에 연결" />
               종료 화면에 연결
             </label>
+            {/* 이 스위치만 켜도 시청자에게는 아무것도 안 보일 수 있다 — 종료 화면의 설문 영역이
+                따로 꺼져 있으면 무시된다. 예전엔 그 사실이 어디에도 없어서 "켰는데 안 나온다" 가 됐다.
+                여기서 쓰지 않고 알리는 이유: config 병합이 최상위 얕은 병합이라 이 탭에서
+                livePage 를 건드리면 CTA·자료·공지가 통째로 날아간다. */}
+            {survey.showOnEnded && endedSurveyAreaOn === false && (
+              <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-relaxed text-amber-700 dark:text-amber-400">
+                종료 화면의 설문 영역이 꺼져 있어 시청자에게는 보이지 않아요.
+                {onGoToEndedScreen && (
+                  <button type="button" onClick={onGoToEndedScreen} className="font-semibold underline underline-offset-2">
+                    시청 화면 › 종료에서 켜기
+                  </button>
+                )}
+              </p>
+            )}
             <label className="flex select-none items-center gap-1.5 text-xs text-muted-foreground">
               <CalendarClock className="h-3.5 w-3.5" />마감 예약
               <input
@@ -659,27 +661,26 @@ function SurveyEditor({
                 onChange={(e) => setClosesDraft(e.target.value)}
                 onBlur={(e) => void commitClosesAt(e.target.value)}
                 aria-label="마감 예약 시각"
-                className="rounded-md border border-border bg-background px-1.5 py-1 text-[11px] tabular-nums transition-colors focus:border-violet-400 focus:outline-none"
+                className={`${FIELD_CLS} min-h-0 px-1.5 py-1 text-[11px] tabular-nums`}
               />
               {survey.closesAt && (
                 <button
                   type="button"
                   onClick={() => { setClosesDraft(""); void commitClosesAt(""); }}
                   aria-label="마감 예약 해제"
-                  className="grid h-5 w-5 place-items-center rounded text-muted-foreground/50 transition-colors hover:bg-red-500/10 hover:text-red-500"
+                  className="grid h-5 w-5 place-items-center rounded-lg text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
                 >
                   <X className="h-3 w-3" />
                 </button>
               )}
               {scheduledClosed && (
-                <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">예약 시각이 지나 마감됨</span>
+                <span className="rounded-lg bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">예약 시각이 지나 마감됨</span>
               )}
             </label>
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground/70"><BarChart3 className="h-3 w-3" />응답 {survey._count?.responses ?? 0}건</span>
             <button type="button" onClick={copyLink} className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground">
               <Link2 className="h-3.5 w-3.5" />{copied ? "복사됨 ✓" : "응답 링크 복사"}
             </button>
-            <AutosaveIndicator state={saveState} onRetry={retry} />
           </div>
         </div>
 
@@ -705,11 +706,20 @@ export default function SurveyTab({
   slug,
   webinarName,
   theme,
+  endedSurveyAreaOn,
+  onGoToEndedScreen,
 }: {
   webinarId: string;
   slug: string;
   webinarName?: string;
   theme?: Record<string, string>;
+  /**
+   * 종료 화면의 설문 영역(config.livePage.ended.survey)이 켜져 있는가.
+   * 꺼져 있으면 '종료 화면에 연결' 을 켜도 시청자에게 아무것도 보이지 않는다 —
+   * 이 탭은 그 사실을 알려 주기만 하고, 켜는 결정은 시청 화면 › 종료 › '설문 연결' 소관이다.
+   */
+  endedSurveyAreaOn?: boolean;
+  onGoToEndedScreen?: () => void;
 }) {
   const [surveys, setSurveys] = useState<AdminSurvey[] | null>(null);
   const [creating, setCreating] = useState(false);
@@ -759,6 +769,8 @@ export default function SurveyTab({
           <ArrowLeft className="h-4 w-4" />설문 목록
         </button>
         <SurveyEditor
+          endedSurveyAreaOn={endedSurveyAreaOn}
+          onGoToEndedScreen={onGoToEndedScreen}
           key={selected.id}
           webinarId={webinarId}
           slug={slug}

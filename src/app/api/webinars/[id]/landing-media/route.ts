@@ -1,19 +1,17 @@
-// 랜딩 히어로 배경 미디어 업로드(이미지·동영상) — speaker-photo 와 같은 버킷(webinar-assets)을 쓰되,
-// 동영상은 버킷 기본 제한(5MB·이미지 전용)에 걸리므로 업로드 전에 제한을 상향해 둔다.
+// 랜딩 히어로 배경 미디어 업로드(이미지·동영상).
+// 버킷 설정은 webinar-asset-bucket.ts 한 곳이 소유한다 — 예전엔 이 파일이 매 업로드마다
+// allowedMimeTypes 를 자기가 아는 목록으로 덮어써서, 다른 라우트가 새 형식을 허용해도
+// 여기 업로드 한 번에 지워졌다(그 뒤 새 형식만 Supabase 단계에서 실패 — 원인이 안 보인다).
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { ASSET_BUCKET, ensureAssetBucket } from "@/lib/webinar-asset-bucket";
 import {
-  LANDING_MEDIA_MIME_TYPES,
   landingMediaExtension,
   landingMediaKind,
   validateLandingMedia,
 } from "@/lib/webinar-landing-media";
-
-const BUCKET = "webinar-assets";
-const SPEAKER_PHOTO_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 async function authorize(webinarId: string, userId: string) {
   const webinar = await prisma.webinar.findUnique({ where: { id: webinarId } });
@@ -22,29 +20,6 @@ async function authorize(webinarId: string, userId: string) {
     where: { userId_workspaceId: { userId, workspaceId: webinar.workspaceId } },
   });
   return membership ? webinar : null;
-}
-
-// 버킷이 없으면 생성, 있으면 동영상까지 받도록 제한을 상향(멱등 — 이미 상향돼 있어도 무해).
-async function ensureAssetBucket() {
-  const admin = createAdminClient();
-  const allowedMimeTypes = [...new Set([...SPEAKER_PHOTO_MIME_TYPES, ...LANDING_MEDIA_MIME_TYPES])];
-  const { error: bucketError } = await admin.storage.getBucket(BUCKET);
-  if (bucketError) {
-    const { error } = await admin.storage.createBucket(BUCKET, {
-      public: true,
-      fileSizeLimit: "50MB",
-      allowedMimeTypes,
-    });
-    if (error && !/already exists/i.test(error.message)) throw error;
-    return admin;
-  }
-  const { error } = await admin.storage.updateBucket(BUCKET, {
-    public: true,
-    fileSizeLimit: "50MB",
-    allowedMimeTypes,
-  });
-  if (error) throw error;
-  return admin;
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -70,14 +45,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const admin = await ensureAssetBucket();
     const path = `${webinar.workspaceId}/${webinar.id}/landing/${randomUUID()}.${extension}`;
-    const { error } = await admin.storage.from(BUCKET).upload(path, file, {
+    const { error } = await admin.storage.from(ASSET_BUCKET).upload(path, file, {
       contentType: file.type,
       cacheControl: "31536000",
       upsert: false,
     });
     if (error) throw error;
 
-    const { data } = admin.storage.from(BUCKET).getPublicUrl(path);
+    const { data } = admin.storage.from(ASSET_BUCKET).getPublicUrl(path);
     return NextResponse.json({ url: data.publicUrl, type: kind }, { status: 201 });
   } catch (error) {
     console.error("[webinar] landing media upload failed", error);

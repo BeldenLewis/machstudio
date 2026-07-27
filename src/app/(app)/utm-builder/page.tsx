@@ -270,7 +270,7 @@ function TagInput({ tags, onChange, suggestions, placeholder }: {
 
   return (
     <div className="space-y-2">
-      <div className="min-h-[42px] flex flex-wrap gap-1.5 rounded-xl border border-border bg-background px-3 py-2 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-400/20 transition-all cursor-text"
+      <div data-focus-shell className="min-h-[42px] flex flex-wrap gap-1.5 rounded-xl border border-border bg-background px-3 py-2 transition-all cursor-text"
         onClick={(e) => (e.currentTarget.querySelector("input") as HTMLInputElement)?.focus()}>
         {tags.map((t) => (
           <span key={t} className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-violet-500/10 text-violet-500 text-xs font-mono font-medium">

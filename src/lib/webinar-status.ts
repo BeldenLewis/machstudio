@@ -25,6 +25,13 @@ export const WEBINAR_STATUS_META: Record<WebinarStatus, { label: string; tone: s
 // 입장 오픈: 시작 N분 전부터 CTA가 "입장하기"로 전환 (레거시 STK watch 모드 — 13:00 오픈/14:00 시작)
 export const DEFAULT_ENTRY_OPEN_BEFORE_MINUTES = 60;
 
+/**
+ * "지금 보고 있는 사람" 판정 창 — lastPingAt 이 이 시간 안이면 시청 중으로 센다.
+ * ping 라우트의 SEGMENT_GAP_MS 와 같은 값이어야 한다(같은 핑 주기를 두 쪽에서 해석하므로).
+ * 대시보드가 이 숫자를 리터럴로 들고 있었는데, 같은 값을 쓰는 곳이 늘면 조용히 갈라진다.
+ */
+export const ACTIVE_VIEWER_WINDOW_MS = 90_000;
+
 export interface WebinarStatusInput {
   liveStartAt: Date | string;
   liveEndAt: Date | string;

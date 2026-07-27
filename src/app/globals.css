@@ -106,12 +106,52 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
+  /* ── 면 경계에 대한 실측 기록 (oklch → sRGB → WCAG) ─────────────────────────────
+     이 팔레트에는 **3:1 을 넘는 면 경계가 없다.** 리디자인 때 "border 를 없애고 그림자로"
+     가 반복해서 제안되는데, 수치가 그걸 막는다:
+         라이트 카드 vs 배경            1.00:1  (--card 와 --background 가 같은 oklch(1 0 0))
+         다크  카드 vs 배경            1.10:1
+         다크  secondary vs 카드        1.18:1
+         라이트 secondary vs 카드        1.09:1
+         다크  border(white 10%) vs 카드 1.32:1  ← 현재 가장 강한 신호
+         다크  그림자(검정 30/60%)        1.03~1.09:1  ← 측정상 0
+     결론: 색조도 그림자도 단독으로 경계를 만들지 못한다. 마감을 통일하려면 헤어라인을
+     **그림자 선언 안으로** 넣어라 — box-shadow: inset 0 0 0 1px var(--border), <elevation>.
+     border 유틸리티를 지우는 방향은 다크에서 카드를 사라지게 한다.
+     (다크 --popover 가 --card 와 같은 값이라 오버레이는 헤어라인이 특히 필수다.) */
   /* 라이브 콘솔 카드 마감 — 목업(90c8cc88) 소프트 섀도우(라이트) */
   --shadow-card: 0 1px 2px rgba(20, 20, 25, 0.04), 0 6px 20px -12px rgba(20, 20, 25, 0.1);
   /* 분석 차트 시리즈 — 테마 대응(라이트): 동시=네이비 / 누적입장=그린 / 채팅=뮤트 */
   --chart-viewers: oklch(0.45 0.1 252);
   --chart-entered: oklch(0.55 0.13 150);
   --chart-chat: oklch(0.72 0.03 252);
+  /* ── 범주형 시리즈 5슬롯 (UTM 소스처럼 "이름이 여럿"인 데이터) ─────────────
+     위 --chart-* 셋은 의미가 고정된 시리즈(동시/입장/채팅)고, 이건 **정체를 구분만**
+     하면 되는 슬롯이다. 순서는 고정이고 절대 순환시키지 않는다.
+
+     왜 만드는가: 대시보드의 UTM 트렌드가 하드코딩 배열 하나를 썼다 —
+     ["#8b5cf6","#ec4899","#f59e0b","#0a66c2","#10b981"]. 문제가 셋이었다.
+       · #8b5cf6 은 **현재 팔레트에 없는 색**이다(violet 계열을 딥네이비로 재정의).
+         그래서 만들기·랜딩은 네이비인데 분석 그래프만 보라로 보였다.
+       · 배열이 한 벌이라 **다크에서 라이트 색이 그대로** 나왔다.
+       · #0a66c2 은 슬롯1을 브랜드 네이비로 바꾸면 서로 구분되지 않는다.
+
+     색은 고르지 않고 계산했다. dataviz 스킬의 validate_palette.js 로 두 모드를
+     검증했고(인접쌍 기준 — all-pairs 는 산점도·지도용), 최종 결과는 **경고 0 · 실패 0**:
+       라이트(면 #ffffff)  명도대역 PASS · 채도하한 PASS · CVD PASS · 정상시야 PASS · 대비 PASS
+       다크 (면 #171717)  전 항목 PASS
+     순서가 [네이비 · 초록 · 핑크 · 앰버 · 틸] 인 이유: 인접쌍만 검사되므로 위험한 쌍을
+     떼어 놓아야 한다. 실측으로 걸러낸 나쁜 인접쌍 —
+       핑크↔틸    deutan ΔE 2.0  (마젠타와 시안은 적록색약에서 붕괴)
+       앰버↔초록  protan ΔE 4.9~7.1
+     이 순서는 그 쌍이 하나도 인접하지 않는 유일한 배열(슬롯1=브랜드 고정 조건에서)이다.
+     hue 는 252(브랜드)·152·350·72·178. 상태색(destructive/warning/success)과 대역이
+     겹치는 것은 명도로 갈라 두었다 — 시리즈 색이 상태 색으로 오독되지 않게. */
+  --series-1: #0058a8;
+  --series-2: #007a34;
+  --series-3: #d4679f;
+  --series-4: #af6700;
+  --series-5: #008369;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -140,7 +180,10 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  /* 다크 링을 무채색(0.556)에서 브랜드색으로 — 라이트는 딥네이비인데 다크만 회색이면
+     같은 컨트롤이 테마에 따라 다른 색으로 포커스된다. violet-300(0.66 0.07 252)은
+     --background(0.145)·--card(0.205) 양쪽에 충분한 명도차를 갖는다. */
+  --ring: oklch(0.66 0.07 252);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -160,6 +203,14 @@
   --chart-viewers: oklch(0.68 0.12 252);
   --chart-entered: oklch(0.72 0.18 150);
   --chart-chat: oklch(0.6 0.03 252);
+  /* 범주형 시리즈 5슬롯(다크) — 자동 반전이 아니라 다크 면(#171717) 기준으로 따로 계산했다.
+     같은 hue, 명도만 올린 것: L +0.08 로 다크 권장 대역 0.48–0.67 안에 들어간다.
+     검증 결과 경고 0 · 실패 0 (라이트 값 옆 주석의 표와 같은 절차). */
+  --series-1: #1870c2;
+  --series-2: #0a924b;
+  --series-3: #d4679f;
+  --series-4: #c98000;
+  --series-5: #009c80;
 }
 
 @layer base {
@@ -215,6 +266,11 @@
   box-shadow: var(--shadow-card);
 }
 
+/* 마감(면 헤어라인 + 엘리베이션)은 여기 클래스로 두지 않는다 —
+   top-level 로 .finish-* 를 선언했더니 서브된 CSS 에 하나도 나타나지 않았다(하니스 실측).
+   대신 src/components/ui/primitives.tsx 의 FINISH 상수가 Tailwind 임의값으로 들고 있다.
+   값의 근거는 위 '면 경계 실측 기록' 참고. */
+
 .mach-toaster {
   pointer-events: none;
 }
@@ -238,14 +294,53 @@
 
 /* 키보드 포커스 링 — 다수 버튼/링크가 focus:outline-none 만 두고 대체 표시가 없어
    키보드 사용자가 현재 위치를 잃는다. focus-visible(키보드 탐색)에만 링을 부여해
-   마우스 클릭 시엔 나타나지 않게 한다. 입력요소는 기존 border 색 변화로 표시하므로 제외. */
+   마우스 클릭 시엔 나타나지 않게 한다.
+
+   입력요소도 포함한다. 예전 주석은 "입력은 border 색 변화로 표시하므로 제외" 였는데,
+   그 전제가 리디자인 스윕으로 깨졌다 — 헤어라인이 border 에서 inset shadow 로 옮겨가면서
+   focus 시 색이 바뀌는 border 가 더는 없다. 브라우저 기본 링이 남긴 하지만 그건
+   UA 마다 색·두께가 다르고 var(--ring) 과 무관해서, 같은 화면에서 버튼과 입력의
+   포커스 표시가 서로 다른 색으로 보인다. 여기서 한 벌로 묶는다. */
 a:focus-visible,
 button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[contenteditable]:focus-visible,
 [role="button"]:focus-visible,
 [role="tab"]:focus-visible,
 [tabindex="0"]:focus-visible,
 summary:focus-visible {
-  outline: 2px solid rgb(139 92 246 / 0.65);
+  /* var(--ring) 을 쓴다 — 예전엔 rgb(139 92 246) 리터럴이었는데, 이 파일 위쪽에서 violet 팔레트를
+     딥네이비로 통째 재정의(--color-violet-400: oklch(0.50 0.08 252))했기 때문에 그 순보라는
+     **현재 팔레트에 존재하지 않는 색**이 되어 있었다. 포커스 링만 리브랜드 이전 색으로 남아 있었다. */
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
-  border-radius: 6px;
+  /* border-radius 를 지정하지 않는다 — 이 규칙은 언레이어드라 @layer utilities 의 rounded-* 를
+     모두 이긴다. 6px 을 박아 두면 rounded-xl(14px) 버튼에 키보드 포커스가 닿는 순간 모서리가
+     6px 로 튄다(육안으로 보인다). 빼면 링이 각 컨트롤 자기 반경을 따라간다. */
+}
+
+/* 포커스 껍데기 — **행/틀이 컨트롤**인 경우.
+
+   이 코드베이스에는 맨입력(bg-transparent + outline-none)이 크롬을 가진 행 안에 놓이는
+   패턴이 여러 곳 있다(선택지 행, 검색 상자, 인증 폼 필드). 위 규칙이 input 을 포함하게
+   되면서 그 행들은 링이 **두 겹**으로 그려진다 — 행의 focus-within 표시 + 입력 자기 아웃라인.
+   소유권을 행 하나로 넘겨서 정리한다. 부수 효과로 focus-within 관용구 4종
+   (ring-2/ring-violet-400·border-violet-400·border-violet-400/70·ring-violet-400/20)이
+   한 벌로 합쳐진다.
+
+   위 규칙은 언레이어드라 유틸리티 클래스로는 끌 수 없다. 그래서 같은 언레이어드 층에서
+   더 높은 특이도로 끈다 — (0,2,1) > (0,1,1). */
+[data-focus-shell]:focus-within {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+/* 껍데기 안에 껍데기가 있으면 바깥이 양보한다 — :focus-within 은 조상 **전부**에 매치되므로
+   중첩(선택지 행 ⊂ 필드 카드)에서 링이 두 겹이 된다. */
+[data-focus-shell]:has([data-focus-shell]:focus-within) {
+  outline: none;
+}
+[data-focus-shell] :is(input, textarea, select):focus-visible {
+  outline: none;
 }

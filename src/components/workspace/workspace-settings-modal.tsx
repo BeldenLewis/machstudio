@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Edit2, Check, Plus, Trash2, Crown, ShieldCheck, User as UserIcon, GripVertical, Tag, Layers, AlertTriangle, Loader2 } from "lucide-react";
+import { FileText, X, Edit2, Check, Plus, Trash2, Crown, ShieldCheck, User as UserIcon, GripVertical, Tag, Layers, AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspace } from "@/contexts/workspace";
 import { Select } from "@/components/ui/select";
@@ -17,7 +17,7 @@ interface Member {
   user: { id: string; name: string | null; email: string; avatarUrl: string | null };
 }
 
-type ModalTab = "general" | "utm";
+type ModalTab = "general" | "utm" | "consent";
 
 const ROLE_LABEL: Record<string, string> = { OWNER: "소유자", ADMIN: "편집자", MEMBER: "뷰어" };
 const ROLE_ICON: Record<string, React.ElementType> = { OWNER: Crown, ADMIN: ShieldCheck, MEMBER: UserIcon };
@@ -219,6 +219,33 @@ export function WorkspaceSettingsModal({ open, onClose }: Props) {
       await refreshWorkspaces();
       toast.success("워크스페이스 이름이 변경됐어요");
     } finally { setIsSavingName(false); }
+  };
+
+  /**
+   * 약관 전문 템플릿 — 웨비나가 자기 값을 비워 두면 이 값을 상속한다.
+   * 이름과 **따로** 저장한다(라우트가 보낸 키만 반영) — 함께 보내면 옛 이름 스냅샷이 되돌린다.
+   */
+  const [privacyTpl, setPrivacyTpl] = useState("");
+  const [marketingTpl, setMarketingTpl] = useState("");
+  const [isSavingTpl, setIsSavingTpl] = useState(false);
+  useEffect(() => {
+    setPrivacyTpl(workspace?.privacyBodyTemplate ?? "");
+    setMarketingTpl(workspace?.marketingBodyTemplate ?? "");
+  }, [workspace?.privacyBodyTemplate, workspace?.marketingBodyTemplate]);
+
+  const handleSaveTemplates = async () => {
+    if (!workspace?.id) return;
+    setIsSavingTpl(true);
+    try {
+      const res = await fetch(`/api/workspace/${workspace.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ privacyBodyTemplate: privacyTpl, marketingBodyTemplate: marketingTpl }),
+      });
+      if (!res.ok) { toast.error("약관 템플릿을 저장하지 못했어요"); return; }
+      await refreshWorkspaces();
+      toast.success("약관 템플릿을 저장했어요 — 전문을 비워 둔 웨비나가 이 값을 씁니다");
+    } finally { setIsSavingTpl(false); }
   };
 
   const handleInvite = async () => {
@@ -427,6 +454,8 @@ export function WorkspaceSettingsModal({ open, onClose }: Props) {
   const tabs: { key: ModalTab; label: string; icon: React.ElementType }[] = [
     { key: "general", label: "일반", icon: UserIcon },
     ...(canManage ? [{ key: "utm" as ModalTab, label: "UTM 규칙", icon: Tag }] : []),
+    // 약관 전문은 조직 자산이라 워크스페이스에 둔다 — 웨비나마다 다시 붙여넣을 값이 아니다(IA 8단계).
+    ...(canManage ? [{ key: "consent" as ModalTab, label: "약관", icon: FileText }] : []),
   ];
 
   return (
@@ -671,6 +700,55 @@ export function WorkspaceSettingsModal({ open, onClose }: Props) {
                           </div>
                         </>
                       )}
+                    </motion.div>
+                  )}
+
+                  {activeTab === "consent" && (
+                    <motion.div key="consent" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="space-y-5">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">약관 전문 템플릿</p>
+                        <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                          웨비나 등록 폼에서 동의 문구를 눌렀을 때 뜨는 전문이에요. 여기 넣어 두면
+                          <b className="font-semibold text-foreground"> 전문을 비워 둔 웨비나가 이 값을 물려받아요</b>.
+                          특정 웨비나만 다르게 하려면 그 웨비나의 등록 탭에서 덮어쓰면 돼요.
+                        </p>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-muted-foreground" htmlFor="ws-privacy-tpl">개인정보 수집·이용 동의 전문</label>
+                        <textarea
+                          id="ws-privacy-tpl"
+                          rows={7}
+                          value={privacyTpl}
+                          onChange={(e) => setPrivacyTpl(e.target.value)}
+                          placeholder="제1조 (수집 항목) ..."
+                          className="w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-sm leading-relaxed transition-colors focus:border-violet-400 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-muted-foreground" htmlFor="ws-marketing-tpl">마케팅 정보 수신 동의 전문</label>
+                        <textarea
+                          id="ws-marketing-tpl"
+                          rows={7}
+                          value={marketingTpl}
+                          onChange={(e) => setMarketingTpl(e.target.value)}
+                          placeholder="수신 동의 시 제공되는 정보 ..."
+                          className="w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-sm leading-relaxed transition-colors focus:border-violet-400 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleSaveTemplates}
+                          disabled={isSavingTpl}
+                          className="rounded-xl bg-violet-500 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-violet-600 disabled:opacity-50"
+                        >
+                          {isSavingTpl ? "저장 중…" : "저장"}
+                        </button>
+                        <span className="text-[11px] text-muted-foreground/70">비워 두면 템플릿 없음으로 저장돼요.</span>
+                      </div>
                     </motion.div>
                   )}
 

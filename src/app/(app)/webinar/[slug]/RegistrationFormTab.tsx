@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type Dispatch, type ElementType, type SetStateAction } from "react";
-import { motion, Reorder, useDragControls } from "framer-motion";
+import { useEffect, useId, useMemo, useRef, useState, type Dispatch, type ElementType, type ReactNode, type SetStateAction } from "react";
+import { motion } from "framer-motion";
 import { Plus, Trash2, GripVertical, Smartphone, AlignLeft, Mail, Phone, ListChecks, SquareCheck, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
-import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
+import { useReportAutosave } from "@/components/ui/autosave-scope";
+import { SignupDeadlineField } from "@/components/webinar/WebinarSchedulePicker";
+import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
+import { resolveConsentBody, consentSourceLabel } from "@/lib/consent-template";
 import { Switch } from "@/components/ui/switch";
+import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
+import { OptionRows } from "@/components/ui/option-rows";
+import { EditableList } from "@/components/ui/editable-list";
 import { normalizeRegistrationForm, type WebinarRegistrationField } from "@/lib/webinar-config";
 import { buildStkCss } from "@/app/webinar/[slug]/LiveContentStk";
 
@@ -20,9 +26,15 @@ interface Webinar {
   slug?: string;
   config: Record<string, unknown>;
   theme?: Record<string, string>;
+  /** 접수 창 계산의 기준 — 마감 프리셋(시작 시점/하루 전)이 이 값에 상대적이다. */
+  liveStartAt: string;
+  signupDeadline: string;
+  components?: Record<string, unknown> | null;
+  /** 약관 전문 템플릿 — 이 웨비나가 비워 두면 상속한다(IA 8단계). */
+  workspace?: { privacyBodyTemplate?: string | null; marketingBodyTemplate?: string | null } | null;
 }
 
-const inputCls = "w-full px-2.5 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:border-violet-400 transition-colors disabled:opacity-40";
+const inputCls = FIELD_CLS;
 // 항목 형식 메타 — 설문 문항 타입 칩과 같은 결(아이콘+라벨)
 const REG_TYPE_META: Record<FieldType, { label: string; desc: string; icon: ElementType }> = {
   text: { label: "텍스트", desc: "한 줄 입력", icon: AlignLeft },
@@ -49,7 +61,7 @@ function useRegPopover() {
 
 function RegTypeMenu({ current, onPick }: { current: FieldType; onPick: (t: FieldType) => void }) {
   return (
-    <div className="absolute left-0 top-full z-30 mt-1.5 w-56 rounded-xl border border-border bg-background p-1.5 shadow-xl">
+    <div className={`absolute left-0 top-full z-30 mt-1.5 w-56 bg-popover p-1.5 ${R.surface} ${FINISH.overlay}`}>
       <p className="px-2 pb-1 pt-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">항목 형식</p>
       {REG_TYPE_ORDER.map((t) => {
         const meta = REG_TYPE_META[t];
@@ -80,15 +92,16 @@ function RegTypeMenu({ current, onPick }: { current: FieldType; onPick: (t: Fiel
 function FieldCard({
   field,
   setFields,
-  onRemove,
+  handle,
+  removeButton,
 }: {
   field: RegistrationField;
   setFields: Dispatch<SetStateAction<RegistrationField[]>>;
-  onRemove: () => void;
+  /** 골격이 만든 드래그 핸들 — dnd-kit 배선(포인터+방향키)이 이미 붙어 있다. */
+  handle: ReactNode | null;
+  /** 골격이 만든 삭제 컨트롤. removable 이 false 면 null 을 준다(기본 필드). */
+  removeButton: (opts?: { label?: string; onClick?: () => void }) => ReactNode | null;
 }) {
-  const dragControls = useDragControls();
-  const rootRef = useRef<HTMLDivElement>(null);
-  const pendingFocus = useRef<number | null>(null);
   const typePop = useRegPopover();
   const patch = (next: Partial<RegistrationField>) =>
     setFields((fields) => fields.map((item) => (item.id === field.id ? { ...item, ...next } : item)));
@@ -98,23 +111,7 @@ function FieldCard({
   const meta = REG_TYPE_META[field.type];
   const TypeIcon = meta.icon;
 
-  // 선택지 추가/삭제 후 해당 입력으로 포커스 이동 (설문 빌더와 동일)
-  useEffect(() => {
-    if (pendingFocus.current === null) return;
-    const el = rootRef.current?.querySelector<HTMLInputElement>(`input[data-opt-idx="${pendingFocus.current}"]`);
-    pendingFocus.current = null;
-    el?.focus();
-  });
-
   const options = field.options ?? [];
-  const setOption = (idx: number, v: string) => { const next = [...options]; next[idx] = v; patch({ options: next }); };
-  const addOption = (at: number) => { const next = [...options]; next.splice(at, 0, ""); patch({ options: next }); pendingFocus.current = at; };
-  const removeOption = (at: number, focusPrev = false) => {
-    const next = [...options];
-    if (next.length <= 1) next[at] = ""; else next.splice(at, 1);
-    patch({ options: next });
-    if (focusPrev) pendingFocus.current = Math.max(0, at - 1);
-  };
 
   const changeType = (t: FieldType) => {
     typePop.setOpen(false);
@@ -125,23 +122,19 @@ function FieldCard({
   };
 
   return (
-    <Reorder.Item
-      value={field}
-      dragListener={false}
-      dragControls={dragControls}
-      layout
-      className={`rounded-xl bg-secondary/40 transition-colors focus-within:bg-secondary/60 ${field.enabled ? "" : "opacity-60"}`}
-    >
-      <div ref={rootRef}>
+    /**
+     * framer Reorder → 골격(EditableList/dnd-kit). layout 프롭이 없어진 게 핵심이다 —
+     * framer 가 layout 이나 y 를 애니메이션하는 순간 transform 문자열의 저자가 되고,
+     * dnd-kit 이 넘긴 transform 은 버려진다(SessionsTab 에서 실측한 그 조합). 끌어도
+     * 행이 따라오지 않고 놓으면 순서만 바뀌어서 눈에 잘 띄지 않는 종류의 고장이다.
+     *
+     * 함께 얻는 것: 방향키 재정렬(원래 0곳), 삭제 되돌리기(원래 즉시 소실 — 옵션까지
+     * 설정해 둔 필드가 한 번의 오클릭으로 사라졌다).
+     */
+    <div className={`${R.surface} bg-secondary ${FINISH.s2} transition-colors focus-within:bg-secondary/70 ${field.enabled ? "" : "opacity-60"}`}>
+      <div>
         <div className="flex items-center gap-1 px-2 pt-2">
-          <button
-            type="button"
-            aria-label="순서 변경"
-            onPointerDown={(e) => { e.preventDefault(); dragControls.start(e); }}
-            className="grid h-8 w-7 shrink-0 cursor-grab place-items-center rounded-md text-muted-foreground/40 transition-colors hover:text-muted-foreground active:cursor-grabbing touch-none"
-          >
-            <GripVertical className="h-4 w-4" />
-          </button>
+          {handle}
 
           <div className="relative" ref={typePop.ref}>
             <button
@@ -152,7 +145,7 @@ function FieldCard({
               disabled={typeLocked}
               className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-background px-2 py-1.5 text-xs font-semibold shadow-sm transition-shadow hover:shadow disabled:cursor-default disabled:opacity-90"
             >
-              <span className="grid h-5 w-5 place-items-center rounded-md bg-violet-500/10 text-violet-500"><TypeIcon className="h-3 w-3" /></span>
+              <span className="grid h-5 w-5 place-items-center rounded-lg bg-violet-500/10 text-violet-500"><TypeIcon className="h-3 w-3" /></span>
               {meta.label}
               {!typeLocked && <ChevronDown className="h-3 w-3 text-muted-foreground/60" />}
             </button>
@@ -167,18 +160,9 @@ function FieldCard({
           <label className="flex shrink-0 select-none items-center gap-1 text-[11px] text-muted-foreground">
             표시<Switch checked={field.enabled} onChange={(v) => patch({ enabled: v })} disabled={isName} label={`${field.label} 표시`} />
           </label>
-          {field.system ? (
-            <span className="w-8 shrink-0" />
-          ) : (
-            <button
-              type="button"
-              onClick={onRemove}
-              aria-label={`${field.label} 삭제`}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground/50 transition-colors hover:bg-red-500/10 hover:text-red-500"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          )}
+          {/* 기본 필드는 removable=false 라 골격이 null 을 준다 — 빈 자리는 우리가 그려
+              헤더 정렬을 유지한다(bare 모드에서 레이아웃은 호출자 책임). */}
+          {removeButton({ label: `${field.label || "필드"} 삭제` }) ?? <span className="w-8 shrink-0" />}
         </div>
 
         <div className="px-3 pb-3 pl-[42px] pt-1">
@@ -210,35 +194,20 @@ function FieldCard({
 
           {field.type === "select" && (
             <div className="space-y-1.5">
-              {options.map((opt, idx) => (
-                <div key={idx} className="group flex items-center gap-2 rounded-lg bg-background px-2.5 shadow-sm transition-shadow focus-within:ring-2 focus-within:ring-violet-400/50">
-                  <span className="h-3.5 w-3.5 shrink-0 rounded-full border-[1.5px] border-muted-foreground/40" />
-                  <input
-                    value={opt}
-                    data-opt-idx={idx}
-                    onChange={(e) => setOption(idx, e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.nativeEvent.isComposing) return;
-                      if (e.key === "Enter") { e.preventDefault(); addOption(idx + 1); }
-                      else if (e.key === "Backspace" && e.currentTarget.value === "" && options.length > 1) { e.preventDefault(); removeOption(idx, true); }
-                    }}
-                    placeholder={`선택지 ${idx + 1}`}
-                    aria-label={`${field.label || "필드"} 선택지 ${idx + 1}`}
-                    className="min-w-0 flex-1 bg-transparent py-2 text-[13px] outline-none placeholder:text-muted-foreground/40"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeOption(idx)}
-                    aria-label={`선택지 ${idx + 1} 삭제`}
-                    className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted-foreground/40 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-              <button type="button" onClick={() => addOption(options.length)} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-violet-500 transition-colors hover:bg-violet-500/10">
-                <Plus className="h-3.5 w-3.5" />선택지 추가 <span className="font-normal text-muted-foreground/60">— 입력 중 Enter 로도 추가돼요</span>
-              </button>
+              {/**
+               * 공용 OptionRows 로 이관 — 설문 탭의 선택지 코드와 사실상 같은 코드였다.
+               * 이관으로 얻는 것: 드래그·키보드 재정렬. 선택지 순서는 공개 폼 <select> 의
+               * option 순서인데, 여기서 순서를 바꾸는 방법이 **문구를 다시 타이핑하는 것**뿐이었다.
+               * 함께 없어진 것: 이 파일이 들고 있던 pendingFocus + data-opt-idx 쿼리 기반
+               * 포커스 이동(골격의 autoFocusNewRow·removeNow({focus}) 가 대신한다).
+               */}
+              <OptionRows
+                listId={`reg-field-${field.id}`}
+                value={options}
+                onChange={(next) => patch({ options: next })}
+                ownerLabel="필드"
+                ownerTitle={field.label}
+              />
               {options.filter(Boolean).length === 0 && field.enabled && (
                 <p className="text-[11px] text-amber-600">옵션이 없으면 등록 폼에 표시되지 않아요{field.required ? " — 필수 항목이라 등록도 막혀요" : ""}.</p>
               )}
@@ -246,7 +215,7 @@ function FieldCard({
           )}
         </div>
       </div>
-    </Reorder.Item>
+    </div>
   );
 }
 
@@ -361,7 +330,92 @@ function RegistrationFormPreview({
   );
 }
 
-export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webinar: Webinar; onSilentUpdate: () => void }) {
+/**
+ * 약관 전문 — 상속 요약 + 덮어쓰기.
+ *
+ * 예전엔 라벨 없는 큰 textarea 두 개가 **고빈도로 만지는 필드 빌더와 같은 스크롤**에 섞여
+ * 있었고, 웨비나마다 같은 전문을 다시 붙여넣어야 했다. 이제 워크스페이스 템플릿이 기본이고
+ * 이 웨비나만 다르게 할 때 펼쳐서 덮어쓴다(AGENTS: 저빈도 긴 세부는 가까운 확장으로).
+ */
+function ConsentBodyField({
+  label, value, onChange, template,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  template?: string | null;
+}) {
+  const resolved = resolveConsentBody(value, template);
+  const overriding = resolved.source === "webinar";
+  const [open, setOpen] = useState(overriding);
+
+  return (
+    <div className="mt-2 space-y-1.5 rounded-xl bg-secondary/25 p-2.5">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="text-[11px] text-muted-foreground">전문</span>
+        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+          resolved.source === "webinar" ? "bg-violet-500/10 text-violet-600 dark:text-violet-400"
+          : resolved.source === "workspace" ? "bg-secondary text-muted-foreground"
+          : "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+        }`}>
+          {consentSourceLabel(resolved.source)}
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="ml-auto text-[11px] font-medium text-violet-500 transition-colors hover:text-violet-600"
+        >
+          {open ? "접기" : overriding ? "전문 보기·수정" : "이 웨비나만 다르게"}
+        </button>
+      </div>
+
+      {!open && (
+        <p className="line-clamp-2 whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground/80">
+          {resolved.body || "전문이 없어요 — 동의 문구를 눌러도 팝업이 뜨지 않아요."}
+        </p>
+      )}
+
+      {open && (
+        <>
+          <textarea
+            rows={5}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            aria-label={`${label} 약관 전문 (이 웨비나 전용)`}
+            placeholder={template ? "비워 두면 워크스페이스 공통 전문을 씁니다." : "약관 전문 — 워크스페이스 설정 › 약관에 넣어 두면 모든 웨비나가 물려받아요."}
+            className={`${FIELD_CLS} resize-y leading-relaxed`}
+          />
+          {overriding && template && (
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              className="text-[11px] text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground"
+            >
+              워크스페이스 공통으로 되돌리기
+            </button>
+          )}
+          {!template && (
+            <p className="text-[11px] leading-relaxed text-muted-foreground/70">
+              같은 전문을 웨비나마다 붙여넣고 있다면 워크스페이스 설정 › 약관에 한 번만 넣어 두세요.
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLiveOff }: {
+  webinar: Webinar;
+  onSilentUpdate: () => void;
+  /**
+   * 라이브 중 "끄는" 변경에 확인을 붙인다 — 켜는 쪽은 시청자에게 더 주는 변경이라 통과.
+   * 껍데기가 시청자 수를 알고 있어서 문구에 실제 인원이 들어간다.
+   */
+  confirmLiveOff?: (what: string, effect: string) => Promise<boolean>;
+}) {
+  const uid = useId();
   const initial = normalizeRegistrationForm(webinar.config ?? {}, { includeDisabled: true });
   const [fields, setFields] = useState<RegistrationField[]>(initial.fields);
   const [privacyText, setPrivacyText] = useState(initial.privacyText);
@@ -370,6 +424,17 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
   const [marketingBody, setMarketingBody] = useState(initial.marketingBody);
   const [privacyDefaultChecked, setPrivacyDefaultChecked] = useState(initial.privacyDefaultChecked);
   const [marketingDefaultChecked, setMarketingDefaultChecked] = useState(initial.marketingDefaultChecked);
+
+  /**
+   * 접수 창 — 언제까지, 그리고 라이브 중에도 받는가. IA 3단계에서 '기본 정보' 에서 옮겨 왔다.
+   * 둘 다 접수 정책인데 마감은 일정 카드 안, 라이브 중 정책은 그 밖에 있어서 **모순 조합을
+   * 경고할 자리가 없었다.** 한 블록으로 모으니 그 자리가 생긴다.
+   */
+  const liveStartLocal = kstDateTimeLocalInput(webinar.liveStartAt);
+  const [deadline, setDeadline] = useState(() => kstDateTimeLocalInput(webinar.signupDeadline));
+  const liveRegOf = (c: Record<string, unknown> | null | undefined) =>
+    c?.allowLiveRegistration === false ? "closed" : c?.allowLiveRegistration === true ? "open" : "auto";
+  const [liveReg, setLiveReg] = useState<"auto" | "open" | "closed">(() => liveRegOf(webinar.components));
   const [submitLabel, setSubmitLabel] = useState(initial.submitLabel);
 
   const previewTheme = useMemo(() => ({
@@ -405,6 +470,10 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
         keepalive: true, // 페이지 이탈 중 flush 도 서버에 도달하도록
         // 이 탭이 소유한 registrationForm 키만 보낸다(서버가 config 를 키 단위로 병합).
         body: JSON.stringify({
+          // 접수 창은 이 탭이 소유한다(기본 정보 탭은 더 이상 보내지 않는다).
+          // auto 는 null 로 저장해 "마감일까지" 기존 동작을 유지한다.
+          signupDeadline: kstDateTimeLocalToIso(deadline),
+          components: { allowLiveRegistration: liveReg === "closed" ? false : liveReg === "open" ? true : null },
           config: {
             registrationForm: {
               // 편집 중 빈 선택지 행은 로컬에만 두고 저장에서는 정리 — 공개 폼에 빈 옵션이 새지 않게
@@ -426,15 +495,80 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
     } catch { return false; }
   };
   const { state: saveState, retry } = useAutosave(
-    { fields, privacyText, marketingText, privacyBody, marketingBody, privacyDefaultChecked, marketingDefaultChecked, submitLabel },
+    { fields, privacyText, marketingText, privacyBody, marketingBody, privacyDefaultChecked, marketingDefaultChecked, submitLabel, deadline, liveReg },
     save,
   );
+  // 표시는 껍데기 한 곳에서 그린다(만들기 화면당 1개) — 저장 경로는 그대로 각자.
+  useReportAutosave(saveState, retry);
+
+  /**
+   * 접수 창의 두 값이 서로를 무의미하게 만드는 조합만 짚는다(에러가 아니라 안내).
+   * 서버 규칙은 "마감 ≤ 종료" 뿐이라 이 조합들은 저장은 되지만 운영자 의도와 어긋난다.
+   */
+  const intakeConflict =
+    liveReg === "open" && deadline === liveStartLocal
+      ? "마감을 ‘라이브 시작 시점’ 으로 두고 ‘계속 받기’ 를 골랐어요 — 마감 시각이 사실상 의미가 없어져요."
+      : liveReg === "closed" && deadline > liveStartLocal
+        ? "마감이 라이브 시작보다 뒤인데 ‘시작 시 마감’ 이에요 — 설정한 마감 시각에는 도달하지 못해요."
+        : null;
 
   const hasTel = fields.some((f) => f.enabled && f.type === "tel");
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] space-y-6 2xl:grid 2xl:grid-cols-[minmax(0,1fr)_440px] 2xl:gap-8 2xl:space-y-0 2xl:items-start">
       <div className="space-y-6 min-w-0">
+        {/* 접수 창 — 무엇을 받는지(아래)보다 상위 결정이라 위에 둔다. 두 줄이라 아래를 밀어내지 않는다. */}
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold">접수 창</h3>
+            <p className="mt-1 text-sm text-muted-foreground">언제까지 받고, 라이브가 시작된 뒤에도 받을지 정해요.</p>
+          </div>
+          <div className="space-y-3 rounded-2xl bg-secondary/20 p-4">
+            <SignupDeadlineField liveStartAt={liveStartLocal} value={deadline} onChange={setDeadline} />
+
+            <div className="space-y-1.5 pt-1">
+              <span className="text-xs font-medium">라이브 중 사전등록</span>
+              <div className="flex flex-wrap gap-1.5">
+                {([
+                  { v: "auto", label: "마감일까지" },
+                  { v: "open", label: "계속 받기" },
+                  { v: "closed", label: "시작 시 마감" },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    aria-pressed={liveReg === opt.v}
+                    onClick={() => {
+                      // 지금 받고 있는 접수를 닫는 방향일 때만 확인 — 여는 방향은 통과.
+                      if (opt.v !== "closed" || liveReg === "closed" || !confirmLiveOff) { setLiveReg(opt.v); return; }
+                      void confirmLiveOff("사전등록 접수", "입장 확인 화면에서 사전등록 버튼이 사라져요.").then((ok) => {
+                        if (ok) setLiveReg("closed");
+                      });
+                    }}
+                    className={`rounded-lg px-3 py-2 text-xs font-medium shadow-sm transition-colors ${
+                      liveReg === opt.v ? "bg-violet-500 text-white" : "bg-background text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <span className="block text-[11px] leading-relaxed text-muted-foreground/70">
+                {liveReg === "auto" ? "설정한 마감 시각이 지나면 접수를 닫아요."
+                  : liveReg === "open" ? "마감이 지나도 라이브 중 들어온 사람이 등록할 수 있어요 — 입장 확인 화면에 사전등록 버튼이 보여요."
+                  : "라이브가 시작되면 바로 접수를 닫아요. 입장 확인 화면에 사전등록 버튼이 보이지 않아요."}
+              </span>
+            </div>
+
+            {/* 두 값이 서로를 무의미하게 만드는 조합 — 예전엔 두 컨트롤이 다른 화면에 있어 경고할 자리가 없었다. */}
+            {intakeConflict && (
+              <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-700 dark:text-amber-400">
+                {intakeConflict}
+              </p>
+            )}
+          </div>
+        </section>
+
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="text-sm font-semibold">입력 항목</h3>
@@ -453,16 +587,22 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
           </motion.button>
         </div>
 
-        <Reorder.Group axis="y" values={fields} onReorder={setFields} className="space-y-2">
-          {fields.map((field) => (
-            <FieldCard
-              key={field.id}
-              field={field}
-              setFields={setFields}
-              onRemove={() => setFields((prev) => prev.filter((item) => item.id !== field.id))}
-            />
-          ))}
-        </Reorder.Group>
+        <EditableList<RegistrationField>
+          listId="reg-fields"
+          itemNoun="필드"
+          items={fields}
+          onChange={setFields}
+          rowKey={(f) => f.id}
+          reorderable
+          rowChrome="bare"
+          // 기본 필드(이름·연락처·이메일)는 지울 수 없다 — 골격이 삭제 컨트롤 자리에 null 을 준다.
+          removable={(f) => !f.system}
+          // 추가 버튼은 이 섹션 헤더에 이미 있다(유형을 먼저 고르는 흐름) — 골격은 그리지 않는다.
+          renderAdd={() => null}
+          renderRow={({ item, handle, removeButton }) => (
+            <FieldCard field={item} setFields={setFields} handle={handle} removeButton={removeButton} />
+          )}
+        />
         {hasTel && (
           <p className="text-[11px] text-muted-foreground/70 -mt-3">전화번호 필드는 하이픈(-) 없이 숫자만 입력받아요.</p>
         )}
@@ -474,14 +614,13 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">개인정보 동의 문구</label>
-              <input value={privacyText} onChange={(e) => setPrivacyText(e.target.value)} className={inputCls} />
-              <textarea
-                rows={4}
+              <label htmlFor={`${uid}-privacy`} className="text-xs text-muted-foreground mb-1 block">개인정보 동의 문구</label>
+              <input id={`${uid}-privacy`} value={privacyText} onChange={(e) => setPrivacyText(e.target.value)} className={inputCls} />
+              <ConsentBodyField
+                label="개인정보 수집·이용"
                 value={privacyBody}
-                onChange={(e) => setPrivacyBody(e.target.value)}
-                placeholder="약관 전문 — 입력하면 폼에서 문구를 눌렀을 때 팝업으로 보여요. 비워두면 팝업 없음."
-                className={`${inputCls} mt-2 resize-y`}
+                onChange={setPrivacyBody}
+                template={webinar.workspace?.privacyBodyTemplate}
               />
               <label className="flex items-center gap-2 text-xs text-muted-foreground mt-2 select-none">
                 <Switch checked={privacyDefaultChecked} onChange={setPrivacyDefaultChecked} label="개인정보 동의 기본 체크" />
@@ -489,14 +628,13 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
               </label>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">마케팅 동의 문구</label>
-              <input value={marketingText} onChange={(e) => setMarketingText(e.target.value)} className={inputCls} />
-              <textarea
-                rows={4}
+              <label htmlFor={`${uid}-marketing`} className="text-xs text-muted-foreground mb-1 block">마케팅 동의 문구</label>
+              <input id={`${uid}-marketing`} value={marketingText} onChange={(e) => setMarketingText(e.target.value)} className={inputCls} />
+              <ConsentBodyField
+                label="마케팅 정보 수신"
                 value={marketingBody}
-                onChange={(e) => setMarketingBody(e.target.value)}
-                placeholder="약관 전문 — 입력하면 폼에서 문구를 눌렀을 때 팝업으로 보여요. 비워두면 팝업 없음."
-                className={`${inputCls} mt-2 resize-y`}
+                onChange={setMarketingBody}
+                template={webinar.workspace?.marketingBodyTemplate}
               />
               <label className="flex items-center gap-2 text-xs text-muted-foreground mt-2 select-none">
                 <Switch checked={marketingDefaultChecked} onChange={setMarketingDefaultChecked} label="마케팅 동의 기본 체크" />
@@ -509,13 +647,11 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
               )}
             </div>
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">제출 버튼 문구</label>
-              <input value={submitLabel} onChange={(e) => setSubmitLabel(e.target.value)} className={inputCls} />
+              <label htmlFor={`${uid}-submit`} className="text-xs text-muted-foreground mb-1 block">제출 버튼 문구</label>
+              <input id={`${uid}-submit`} value={submitLabel} onChange={(e) => setSubmitLabel(e.target.value)} className={inputCls} />
             </div>
           </div>
         </section>
-
-        <AutosaveIndicator state={saveState} onRetry={retry} />
       </div>
 
       <RegistrationFormPreview

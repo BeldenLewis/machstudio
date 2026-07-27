@@ -45,6 +45,7 @@ interface Session {
   title: string;
   speaker: string | null;
   speakerPhotoUrl?: string | null;
+  logoUrl?: string | null;
   description?: string | null;
   startTime: string;
   endTime: string;

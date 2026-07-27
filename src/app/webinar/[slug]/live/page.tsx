@@ -16,6 +16,13 @@ const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
 // 소유자 미리보기 진입 여부 — ?preview 파라미터. 이 tab 에선 폴링·ping·제출 등 모든 부작용을 정지시킨다.
 const isPreviewUrl = () => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("preview");
+/**
+ * 어드민 '만들기' 의 인접 미리보기 패널 안에서 열렸는가(?embed=1).
+ * 그 패널에는 이미 대기·입장·라이브·종료 세그먼트가 폼 쪽에 있다. 아래 소유자 전환 바를
+ * 그대로 두면 **같은 것을 조작하는 컨트롤이 둘**이 되고, 안쪽에서 상태를 바꾸면 폼과 어긋난다.
+ * 그래서 embed 일 때만 전환 바를 숨긴다(미리보기 자체의 동작은 그대로).
+ */
+const isEmbeddedPreview = () => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("embed") === "1";
 
 // 상태 폴링(fetchStatus)은 URL 의 ?view 만 보고 화면을 정한다 — state 로만 바꾼 화면은
 // 다음 폴에서 되돌아간다. "등록하러 가기" 같은 사용자의 명시적 이동은 여기에 남겨야 유지된다.
@@ -76,6 +83,7 @@ interface WebinarSession {
   title: string;
   speaker: string | null;
   speakerPhotoUrl?: string | null;
+  logoUrl?: string | null;
   description?: string | null;
   startTime: string;
   endTime: string;
@@ -151,6 +159,9 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [view, setView] = useState<PageView>("signup");
   // ── 소유자 미리보기 — ?preview=<상태>. 4개 상태를 강제 렌더(부작용 차단). null = 일반 시청자 뷰.
   const [previewState, setPreviewState] = useState<null | "registration" | "entry" | "live" | "ended">(null);
+  // 렌더 중 직접 window 를 읽으면 서버/클라이언트 첫 렌더가 갈린다 → 마운트 후 state 로.
+  const [embedded, setEmbedded] = useState(false);
+  useEffect(() => { setEmbedded(isEmbeddedPreview()); }, []);
   const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
   const previewMode = previewState !== null;
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -941,7 +952,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       style={{ backgroundColor: bg, color: text, fontFamily: `${font}, sans-serif` }}
     >
       {/* 소유자 미리보기 — 상태 전환 바(대기·입장확인·라이브·종료). 실제 부작용은 모두 정지. */}
-      {previewMode && (
+      {previewMode && !embedded && (
         <div
           className="sticky top-0 z-[70] flex flex-wrap items-center gap-2 border-b border-white/10 bg-neutral-900/90 px-3 py-2 text-white backdrop-blur"
           style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}

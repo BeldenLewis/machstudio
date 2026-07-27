@@ -84,6 +84,7 @@ export async function POST(request: Request) {
   let clonedSessions: {
     number: number; type: string; title: string;
     speaker: string | null; speakerCompany: string | null; speakerPhotoUrl: string | null;
+    logoUrl: string | null;
     description: string | null; speakerBio: string | null;
     startTime: string; endTime: string;
   }[] = [];
@@ -100,6 +101,7 @@ export async function POST(request: Request) {
           select: {
             number: true, type: true, title: true,
             speaker: true, speakerCompany: true, speakerPhotoUrl: true,
+            logoUrl: true,
             description: true, speakerBio: true,
             startTime: true, endTime: true,
           },

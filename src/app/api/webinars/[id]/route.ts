@@ -32,7 +32,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       sessions: { orderBy: { number: "asc" } },
       // 허브 헤더 브레드크럼용 소속 맥락 (딥링크/복제로 진입 시 어느 프로젝트인지 표시)
       project: { select: { id: true, name: true } },
-      workspace: { select: { id: true, name: true } },
+      // 약관 템플릿을 함께 내려보낸다 — 등록 폼이 "상속 중" 을 보여주려면 값을 알아야 한다.
+      workspace: { select: { id: true, name: true, privacyBodyTemplate: true, marketingBodyTemplate: true } },
       _count: { select: { registrations: true, questions: true } },
     },
   });

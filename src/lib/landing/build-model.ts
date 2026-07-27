@@ -9,6 +9,7 @@
 
 import { formatKst } from "@/lib/datetime";
 import { normalizeLandingPageConfig, safeHttpUrl } from "@/lib/webinar-config";
+import { isRealSession } from "@/lib/webinar-sessions";
 import { SAFE_HEX, TOC_DEF, onPrimaryFor } from "./model";
 import type { LandingModel, LandingSession, LandingStatusInfo, LandingTocItem, LandingWebinar } from "./types";
 
@@ -40,7 +41,11 @@ export function buildLandingModel(webinar: LandingWebinar, opts: BuildLandingMod
   const sectionId = (base: string) => `${uid}-${base}`;
 
   const accentRaw = String(webinar.theme?.accentColor ?? "");
-  const accent = SAFE_HEX.test(accentRaw) ? accentRaw : "#8b5cf6";
+  // 폴백은 **에디터가 선언한 기본값과 같아야 한다** — BrandSection 의
+  // THEME_DEFAULTS.accentColor 는 #6d28d9 인데 여기만 #8b5cf6 이었다. 그래서 accent 를
+  // 한 번도 저장하지 않은 웨비나는 편집기에서 보이는 색과 실제 랜딩 색이 서로 달랐다.
+  // (이건 앱 크롬이 아니라 **시청자에게 보이는 고객 테마** 도메인이라 보라를 유지한다.)
+  const accent = SAFE_HEX.test(accentRaw) ? accentRaw : "#6d28d9";
   const onPrimary = onPrimaryFor(accent);
 
   const brand = lp.brand.trim() || webinar.name;
@@ -75,7 +80,12 @@ export function buildLandingModel(webinar: LandingWebinar, opts: BuildLandingMod
 
   // 임베드는 호출자가 만든 임의의 객체를 넘길 수 있어 세션 배열 부재를 방어한다(파트너 문서에서 throw 금지).
   const sessions: LandingSession[] = Array.isArray(webinar.sessions) ? webinar.sessions : [];
-  const sessionCards = lp.sessions.enabled ? sessions.filter((s) => (s.type ?? "session") === "session") : [];
+  /**
+   * 세션 카드는 **실제 세션만** — isRealSession 을 쓴다. 예전엔 여기서 `=== "session"` 을
+   * 직접 비교해 헬퍼의 복제였고, 헬퍼만 고치면 랜딩 카드만 옛 규칙으로 남아 타임테이블
+   * (전체 통과)과 어긋난 화면이 시청자에게 나갔다.
+   */
+  const sessionCards = lp.sessions.enabled ? sessions.filter(isRealSession) : [];
   const timetableRows = lp.timetable.enabled ? sessions : [];
 
   const introTitle = lp.intro.title.trim() || subtitle;

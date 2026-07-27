@@ -798,7 +798,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
         >
           <Download className="w-3.5 h-3.5" />CSV 내보내기
         </motion.button>
-        <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border bg-background w-full sm:w-[360px] transition-colors focus-within:border-violet-400">
+        <div data-focus-shell className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border bg-background w-full sm:w-[360px]">
           <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
           <input
             type="text"

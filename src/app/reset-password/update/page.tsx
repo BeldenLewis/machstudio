@@ -86,7 +86,7 @@ export default function ResetPasswordUpdatePage() {
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div>
                 <label className="text-sm font-medium text-muted-foreground">새 비밀번호</label>
-                <div className="mt-1 rounded-2xl border border-border bg-foreground/5 backdrop-blur-sm transition-colors focus-within:border-violet-400/70 focus-within:bg-violet-500/10">
+                <div data-focus-shell className="mt-1 rounded-2xl border border-border bg-foreground/5 backdrop-blur-sm transition-colors focus-within:bg-violet-500/10">
                   <input
                     type="password"
                     placeholder="8자 이상"
@@ -101,7 +101,7 @@ export default function ResetPasswordUpdatePage() {
 
               <div>
                 <label className="text-sm font-medium text-muted-foreground">비밀번호 확인</label>
-                <div className="mt-1 rounded-2xl border border-border bg-foreground/5 backdrop-blur-sm transition-colors focus-within:border-violet-400/70 focus-within:bg-violet-500/10">
+                <div data-focus-shell className="mt-1 rounded-2xl border border-border bg-foreground/5 backdrop-blur-sm transition-colors focus-within:bg-violet-500/10">
                   <input
                     type="password"
                     placeholder="다시 입력"

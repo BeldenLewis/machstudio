@@ -11,7 +11,7 @@ import { motion } from "framer-motion";
 import { getYouTubeVideoId } from "@/lib/youtube";
 import { CheckCircle2, Send, Share2 } from "lucide-react";
 import { formatKst, kstDateString } from "@/lib/datetime";
-import { buildSessionNumbering, cleanSessionText, isRealSession } from "@/lib/webinar-sessions";
+import { buildSessionNumbering, cleanSessionText, isPauseSession, isRealSession, sessionHasSpeaker, sessionTypeLabel } from "@/lib/webinar-sessions";
 import SurveyForm, { SURVEY_FORM_CSS, clearSurveyDraft } from "./SurveyForm";
 import type { SurveyAnswers, SurveyQuestion } from "@/lib/webinar-survey";
 
@@ -24,13 +24,14 @@ interface Session {
   title: string;
   speaker: string | null;
   speakerPhotoUrl?: string | null;
+  logoUrl?: string | null;
   description?: string | null;
   startTime: string;
   endTime: string;
 }
 
-// 아젠다·메타에서 유형 라벨 (기본 세션은 라벨 없음)
-const SES_TYPE_LABEL: Record<string, string> = { qa: "Q&A", break: "휴식" };
+// 유형 라벨은 sessionTypeLabel(webinar-sessions.ts)이 준다 — 예전엔 이 파일이 자기 맵을
+// 들고 있었고, `?? s.type` 폴백이라 표에 없는 값이 **시청자에게 영문 원문**으로 찍혔다.
 
 interface AnsweredQA {
   id: string;
@@ -285,6 +286,11 @@ const WATCH_CSS = `
 .stk-live .lv-ses.now .tc { color:var(--key); font-weight:650; }
 .stk-live .lv-ses h4 { margin:0; font-size:14px; font-weight:700; letter-spacing:-0.01em; word-break:keep-all; color:var(--text); }
 .stk-live .lv-setype { margin-left:6px; font-size:10px; font-weight:700; padding:1px 6px; border-radius:6px; background:var(--key-dim); color:var(--key); vertical-align:middle; white-space:nowrap; }
+/* 휴식은 콘텐츠가 아니라 빈 시간이다 — 오프닝·Q&A·클로징과 같은 키컬러 강조를 주면 안 된다
+   (어드민은 이미 휴식=회색으로 구분하고 있어 화면 간에 어긋나 있었다). */
+.stk-live .lv-setype.muted { background:color-mix(in srgb,var(--text) 8%,transparent); color:var(--sub); }
+/* 로고: 자르지 않고(contain) 높이만 고정. 투명 PNG 가 많아 흰 판을 깐다. */
+.stk-live .lv-selogo { display:block; height:20px; width:auto; max-width:120px; object-fit:contain; margin:6px 0 0; background:#fff; border-radius:4px; padding:2px 4px; }
 .stk-live .lv-ses small { color:var(--sub); font-size:12px; }
 .stk-live .lv-ses .st { margin-left:auto; align-self:center; font-size:11px; font-weight:700; color:var(--sub); white-space:nowrap; }
 .stk-live .lv-ses.now .st { color:var(--key); display:inline-flex; align-items:center; gap:5px; }
@@ -311,7 +317,9 @@ const WATCH_CSS = `
 .stk-live .lv-switch .knob { position:absolute; top:2px; left:2px; width:21px; height:21px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.3); transition:transform .22s cubic-bezier(.2,.8,.2,1); }
 .stk-live .lv-switch[aria-checked="true"] { background:var(--key); border-color:transparent; }
 .stk-live .lv-switch[aria-checked="true"] .knob { transform:translateX(19px); }
-.stk-live .lv-notice { margin-top:16px; padding:14px 18px; border:1px solid var(--key-border); border-radius:var(--radius-sm); background:var(--key-dim); color:var(--muted); font-size:12.5px; line-height:1.7; word-break:keep-all; }
+/* 안내 문구도 어드민이 직접 쓰는 여러 줄 텍스트다 — 편집기 textarea 는 줄바꿈을 받는데
+   여기서 한 줄로 흘리면 입력한 모양과 다르게 나간다. */
+.stk-live .lv-notice { margin-top:16px; padding:14px 18px; border:1px solid var(--key-border); border-radius:var(--radius-sm); background:var(--key-dim); color:var(--muted); font-size:12.5px; line-height:1.7; word-break:keep-all; white-space:pre-line; }
 /* CTA 모달 — 폼(자체 설문)·URL 임베드 공용 */
 .stk-live .lv-ctamodal-backdrop { position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(8,8,12,0.62); backdrop-filter:blur(4px); animation:lvFade .18s ease; }
 @keyframes lvFade { from { opacity:0; } }
@@ -475,7 +483,9 @@ export default function LiveContentStk({
   // 표시 순번·개수는 실제 세션만 센다. 예전엔 `focus.number}/${sessions.length}` 여서
   // 중간에 휴식이 끼면 세 번째 세션이 "4/6" 으로 보였다(분자·분모 둘 다 틀림).
   const numbering = useMemo(() => buildSessionNumbering(webinar.sessions), [webinar.sessions]);
-  const metaKind = focus?.type === "break" ? "휴식" : focus?.type === "qa" ? "Q&A" : "세션";
+  // 유형 라벨 그대로(모르는 값이면 "세션"). 예전엔 삼항 체인이라 새 유형이 "세션"으로 표시되는데
+  // displayNumber 는 null 이어서 아래 `· n/N` 이 빠진 "번호 없는 세션" 이라는 모순이 나왔다.
+  const metaKind = sessionTypeLabel(focus?.type) ?? "세션";
   const focusDisplayNo = focus ? numbering.displayNumber(focus.number) : null;
   const metaKicker = focus
     ? // 휴식·Q&A 는 번호가 없다 → "지금 휴식" 처럼 종류만 알려준다
@@ -483,8 +493,10 @@ export default function LiveContentStk({
     : null;
   const metaTitle = focus?.title || webinar.name;
   const metaDesc = focus?.description || webinar.description;
-  // 휴식엔 연사가 없고, 레거시 행은 speaker 에 문자열 "null" 이 들어 있을 수 있다.
-  const focusSpeaker = focus && focus.type !== "break" ? cleanSessionText(focus.speaker) : "";
+  // 연사 없는 유형(휴식)은 비운다. 레거시 행은 speaker 에 문자열 "null" 이 들어 있을 수 있다.
+  // 판정은 유형 표 하나로 — 예전엔 여기가 `!== "break"`(부정형)이고 랜딩은 `=== "session"`
+  // (긍정형)이라, Q&A 의 "전체 연사" 가 라이브에는 보이고 랜딩에서는 사라졌다.
+  const focusSpeaker = focus && sessionHasSpeaker(focus.type) ? cleanSessionText(focus.speaker) : "";
 
   // 탭 구성 — 채팅은 chatEnabled 일 때만 노출(오프하면 탭 자체가 사라짐)
   const tabs = useMemo(
@@ -796,11 +808,14 @@ export default function LiveContentStk({
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <h4>
                                 {s.title}
-                                {s.type && s.type !== "session" && <span className="lv-setype">{SES_TYPE_LABEL[s.type] ?? s.type}</span>}
+                                {!isRealSession(s) && sessionTypeLabel(s.type) && (
+                                  <span className={`lv-setype${isPauseSession(s.type) ? " muted" : ""}`}>{sessionTypeLabel(s.type)}</span>
+                                )}
                               </h4>
-                              {/* 휴식엔 연사가 없다. cleanSessionText 는 레거시 "null" 문자열도 걸러 준다
-                                  (예전엔 휴식 행 밑에 회색 "null" 이 찍혔다). */}
-                              {s.type !== "break" && cleanSessionText(s.speaker) && <small>{cleanSessionText(s.speaker)}</small>}
+                              {s.logoUrl && <img className="lv-selogo" src={s.logoUrl} alt="" />}
+                              {/* 연사 없는 유형은 안 그린다. cleanSessionText 는 레거시 "null" 문자열도
+                                  걸러 준다(예전엔 휴식 행 밑에 회색 "null" 이 찍혔다). */}
+                              {sessionHasSpeaker(s.type) && cleanSessionText(s.speaker) && <small>{cleanSessionText(s.speaker)}</small>}
                               {s.status === "now" && (
                                 <div className="lv-prog"><span style={{ width: `${pct}%` }} /></div>
                               )}

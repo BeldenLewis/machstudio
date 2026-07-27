@@ -2,12 +2,33 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2, MessageSquare } from "lucide-react";
+import { Loader2, MessageSquare, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatKst } from "@/lib/datetime";
 import { InlineError } from "@/components/ui/inline-error";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useUndoableDelete } from "@/components/ui/use-undoable-delete";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
+
+/**
+ * 삭제 — 아이콘만. 저빈도 위험 액션이라 [답변 완료] 같은 채운 버튼과 나란히 두면 안 된다
+ * (AGENTS 판별질문 2: "위험한 저빈도 액션은 멀리·작게"). 터치 타깃은 28×28 을 지킨다.
+ */
+function DeleteQaButton({ onClick }: { onClick: () => void }) {
+  return (
+    <motion.button
+      whileTap={{ scale: 0.94 }}
+      transition={spring}
+      onClick={onClick}
+      aria-label="질문 삭제"
+      title="기록에서 완전히 지워요 — 추천 수·분석 상위 질문에서도 사라져요"
+      className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
+    >
+      <Trash2 className="h-3.5 w-3.5" />
+    </motion.button>
+  );
+}
 
 type QAStatus = "pending" | "answered" | "dismissed";
 
@@ -28,6 +49,15 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [filter, setFilter] = useState<QAStatus | "all">("pending");
+  const confirm = useConfirm();
+  const { remove: undoableRemove } = useUndoableDelete();
+  /**
+   * 삭제 유예(5초) 중 화면에서만 숨긴 id.
+   *
+   * 이 목록은 tick 마다 조용히 재조회하므로(아래 useEffect) 낙관적 제거만으로는 유예 안에
+   * 행이 되살아난다. 그래서 '지운 것처럼 보이는' 상태를 별도로 들고 렌더에서 뺀다.
+   */
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   // 진행 중 mutation 동안 사일런트 tick 폴링이 낙관적 갱신을 덮어쓰지 않게 가드(PollPanel editIdRef 패턴).
   const mutatingRef = useRef(false);
   // 인플라이트 응답 펜스 — mutation 시작 전 출발한 tick fetch 가 뒤늦게 도착해 낙관적 변경을 되돌리지 않게.
@@ -94,8 +124,55 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
     } finally { mutatingRef.current = false; }
   };
 
-  // 추천순 정렬(voteCount desc, 동점은 먼저 올라온 순).
-  const ordered = [...questions].sort((a, b) => (b.voteCount - a.voteCount) || (a.createdAt < b.createdAt ? -1 : 1));
+  /**
+   * 질문 삭제 — '숨기기'(dismissed)와 다른 물건이다.
+   *   숨기기 : 시청자에게만 안 보인다. 되돌릴 수 있고 운영 대시보드·분석 탭에는 계속 뜬다.
+   *   삭제   : 기록에서 사라진다. 추천 표도 함께 지워지고 분석 숫자가 줄어든다.
+   * 둘이 나란히 있으면 반드시 혼동되므로 되돌릴 수 없다는 걸 확인창이 말한다.
+   *
+   * 확인창을 **송출 중이거나 추천이 있는 질문에만** 띄운다 — AGENTS §3 "시청자에게 노출되거나
+   * 파괴적인 동작만 확인 단계". 나머지(테스트·중복 질문)는 5초 되돌리기가 확인창보다 낫다.
+   */
+  const deleteQuestion = async (q: QAItem) => {
+    const risky = q.onScreen || q.voteCount > 0;
+    if (risky) {
+      const ok = await confirm({
+        title: "이 질문을 삭제할까요?",
+        description: q.onScreen
+          ? "지금 시청 화면에 띄워 둔 질문이에요. 삭제하면 시청자 화면에서도 사라지고, 추천 수와 분석의 상위 질문에서도 되돌릴 수 없이 지워져요."
+          : `${q.voteCount}명이 추천한 질문이에요. 삭제하면 추천 수와 분석의 상위 질문에서 되돌릴 수 없이 지워져요.`,
+        confirmLabel: "삭제",
+        tone: "danger",
+      });
+      if (!ok) return;
+    }
+
+    undoableRemove({
+      key: q.id,
+      message: "질문을 삭제했어요",
+      onOptimistic: () => setHiddenIds((prev) => new Set(prev).add(q.id)),
+      onUndo: () => setHiddenIds((prev) => { const n = new Set(prev); n.delete(q.id); return n; }),
+      commit: async () => {
+        mutatingRef.current = true; reqIdRef.current++;
+        try {
+          const res = await fetch(`/api/webinars/${webinarId}/qa/${q.id}`, { method: "DELETE" });
+          if (!res.ok) {
+            // 실패하면 숨김을 되돌린다 — 지운 줄 알았는데 남아 있는 게 더 나쁘다.
+            setHiddenIds((prev) => { const n = new Set(prev); n.delete(q.id); return n; });
+            toast.error("삭제하지 못했어요. 잠시 후 다시 시도해주세요.");
+            return;
+          }
+          setQuestions((prev) => prev.filter((x) => x.id !== q.id));
+          setHiddenIds((prev) => { const n = new Set(prev); n.delete(q.id); return n; });
+        } finally { mutatingRef.current = false; }
+      },
+    });
+  };
+
+  // 추천순 정렬(voteCount desc, 동점은 먼저 올라온 순). 삭제 유예 중인 행은 뺀다.
+  const ordered = [...questions]
+    .filter((q) => !hiddenIds.has(q.id))
+    .sort((a, b) => (b.voteCount - a.voteCount) || (a.createdAt < b.createdAt ? -1 : 1));
   const maxVote = ordered.reduce((m, q) => Math.max(m, q.voteCount), 0);
 
   const filters: { value: QAStatus | "all"; label: string }[] = [
@@ -183,7 +260,9 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
                         className={`rounded-lg px-2.5 py-1 text-[11.5px] font-medium transition ${q.onScreen ? "border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400" : "border border-border hover:border-violet-500/40 hover:text-violet-500"}`}>
                         {q.onScreen ? "송출 끄기" : "화면에 띄우기"}</motion.button>
                       <motion.button whileTap={{ scale: 0.96 }} transition={spring} onClick={() => updateStatus(q.id, "dismissed")}
-                        className="rounded-lg px-2.5 py-1 text-[11.5px] font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground">숨기기</motion.button>
+                        className="rounded-lg px-2.5 py-1 text-[11.5px] font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+                        title="시청자에게만 안 보이게 해요 — 되돌릴 수 있어요">숨기기</motion.button>
+                      <DeleteQaButton onClick={() => void deleteQuestion(q)} />
                     </>
                   ) : (
                     <div className="flex items-center gap-2">
@@ -191,6 +270,7 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
                         {q.status === "answered" ? "답변 완료" : "미채택"}</span>
                       <motion.button whileTap={{ scale: 0.96 }} transition={spring} onClick={() => updateStatus(q.id, "pending")}
                         className="rounded-lg px-2.5 py-1 text-[11.5px] font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground">대기로 되돌리기</motion.button>
+                      <DeleteQaButton onClick={() => void deleteQuestion(q)} />
                     </div>
                   )}
                 </div>

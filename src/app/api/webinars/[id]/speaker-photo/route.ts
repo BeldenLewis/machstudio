@@ -1,11 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { ASSET_BUCKET, ensureAssetBucket } from "@/lib/webinar-asset-bucket";
 import { speakerPhotoExtension, validateSpeakerPhoto } from "@/lib/webinar-speaker-photo";
-
-const BUCKET = "webinar-assets";
 
 async function authorize(webinarId: string, userId: string) {
   const webinar = await prisma.webinar.findUnique({ where: { id: webinarId } });
@@ -16,21 +14,6 @@ async function authorize(webinarId: string, userId: string) {
   });
 
   return membership ? webinar : null;
-}
-
-async function ensureAssetBucket() {
-  const admin = createAdminClient();
-  const { error: bucketError } = await admin.storage.getBucket(BUCKET);
-  if (!bucketError) return admin;
-
-  const { error } = await admin.storage.createBucket(BUCKET, {
-    public: true,
-    fileSizeLimit: "5MB",
-    allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"],
-  });
-  // 동시에 처음 올린 두 요청 중 하나는 이미 생성됐다는 응답을 받을 수 있다.
-  if (error && !/already exists/i.test(error.message)) throw error;
-  return admin;
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -55,14 +38,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const admin = await ensureAssetBucket();
     const path = `${webinar.workspaceId}/${webinar.id}/speakers/${randomUUID()}.${extension}`;
-    const { error } = await admin.storage.from(BUCKET).upload(path, file, {
+    const { error } = await admin.storage.from(ASSET_BUCKET).upload(path, file, {
       contentType: file.type,
       cacheControl: "31536000",
       upsert: false,
     });
     if (error) throw error;
 
-    const { data } = admin.storage.from(BUCKET).getPublicUrl(path);
+    const { data } = admin.storage.from(ASSET_BUCKET).getPublicUrl(path);
     return NextResponse.json({ url: data.publicUrl }, { status: 201 });
   } catch (error) {
     console.error("[webinar] speaker photo upload failed", error);

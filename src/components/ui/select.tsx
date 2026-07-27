@@ -38,7 +38,7 @@ export function Select({ value, onChange, options, placeholder = "선택", class
   const triggerBase =
     size === "sm"
       ? "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-border bg-background text-xs font-medium hover:bg-secondary transition-colors cursor-pointer select-none"
-      : "w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border bg-background text-sm hover:border-violet-400/60 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-400/20 transition-all cursor-pointer select-none";
+      : "w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border bg-background text-sm hover:border-violet-400/60 transition-all cursor-pointer select-none";
 
   const labelCls = selected ? "text-foreground" : "text-muted-foreground";
 

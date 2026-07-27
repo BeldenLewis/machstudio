@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { SESSION_TYPE_VALUES } from "@/lib/webinar-sessions";
 import { logActivity } from "@/lib/activity";
 
 async function authorize(webinarId: string, sessionId: string, userId: string) {
@@ -49,12 +50,20 @@ export async function PATCH(
   if (endTime !== undefined && !endTime) {
     return NextResponse.json({ error: "종료 시간을 입력해주세요" }, { status: 400 });
   }
+  /**
+   * 유형은 400 으로 거른다. 예전엔 모르는 값이 update data 에서 **통째로 누락**되어 기존 값이
+   * 유지됐다 — POST(조용히 "session" 강제)와 실패 모드가 다른데 둘 다 성공 응답을 줬다.
+   * 낙관적 UI 는 성공처럼 보이고 새로고침하면 되돌아간다.
+   */
+  if (body.type !== undefined && !SESSION_TYPE_VALUES.includes(String(body.type))) {
+    return NextResponse.json({ error: "세션 유형을 확인해주세요" }, { status: 400 });
+  }
 
   const updated = await prisma.webinarSession.update({
     where: { id: session.id },
     data: {
       ...(number !== undefined && { number }),
-      ...(["session", "qa", "break"].includes(String(body.type)) && { type: String(body.type) }),
+      ...(body.type !== undefined && { type: String(body.type) }),
       ...(title !== undefined && { title }),
       // `?? ""` 가 반드시 있어야 한다. body.speaker 가 JSON null 이면 null !== undefined 라 이 항목이
       // 통과하고, String(null) === "null" 이 그대로 저장돼 화면에 "null" 이 찍힌다.
@@ -63,6 +72,7 @@ export async function PATCH(
       ...(body.speaker !== undefined && { speaker: String(body.speaker ?? "").trim() || null }),
       ...(body.speakerCompany !== undefined && { speakerCompany: String(body.speakerCompany ?? "").trim() || null }),
       ...(body.speakerPhotoUrl !== undefined && { speakerPhotoUrl: String(body.speakerPhotoUrl ?? "").trim() || null }),
+      ...(body.logoUrl !== undefined && { logoUrl: String(body.logoUrl ?? "").trim() || null }),
       ...(body.description !== undefined && { description: String(body.description ?? "").trim() || null }),
       ...(body.speakerBio !== undefined && { speakerBio: String(body.speakerBio ?? "").trim() || null }),
       ...(startTime !== undefined && { startTime }),

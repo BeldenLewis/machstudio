@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useChartColors } from "@/components/ui/use-chart-colors";
 import { motion } from "framer-motion";
 import { Download, Loader2, RefreshCw, BarChart3, MessageSquare, HelpCircle, Users, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -139,35 +140,7 @@ const RANGES: { k: Range; label: string }[] = [
 /* 운영 이벤트 마커로 삼을 활동 — 발행/송출 계열만 */
 const EVENT_RE = /(poll|announcement|popup|tally_push)_(created|updated)/;
 
-/* ── 차트 색상: 테마 토큰(--chart-*)을 런타임 해석해 recharts SVG에 전달 (라이트/다크 대응) ── */
-function useChartColors() {
-  const [c, setC] = useState({
-    viewers: "#5b6b9a",
-    entered: "#4f9d6b",
-    chat: "#9aa4c0",
-    grid: "rgba(120,120,140,0.15)",
-    axis: "#8b8b96",
-  });
-  useEffect(() => {
-    const read = () => {
-      const s = getComputedStyle(document.body);
-      const g = (name: string, fb: string) => s.getPropertyValue(name).trim() || fb;
-      setC({
-        viewers: g("--chart-viewers", "#5b6b9a"),
-        entered: g("--chart-entered", "#4f9d6b"),
-        chat: g("--chart-chat", "#9aa4c0"),
-        grid: g("--border", "rgba(120,120,140,0.15)"),
-        axis: g("--muted-foreground", "#8b8b96"),
-      });
-    };
-    read();
-    const obs = new MutationObserver(read);
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    obs.observe(document.body, { attributes: true, attributeFilter: ["class"] });
-    return () => obs.disconnect();
-  }, []);
-  return c;
-}
+/* 차트 색상은 공용 훅으로 옮겼다 — use-chart-colors.ts (같은 문제를 겪는 화면이 셋이다) */
 
 /* ── 테마 대응 커스텀 툴팁 ── */
 function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: { name?: string; value?: number; color?: string; dataKey?: string }[]; label?: string }) {
