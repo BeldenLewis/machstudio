@@ -12,7 +12,6 @@ import { getYouTubeVideoId } from "@/lib/youtube";
 import { CheckCircle2, Send, Share2 } from "lucide-react";
 import { formatKst, kstDateString } from "@/lib/datetime";
 import { buildSessionNumbering, cleanSessionText, isPauseSession, isRealSession, parseSpeaker, sessionHasSpeaker, sessionTypeLabel } from "@/lib/webinar-sessions";
-import { sessionLogoCss } from "@/lib/webinar-logo";
 import SurveyForm, { SURVEY_FORM_CSS, clearSurveyDraft } from "./SurveyForm";
 import type { SurveyAnswers, SurveyQuestion } from "@/lib/webinar-survey";
 
@@ -291,11 +290,6 @@ const WATCH_CSS = `
 /* 휴식은 콘텐츠가 아니라 빈 시간이다 — 오프닝·Q&A·클로징과 같은 키컬러 강조를 주면 안 된다
    (어드민은 이미 휴식=회색으로 구분하고 있어 화면 간에 어긋나 있었다). */
 .stk-live .lv-setype.muted { background:color-mix(in srgb,var(--text) 8%,transparent); color:var(--sub); }
-/* 로고 규격은 webinar-logo.ts 한 곳에서 온다(랜딩·대기와 같은 크기). 예전엔 여기만 20px 이라
-   같은 로고가 대기 화면보다 작아 보였다. */
-${sessionLogoCss(".stk-live .lv-selogo", { plate: true })}
-/* 로고는 이름 바로 오른쪽 — 끝까지 밀면 넓은 목록에서 이름과 떨어져 무관해 보인다. */
-.stk-live .lv-selogo { margin-left:4px; }
 .stk-live .lv-sewho { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:6px; }
 /* 연사 이름 — 12px 은 로고 옆에서 위계가 뒤집힌다(로고가 이름보다 먼저 읽힘). */
 .stk-live .lv-ses small { color:var(--muted); font-size:13.5px; font-weight:600; }
@@ -828,20 +822,20 @@ export default function LiveContentStk({
                                   문자열도 걸러 준다 — 예전엔 휴식 행 밑에 회색 "null" 이 찍혔다). */}
                               {(() => {
                                 /* 대기 화면·랜딩 타임테이블과 같은 표기 — "이름 | 소속·직책".
-                                   같은 목록의 다른 상태라 표기가 갈라지면 바로 눈에 띈다. */
+                                   같은 목록의 다른 상태라 표기가 갈라지면 바로 눈에 띈다.
+                                   로고도 같은 이유로 그리지 않는다(대기 화면에서 뺐는데 여기 남기면
+                                   방송이 시작되는 순간 마크가 다시 나타난다). 로고는 랜딩 타임테이블
+                                   펼침과 연사 상세 팝업에서 본다. */
                                 const sp = parseSpeaker(cleanSessionText(s.speaker), cleanSessionText(s.speakerCompany));
                                 const hasWho = Boolean(sp.name || sp.company);
-                                if (!s.logoUrl && !(sessionHasSpeaker(s.type) && hasWho)) return null;
+                                if (!(sessionHasSpeaker(s.type) && hasWho)) return null;
                                 return (
                                   <div className="lv-sewho">
-                                    {sessionHasSpeaker(s.type) && hasWho && (
-                                      <small className="who">
-                                        {Boolean(sp.name) && <b>{sp.name}</b>}
-                                        {Boolean(sp.name && sp.company) && <span className="sep" aria-hidden="true">|</span>}
-                                        {Boolean(sp.company) && <span className="co">{sp.company}</span>}
-                                      </small>
-                                    )}
-                                    {s.logoUrl && <img className="lv-selogo" src={s.logoUrl} alt="" />}
+                                    <small className="who">
+                                      {Boolean(sp.name) && <b>{sp.name}</b>}
+                                      {Boolean(sp.name && sp.company) && <span className="sep" aria-hidden="true">|</span>}
+                                      {Boolean(sp.company) && <span className="co">{sp.company}</span>}
+                                    </small>
                                   </div>
                                 );
                               })()}
