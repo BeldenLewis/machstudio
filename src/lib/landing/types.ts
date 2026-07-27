@@ -15,6 +15,10 @@ export interface LandingSession {
   logoUrl?: string | null;
   description?: string | null;
   speakerBio?: string | null;
+  /** 연사·소속 홈페이지. 상세 팝업의 바로가기 — 절대 http(s) 만 표시된다. */
+  speakerHomepage?: string | null;
+  /** SNS 링크(URL 배열). 플랫폼은 저장하지 않고 호스트로 판정한다 — webinar-speaker-links.ts. */
+  speakerLinks?: unknown;
   startTime: string;
   endTime: string;
 }

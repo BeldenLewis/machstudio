@@ -17,7 +17,7 @@ import { h, clearNode } from "./h";
 import { renderHero, renderToc, scrollToSectionIn } from "./view-hero";
 import { renderIntro, renderAudience, renderPrograms, renderHighlights, renderJoin, renderFaq } from "./view-sections";
 import { renderSessions, renderTimetable, createSessionDialog } from "./view-sessions";
-import { attachReveal, attachAccentZone, attachTocSpy, attachTocVisibility } from "./effects";
+import { attachAccordion, attachReveal, attachAccentZone, attachTocSpy, attachTocVisibility } from "./effects";
 import { acquireLayer, createTocLayer, releaseLayer, lockScroll, unlockScroll, trapFocus } from "./overlay";
 import type { LandingSession, LandingWebinar } from "./types";
 
@@ -267,6 +267,9 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
 
   // ── 이펙트 ────────────────────────────────────────────────────────────
   cleanups.push(attachReveal(root));
+  // 타임테이블·FAQ 아코디언 모션. 재렌더(FAQ 카테고리 전환)마다 다시 붙는 자리라야 한다 —
+  // 새로 그려진 details 에는 리스너가 없다.
+  cleanups.push(attachAccordion(root));
   const accentZones = [m.sectionId("lnd-sessions"), m.sectionId("lnd-timetable")];
   // 목차 레이어에도 on-accent 를 미러링한다 — 루트 밖으로 나갔으니 후손 선택자가 안 걸린다.
   cleanups.push(attachAccentZone(root, accentZones, tocLayer ? [tocLayer] : []));

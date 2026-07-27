@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@/generated/prisma";
+import { safeHttpUrl } from "@/lib/webinar-config";
+import { serializeSpeakerLinks } from "@/lib/webinar-speaker-links";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { SESSION_TYPE_VALUES } from "@/lib/webinar-sessions";
@@ -75,6 +78,13 @@ export async function PATCH(
       ...(body.logoUrl !== undefined && { logoUrl: String(body.logoUrl ?? "").trim() || null }),
       ...(body.description !== undefined && { description: String(body.description ?? "").trim() || null }),
       ...(body.speakerBio !== undefined && { speakerBio: String(body.speakerBio ?? "").trim() || null }),
+      // 링크는 스킴 검증을 거친다(POST 와 같은 규칙). 잘못된 스킴은 저장하지 않고 비운다 —
+      // 조용히 통과시키면 랜딩에서 클릭 가능한 위험 링크가 된다.
+      ...(body.speakerHomepage !== undefined && { speakerHomepage: safeHttpUrl(body.speakerHomepage) || null }),
+      // Json 컬럼을 비우는 것은 null 이 아니라 Prisma.DbNull 이다(그냥 null 은 타입 오류).
+      ...(body.speakerLinks !== undefined && {
+        speakerLinks: serializeSpeakerLinks(body.speakerLinks) ?? Prisma.DbNull,
+      }),
       ...(startTime !== undefined && { startTime }),
       ...(endTime !== undefined && { endTime }),
     },

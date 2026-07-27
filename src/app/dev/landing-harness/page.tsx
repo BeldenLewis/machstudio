@@ -54,7 +54,15 @@ const mockWebinar = (origin: string): LandingWebinar => ({
       timetable: { enabled: true },
       programs: { enabled: false, items: [] },
       highlights: { enabled: false, items: [] },
-      faq: { enabled: false, items: [] },
+      // 아코디언 모션은 FAQ 와 타임테이블이 같은 헬퍼를 쓴다 — 둘 다 켜서 함께 확인한다.
+      faq: {
+        enabled: true,
+        items: [
+          { category: "참가", question: "다시보기가 제공되나요?", answer: "종료 후 영상 링크를 이메일로 보내드립니다." },
+          { category: "참가", question: "모바일에서도 볼 수 있나요?", answer: "네, 브라우저만 있으면 됩니다.\n앱 설치는 필요하지 않습니다." },
+          { category: "등록", question: "등록을 취소할 수 있나요?", answer: "문의 메일로 알려주시면 처리해드립니다." },
+        ],
+      },
     },
   },
   sessions: [
@@ -66,7 +74,14 @@ const mockWebinar = (origin: string): LandingWebinar => ({
       speakerBio: "10년간 B2B SaaS 그로스를 담당했고, 웨비나·전시 리드 파이프라인을 설계했습니다.",
       speakerPhotoUrl: null,
       logoUrl: `${origin}/next.svg`,
-      description: "실제로 돌아가는 자동화와 그렇지 않은 것을 사례로 가릅니다.",
+      description: "실제로 돌아가는 자동화와 그렇지 않은 것을 사례로 가릅니다.\n리드 스코어링·세그먼트 분기·후속 시퀀스를 실제 화면으로 보여드립니다.",
+      speakerHomepage: "https://www.exporum.com/team",
+      speakerLinks: [
+        "https://www.linkedin.com/in/example",
+        "https://x.com/example",
+        "https://brunch.co.kr/@example",
+        "javascript:alert(1)",
+      ],
       startAt: "2026-08-20T10:00:00.000Z", endAt: "2026-08-20T10:40:00.000Z",
     },
     {
@@ -78,7 +93,18 @@ const mockWebinar = (origin: string): LandingWebinar => ({
       speakerPhotoUrl: null,
       logoUrl: `${origin}/next.svg`,
       description: null,
+      speakerHomepage: null,
+      speakerLinks: null,
       startAt: "2026-08-20T10:40:00.000Z", endAt: "2026-08-20T11:20:00.000Z",
+    },
+    {
+      // 펼칠 것이 없는 행 — details 가 아니라 정적 줄로 그려져야 한다.
+      id: "s3", number: 3, type: "break",
+      title: "휴식",
+      speaker: null, speakerCompany: null,
+      speakerBio: null, speakerPhotoUrl: null, logoUrl: null, description: null,
+      speakerHomepage: null, speakerLinks: null,
+      startAt: "2026-08-20T11:20:00.000Z", endAt: "2026-08-20T11:30:00.000Z",
     },
   ] as unknown as LandingWebinar["sessions"],
 });
