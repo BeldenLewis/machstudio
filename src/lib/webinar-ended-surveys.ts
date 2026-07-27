@@ -15,10 +15,16 @@
  */
 
 /** DB 에서 읽어 오는 자체 설문 — 공개해도 되는 값만(응답·문항은 여기 오지 않는다). */
-export type EndedSurveyRef = { id: string; title?: string | null; description?: string | null };
+export type EndedSurveyRef = {
+  id: string;
+  title?: string | null;
+  description?: string | null;
+  /** 이 설문으로 가는 버튼 문구. 비어 있으면 화면이 기본 문구("설문 참여하기")로 채운다. */
+  ctaLabel?: string | null;
+};
 
 /** 화면이 그리는 카드 하나. */
-export type EndedSurveyLink = { url: string; title?: string | null; description?: string | null };
+export type EndedSurveyLink = { url: string; title?: string | null; description?: string | null; ctaLabel?: string | null };
 
 /**
  * 종료 화면에 그릴 설문 목록. `buildUrl` 이 면마다 다른 URL 형태를 만든다
@@ -30,7 +36,7 @@ export function endedSurveyLinks(
   buildUrl: (id: string) => string,
 ): EndedSurveyLink[] {
   if (surveys.length > 0) {
-    return surveys.map((s) => ({ url: buildUrl(s.id), title: s.title ?? null, description: s.description ?? null }));
+    return surveys.map((s) => ({ url: buildUrl(s.id), title: s.title ?? null, description: s.description ?? null, ctaLabel: s.ctaLabel ?? null }));
   }
   // 외부 URL 은 제목·설명이 없다 — 화면이 기본 문구로 채운다.
   return typeof externalUrl === "string" && externalUrl.trim() !== "" ? [{ url: externalUrl }] : [];

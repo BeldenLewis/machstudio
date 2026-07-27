@@ -38,7 +38,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     where: { webinarId: webinar.id, showOnEnded: true, isOpen: true, OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }] },
     // 만든 순서대로 — 종료 화면 카드 순서가 관리자 목록 순서와 같아야 어느 카드를 고칠지 알 수 있다
     orderBy: { createdAt: "asc" },
-    select: { id: true, title: true, description: true },
+    select: { id: true, title: true, description: true, ctaLabel: true },
   });
 
   // config 는 뷰어가 실제로 쓰는 키만 allowlist 로 노출 — youtubeId(입장 verify 시 전달) 및

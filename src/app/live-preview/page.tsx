@@ -16,10 +16,13 @@ import { normalizeLivePageConfig } from "@/lib/webinar-config";
 
 type State = "waiting" | "entry" | "live" | "ended";
 
-/** 목업 모드 전용 — 카드 2장이 어떻게 앉는지 확인용(실제 웨비나에서는 저장된 값만 쓴다). */
+/**
+ * 목업 모드 전용 — 카드 2장이 어떻게 앉는지 확인용(실제 웨비나에서는 저장된 값만 쓴다).
+ * 두 번째 카드는 ctaLabel 을 지정해 버튼 문구가 설문마다 달라지는지도 함께 확인한다.
+ */
 const MOCK_ENDED_SURVEYS = [
   { url: "#survey-1", title: "1분 만족도 설문", description: "오늘 어떠셨나요? 짧은 피드백이 다음 웨비나를 더 좋게 만들어요." },
-  { url: "#survey-2", title: "다음 웨비나 주제 사전조사", description: "다음 회차에서 가장 듣고 싶은 주제를 골라주세요." },
+  { url: "#survey-2", title: "다음 웨비나 주제 사전조사", description: "다음 회차에서 가장 듣고 싶은 주제를 골라주세요.", ctaLabel: "사전 신청하기" },
 ];
 type ThemeKey = "dark" | "light";
 

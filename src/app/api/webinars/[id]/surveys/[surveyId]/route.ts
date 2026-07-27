@@ -43,6 +43,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // 제출 완료 화면 문구 — 빈 값이면 null(노출면별 기본 문구로 폴백)
   if (body?.doneTitle !== undefined) data.doneTitle = String(body.doneTitle ?? "").trim() || null;
   if (body?.doneDescription !== undefined) data.doneDescription = String(body.doneDescription ?? "").trim() || null;
+  // 종료 화면 카드 버튼 문구 — 빈 값이면 null(EndedScreen 이 "설문 참여하기" 로 폴백)
+  if (body?.ctaLabel !== undefined) data.ctaLabel = String(body.ctaLabel ?? "").trim() || null;
   let retiredCount = 0;
   if (body?.questions !== undefined) {
     const incoming = normalizeSurveyQuestions(body.questions, { includeHidden: true });

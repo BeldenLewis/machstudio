@@ -44,7 +44,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
     where: { webinarId: webinar.id, showOnEnded: true, isOpen: true, OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }] },
     // 만든 순서대로 — 종료 화면 카드 순서가 관리자 목록 순서와 같아야 어느 카드를 고칠지 알 수 있다
     orderBy: { createdAt: "asc" },
-    select: { id: true, title: true, description: true },
+    select: { id: true, title: true, description: true, ctaLabel: true },
   });
 
   const rawConfig = (webinar.config ?? {}) as Record<string, unknown>;

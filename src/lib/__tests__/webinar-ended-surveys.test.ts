@@ -13,7 +13,7 @@ const url = (id: string) => `/s/${id}`;
 describe("배타적 폴백 — 두 경로를 섞지 않는다", () => {
   it("자체 설문이 있으면 외부 URL 은 무시된다", () => {
     const links = endedSurveyLinks([{ id: "a" }], "https://tally.so/x", url);
-    expect(links).toEqual([{ url: "/s/a", title: null, description: null }]);
+    expect(links).toEqual([{ url: "/s/a", title: null, description: null, ctaLabel: null }]);
   });
 
   it("자체 설문이 여러 개면 순서를 그대로 지킨다 — 어드민 목록 순서와 같아야 어느 카드인지 안다", () => {
@@ -37,8 +37,23 @@ describe("배타적 폴백 — 두 경로를 섞지 않는다", () => {
       null,
       url,
     );
-    expect(links[0]).toEqual({ url: "/s/a", title: "만족도", description: "1분" });
-    expect(links[1]).toEqual({ url: "/s/b", title: "사전조사", description: null });
+    expect(links[0]).toEqual({ url: "/s/a", title: "만족도", description: "1분", ctaLabel: null });
+    expect(links[1]).toEqual({ url: "/s/b", title: "사전조사", description: null, ctaLabel: null });
+  });
+
+  /**
+   * 버튼 문구도 제목·설명과 같은 이유로 설문마다 다르게 실린다 — 두 설문을 함께 걸었을 때
+   * "설문 참여하기" / "사전 신청하기" 처럼 다른 행동을 유도하는 문구를 쓸 수 있어야 한다.
+   * 외부 URL 경로는 애초에 개별 설문이 없어 ctaLabel 을 실을 자리가 없다(항상 null).
+   */
+  it("버튼 문구는 설문마다 따로 실린다 — 없으면 null(화면이 기본 문구로 채운다)", () => {
+    const links = endedSurveyLinks(
+      [{ id: "a", ctaLabel: "사전 신청하기" }, { id: "b", ctaLabel: null }, { id: "c" }],
+      null,
+      url,
+    );
+    expect(links.map((l) => l.ctaLabel)).toEqual(["사전 신청하기", null, null]);
+    expect(endedSurveyLinks([], "https://tally.so/x", url)[0].ctaLabel).toBeUndefined();
   });
 });
 

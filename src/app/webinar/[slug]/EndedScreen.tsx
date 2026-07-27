@@ -17,6 +17,8 @@ const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 /** 제목·설명이 비었을 때의 기본 문구 — 외부 설문 URL 만 넣은 경우가 이 경로다. */
 const DEFAULT_SURVEY_TITLE = "1분 만족도 설문";
 const DEFAULT_SURVEY_DESCRIPTION = "오늘 어떠셨나요? 짧은 피드백이 다음 웨비나를 더 좋게 만들어요.";
+/** 버튼 문구 기본값 — 설문 편집기의 '종료 화면 버튼' 을 비우면 이 문구가 나간다. */
+const DEFAULT_SURVEY_CTA = "설문 참여하기";
 
 const EXTRA_CSS = `
 .stk-live .en-hero { text-align:center; display:flex; flex-direction:column; align-items:center; gap:16px; padding:8px 0 4px; }
@@ -127,7 +129,7 @@ export default function EndedScreen({
                 <h3>{survey.title?.trim() || DEFAULT_SURVEY_TITLE}</h3>
                 <p style={{ whiteSpace: "pre-line" }}>{survey.description?.trim() || DEFAULT_SURVEY_DESCRIPTION}</p>
                 <a href={survey.url} target="_blank" rel="noopener noreferrer" className="en-btn soft">
-                  설문 참여하기
+                  {survey.ctaLabel?.trim() || DEFAULT_SURVEY_CTA}
                 </a>
               </div>
             ))}
