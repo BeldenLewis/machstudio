@@ -81,6 +81,100 @@ describe("요소 — empty 와 default 를 구분한다", () => {
   });
 });
 
+describe("랜딩 — 섹션을 끈 것과 켜 놓고 비운 것은 다르다", () => {
+  /**
+   * 이 구분이 없던 동안 `lm.show*`(= enabled && hasItems) 하나만 보고 판정해서, FAQ·하이라이트를
+   * 안 쓰는 정상 웨비나가 "켰지만 항목이 없어요" 경고 3건을 받았다. off 상태가 나올 길이 없었다.
+   */
+  const cfg = (section: string, enabled: boolean, items: unknown[] = []) => ({
+    landingPage: { enabled: true, titleLines: ["제목"], [section]: { enabled, items } },
+  });
+
+  it("섹션을 끄면 off — 경고가 아니다", () => {
+    for (const key of ["intro", "programs", "highlights", "faq"]) {
+      expect(row(make({ config: cfg(key, false) }), `landing.${key}`).state, key).toBe("off");
+    }
+  });
+
+  it("켜 놓고 비우면 empty", () => {
+    expect(row(make({ config: cfg("programs", true) }), "landing.programs").state).toBe("empty");
+    expect(row(make({ config: cfg("faq", true) }), "landing.faq").state).toBe("empty");
+  });
+
+  it("켜고 채우면 on", () => {
+    expect(row(make({ config: cfg("programs", true, [{ title: "세션 A" }]) }), "landing.programs").state).toBe("on");
+  });
+
+  it("연사 카드·타임테이블은 섹션 토글이 없다 — 세션이 없을 때만 empty", () => {
+    const r = make({ config: { landingPage: { enabled: true, titleLines: ["제목"] } } });
+    expect(row(r, "landing.sessions").state).toBe("empty");
+    expect(row(r, "landing.timetable").state).toBe("empty");
+  });
+});
+
+describe("영상 — 뷰어와 같은 파서로 판정한다", () => {
+  /**
+   * 뷰어는 getYouTubeVideoId 로 11자 ID 를 뽑아야 iframe 을 그린다. "빈 문자열이 아님" 만 보던
+   * 동안 채널 라이브 URL 이 초록 on 으로 읽혀 운영자가 그대로 방송에 들어갔다.
+   */
+  it("파싱할 수 없는 주소는 empty 이고 이유를 구분해 말한다", () => {
+    const bad = row(make({ config: { youtubeId: "https://www.youtube.com/@brand/live" } }), "live.video");
+    expect(bad.state).toBe("empty");
+    expect(bad.why).toContain("유튜브 ID를 읽지 못했어요");
+    const none = row(make(), "live.video");
+    expect(none.why).toContain("연결되지 않아");
+  });
+
+  it("전체 URL·짧은 URL·생 ID 모두 on", () => {
+    for (const v of ["dQw4w9WgXcQ", "https://youtu.be/dQw4w9WgXcQ", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"]) {
+      expect(row(make({ config: { youtubeId: v } }), "live.video").state, v).toBe("on");
+    }
+  });
+});
+
+describe("안내 문구 — 저장 키를 읽는다", () => {
+  /**
+   * 예전엔 `livePage.lpNotice` 를 읽었다. 그건 편집 폼의 필드 이름이고 저장 키는 `notice` 다 —
+   * 그래서 문구를 직접 쓴 웨비나도 언제나 "비우면 기본 문구가 나가요" 로 읽혔다.
+   */
+  it("직접 쓴 문구가 있으면 on, 없으면 default", () => {
+    expect(row(make({ config: { livePage: { notice: "문의는 채팅으로" } } }), "live.notice").state).toBe("on");
+    expect(row(make(), "live.notice").state).toBe("default");
+    // 폼 필드 이름으로 저장된 값은 뷰어가 읽지 않으므로 표도 읽지 않는다
+    expect(row(make({ config: { livePage: { lpNotice: "문구" } } }), "live.notice").state).toBe("default");
+  });
+});
+
+describe("등록 폼 — 필드당 한 행", () => {
+  const field = (patch: Record<string, unknown>) =>
+    make({ config: { registrationForm: { fields: [{ key: "job", label: "직무", enabled: true, ...patch }] } } });
+
+  it("선택형이 선택지 0개면 그 필드 행이 empty — 폼 전체 한 행으로는 잡을 수 없던 것이다", () => {
+    for (const type of ["select", "multiple"]) {
+      expect(row(field({ type, options: [] }), "signup.field.job").state, type).toBe("empty");
+    }
+  });
+
+  it("필수면 문구가 더 강하다 — 답을 한 건도 못 받는다", () => {
+    expect(row(field({ type: "select", options: [], required: true }), "signup.field.job").why).toContain("한 건도");
+  });
+
+  it("기타(직접입력)가 켜져 있으면 on — 자유 입력으로 답할 수 있다", () => {
+    expect(row(field({ type: "multiple", options: [], allowOther: true }), "signup.field.job").state).toBe("on");
+  });
+
+  it("끈 필드는 off", () => {
+    expect(row(field({ type: "select", options: [], enabled: false }), "signup.field.job").state).toBe("off");
+  });
+
+  it("기본 필드 7개도 각자 행을 갖는다 — 이름·연락처가 어느 면에 나가는지 표에서 읽힌다", () => {
+    const ids = make().elements.filter((e) => e.id.startsWith("signup.field.")).map((e) => e.id);
+    expect(ids).toContain("signup.field.name");
+    expect(ids).toContain("signup.field.phone");
+    expect(ids.length).toBeGreaterThanOrEqual(7);
+  });
+});
+
 describe("요소 — 약속만 있고 렌더처가 없는 것(broken)", () => {
   it("정확히 2건이다 — 세 번째가 조용히 늘거나 렌더처가 생겨 목록이 거짓이 되는 것을 막는다", () => {
     const r = make();

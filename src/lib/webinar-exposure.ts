@@ -27,8 +27,8 @@
 
 import { buildLandingModel } from "./landing/build-model";
 import type { LandingSession } from "./landing/types";
-import { normalizeLandingPageConfig, normalizeLivePageConfig, normalizeRegistrationForm } from "./webinar-config";
-import { isRealSession } from "./webinar-sessions";
+import { CHOICE_FIELD_TYPES, normalizeLandingPageConfig, normalizeLivePageConfig, normalizeRegistrationForm } from "./webinar-config";
+import { getYouTubeVideoId } from "./youtube";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 면
@@ -105,6 +105,12 @@ export interface ElementRow {
   state: ElementState;
   /** state 의 근거 한 줄. empty·broken·default 는 반드시 채운다. */
   why: string | null;
+  /**
+   * empty 일 때 **시청자 여정이 막히는가**. 준비 상태가 severity 를 여기서 파생한다.
+   * 켰는데 비어서 한 영역이 사라지는 것(false)과 이름·영상이 없어 화면이 성립하지 않는 것(true)은
+   * 급한 정도가 다르다 — 둘을 같은 점으로 그리면 목록에서 급한 것이 묻힌다.
+   */
+  blocks?: boolean;
 }
 
 export interface ExposureReport {
@@ -197,7 +203,6 @@ export function buildExposureReport(input: ExposureInput): ExposureReport {
   const live = normalizeLivePageConfig(cfg);
   const reg = normalizeRegistrationForm(cfg, { includeDisabled: false });
   const comps = (input.components ?? {}) as Record<string, unknown>;
-  const realSessions = input.sessions.filter(isRealSession).length;
 
   const lm = buildLandingModel(
     {
@@ -211,7 +216,8 @@ export function buildExposureReport(input: ExposureInput): ExposureReport {
     { uid: "exposure", embedded: false, isPreview: true, origin: "" },
   );
   // LandingModel 에는 enabled 가 없다(뷰가 그걸 몰라도 되게 설계돼 있다) — 정규화에서 읽는다.
-  const landingEnabled = normalizeLandingPageConfig(cfg).enabled;
+  const lp = normalizeLandingPageConfig(cfg);
+  const landingEnabled = lp.enabled;
 
   const rows: ElementRow[] = [];
   const add = (r: ElementRow) => rows.push(r);
@@ -227,39 +233,76 @@ export function buildExposureReport(input: ExposureInput): ExposureReport {
   // ── 사실(원본 정보)이 여러 면으로 나가는 것 ──────────────────────────────
   // 종료 화면은 이름을 쓰지 않는다(자체 인사말 + 기본 문구만) — 실측으로 확인한 빈칸이다.
   add({ id: "name", label: "웨비나 이름", surfaces: ["landing", "signup", "waiting", "entry", "live"], owner: "source",
+    blocks: true,
     ...(input.name.trim() ? { state: "on" as const, why: null } : { state: "empty" as const, why: "이름이 비면 모든 공개 화면의 제목이 비어요." }) });
   // 일시를 실제로 찍는 곳은 랜딩·대기(그리고 대기를 재사용하는 입장) 셋뿐이다.
   add({ id: "startAt", label: "라이브 일시", surfaces: ["landing", "waiting", "entry"], owner: "source", state: "on", why: null });
   add({ id: "brand", label: "브랜드 색", surfaces: ["landing", "signup", "waiting", "entry", "live", "ended"], owner: "source", state: "on", why: null });
   add({ id: "sessions", label: "진행 순서", surfaces: ["landing", "waiting", "entry", "live"], owner: "source",
-    ...(realSessions > 0 || input.sessions.length > 0
+    // 행이 하나라도 있으면 나간다 — 대기 아젠다·타임테이블은 유형을 가리지 않는다(연사 카드만 실제 세션).
+    // 예전엔 `realSessions > 0 || sessions.length > 0` 이었는데 좌항이 우항에 포함돼 죽은 계산이었다.
+    ...(input.sessions.length > 0
       ? { state: "on" as const, why: null }
       : { state: "empty" as const, why: "세션이 없으면 아젠다·타임테이블·세션 카드가 모두 사라져요." }) });
 
   // ── 랜딩 ────────────────────────────────────────────────────────────────
-  const L = (id: string, label: string, on: boolean, why: string): ElementRow => ({
+  /**
+   * 랜딩 요소 — **토글 축과 내용 축을 갈라서** 받는다.
+   *
+   * 예전엔 `on` 하나만 받아 `lm.show*` 를 넘겼는데, 그 값은 이미 `enabled && hasItems` 라
+   * 섹션을 **일부러 끈** 랜딩이 "켰지만 항목이 없어요" 라는 거짓 경고를 냈다(off 상태가 나올
+   * 길이 아예 없었다). FAQ·하이라이트를 안 쓰는 정상 웨비나가 경고 3건을 받고 한 줄 판정도
+   * 같이 거짓말했다. 그래서 sectionOn(그 섹션 토글)과 hasContent(내용 유무)를 따로 넘긴다.
+   */
+  const L = (id: string, label: string, sectionOn: boolean, hasContent: boolean, why: string): ElementRow => ({
     id: `landing.${id}`, label, surfaces: ["landing"], owner: "landing",
-    ...(landingEnabled ? (on ? { state: "on" as const, why: null } : { state: "empty" as const, why })
-      : { state: "off" as const, why: null }),
+    ...(!landingEnabled || !sectionOn
+      ? { state: "off" as const, why: null }
+      : hasContent ? { state: "on" as const, why: null } : { state: "empty" as const, why }),
   });
-  add(L("hero", "히어로", true, ""));
-  add(L("intro", "소개", lm.showIntro, "소개를 켰지만 제목·본문이 모두 비어 있어요."));
-  add(L("sessions", "연사 카드", lm.sessionCards.length > 0, "연사 카드를 켰지만 표시할 세션이 없어요(오프닝·휴식·Q&A·클로징은 카드에서 빠져요)."));
-  add(L("timetable", "타임테이블", lm.timetableRows.length > 0, "타임테이블을 켰지만 세션이 없어요."));
-  add(L("programs", "프로그램", lm.showPrograms, "프로그램을 켰지만 제목이 있는 항목이 없어요."));
-  add(L("highlights", "하이라이트", lm.showHighlights, "하이라이트를 켰지만 제목이 있는 항목이 없어요."));
-  add(L("join", "참여 방법", lm.showJoin, ""));
-  add(L("faq", "FAQ", lm.showFaq, "FAQ를 켰지만 질문이 있는 항목이 없어요."));
+  add(L("hero", "히어로", true, true, ""));
+  add(L("intro", "소개", lp.intro.enabled, lm.showIntro, "소개를 켰지만 제목·본문이 모두 비어 있어요."));
+  // 연사 카드·타임테이블은 섹션 토글이 없다 — 세션 표에서 파생되는 자리라 항상 켜져 있다.
+  add(L("sessions", "연사 카드", true, lm.sessionCards.length > 0, "연사 카드에 표시할 세션이 없어요(오프닝·휴식·Q&A·클로징은 카드에서 빠져요)."));
+  add(L("timetable", "타임테이블", true, lm.timetableRows.length > 0, "타임테이블에 표시할 세션이 없어요."));
+  add(L("programs", "프로그램", lp.programs.enabled, lm.showPrograms, "프로그램을 켰지만 제목이 있는 항목이 없어요."));
+  add(L("highlights", "하이라이트", lp.highlights.enabled, lm.showHighlights, "하이라이트를 켰지만 제목이 있는 항목이 없어요."));
+  add(L("join", "참여 방법", lp.join.enabled, true, ""));
+  add(L("faq", "FAQ", lp.faq.enabled, lm.showFaq, "FAQ를 켰지만 질문이 있는 항목이 없어요."));
   // 참여 방법은 이중 게이트의 유일한 예외 — 입력하지 않아도 기본 3스텝이 주입된다.
   const join = rows.find((r) => r.id === "landing.join")!;
-  if (landingEnabled && join.state === "on" && !Array.isArray((((cfg.landingPage ?? {}) as Record<string, unknown>).join as Record<string, unknown> | undefined)?.steps)) {
+  if (join.state === "on" && !Array.isArray((((cfg.landingPage ?? {}) as Record<string, unknown>).join as Record<string, unknown> | undefined)?.steps)) {
     join.state = "default";
     join.why = "입력하지 않아 기본 참여 절차 3단계가 나가요.";
   }
 
   // ── 등록 폼 ─────────────────────────────────────────────────────────────
-  add({ id: "signup.fields", label: "수집 항목", surfaces: ["signup"], owner: "registration",
-    ...(reg.fields.length > 0 ? { state: "on" as const, why: null } : { state: "empty" as const, why: "공개 폼에 표시될 항목이 없어요." }) });
+  /**
+   * 등록 폼은 **필드당 한 행**이다. 폼 전체로 한 행만 두면 "공개 폼에 항목이 하나라도 있나" 만
+   * 답하는데, 기본 필드 7개가 늘 있어서 그 판정은 사실상 항상 on 이다 — 개별 항목이 조용히
+   * 사라지는 것(선택지 0개인 선택형)을 잡을 칸이 없었다. 정본의 판정 단위도 필드다
+   * (normalizeRegistrationForm 의 공개 필터가 필드마다 걸린다).
+   *
+   * includeDisabled 로 **끈 필드까지** 읽는 이유: 켠 필드가 선택지 0개로 사라지는 것을 잡으려면
+   * 공개 필터가 이미 걸러낸 뒤의 목록으로는 알 수 없다(사라진 필드는 목록에 없다).
+   */
+  const allFields = normalizeRegistrationForm(cfg, { includeDisabled: true }).fields;
+  for (const f of allFields) {
+    const isChoice = CHOICE_FIELD_TYPES.includes(f.type);
+    // 공개 폼 필터와 **같은 조건**이어야 한다 — 어긋나면 표가 없는 항목을 있다고 하거나 반대로 말한다.
+    const droppedForNoOptions = isChoice && (f.options ?? []).length === 0 && f.allowOther !== true;
+    add({
+      id: `signup.field.${f.key}`, label: f.label || f.key, surfaces: ["signup"], owner: "registration",
+      ...(f.enabled === false
+        ? { state: "off" as const, why: null }
+        : droppedForNoOptions
+          ? { state: "empty" as const,
+              why: f.required
+                ? "선택지가 없어 항목이 폼에서 빠져요 — 필수로 켜 뒀지만 답을 한 건도 못 받아요."
+                : "선택지가 없어 이 항목은 폼에 표시되지 않아요." }
+          : { state: "on" as const, why: null }),
+    });
+  }
   add({ id: "signup.privacy", label: "개인정보 동의", surfaces: ["signup"], owner: "registration", state: "on", why: null });
 
   // ── 시청 화면 ───────────────────────────────────────────────────────────
@@ -271,19 +314,43 @@ export function buildExposureReport(input: ExposureInput): ExposureReport {
   add(W("waiting.calendar", "캘린더에 추가", ["waiting", "entry"], "waiting",
     gate(live.waiting.calendar, !!str(cfg.calendarUrl), "버튼을 켰지만 캘린더 URL이 없어요.")));
   add(W("waiting.share", "초대 공유", ["waiting", "entry"], "waiting", gate(live.waiting.share, true, "")));
-  add(W("waiting.notify", "시작 알림 받기", ["waiting"], "waiting", gate(live.waiting.notify, true, "")));
+  /**
+   * 시작 알림은 **면마다 관객이 다르다** — 대기 화면에서는 등록자에게만 버튼이 가고
+   * (onNotify={hasRegistration ? … : undefined}), 입장 확인 화면에서는 모두에게 간다.
+   * 면 목록에 entry 가 빠져 있던 동안 표는 "대기 화면에만 나간다" 고 답했다.
+   */
+  add({ ...W("waiting.notify", "시작 알림 받기", ["waiting", "entry"], "waiting", gate(live.waiting.notify, true, "")),
+    ...(live.waiting.notify ? { why: "대기 화면에서는 등록자에게만 보여요(입장 확인 화면에서는 누구나)." } : {}) });
   add({ ...W("waiting.social", "함께 기다리는 사람 수", ["waiting"], "waiting", { state: "broken", why: BROKEN["waiting.social"] }) });
 
-  add(W("live.video", "라이브 영상", ["live"], "live",
-    gate(true, !!str(cfg.youtubeId), "영상이 연결되지 않아 방송이 시작돼도 화면에 아무것도 안 나와요.")));
+  /**
+   * 영상은 "값이 있나" 가 아니라 **뷰어가 파싱할 수 있나** 로 판정한다.
+   * 뷰어는 getYouTubeVideoId 로 11자 ID 를 뽑아내야 iframe 을 그리고, 못 뽑으면 포스터만 띄운다.
+   * 빈 문자열만 보던 동안 `youtube.com/@brand/live` 같은 값이 초록 'on' 으로 읽혔고
+   * 운영자는 영상이 연결된 줄 알고 방송에 들어갔다. blocks — 시청자 여정이 여기서 끊긴다.
+   */
+  add({ ...W("live.video", "라이브 영상", ["live"], "live",
+    gate(true, !!getYouTubeVideoId(str(cfg.youtubeId)),
+      str(cfg.youtubeId)
+        ? "영상 주소에서 유튜브 ID를 읽지 못했어요 — 시청자에게는 포스터만 보여요."
+        : "영상이 연결되지 않아 방송이 시작돼도 화면에 아무것도 안 나와요.")), blocks: true });
   add(W("live.chat", "채팅 탭", ["live"], "live", gate(comps.chatEnabled === true, true, "")));
   add({ ...W("live.infoContact", "문의처", ["live"], "live", { state: "broken", why: BROKEN["live.infoContact"] }) });
+  /**
+   * ⚠ 예전엔 `livePage.lpNotice` 를 읽었다. 그건 **편집 폼의 필드 이름**이고 저장 키는
+   * `livePage.notice` 다(LivePageTab: `lp.notice = form.lpNotice.trim()`). 그래서 이 행은
+   * 값이 있어도 언제나 undefined 를 읽어 "비우면 기본 문구가 나가요" 를 말했다 —
+   * 직접 쓴 문구가 있는 웨비나와 없는 웨비나를 표가 구분하지 못했다. 뷰어는 `live.notice` 를 읽는다.
+   */
   add(W("live.notice", "안내 문구", ["live"], "live",
-    gate(true, !!str((cfg.livePage as Record<string, unknown> | undefined)?.lpNotice), "비우면 기본 안내 문구가 나가요.", "default")));
+    gate(true, !!str((cfg.livePage as Record<string, unknown> | undefined)?.notice), "비우면 기본 안내 문구가 나가요.", "default")));
 
   add(W("ended.title", "종료 인사말", ["ended"], "ended",
     gate(true, !!live.ended.title.trim(), "비우면 기본 인사말이 나가요.", "default")));
-  add(W("ended.replay", "다시보기 신청", ["ended"], "ended", gate(live.ended.replay, true, "")));
+  // 다시보기 버튼은 등록 이메일이 있어야 보낼 수 있어 미등록 방문자에게는 아예 없다 —
+  // 면 audience 는 '누구나' 지만 이 요소는 그렇지 않다(요소 단위 제약은 요소 행이 말한다).
+  add({ ...W("ended.replay", "다시보기 신청", ["ended"], "ended", gate(live.ended.replay, true, "")),
+    ...(live.ended.replay ? { why: "등록자에게만 보여요 — 종료 후 처음 들어온 방문자에게는 카드가 없어요." } : {}) });
   add(W("ended.resources", "자료 다운로드", ["ended"], "ended",
     gate(live.ended.resources, live.resources.length > 0, "자료 영역을 켰지만 자료가 없어요.")));
   add(W("ended.nextWebinar", "다음 웨비나", ["ended"], "ended",
