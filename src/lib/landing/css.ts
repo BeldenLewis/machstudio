@@ -452,15 +452,26 @@ ${sessionLogoCss(".lnd .lnd-modal-logo", { plate: true })}
 .lnd .schedule-chev { grid-area: 1 / 3; }
 .lnd .schedule-summary.is-static { cursor: default; }
 .lnd .schedule-summary::-webkit-details-marker { display: none; }
-/* 펼침 셰브론 — 오른쪽 끝. 열리면 180도. 색은 행 색을 따라간다(반전 행에서도 보이게). */
+/**
+ * 펼침 셰브론 — 오른쪽 끝. 열리면 180도. 색은 행 색을 따라간다(반전 행에서도 보이게).
+ *
+ * **회전은 svg 에만 건다.** 예전엔 이 span(패딩을 가진 칸)을 회전시켰는데,
+ * rotate(180deg) 가 padding-right 를 왼쪽으로 뒤집어 안쪽 글리프가 오른쪽으로 18px 밀렸다
+ * → 접혔을 때와 펼쳤을 때 화살표 x 좌표가 어긋났다.
+ * span 의 박스는 회전해도 그대로라서, span 을 재면 "제자리" 로 보인다(그래서 놓쳤다).
+ * 여백은 span 이 갖고 움직이는 것은 svg 뿐 — 이제 뒤집힐 패딩이 없다.
+ */
 .lnd .schedule-chev {
   display: flex; align-items: center; justify-content: center;
   padding-right: 18px; color: currentColor; opacity: .55;
-  transition: transform .22s cubic-bezier(.22,.61,.36,1), opacity .18s ease;
+  transition: opacity .18s ease;
+}
+.lnd .schedule-chev svg {
+  transition: transform .22s cubic-bezier(.22,.61,.36,1);
 }
 .lnd .schedule-chev svg { width: 18px; height: 18px; }
 .lnd .schedule-summary:hover .schedule-chev { opacity: .9; }
-.lnd details[open] > .schedule-summary .schedule-chev { transform: rotate(180deg); }
+.lnd details[open] > .schedule-summary .schedule-chev svg { transform: rotate(180deg); }
 /* 상세 — 높이 애니메이션 대상(effects.attachAccordion). CSS 로는 열림 상태만 잡고,
    여닫는 모션은 JS 가 인라인 height 로 그린다(details 는 닫히면 내용이 즉시 감춰진다). */
 .lnd .schedule-detail { overflow: hidden; }
