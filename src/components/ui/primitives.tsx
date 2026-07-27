@@ -128,6 +128,38 @@ export function Surface({
   );
 }
 
+/**
+ * 안내 문구 안의 "저기 가서 하세요" 를 **누를 수 있게** 만든다.
+ *
+ * IA 진단이 이걸 핵심 근거로 들었다: "그 구멍을 UI 가 안내 문장 18개로 메꾸는데,
+ * 그중 클릭 가능한 링크는 0개입니다." 문서 0단계의 항목이고, 문서는 이 단계만으로
+ * 체감 결함의 절반이 사라진다고 봤다.
+ *
+ * 문장 안에 인라인으로 놓이므로 버튼처럼 보이지 않게 한다 — 밑줄 + 키 컬러.
+ * 링크가 아니라 button 인 이유: 목적지가 URL 이 아니라 **같은 페이지의 탭·섹션 상태**다
+ * (내비 상태는 URL 이 단일 소스지만 이동은 라우터 호출로 한다).
+ */
+export function JumpLink({
+  onClick,
+  children,
+  className = "",
+}: {
+  onClick: () => void;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline items-center gap-0.5 rounded font-medium underline decoration-violet-500/40 underline-offset-2 transition-colors hover:decoration-violet-500 ${SELECTED_TEXT} ${className}`}
+    >
+      {children}
+      <span aria-hidden> ↗</span>
+    </button>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Blk — 편집 블록. IA 문서 프로토타입의 `.blk` 패턴.
 // ─────────────────────────────────────────────────────────────────────────────

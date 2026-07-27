@@ -452,6 +452,9 @@ function WebinarDetail({ id }: { id: string }) {
                 // 레일 상태 점의 근거 — 같은 판정을 두 번 하지 않는다
                 canRegister={webinarStatus.canRegister}
                 isEnded={isEnded}
+                // 안내 문구의 "운영 → 라이브 콘솔에서" 같은 문장을 누를 수 있게 —
+                // 목적지가 다른 탭이라 만들기 혼자서는 이동할 수 없다(navigate 는 이 껍데기 소유).
+                onJumpToTab={navigate}
               />
             )}
             {activeTab === "deploy" && <DeployTab

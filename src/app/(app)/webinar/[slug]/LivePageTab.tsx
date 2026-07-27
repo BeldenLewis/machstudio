@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { useAutosave, useExternalSync, diffPatch } from "@/components/ui/use-autosave";
@@ -12,7 +12,7 @@ import {
 import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { getYouTubeVideoId } from "@/lib/youtube";
 import { Switch } from "@/components/ui/switch";
-import { Blk, btnCls, FIELD_CLS, FIELD_CLS_DANGER, FINISH, R, SELECTED, Segmented } from "@/components/ui/primitives";
+import { Blk, JumpLink, btnCls, FIELD_CLS, FIELD_CLS_DANGER, FINISH, R, SELECTED, Segmented } from "@/components/ui/primitives";
 
 /** 시청자에게 보이는 한 페이지의 네 순간. 어드민에서는 이 상태로 편집 대상을 고른다. */
 export type WatchState = "waiting" | "entry" | "live" | "ended";
@@ -163,13 +163,17 @@ const inputCls = FIELD_CLS;
 // 만들기 › 대기/라이브/종료 화면 편집.
 // ⚠️ 세 메뉴가 하나의 인스턴스를 공유한다(PageSetupTab 그룹 키) — livePage 를 통째로 재구성해 저장하므로
 // 상태를 쪼개면 다른 화면 데이터가 유실된다. 렌더만 section 으로 게이트.
-export default function LivePageTab({ webinar, slug, state, onStateChange, onSilentUpdate }: {
+export default function LivePageTab({ webinar, slug, state, onStateChange, onSilentUpdate, onGoToSurvey, onGoToConsole }: {
   webinar: Webinar;
   slug: string;
   /** 편집 중인 시청 화면 상태. URL 이 단일 소스라 부모가 들고 있다(새로고침·딥링크 복원). */
   state: WatchState;
   onStateChange: (next: WatchState) => void;
   onSilentUpdate: () => void;
+  /** "설문에서 먼저 만들어 주세요" 를 누를 수 있게(만들기 안 섹션 전환). */
+  onGoToSurvey?: () => void;
+  /** "운영 → 라이브 콘솔에서" 를 누를 수 있게(다른 탭이라 껍데기가 이동시킨다). */
+  onGoToConsole?: () => void;
 }) {
   const livePage = (webinar.config?.livePage ?? {}) as Record<string, unknown>;
   const notify = (livePage.notify ?? {}) as Record<string, unknown>;
@@ -179,6 +183,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
     : livePage.cta ? [livePage.cta as Record<string, unknown>] : []
   ).map(ctaToForm);
 
+  const uid = useId();
   const [form, setForm] = useState({
     youtubeId: (webinar.config?.youtubeId as string) ?? "",
     calendarUrl: (webinar.config?.calendarUrl as string) ?? "",
@@ -436,7 +441,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
           </Blk>
 
           <Blk title="캘린더" goes={["대기 화면"]} hint="&ldquo;캘린더에 추가&rdquo; 버튼이 여는 링크예요.">
-            <input type="url" placeholder="https://calendar.google.com/..." value={form.calendarUrl}
+            <input aria-label="캘린더 URL" type="url" placeholder="https://calendar.google.com/..." value={form.calendarUrl}
               onChange={(e) => setForm((f) => ({ ...f, calendarUrl: e.target.value }))} className={inputCls} />
           </Blk>
         </>
@@ -448,8 +453,8 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
           {/* 영상 */}
           <Blk title="영상" tag="risk" goes={["라이브 시청"]} pinned hint="시청 화면에 재생될 라이브 방송 소스예요.">
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">YouTube 공유 링크 또는 영상 ID</label>
-              <input type="text" placeholder="예: https://youtu.be/dQw4w9WgXcQ" value={form.youtubeId}
+              <label htmlFor={`${uid}-yt`} className="text-xs text-muted-foreground mb-1 block">YouTube 공유 링크 또는 영상 ID</label>
+              <input id={`${uid}-yt`} type="text" placeholder="예: https://youtu.be/dQw4w9WgXcQ" value={form.youtubeId}
                 onChange={(e) => setForm((f) => ({ ...f, youtubeId: e.target.value }))}
                 className={`${form.youtubeId.trim() && !youtubeVideoId ? FIELD_CLS_DANGER : FIELD_CLS} font-mono`} />
               <p className={`mt-1 text-[11px] ${form.youtubeId.trim() && !youtubeVideoId ? "text-destructive" : "text-muted-foreground"}`}>
@@ -464,13 +469,13 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
           <Blk title="콘텐츠" goes={["라이브 시청"]} hint="시청 화면의 정보·안내 문구예요. 비워두면 표시되지 않아요.">
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">문의처 (정보 카드)</label>
-                <input type="text" placeholder="예: STK 운영사무국" value={form.lpContact}
+                <label htmlFor={`${uid}-contact`} className="text-xs text-muted-foreground mb-1 block">문의처 (정보 카드)</label>
+                <input id={`${uid}-contact`} type="text" placeholder="예: STK 운영사무국" value={form.lpContact}
                   onChange={(e) => setForm((f) => ({ ...f, lpContact: e.target.value }))} className={inputCls} />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">안내 문구 (하단 노티스)</label>
-                <textarea rows={2} placeholder="비워두면 기본 안내 문구가 표시돼요." value={form.lpNotice}
+                <label htmlFor={`${uid}-notice`} className="text-xs text-muted-foreground mb-1 block">안내 문구 (하단 노티스)</label>
+                <textarea id={`${uid}-notice`} rows={2} placeholder="비워두면 기본 안내 문구가 표시돼요." value={form.lpNotice}
                   onChange={(e) => setForm((f) => ({ ...f, lpNotice: e.target.value }))} className={`${inputCls} resize-none`} />
               </div>
             </div>
@@ -516,11 +521,11 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                     {removeButton({ label: `${card.title || `카드 ${visibleIndex + 1}`} 삭제` })}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <input type="text" placeholder="상단 라벨 (예: 세션 자료)" value={card.eyebrow} onChange={(e) => patchCard({ eyebrow: e.target.value })} className={inputCls} />
-                    <input type="text" placeholder="제목 (예: 발표 자료·템플릿 받기)" value={card.title} onChange={(e) => patchCard({ title: e.target.value })} className={inputCls} />
+                    <input aria-label="CTA 카드 상단 라벨" type="text" placeholder="상단 라벨 (예: 세션 자료)" value={card.eyebrow} onChange={(e) => patchCard({ eyebrow: e.target.value })} className={inputCls} />
+                    <input aria-label="CTA 카드 제목" type="text" placeholder="제목 (예: 발표 자료·템플릿 받기)" value={card.title} onChange={(e) => patchCard({ title: e.target.value })} className={inputCls} />
                   </div>
-                  <textarea rows={2} placeholder="설명" value={card.description} onChange={(e) => patchCard({ description: e.target.value })} className={`${inputCls} resize-none`} />
-                  <textarea rows={2} placeholder="혜택 목록 — 한 줄에 하나씩 (선택)" value={card.benefits} onChange={(e) => patchCard({ benefits: e.target.value })} className={`${inputCls} resize-none`} />
+                  <textarea aria-label="CTA 카드 설명" rows={2} placeholder="설명" value={card.description} onChange={(e) => patchCard({ description: e.target.value })} className={`${inputCls} resize-none`} />
+                  <textarea aria-label="CTA 카드 혜택 목록" rows={2} placeholder="혜택 목록 — 한 줄에 하나씩 (선택)" value={card.benefits} onChange={(e) => patchCard({ benefits: e.target.value })} className={`${inputCls} resize-none`} />
                   <div className="space-y-2">
                     {(["primary", "secondary"] as const).map((slot) => {
                       const btn = card[slot];
@@ -530,6 +535,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                           <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_130px_96px]">
                             <input
                               type="text"
+                              aria-label={slot === "primary" ? "메인 버튼 라벨" : "보조 버튼 라벨"}
                               placeholder={slot === "primary" ? "메인 버튼 라벨 (예: 자료 받기·문의하기)" : "보조 버튼 라벨 (선택)"}
                               value={btn.label}
                               onChange={(e) => upd({ label: e.target.value })}
@@ -546,7 +552,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                           </div>
                           {btn.action === "url" ? (
                             <>
-                              <input type="url" placeholder="연결 URL (https://…)" value={btn.url} onChange={(e) => upd({ url: e.target.value })} className={inputCls} />
+                              <input aria-label="버튼 연결 URL" type="url" placeholder="연결 URL (https://…)" value={btn.url} onChange={(e) => upd({ url: e.target.value })} className={inputCls} />
                               {btn.open === "modal" && (
                                 <p className="text-[11px] text-amber-600">일부 사이트는 페이지 안 임베드(모달)를 차단해요 — 모달이 비어 보이면 새 창으로 바꿔주세요.</p>
                               )}
@@ -554,7 +560,10 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                           ) : surveyOptions === null ? (
                             <p className="text-[11px] text-muted-foreground">폼 목록 불러오는 중…</p>
                           ) : surveyOptions.length === 0 ? (
-                            <p className="text-[11px] text-amber-600">연결할 폼이 없어요 — 만들기 → 설문에서 먼저 만들어주세요. 설문 빌더가 곧 커스텀 폼 빌더예요(문항 자유 구성).</p>
+                            <p className="text-[11px] text-amber-600">
+                                연결할 폼이 없어요 —{" "}
+                                {onGoToSurvey ? <JumpLink onClick={onGoToSurvey}>설문에서 먼저 만들기</JumpLink> : "만들기 → 설문에서 먼저 만들어주세요"}
+                              </p>
                           ) : (
                             <>
                               <select value={btn.surveyId} onChange={(e) => upd({ surveyId: e.target.value })} aria-label="연결할 폼" className={inputCls}>
@@ -592,34 +601,35 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
             {form.notifyEnabled && (
               <div className="space-y-3 pt-1">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <input type="text" placeholder="상단 라벨 (예: 다음 세션 · 20:20)" value={form.notifyKicker}
+                  <input aria-label="알림 박스 상단 라벨" type="text" placeholder="상단 라벨 (예: 다음 세션 · 20:20)" value={form.notifyKicker}
                     onChange={(e) => setForm((f) => ({ ...f, notifyKicker: e.target.value }))} className={inputCls} />
-                  <input type="text" placeholder="제목 (예: 알림 받고 이어보기)" value={form.notifyTitle}
+                  <input aria-label="알림 박스 제목" type="text" placeholder="제목 (예: 알림 받고 이어보기)" value={form.notifyTitle}
                     onChange={(e) => setForm((f) => ({ ...f, notifyTitle: e.target.value }))} className={inputCls} />
                 </div>
-                <textarea rows={2} placeholder="설명 (비워두면 기본 문구)" value={form.notifyDescription}
+                <textarea aria-label="알림 박스 설명" rows={2} placeholder="설명 (비워두면 기본 문구)" value={form.notifyDescription}
                   onChange={(e) => setForm((f) => ({ ...f, notifyDescription: e.target.value }))} className={`${inputCls} resize-none`} />
-                <input type="text" placeholder="스위치 문구 (예: 세션 시작 알림 받기)" value={form.notifySwitchLabel}
+                <input aria-label="알림 스위치 문구" type="text" placeholder="스위치 문구 (예: 세션 시작 알림 받기)" value={form.notifySwitchLabel}
                   onChange={(e) => setForm((f) => ({ ...f, notifySwitchLabel: e.target.value }))} className={inputCls} />
               </div>
             )}
           </Blk>
 
           {/* 참여 구성 */}
-          <Blk title="참여 구성" tag="sync" goes={["라이브 시청"]} hint="시청 화면 참여 박스(Q&amp;A·채팅·세션) 구성이에요.">
+          <Blk title="참여 구성" tag="sync" goes={["라이브 시청"]}
+            action={onGoToConsole ? <JumpLink onClick={onGoToConsole}>라이브 콘솔</JumpLink> : undefined} hint="시청 화면 참여 박스(Q&amp;A·채팅·세션) 구성이에요.">
             <div className="space-y-4">
               <Toggle
                 checked={form.chatEnabled}
                 onChange={(v) => setForm((f) => ({ ...f, chatEnabled: v }))}
                 label="채팅 탭 사용"
-                desc="끄면 참여 박스에서 채팅 탭이 사라져요. 라이브 중 메시지 관리는 운영 → 라이브 콘솔 → 실시간 채팅에서."
+                desc="끄면 참여 박스에서 채팅 탭이 사라져요."
               />
               <div className="border-t border-border/60 pt-4">
                 <ModeChoice
                   value={form.qaMode}
                   onChange={(v) => setForm((f) => ({ ...f, qaMode: v }))}
                   label="Q&A 공개 범위"
-                  desc="라이브 중에도 운영 → 라이브 콘솔에서 바꿀 수 있어요."
+                  desc="라이브 중에도 바꿀 수 있어요."
                   options={[
                     { value: "open", title: "오픈형", desc: "올라온 질문을 시청자끼리 보고 추천할 수 있어요." },
                     { value: "closed", title: "폐쇄형", desc: "질문은 주최자만 봐요. 시청자에겐 질문하기 입력만 보여요." },
@@ -726,7 +736,8 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                   <p className="text-[11px] text-muted-foreground">설문 목록을 불러오는 중…</p>
                 ) : surveyOptions.length === 0 ? (
                   <p className="text-[11px] text-amber-600">
-                    연결할 자체 설문이 없어요 — 만들기 → 설문에서 먼저 만들어 주세요.
+                    연결할 자체 설문이 없어요 —{" "}
+                    {onGoToSurvey ? <JumpLink onClick={onGoToSurvey}>설문에서 먼저 만들기</JumpLink> : "만들기 → 설문에서 먼저 만들어 주세요"}
                   </p>
                 ) : (
                   <div className="space-y-1.5">
@@ -781,10 +792,10 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                 renderRow={({ item, index, patch }) => (
                   <>
                     <span className="text-[11px] text-muted-foreground">자료 {index + 1}</span>
-                    <input className={inputCls} placeholder="제목 (예: 발표자료)" value={item.title} onChange={(e) => patch({ title: e.target.value })} />
+                    <input aria-label="자료 제목" className={inputCls} placeholder="제목 (예: 발표자료)" value={item.title} onChange={(e) => patch({ title: e.target.value })} />
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <input className={inputCls} placeholder="설명 (예: PDF · 4.2MB)" value={item.meta} onChange={(e) => patch({ meta: e.target.value })} />
-                      <input className={inputCls} type="url" placeholder="다운로드 URL" value={item.url} onChange={(e) => patch({ url: e.target.value })} />
+                      <input aria-label="자료 설명" className={inputCls} placeholder="설명 (예: PDF · 4.2MB)" value={item.meta} onChange={(e) => patch({ meta: e.target.value })} />
+                      <input aria-label="자료 다운로드 URL" className={inputCls} type="url" placeholder="다운로드 URL" value={item.url} onChange={(e) => patch({ url: e.target.value })} />
                     </div>
                   </>
                 )}
@@ -794,10 +805,10 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
 
           {screens.ended.nextWebinar && (
             <Blk title="다음 웨비나" goes={["종료 화면"]} hint="종료 화면 하단에 사전등록 티저로 표시돼요.">
-              <input className={inputCls} placeholder="제목 (예: 미국 아마존 입점 A to Z)" value={nextWeb.title} onChange={(e) => setNextWeb((n) => ({ ...n, title: e.target.value }))} />
+              <input aria-label="다음 웨비나 제목" className={inputCls} placeholder="제목 (예: 미국 아마존 입점 A to Z)" value={nextWeb.title} onChange={(e) => setNextWeb((n) => ({ ...n, title: e.target.value }))} />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <input className={inputCls} placeholder="일시 (예: 8월 21일 오후 2시)" value={nextWeb.when} onChange={(e) => setNextWeb((n) => ({ ...n, when: e.target.value }))} />
-                <input className={inputCls} type="url" placeholder="사전등록 URL" value={nextWeb.url} onChange={(e) => setNextWeb((n) => ({ ...n, url: e.target.value }))} />
+                <input aria-label="다음 웨비나 일시" className={inputCls} placeholder="일시 (예: 8월 21일 오후 2시)" value={nextWeb.when} onChange={(e) => setNextWeb((n) => ({ ...n, when: e.target.value }))} />
+                <input aria-label="다음 웨비나 사전등록 URL" className={inputCls} type="url" placeholder="사전등록 URL" value={nextWeb.url} onChange={(e) => setNextWeb((n) => ({ ...n, url: e.target.value }))} />
               </div>
             </Blk>
           )}

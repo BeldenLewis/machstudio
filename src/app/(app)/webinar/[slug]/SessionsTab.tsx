@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useEffect, useId, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
@@ -176,6 +176,9 @@ function SessionFormFields({
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isBreak = form.type === "break";
+  /* 라벨↔입력을 id 로 묶는다. useId 인 이유: 이 폼은 '추가'와 '수정'이 동시에 열릴 수 있어
+     고정 id("ses-order")면 두 벌이 겹쳐 라벨이 엉뚱한 칸을 가리켰다. */
+  const uid = useId();
 
   const uploadPhoto = async (file: File) => {
     const validationError = validateSpeakerPhoto(file);
@@ -204,9 +207,9 @@ function SessionFormFields({
       <div className="col-span-4 sm:col-span-2">
         {/* "번호"가 아니라 "순서" — 휴식·Q&A 도 이 번호를 차지한다(진행 순서라서).
             시청자에게 보이는 "세션 n"은 실제 세션만 다시 센 값이라 이 숫자와 다를 수 있다. */}
-        <label htmlFor="ses-order" className="text-xs text-muted-foreground mb-1 block">순서</label>
+        <label htmlFor={`${uid}-order`} className="text-xs text-muted-foreground mb-1 block">순서</label>
         <input
-          id="ses-order"
+          id={`${uid}-order`}
           type="number"
           min={1}
           value={form.number}
@@ -215,8 +218,9 @@ function SessionFormFields({
         />
       </div>
       <div className="col-span-8 sm:col-span-3">
-        <label className="text-xs text-muted-foreground mb-1 block">유형</label>
+        <label htmlFor={`${uid}-type`} className="text-xs text-muted-foreground mb-1 block">유형</label>
         <select
+          id={`${uid}-type`}
           value={form.type}
           onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
           className={FIELD_CLS}
@@ -227,8 +231,9 @@ function SessionFormFields({
         </select>
       </div>
       <div className="col-span-12 sm:col-span-7">
-        <label className="text-xs text-muted-foreground mb-1 block">제목</label>
+        <label htmlFor={`${uid}-title`} className="text-xs text-muted-foreground mb-1 block">제목</label>
         <input
+          id={`${uid}-title`}
           type="text"
           value={form.title}
           onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
@@ -241,8 +246,9 @@ function SessionFormFields({
       {!isBreak && (
         <>
           <div className="col-span-12 sm:col-span-4">
-            <label className="text-xs text-muted-foreground mb-1 block">연사 이름</label>
+            <label htmlFor={`${uid}-speaker`} className="text-xs text-muted-foreground mb-1 block">연사 이름</label>
             <input
+              id={`${uid}-speaker`}
               type="text"
               value={form.speaker}
               onChange={(e) => setForm((f) => ({ ...f, speaker: e.target.value }))}
@@ -251,8 +257,9 @@ function SessionFormFields({
             />
           </div>
           <div className="col-span-12 sm:col-span-4">
-            <label className="text-xs text-muted-foreground mb-1 block">소속·직책</label>
+            <label htmlFor={`${uid}-company`} className="text-xs text-muted-foreground mb-1 block">소속·직책</label>
             <input
+              id={`${uid}-company`}
               type="text"
               value={form.speakerCompany}
               onChange={(e) => setForm((f) => ({ ...f, speakerCompany: e.target.value }))}
@@ -263,8 +270,9 @@ function SessionFormFields({
         </>
       )}
       <div className="col-span-6 sm:col-span-2">
-        <label className="text-xs text-muted-foreground mb-1 block">시작</label>
+        <label htmlFor={`${uid}-start`} className="text-xs text-muted-foreground mb-1 block">시작</label>
         <input
+          id={`${uid}-start`}
           type="time"
           value={form.startTime}
           onChange={(e) => setForm((f) => ({ ...f, startTime: e.target.value }))}
@@ -272,8 +280,9 @@ function SessionFormFields({
         />
       </div>
       <div className="col-span-6 sm:col-span-2">
-        <label className="text-xs text-muted-foreground mb-1 block">종료</label>
+        <label htmlFor={`${uid}-end`} className="text-xs text-muted-foreground mb-1 block">종료</label>
         <input
+          id={`${uid}-end`}
           type="time"
           value={form.endTime}
           onChange={(e) => setForm((f) => ({ ...f, endTime: e.target.value }))}
@@ -281,8 +290,9 @@ function SessionFormFields({
         />
       </div>
       <div className="col-span-12">
-        <label className="text-xs text-muted-foreground mb-1 block">세션 내용</label>
+        <label htmlFor={`${uid}-desc`} className="text-xs text-muted-foreground mb-1 block">세션 내용</label>
         <textarea
+          id={`${uid}-desc`}
           value={form.description}
           onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
           placeholder="세션 주제에 대한 상세 설명 (선택) — 랜딩 상세 팝업에 표시돼요"
@@ -292,8 +302,9 @@ function SessionFormFields({
       </div>
       {!isBreak && (
       <div className="col-span-12">
-        <label className="text-xs text-muted-foreground mb-1 block">연사 약력·경력</label>
+        <label htmlFor={`${uid}-bio`} className="text-xs text-muted-foreground mb-1 block">연사 약력·경력</label>
         <textarea
+          id={`${uid}-bio`}
           value={form.speakerBio}
           onChange={(e) => setForm((f) => ({ ...f, speakerBio: e.target.value }))}
           placeholder={"예:\n전) 우아한청년들 CEO\n전) 우아한형제들 공동창업자 겸 CTO, COO"}
@@ -338,7 +349,7 @@ function SessionFormFields({
             }} />
           </div>
         ) : (
-          <input type="url" value={form.speakerPhotoUrl}
+          <input type="url" aria-label="연사 사진 URL" value={form.speakerPhotoUrl}
             onChange={(e) => setForm((f) => ({ ...f, speakerPhotoUrl: e.target.value }))}
             placeholder="https://... (라이브 페이지 아젠다에 원형 사진으로 표시돼요)"
             className={FIELD_CLS} />

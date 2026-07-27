@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type Dispatch, type ElementType, type ReactNode, type SetStateAction } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type Dispatch, type ElementType, type ReactNode, type SetStateAction } from "react";
 import { motion } from "framer-motion";
 import { Plus, Trash2, GripVertical, Smartphone, AlignLeft, Mail, Phone, ListChecks, SquareCheck, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
@@ -407,6 +407,7 @@ function ConsentBodyField({
 }
 
 export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webinar: Webinar; onSilentUpdate: () => void }) {
+  const uid = useId();
   const initial = normalizeRegistrationForm(webinar.config ?? {}, { includeDisabled: true });
   const [fields, setFields] = useState<RegistrationField[]>(initial.fields);
   const [privacyText, setPrivacyText] = useState(initial.privacyText);
@@ -599,8 +600,8 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">개인정보 동의 문구</label>
-              <input value={privacyText} onChange={(e) => setPrivacyText(e.target.value)} className={inputCls} />
+              <label htmlFor={`${uid}-privacy`} className="text-xs text-muted-foreground mb-1 block">개인정보 동의 문구</label>
+              <input id={`${uid}-privacy`} value={privacyText} onChange={(e) => setPrivacyText(e.target.value)} className={inputCls} />
               <ConsentBodyField
                 label="개인정보 수집·이용"
                 value={privacyBody}
@@ -613,8 +614,8 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
               </label>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">마케팅 동의 문구</label>
-              <input value={marketingText} onChange={(e) => setMarketingText(e.target.value)} className={inputCls} />
+              <label htmlFor={`${uid}-marketing`} className="text-xs text-muted-foreground mb-1 block">마케팅 동의 문구</label>
+              <input id={`${uid}-marketing`} value={marketingText} onChange={(e) => setMarketingText(e.target.value)} className={inputCls} />
               <ConsentBodyField
                 label="마케팅 정보 수신"
                 value={marketingBody}
@@ -632,8 +633,8 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
               )}
             </div>
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">제출 버튼 문구</label>
-              <input value={submitLabel} onChange={(e) => setSubmitLabel(e.target.value)} className={inputCls} />
+              <label htmlFor={`${uid}-submit`} className="text-xs text-muted-foreground mb-1 block">제출 버튼 문구</label>
+              <input id={`${uid}-submit`} value={submitLabel} onChange={(e) => setSubmitLabel(e.target.value)} className={inputCls} />
             </div>
           </div>
         </section>

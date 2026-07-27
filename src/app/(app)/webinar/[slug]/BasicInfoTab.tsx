@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
 import WebinarSchedulePicker from "@/components/webinar/WebinarSchedulePicker";
@@ -27,6 +27,7 @@ export default function BasicInfoTab({ webinar, onSilentUpdate, embedded }: {
   /** 다른 화면 안에 얹힐 때 true — 자기 좌우 패딩을 뺀다(부모가 소유). */
   embedded?: boolean;
 }) {
+  const uid = useId();
   const toLocal = (iso: string) => kstDateTimeLocalInput(iso);
 
   const [form, setForm] = useState({
@@ -82,8 +83,9 @@ export default function BasicInfoTab({ webinar, onSilentUpdate, embedded }: {
         <h3 className="text-sm font-semibold">기본 정보</h3>
         <div className="space-y-3">
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">웨비나 이름</label>
+            <label htmlFor={`${uid}-name`} className="text-xs text-muted-foreground mb-1 block">웨비나 이름</label>
             <input
+              id={`${uid}-name`}
               type="text"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -91,8 +93,9 @@ export default function BasicInfoTab({ webinar, onSilentUpdate, embedded }: {
             />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">설명</label>
+            <label htmlFor={`${uid}-desc`} className="text-xs text-muted-foreground mb-1 block">설명</label>
             <textarea
+              id={`${uid}-desc`}
               rows={2}
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}

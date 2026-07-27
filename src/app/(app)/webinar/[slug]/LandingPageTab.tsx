@@ -4,8 +4,7 @@
 // 모든 값은 config.landingPage 한 곳에 저장되고 공개 페이지(/webinar/[slug]/landing)가 그대로 렌더한다.
 // 섹션은 "토글 ON + 실제 내용 있음"일 때만 공개 페이지에 노출된다(빈 껍데기 방지 — 읽기에서 걸러짐).
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { useId, useRef, useState } from "react";
 import { ExternalLink, Clapperboard, Ban, Loader2, UploadCloud, Link2, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
@@ -19,10 +18,9 @@ import {
   type LandingProgramItem,
 } from "@/lib/webinar-config";
 import { LANDING_IMAGE_ACCEPT, LANDING_VIDEO_ACCEPT, validateLandingMedia } from "@/lib/webinar-landing-media";
-import { FINISH, FIELD_CLS, Segmented } from "@/components/ui/primitives";
+import { FINISH, FIELD_CLS, JumpLink, Segmented } from "@/components/ui/primitives";
 import { EditableList, ROW_KEY, withRowKeys, stripRowKeys, type WithRowKey } from "@/components/ui/editable-list";
 
-const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 // 입력 값은 프리미티브 한 곳에서 온다 — 예전엔 탭마다 로컬 선언이라 값이 3종으로 갈렸다.
 const inputCls = FIELD_CLS;
 const labelCls = "block text-xs font-medium text-muted-foreground mb-1";
@@ -145,12 +143,17 @@ const MEDIA_TYPES: { id: HeroMediaType; label: string; icon: typeof Ban }[] = [
 export default function LandingPageTab({
   webinar,
   onSilentUpdate,
+  onGoToSource,
+  onGoToDeploy,
 }: {
   webinar: Webinar;
   onSilentUpdate: () => void;
+  /** 안내 문구가 가리키는 곳으로 실제로 데려간다 — 문장만 남기면 사용자가 경로를 손으로 찾는다. */
+  onGoToSource?: () => void;
+  onGoToDeploy?: () => void;
 }) {
+  const uid = useId();
   const [state, setState] = useState<EditorState>(() => toEditorState(webinar.config));
-  const [previewNonce, setPreviewNonce] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -199,22 +202,23 @@ export default function LandingPageTab({
   // 표시는 껍데기 한 곳에서 그린다(만들기 화면당 1개) — 저장 경로는 그대로 각자.
   useReportAutosave(saveState, retry);
 
-  // 저장 완료 시 미리보기 새로고침 — 공개 페이지가 저장된 값을 다시 읽는다
-  useEffect(() => {
-    if (saveState === "saved") setPreviewNonce((n) => n + 1);
-  }, [saveState]);
-
-  const previewUrl = useMemo(
-    () => `/webinar/${webinar.slug}/landing?preview=1&r=${previewNonce}`,
-    [webinar.slug, previewNonce],
-  );
+  /**
+   * 미리보기는 **껍데기(PageSetupTab)의 인접 패널이 소유한다.**
+   *
+   * 이 탭이 자기 미리보기 열(440px)을 따로 들고 있었는데, 껍데기에 인접 미리보기가 생기면서
+   * 한 화면에 미리보기가 두 개 겹쳤다 — 실측에서 편집 열이 130px 로 눌려 "연/사/카/드" 처럼
+   * 한 글자씩 줄바꿈됐다. 껍데기 패널이 같은 /landing URL 을 (기기 전환 + 축소율 표시까지)
+   * 보여주므로 이쪽을 지운다. 저장 후 갱신도 그쪽이 saving→saved 전이로 한다.
+   * 남은 previewUrl 은 "새 탭에서 미리보기" 링크 전용 — 패널을 접었을 때의 유일한 출구다.
+   */
+  const previewUrl = `/webinar/${webinar.slug}/landing?preview=1`;
 
   const setRows = <K extends "programs" | "highlights" | "faq">(key: K, items: EditorState[K]["items"]) =>
     setState((prev) => ({ ...prev, [key]: { ...prev[key], items } }));
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <div className="max-w-[1600px] space-y-6 2xl:grid 2xl:grid-cols-[minmax(0,1fr)_440px] 2xl:items-start 2xl:gap-6 2xl:space-y-0">
+      <div className="max-w-3xl">
         <div className="min-w-0 space-y-4">
           {/* 상단: 공개 스위치 + 저장 상태 + 미리보기 */}
           <div className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-card p-4 sm:p-5 ${FINISH.s1}`}>
@@ -223,9 +227,14 @@ export default function LandingPageTab({
               <div>
                 <p className="text-sm font-semibold">{state.enabled ? "공개 중" : "비공개"}</p>
                 <p className="text-xs text-muted-foreground">
-                  {state.enabled
-                    ? "링크와 임베드로 접근할 수 있어요. 배포 탭에서 임베드 코드를 복사하세요."
-                    : "끄면 링크·임베드 모두 비공개 안내만 보여요."}
+                  {state.enabled ? (
+                    <>
+                      링크와 임베드로 접근할 수 있어요. 임베드 코드는{" "}
+                      {onGoToDeploy ? <JumpLink onClick={onGoToDeploy}>배포</JumpLink> : "배포 탭"}에서 복사하세요.
+                    </>
+                  ) : (
+                    "끄면 링크·임베드 모두 비공개 안내만 보여요."
+                  )}
                 </p>
               </div>
             </div>
@@ -245,17 +254,18 @@ export default function LandingPageTab({
           <SectionCard title="히어로" hint="첫 화면 — 비워두면 웨비나 이름·설명·일시가 자동으로 들어가요.">
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className={labelCls}>브랜드 라벨</label>
-                <input className={inputCls} value={state.brand} onChange={(e) => patch({ brand: e.target.value })} placeholder={webinar.name} />
+                <label htmlFor={`${uid}-brand`} className={labelCls}>브랜드 라벨</label>
+                <input id={`${uid}-brand`} className={inputCls} value={state.brand} onChange={(e) => patch({ brand: e.target.value })} placeholder={webinar.name} />
               </div>
               <div>
-                <label className={labelCls}>일시 옆 라벨</label>
-                <input className={inputCls} value={state.venue} onChange={(e) => patch({ venue: e.target.value })} placeholder="ONLINE LIVE" />
+                <label htmlFor={`${uid}-venue`} className={labelCls}>일시 옆 라벨</label>
+                <input id={`${uid}-venue`} className={inputCls} value={state.venue} onChange={(e) => patch({ venue: e.target.value })} placeholder="ONLINE LIVE" />
               </div>
             </div>
             <div>
-              <label className={labelCls}>대형 타이틀 (줄바꿈 = 줄 나눔)</label>
+              <label htmlFor={`${uid}-title`} className={labelCls}>대형 타이틀 (줄바꿈 = 줄 나눔)</label>
               <textarea
+                id={`${uid}-title`}
                 className={`${inputCls} resize-none`}
                 rows={2}
                 value={state.titleText}
@@ -265,8 +275,9 @@ export default function LandingPageTab({
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className={labelCls}>부제</label>
+                <label htmlFor={`${uid}-sub`} className={labelCls}>부제</label>
                 <input
+                  id={`${uid}-sub`}
                   className={inputCls}
                   value={state.subtitle}
                   onChange={(e) => patch({ subtitle: e.target.value })}
@@ -274,8 +285,8 @@ export default function LandingPageTab({
                 />
               </div>
               <div>
-                <label className={labelCls}>등록 버튼 문구</label>
-                <input className={inputCls} value={state.ctaLabel} onChange={(e) => patch({ ctaLabel: e.target.value })} placeholder="사전 등록하기" />
+                <label htmlFor={`${uid}-cta`} className={labelCls}>등록 버튼 문구</label>
+                <input id={`${uid}-cta`} className={inputCls} value={state.ctaLabel} onChange={(e) => patch({ ctaLabel: e.target.value })} placeholder="사전 등록하기" />
               </div>
             </div>
             <div>
@@ -320,6 +331,7 @@ export default function LandingPageTab({
                     <div className="relative flex-1 min-w-[220px]">
                       <Link2 className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                       <input
+                        aria-label="히어로 배경 미디어 URL"
                         className={`${inputCls} pl-8`}
                         value={state.heroMediaUrl}
                         onChange={(e) => patch({ heroMediaUrl: e.target.value })}
@@ -353,8 +365,9 @@ export default function LandingPageTab({
             onToggle={(v) => patch({ intro: { ...state.intro, enabled: v } })}
           >
             <div>
-              <label className={labelCls}>제목</label>
+              <label htmlFor={`${uid}-intro-title`} className={labelCls}>제목</label>
               <input
+                id={`${uid}-intro-title`}
                 className={inputCls}
                 value={state.intro.title}
                 onChange={(e) => patch({ intro: { ...state.intro, title: e.target.value } })}
@@ -362,8 +375,9 @@ export default function LandingPageTab({
               />
             </div>
             <div>
-              <label className={labelCls}>본문 (줄바꿈 유지)</label>
+              <label htmlFor={`${uid}-intro-body`} className={labelCls}>본문 (줄바꿈 유지)</label>
               <textarea
+                id={`${uid}-intro-body`}
                 className={`${inputCls} resize-y`}
                 rows={3}
                 value={state.intro.body}
@@ -374,7 +388,8 @@ export default function LandingPageTab({
           </SectionCard>
 
           {/* 세션 · 타임테이블 */}
-          <SectionCard title="세션 · 타임테이블" hint="내용은 만들기 → 세션에서 관리해요. 여기서는 랜딩 노출만 켜고 끕니다.">
+          {/* hint 와 아래 문단이 "세션에서 관리해요" 를 똑같이 두 번 말하고 있었다 — 한 번만, 대신 누를 수 있게. */}
+          <SectionCard title="세션 · 타임테이블" hint="여기서는 랜딩 노출만 켜고 끕니다.">
             <div className="grid gap-2 sm:grid-cols-2">
               <label className={`flex items-center justify-between gap-3 rounded-xl bg-secondary px-3 py-2.5 text-sm ${FINISH.s2}`}>
                 연사 카드 (세션 소개)
@@ -393,7 +408,9 @@ export default function LandingPageTab({
               <Switch checked={state.sessionsDetailPopup} onChange={(v) => patch({ sessionsDetailPopup: v })} disabled={!state.sessionsEnabled} label="상세 팝업 열기" />
             </label>
             <p className="text-[11px] text-muted-foreground">
-              내용(소속·직책·약력 포함)은 만들기 → 세션에서 관리해요. 이 구간에서 배경이 키컬러로 전환돼요.
+              내용(소속·직책·약력 포함)은{" "}
+              {onGoToSource ? <JumpLink onClick={onGoToSource}>원본 정보 › 세션</JumpLink> : "원본 정보 › 세션"}에서
+              관리해요. 이 구간에서 배경이 키컬러로 전환돼요.
             </p>
           </SectionCard>
 
@@ -413,10 +430,10 @@ export default function LandingPageTab({
               renderRow={({ item, patch: p }) => (
                 <>
                   <div className="flex gap-2">
-                    <input className={`${inputCls} w-24 shrink-0`} value={item.icon} onChange={(e) => p({ icon: e.target.value })} placeholder="배지 (예: Q&A)" />
-                    <input className={inputCls} value={item.title} onChange={(e) => p({ title: e.target.value })} placeholder="제목" />
+                    <input aria-label="프로그램 배지" className={`${inputCls} w-24 shrink-0`} value={item.icon} onChange={(e) => p({ icon: e.target.value })} placeholder="배지 (예: Q&A)" />
+                    <input aria-label="프로그램 제목" className={inputCls} value={item.title} onChange={(e) => p({ title: e.target.value })} placeholder="제목" />
                   </div>
-                  <textarea className={`${inputCls} resize-none`} rows={2} value={item.description} onChange={(e) => p({ description: e.target.value })} placeholder="설명 (줄바꿈 유지)" />
+                  <textarea aria-label="프로그램 설명" className={`${inputCls} resize-none`} rows={2} value={item.description} onChange={(e) => p({ description: e.target.value })} placeholder="설명 (줄바꿈 유지)" />
                 </>
               )}
             />
@@ -438,8 +455,8 @@ export default function LandingPageTab({
               renderRow={({ item, index, patch: p }) => (
                 <>
                   {/* 번호(01·02)는 입력값이 아니라 렌더 순서에서 파생 — 드래그로 순서를 바꾸면 즉시 재계산된다 */}
-                  <input className={inputCls} value={item.title} onChange={(e) => p({ title: e.target.value })} placeholder={`제목 (${String(index + 1).padStart(2, "0")})`} />
-                  <textarea className={`${inputCls} resize-none`} rows={2} value={item.description} onChange={(e) => p({ description: e.target.value })} placeholder="설명" />
+                  <input aria-label="하이라이트 제목" className={inputCls} value={item.title} onChange={(e) => p({ title: e.target.value })} placeholder={`제목 (${String(index + 1).padStart(2, "0")})`} />
+                  <textarea aria-label="하이라이트 설명" className={`${inputCls} resize-none`} rows={2} value={item.description} onChange={(e) => p({ description: e.target.value })} placeholder="설명" />
                 </>
               )}
             />
@@ -460,8 +477,8 @@ export default function LandingPageTab({
               addLabel="단계 추가" emptyState={<p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">아직 단계이 없어요. 아래에서 추가하면 랜딩 페이지에 표시돼요.</p>}
               renderRow={({ item, index, patch: p }) => (
                 <>
-                  <input className={inputCls} value={item.title} onChange={(e) => p({ title: e.target.value })} placeholder={`Step ${index + 1} 제목`} />
-                  <textarea className={`${inputCls} resize-none`} rows={2} value={item.description} onChange={(e) => p({ description: e.target.value })} placeholder="설명" />
+                  <input aria-label="참여 단계 제목" className={inputCls} value={item.title} onChange={(e) => p({ title: e.target.value })} placeholder={`Step ${index + 1} 제목`} />
+                  <textarea aria-label="참여 단계 설명" className={`${inputCls} resize-none`} rows={2} value={item.description} onChange={(e) => p({ description: e.target.value })} placeholder="설명" />
                 </>
               )}
             />
@@ -483,30 +500,14 @@ export default function LandingPageTab({
               renderRow={({ item, patch: p }) => (
                 <>
                   <div className="flex gap-2">
-                    <input className={`${inputCls} w-28 shrink-0`} value={item.category} onChange={(e) => p({ category: e.target.value })} placeholder="카테고리" />
-                    <input className={inputCls} value={item.question} onChange={(e) => p({ question: e.target.value })} placeholder="질문" />
+                    <input aria-label="FAQ 카테고리" className={`${inputCls} w-28 shrink-0`} value={item.category} onChange={(e) => p({ category: e.target.value })} placeholder="카테고리" />
+                    <input aria-label="FAQ 질문" className={inputCls} value={item.question} onChange={(e) => p({ question: e.target.value })} placeholder="질문" />
                   </div>
-                  <textarea className={`${inputCls} resize-none`} rows={2} value={item.answer} onChange={(e) => p({ answer: e.target.value })} placeholder="답변 (줄바꿈 유지)" />
+                  <textarea aria-label="FAQ 답변" className={`${inputCls} resize-none`} rows={2} value={item.answer} onChange={(e) => p({ answer: e.target.value })} placeholder="답변 (줄바꿈 유지)" />
                 </>
               )}
             />
           </SectionCard>
-        </div>
-
-        {/* 미리보기 — 공개 페이지 자체를 iframe 으로(저장 완료 시 갱신). 2xl 미만에선 아래로 쌓임 */}
-        <div className="2xl:sticky 2xl:top-6">
-          <div className={`overflow-hidden rounded-2xl bg-[#06080d] ${FINISH.s2}`}>
-            <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
-              <span className="text-xs font-medium text-white/70">미리보기</span>
-              <span className="text-[10px] text-white/40">저장되면 자동 갱신</span>
-            </div>
-            <iframe
-              key={previewNonce}
-              src={previewUrl}
-              title="랜딩 페이지 미리보기"
-              className="h-[640px] w-full border-0"
-            />
-          </div>
         </div>
       </div>
     </div>

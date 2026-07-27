@@ -9,6 +9,7 @@ import LivePageTab, { type WatchState } from "./LivePageTab";
 import { AutosaveScope, AggregateAutosaveIndicator } from "@/components/ui/autosave-scope";
 import { checkWebinarReadiness, readinessBySection } from "@/lib/webinar-readiness";
 import SurveyTab from "./SurveyTab";
+import { type OperateSection } from "./OperateTab";
 import LandingPageTab from "./LandingPageTab";
 import { FINISH, R, SELECTED_SURFACE, SELECTED_TEXT } from "@/components/ui/primitives";
 import SetupPreview from "./SetupPreview";
@@ -75,6 +76,7 @@ export default function PageSetupTab({
   isLive,
   canRegister,
   isEnded,
+  onJumpToTab,
 }: {
   webinar: Webinar;
   onUpdate: () => void;
@@ -89,6 +91,12 @@ export default function PageSetupTab({
   /** 지금 등록을 받는가 — 레일 상태 점의 근거. 같은 판정을 여기서 다시 하지 않는다. */
   canRegister?: boolean;
   isEnded?: boolean;
+  /**
+   * 다른 탭으로 점프 — 안내 문구를 누를 수 있게 만들 때만 쓴다(껍데기가 소유한 navigate).
+   * 목적지를 좁게 잡는다: 지금 필요한 건 배포 탭과 운영 콘솔뿐이고, string 으로 열어 두면
+   * 오타가 타입에서 안 걸린다.
+   */
+  onJumpToTab?: (tab: "deploy" | "operate", sec?: OperateSection) => void;
 }) {
   /**
    * 종료 화면에 실제로 연결된 자체 설문이 있는가 — 준비 상태의 '설문 영역' 판정 근거.
@@ -377,6 +385,8 @@ export default function PageSetupTab({
                   <LandingPageTab
                     webinar={{ id: webinar.id, slug: webinar.slug, name: webinar.name, description: webinar.description, config: webinar.config }}
                     onSilentUpdate={onSilentUpdate}
+                    onGoToSource={() => onSectionChange("source")}
+                    onGoToDeploy={onJumpToTab ? () => onJumpToTab("deploy") : undefined}
                   />
                 </div>
               )}
@@ -401,6 +411,10 @@ export default function PageSetupTab({
                     state={watchState}
                     onStateChange={onWatchStateChange}
                     onSilentUpdate={onSilentUpdate}
+                    // 안내 문구를 누를 수 있게 — 목적지가 만들기 안이면 섹션 전환,
+                    // 다른 탭이면 껍데기의 navigate. 문구가 말하는 곳으로 실제로 데려간다.
+                    onGoToSurvey={() => onSectionChange("survey")}
+                    onGoToConsole={onJumpToTab ? () => onJumpToTab("operate", "console") : undefined}
                   />
                 </div>
               )}
