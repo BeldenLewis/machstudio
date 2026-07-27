@@ -44,7 +44,10 @@ export default function SignupPage() {
       return;
     }
 
-    router.push("/onboarding");
+    /* 워크스페이스 만들기를 강제하지 않는다 — 대부분은 팀에 초대받아 합류한다.
+       워크스페이스가 없으면 WorkspaceGate 가 안내 화면을 그린다.
+       이메일 확인이 켜져 있으면 이 시점에 세션이 없어서 proxy 가 로그인 화면으로 되돌린다. */
+    router.push("/dashboard");
   };
 
   const handleGoogleSignUp = async () => {

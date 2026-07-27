@@ -2,9 +2,11 @@
  * 로그인한 사용자의 DB 행 보장.
  *
  * 왜 필요한가: 회원가입은 Supabase Auth 에만 계정을 만든다. 예전에는 DB `User` 행을
- * **워크스페이스 만들기(/api/onboarding)** 가 처음 만들었는데, 로그인 경로에는 온보딩으로
- * 보내는 관문이 없다(proxy 는 로그인한 사용자를 워크스페이스 확인 없이 /dashboard 로 보낸다).
- * 그래서 확인 메일을 안 누르고 로그인 화면에서 바로 들어온 사람은 DB 행 없이 앱을 쓰게 됐다.
+ * **워크스페이스 만들기** 가 처음 만들었는데, 로그인 경로에는 그리로 보내는 관문이 없었다
+ * (proxy 는 로그인한 사용자를 워크스페이스 확인 없이 /dashboard 로 보낸다). 그래서 확인
+ * 메일을 안 누르고 로그인 화면에서 바로 들어온 사람은 DB 행 없이 앱을 쓰게 됐다.
+ * (강제 온보딩은 이후 없앴다 — 워크스페이스 0 개는 정상 상태이고 WorkspaceGate 가 안내한다.
+ *  그래서 계정 행을 워크스페이스와 분리해 두는 것이 더 중요해졌다.)
  *
  * 그 상태가 만든 실제 고장:
  *   · 관리자 → 사용자 목록에 안 보인다(prisma.user.findMany 기준이라 렌더 루프에 안 들어온다).
@@ -60,7 +62,7 @@ export async function ensureAppUser(authUser: AuthUserLike): Promise<AppUserRow 
   } catch (err) {
     /* 같은 이메일이 **다른 id** 로 이미 있으면 email 유니크 제약에 걸린다(지운 Auth 계정의
        잔여 행 등). 그건 사람이 정리할 일이고 여기서 조용히 덮어쓰면 남의 계정을 가져간다.
-       /api/onboarding 은 같은 상황을 409 로 알려 준다 — 여기서는 앱을 막지 않고 로그만 남긴다. */
+       POST /api/workspace 는 같은 상황을 409 로 알려 준다 — 여기서는 앱을 막지 않고 로그만 남긴다. */
     console.error("[app-user] ensureAppUser failed:", authUser.id, err instanceof Error ? err.message : err);
     return null;
   }

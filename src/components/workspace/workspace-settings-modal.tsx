@@ -437,13 +437,10 @@ export function WorkspaceSettingsModal({ open, onClose }: Props) {
       localStorage.removeItem("currentWorkspaceId");
       localStorage.removeItem("currentProjectId");
       onClose();
-      // 컨텍스트 실시간 반영. 다른 워크스페이스 없으면 onboarding으로 이동.
-      const list = await refreshWorkspaces();
-      if (list.length === 0) {
-        router.push("/onboarding");
-      } else {
-        router.push("/dashboard");
-      }
+      // 컨텍스트 실시간 반영. 남은 워크스페이스가 없어도 대시보드로 보낸다 —
+      // WorkspaceGate 가 "아직 워크스페이스가 없어요" 안내를 그린다.
+      await refreshWorkspaces();
+      router.push("/dashboard");
     } catch {
       toast.error("삭제하지 못했어요. 다시 시도해주세요");
     } finally {
