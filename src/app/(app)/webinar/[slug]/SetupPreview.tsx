@@ -22,7 +22,7 @@ import { useAggregateAutosave } from "@/components/ui/autosave-scope";
 import { btnCls, FINISH, R, Segmented } from "@/components/ui/primitives";
 import type { WatchState } from "./LivePageTab";
 
-export type SetupSection = "source" | "landing" | "registration" | "watch" | "survey";
+export type SetupSection = "source" | "landing" | "registration" | "watch" | "survey" | "check";
 
 /** 뷰어 미리보기 파라미터 — 어드민 상태 → 공개 페이지의 순간. */
 const WATCH_PREVIEW: Record<WatchState, string> = {
@@ -45,12 +45,19 @@ export function previewUrlFor(section: SetupSection, slug: string, watchState: W
   switch (section) {
     case "source":
     case "landing":
-      return `/webinar/${s}/landing`;
+      // ?preview=1 을 **항상** 붙인다. 안 붙이면 랜딩이 꺼진 웨비나에서 서버가 페이로드를 비워
+      // 패널이 "아직 공개되지 않은 페이지예요" 한 줄만 그린다 — 편집 중인 값을 볼 수 없다.
+      // 켜진 랜딩에 배지가 덧붙지는 않는다(mount.ts 가 `!enabled && isPreview` 일 때만 배지를 단다).
+      return `/webinar/${s}/landing?preview=1`;
     case "registration":
       return `/webinar/${s}/live?preview=registration&embed=1`;
     case "watch":
       return `/webinar/${s}/live?preview=${WATCH_PREVIEW[watchState]}&embed=1`;
     case "survey":
+      return null;
+    // 노출 점검은 거울이라 미리볼 실물이 없다 — null 을 주면 패널이 접히고
+    // 폼 열이 전체 폭을 회수해 표가 잘리지 않는다(그게 이 자리를 고른 이유다).
+    case "check":
       return null;
   }
 }
@@ -170,9 +177,12 @@ export default function SetupPreview({
             />
           </div>
         ) : (
+          /* 미리볼 실물이 없는 섹션이 둘이라 이유를 갈라 말한다 — 예전엔 설문 문구만 있어서
+             노출 점검에서도 "설문은 주소가 달라서…" 라는 엉뚱한 안내가 떴다. */
           <p className={`bg-card p-3 text-xs leading-relaxed text-muted-foreground ${R.surface} ${FINISH.s2}`}>
-            설문은 각 설문마다 주소가 달라서 여기서 한 화면으로 보여줄 수 없어요.
-            설문 편집 화면 안의 미리보기를 사용하세요.
+            {section === "check"
+              ? "노출 점검은 공개 화면이 아니라 그 조건을 읽는 거울이라 미리볼 실물이 없어요. 각 면의 실물은 그 면 섹션에서 볼 수 있어요."
+              : "설문은 각 설문마다 주소가 달라서 여기서 한 화면으로 보여줄 수 없어요. 설문 편집 화면 안의 미리보기를 사용하세요."}
           </p>
         )}
       </div>

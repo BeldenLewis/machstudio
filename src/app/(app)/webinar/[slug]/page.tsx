@@ -34,13 +34,13 @@ import { InlineError } from "@/components/ui/inline-error";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
-type SettingsSection = "source" | "landing" | "registration" | "watch" | "survey";
+type SettingsSection = "source" | "landing" | "registration" | "watch" | "survey" | "check";
 // 새 IA: 만들기(create=설정) / 배포(deploy) / 운영(operate=콘솔+등록자) / 분석(analytics)
 type Tab = "create" | "deploy" | "operate" | "analytics";
 type NavigationTarget = Tab | `create-${SettingsSection}` | "operate-registrants";
 
 const TAB_IDS: Tab[] = ["create", "deploy", "operate", "analytics"];
-const CREATE_SECTIONS: SettingsSection[] = ["source", "landing", "registration", "watch", "survey"];
+const CREATE_SECTIONS: SettingsSection[] = ["source", "landing", "registration", "watch", "survey", "check"];
 
 /**
  * 옛 섹션 키 → 새 키. 북마크·공유 링크·외부 문서의 ?sec=general·?sec=sessions 가 죽지 않게 한다.

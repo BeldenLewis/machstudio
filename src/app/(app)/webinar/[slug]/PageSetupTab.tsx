@@ -2,19 +2,21 @@
 
 import { Fragment, useEffect, useMemo, useState, type ElementType } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FileText, MonitorPlay, SlidersHorizontal, ClipboardCheck, Megaphone } from "lucide-react";
+import { FileText, ListChecks, MonitorPlay, SlidersHorizontal, ClipboardCheck, Megaphone } from "lucide-react";
 import SourceInfoTab from "./SourceInfoTab";
 import RegistrationFormTab from "./RegistrationFormTab";
 import LivePageTab, { type WatchState } from "./LivePageTab";
 import { AutosaveScope, AggregateAutosaveIndicator } from "@/components/ui/autosave-scope";
-import { checkWebinarReadiness, readinessBySection } from "@/lib/webinar-readiness";
+import { checkWebinarReadiness, readinessBySection, type ReadinessSection } from "@/lib/webinar-readiness";
+import { buildExposureReport } from "@/lib/webinar-exposure";
 import { normalizeLivePageConfig } from "@/lib/webinar-config";
 import { isRealSession } from "@/lib/webinar-sessions";
 import SurveyTab from "./SurveyTab";
 import { type OperateSection } from "./OperateTab";
 import LandingPageTab from "./LandingPageTab";
-import { FINISH, R, SELECTED_SURFACE, SELECTED_TEXT } from "@/components/ui/primitives";
+import { FINISH, JumpLink, R, SELECTED_SURFACE, SELECTED_TEXT } from "@/components/ui/primitives";
 import SetupPreview from "./SetupPreview";
+import ExposureTab from "./ExposureTab";
 import { useLiveViewers } from "@/components/webinar/use-live-viewers";
 import { useLiveOffGuard } from "@/components/webinar/use-live-guard";
 
@@ -49,7 +51,7 @@ interface Webinar {
   workspace?: { id: string; name: string; privacyBodyTemplate?: string | null; marketingBodyTemplate?: string | null } | null;
 }
 
-type PageSetupSection = "source" | "landing" | "registration" | "watch" | "survey";
+type PageSetupSection = "source" | "landing" | "registration" | "watch" | "survey" | "check";
 
 /**
  * 승인된 IA 재설계 — 축을 하나로 바꿨다: **"사실인가, 표현인가"**.
@@ -59,7 +61,7 @@ type PageSetupSection = "source" | "landing" | "registration" | "watch" | "surve
  * 1단계에서 합친 것: 기본 정보 + 세션 + (라이브 페이지 안의) 디자인 → '원본 정보'.
  * 2단계에서 대기·라이브·종료가 '시청 화면' 4상태로 합쳐지면 산출물이 4개가 된다.
  */
-const sections: { id: PageSetupSection; label: string; desc: string; icon: ElementType; group: "사실" | "산출물" }[] = [
+const sections: { id: PageSetupSection; label: string; desc: string; icon: ElementType; group: "사실" | "산출물" | "확인" }[] = [
   { id: "source", group: "사실", label: "원본 정보", desc: "이름·일정, 진행 순서, 브랜드 — 네 산출물이 모두 여기서 읽어갑니다.", icon: SlidersHorizontal },
   // 랜딩은 홍보 진입점이라 등록보다 앞 — 산출물 순서 = 시청자 여정 순서
   { id: "landing", group: "산출물", label: "랜딩 페이지", desc: "외부 사이트에 임베드하는 상세페이지 — 히어로·소개·프로그램·FAQ를 구성합니다.", icon: Megaphone },
@@ -67,6 +69,13 @@ const sections: { id: PageSetupSection; label: string; desc: string; icon: Eleme
   // 대기·입장·라이브·종료는 **한 라우트의 네 순간**이라 메뉴 한 칸 + 상태 세그먼트로 합쳤다.
   { id: "watch", group: "산출물", label: "시청 화면", desc: "등록자가 라이브 전·중·후에 보는 한 몸의 화면 — 상태별로 골라 편집합니다.", icon: MonitorPlay },
   { id: "survey", group: "산출물", label: "설문", desc: "자체 설문을 만들어 종료 화면·라이브 푸시·링크로 응답을 모읍니다.", icon: ClipboardCheck },
+  /**
+   * 세 번째 그룹 '확인' — IA 가 세운 '사실 / 산출물' 2축을 흐리는 선택이다. 그래도 넣는 이유:
+   * 점검은 값의 집이 아니라 **거울**이라 두 축 어디에도 안 들어가고, 그 자리에 이미 목적지 없는
+   * 입구가 있었다('확인할 것' 카드의 "그리고 N건 더" 는 button 이 아니라 p 태그였다 — 전체를
+   * 볼 화면이 코드에 없었다). 그 빈 목적지를 채우면서 ?sec=check 딥링크까지 얻는다.
+   */
+  { id: "check", group: "확인", label: "노출 점검", desc: "어떤 요소가 어느 공개 면에 나가는지 한 자리에서 봅니다 — 읽기 전용이에요.", icon: ListChecks },
 ];
 
 
@@ -107,9 +116,16 @@ export default function PageSetupTab({
    * 종료 화면에 실제로 연결된 자체 설문이 있는가 — 준비 상태의 '설문 영역' 판정 근거.
    * 서버(info 라우트)와 같은 조건을 쓴다: showOnEnded + isOpen + 마감 전.
    */
-  const [hasLinkedEndedSurvey, setHasLinkedEndedSurvey] = useState(false);
-  /** 열려 있는 설문이 하나라도 있는가 — 레일에서 '미사용' 과 '공개' 를 가른다. */
-  const [hasOpenSurvey, setHasOpenSurvey] = useState(false);
+  /**
+   * null = 아직 모른다(fetch 중 또는 실패).
+   *
+   * false 로 초기화하면 첫 200ms 동안, 그리고 **네트워크 실패 시 영구히** "설문 없음" 이라고
+   * 단정한다 — 열려 있는 설문을 레일에서 '사용 안 함' 으로 오답하고, 이 화면이 스스로 세운
+   * 규칙("모르는 값은 점을 안 그린다")을 깬다. 아래 catch 가 실패를 조용히 삼키므로 특히 위험하다.
+   */
+  const [hasLinkedEndedSurvey, setHasLinkedEndedSurvey] = useState<boolean | null>(null);
+  /** 열려 있는 설문이 하나라도 있는가 — 레일에서 '사용 안 함' 과 '공개' 를 가른다. */
+  const [hasOpenSurvey, setHasOpenSurvey] = useState<boolean | null>(null);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -152,7 +168,8 @@ export default function PageSetupTab({
       // "대기 아젠다에 보여 줄 세션이 있다" 로 오판된다(빈 아젠다가 시청자에게 나간다).
       sessionCount: webinar.sessions.filter(isRealSession).length,
       config: webinar.config,
-      hasLinkedEndedSurvey,
+      // 준비 상태는 boolean 계약이다 — 모르는 값은 "없다" 로 접는다(경고를 덜 내는 쪽).
+      hasLinkedEndedSurvey: hasLinkedEndedSurvey === true,
     }),
     [webinar.name, webinar.sessions, webinar.config, hasLinkedEndedSurvey],
   );
@@ -163,6 +180,13 @@ export default function PageSetupTab({
    * 기본은 열림: AGENTS §2 가 요구하는 상태가 기본이어야 한다.
    */
   const [previewOpen, setPreviewOpen] = useState(true);
+  /**
+   * 노출 점검에서는 패널을 아예 렌더하지 않는다 — 미리볼 실물이 없는데 44% 를 차지하면
+   * 표가 530px 로 눌려 매트릭스가 잘린다. **이 자리를 레일 칸으로 고른 이유가 전체 폭이다**
+   * (미리보기 패널 안의 탭으로 넣는 안을 기각한 근거이기도 하다).
+   * previewOpen 자체는 건드리지 않는다 — 다른 섹션으로 돌아가면 사용자의 선택이 그대로 살아 있게.
+   */
+  const showPreview = previewOpen && section !== "check";
   useEffect(() => {
     const saved = typeof window !== "undefined" && window.localStorage.getItem("mach:setupPreview");
     if (saved === "0") setPreviewOpen(false);
@@ -185,20 +209,45 @@ export default function PageSetupTab({
    * canRegister 는 page.tsx 의 resolveWebinarStatus 가 준 값 — 여기서 다시 계산하지 않는다.
    */
   const surfaceState = (id: PageSetupSection): "public" | "registrant" | "off" | null => {
-    switch (id) {
-      case "source": return null;                     // 공개 면이 아니다
-      case "landing": return "public";                // 라우트가 항상 서브된다
-      case "registration": return canRegister === undefined ? null : canRegister ? "public" : "off";
-      case "watch": return "registrant";              // 등록자 전용(입장 확인 뒤)
-      case "survey": return hasOpenSurvey ? "public" : "off";
-    }
+    // 공개 면이 아닌 칸은 점을 안 그린다 — 원본 정보는 사실 한 벌, 노출 점검은 거울이다.
+    if (id === "source" || id === "check") return null;
+    if (id === "survey") return hasOpenSurvey === null ? null : hasOpenSurvey ? "public" : "off";
+    // 랜딩 → 면 하나, 등록 폼 → 면 하나, 시청 화면 → 세 면(대기·입장·시청·종료)의 대표.
+    const key = id === "landing" ? "landing" : id === "registration" ? "signup" : "live";
+    const s = exposure.surfaces.find((x) => x.id === key);
+    if (!s || s.use === "unknown") return null;        // 모르는 값은 점을 안 그린다
+    if (s.use === "off") return "off";
+    return s.audience === "등록자" ? "registrant" : "public";
   };
   const DOT: Record<"public" | "registrant" | "off", { cls: string; label: string }> = {
     public: { cls: "bg-emerald-500", label: "공개 중" },
-    registrant: { cls: "bg-violet-500", label: "등록자만" },
+    /**
+     * 시청 화면 점의 라벨 — 면 단위로는 대기·입장·종료가 누구나 닿으므로 '등록자만' 은
+     * 통째로는 거짓이다. 그래도 색은 유지한다(영상이 실제 제약이라 구분할 값이 있다).
+     * 대신 문자열로 그 범위를 좁혀 말한다 — 색 어휘를 늘리는 대신 라벨을 정확히 한다.
+     */
+    registrant: { cls: "bg-violet-500", label: "공개 중 — 영상은 입장 확인 뒤" },
     // 미사용은 채우지 않는다 — 색으로만 구분하면 색각에서 '있음/없음' 이 안 갈린다
-    off: { cls: "bg-transparent shadow-[inset_0_0_0_1.5px_var(--border)]", label: "미사용" },
+    off: { cls: "bg-transparent shadow-[inset_0_0_0_1.5px_var(--border)]", label: "사용 안 함" },
   };
+
+  /**
+   * 노출 리포트 — 레일 점과 노출 점검 표가 **같은 판정**을 읽는다.
+   * 예전엔 레일 점이 자기 switch 문으로 랜딩을 무조건 "공개 중" 이라 그렸다(랜딩이 꺼져
+   * 있어도 초록). 점이 답한다고 선언한 질문에 거짓을 말한 셈이라 판정을 순수 모듈로 옮겼다.
+   */
+  const exposure = useMemo(
+    () => buildExposureReport({
+      name: webinar.name, description: webinar.description, slug: webinar.slug,
+      liveStartAt: webinar.liveStartAt, theme: webinar.theme, config: webinar.config,
+      components: webinar.components, sessions: webinar.sessions,
+      // 상태를 반드시 넘긴다 — 빠지면 랜딩 CTA 판정이 '등록중' 을 가정한다.
+      status: isEnded ? "ended" : isLive ? "live" : undefined,
+      entryOpen: isLive, canRegister,
+      hasOpenSurvey, hasLinkedEndedSurvey,
+    }),
+    [webinar, isEnded, isLive, canRegister, hasOpenSurvey, hasLinkedEndedSurvey],
+  );
 
   const activeMeta = sections.find((item) => item.id === section) ?? sections[0];
   const ActiveIcon = activeMeta.icon;
@@ -277,9 +326,12 @@ export default function PageSetupTab({
                 </li>
               ))}
             </ul>
-            {issues.length > 4 && (
-              <p className="mt-1.5 text-[10.5px] text-muted-foreground/70">그리고 {issues.length - 4}건 더</p>
-            )}
+            {/* 예전엔 p 태그라 눌러도 아무 일이 없었다 — 전체를 볼 화면이 코드에 없었기 때문이다.
+                이제 목적지가 있으니 링크로 만든다. 4건 이하일 때도 표로 가는 길은 열어 둔다. */}
+            <p className="mt-1.5 text-[10.5px] text-muted-foreground/70">
+              {issues.length > 4 && <>그리고 {issues.length - 4}건 더 · </>}
+              <JumpLink onClick={() => onSectionChange("check")}>전체 노출 점검</JumpLink>
+            </p>
             <p className="mt-2 border-t border-border pt-2 text-[10.5px] leading-relaxed text-muted-foreground/70">
               완성도가 아니라 <b className="font-semibold">켜져 있는데 내용이 없는 것</b>만 봐요.
             </p>
@@ -336,12 +388,14 @@ export default function PageSetupTab({
                   );
                 })()}
                 {/* 미완 개수 — 색만으로 알리지 않고 숫자를 함께 둔다(색각·흑백 출력) */}
-                {issuesBySection[item.id] > 0 && (
+                {/* 노출 점검 칸에는 배지를 달지 않는다 — 달면 운영자가 'check 7' 과 'watch 3' 을
+                    10건으로 읽는다. 총계는 표 안에서 한 줄로만 말한다. */}
+                {item.id !== "check" && issuesBySection[item.id as ReadinessSection] > 0 && (
                   <span
                     className="relative z-10 ml-auto rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-amber-700 dark:text-amber-400"
-                    title={`이 섹션에 확인할 것 ${issuesBySection[item.id]}건`}
+                    title={`이 섹션에 확인할 것 ${issuesBySection[item.id as ReadinessSection]}건`}
                   >
-                    {issuesBySection[item.id]}
+                    {issuesBySection[item.id as ReadinessSection]}
                   </span>
                 )}
               </motion.button>
@@ -390,7 +444,7 @@ export default function PageSetupTab({
          */}
         <div
           className={`relative min-h-0 flex-1 lg:overflow-hidden ${
-            previewOpen ? "lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,44%)]" : ""
+            showPreview ? "lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,44%)]" : ""
           }`}
         >
         <div className="min-h-0 lg:overflow-hidden">
@@ -449,6 +503,15 @@ export default function PageSetupTab({
                   />
                 </div>
               )}
+              {section === "check" && (
+                <div className="lg:h-full overflow-auto">
+                  <ExposureTab
+                    report={exposure}
+                    onGoToSection={(owner) => onSectionChange(owner as PageSetupSection)}
+                    onGoToWatchState={(st) => { onSectionChange("watch"); onWatchStateChange(st); }}
+                  />
+                </div>
+              )}
               {section === "survey" && (
                 <div className="lg:h-full overflow-auto">
                   <SurveyTab
@@ -470,13 +533,16 @@ export default function PageSetupTab({
           </AnimatePresence>
         </div>
 
-        <SetupPreview
-          section={section}
-          slug={webinar.slug}
-          watchState={watchState}
-          open={previewOpen}
-          onOpenChange={setPreviewOpen}
-        />
+        {/* 노출 점검에서는 패널 자체를 렌더하지 않는다 — 위 showPreview 주석 참고. */}
+        {section !== "check" && (
+          <SetupPreview
+            section={section}
+            slug={webinar.slug}
+            watchState={watchState}
+            open={previewOpen}
+            onOpenChange={setPreviewOpen}
+          />
+        )}
         </div>
       </div>
     </div>
