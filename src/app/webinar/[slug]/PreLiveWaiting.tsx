@@ -6,7 +6,7 @@ import { CalendarPlus, Share2, Bell } from "lucide-react";
 import { buildStkCss } from "./LiveContentStk";
 import { formatKst } from "@/lib/datetime";
 import type { LivePageConfig } from "@/lib/webinar-config";
-import { buildSessionNumbering, cleanSessionText, isPauseSession, sessionHasSpeaker, sessionKicker } from "@/lib/webinar-sessions";
+import { buildSessionNumbering, cleanSessionText, isPauseSession, parseSpeaker, sessionHasSpeaker, sessionKicker } from "@/lib/webinar-sessions";
 import { sessionLogoCss } from "@/lib/webinar-logo";
 
 /**
@@ -75,7 +75,13 @@ ${sessionLogoCss(".stk-live .plw-logo", { plate: true })}
 .stk-live .plw-who .av { width:26px; height:26px; border-radius:50%; overflow:hidden; background:var(--key-dim); color:var(--key); display:grid; place-items:center; font-size:11px; font-weight:750; }
 .stk-live .plw-who .av img { width:100%; height:100%; object-fit:cover; }
 /* 연사 이름 — 12.5px 은 로고 옆에서 작아 보여 위계가 뒤집혔다(로고가 이름보다 먼저 읽힘). */
+/* "이름 | 소속·직책" — 랜딩 타임테이블과 같은 위계. 이름을 더 진하게 둬서 구분자가 흐려도
+   어디까지가 이름인지 읽힌다. gap 은 세로 0(줄바꿈 시 붙게), 가로 6px. */
 .stk-live .plw-who small { font-size:14px; color:var(--text); font-weight:650; }
+.stk-live .plw-who .who { display:flex; align-items:baseline; flex-wrap:wrap; gap:0 6px; }
+.stk-live .plw-who .who b { font-weight:750; }
+.stk-live .plw-who .who .sep { opacity:.38; font-weight:400; }
+.stk-live .plw-who .who .co { color:var(--muted); font-weight:600; }
 `;
 
 interface Session {
@@ -84,6 +90,7 @@ interface Session {
   type?: string;
   title: string;
   speaker: string | null;
+  speakerCompany?: string | null;
   speakerPhotoUrl?: string | null;
   logoUrl?: string | null;
   description?: string | null;
@@ -239,7 +246,11 @@ export default function PreLiveWaiting({
                   const kd = sessionKicker(sn.type, agendaNumbering.displayNumber(sn.number));
                   // 톤다운은 **빈 시간(휴식)에만**. 오프닝·클로징은 세션으로 세지 않지만 콘텐츠다.
                   const muted = isPauseSession(sn.type);
-                  const speaker = cleanSessionText(sn.speaker);
+                  /* 랜딩 타임테이블과 같은 표기 — "이름 | 소속·직책".
+                     parseSpeaker 를 거치는 이유: 레거시 speaker 가 "이름 | 회사" 결합형이라
+                     raw 로 쓰면 구분자가 두 번 나오거나 소속이 이름 안에 박혀 나온다. */
+                  const sp = parseSpeaker(cleanSessionText(sn.speaker), cleanSessionText(sn.speakerCompany));
+                  const hasWho = Boolean(sp.name || sp.company);
                   return (
                     <div className={`plw-row ${muted ? "brk" : ""}`} key={sn.id}>
                       <div className="tm">{sn.startTime}</div>
@@ -255,12 +266,19 @@ export default function PreLiveWaiting({
                           * 로고만 있고 연사가 없는 세션(오프닝·클로징)에서도 줄을 그린다 —
                           * 게이트에서 로고를 빼면 그 세션의 로고가 통째로 사라진다.
                           */}
-                        {(sn.logoUrl || (sessionHasSpeaker(sn.type) && speaker)) && (
+                        {(sn.logoUrl || (sessionHasSpeaker(sn.type) && hasWho)) && (
                           <div className="plw-who">
-                            {sessionHasSpeaker(sn.type) && speaker && (
+                            {sessionHasSpeaker(sn.type) && hasWho && (
                               <>
-                                <span className="av">{sn.speakerPhotoUrl ? <img src={sn.speakerPhotoUrl} alt={speaker} /> : speaker[0]}</span>
-                                <small>{speaker}</small>
+                                {/* 아바타 이니셜은 이름에서 — 소속만 있는 세션에서는 그리지 않는다(빈 원 방지). */}
+                                {Boolean(sp.name) && (
+                                  <span className="av">{sn.speakerPhotoUrl ? <img src={sn.speakerPhotoUrl} alt={sp.name} /> : sp.name[0]}</span>
+                                )}
+                                <small className="who">
+                                  {Boolean(sp.name) && <b>{sp.name}</b>}
+                                  {Boolean(sp.name && sp.company) && <span className="sep" aria-hidden="true">|</span>}
+                                  {Boolean(sp.company) && <span className="co">{sp.company}</span>}
+                                </small>
                               </>
                             )}
                             {sn.logoUrl && <img className="plw-logo" src={sn.logoUrl} alt="" />}

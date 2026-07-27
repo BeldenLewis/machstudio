@@ -11,7 +11,7 @@ import { motion } from "framer-motion";
 import { getYouTubeVideoId } from "@/lib/youtube";
 import { CheckCircle2, Send, Share2 } from "lucide-react";
 import { formatKst, kstDateString } from "@/lib/datetime";
-import { buildSessionNumbering, cleanSessionText, isPauseSession, isRealSession, sessionHasSpeaker, sessionTypeLabel } from "@/lib/webinar-sessions";
+import { buildSessionNumbering, cleanSessionText, isPauseSession, isRealSession, parseSpeaker, sessionHasSpeaker, sessionTypeLabel } from "@/lib/webinar-sessions";
 import { sessionLogoCss } from "@/lib/webinar-logo";
 import SurveyForm, { SURVEY_FORM_CSS, clearSurveyDraft } from "./SurveyForm";
 import type { SurveyAnswers, SurveyQuestion } from "@/lib/webinar-survey";
@@ -24,6 +24,7 @@ interface Session {
   type?: string; // "session" | "qa" | "break"
   title: string;
   speaker: string | null;
+  speakerCompany?: string | null;
   speakerPhotoUrl?: string | null;
   logoUrl?: string | null;
   description?: string | null;
@@ -298,6 +299,10 @@ ${sessionLogoCss(".stk-live .lv-selogo", { plate: true })}
 .stk-live .lv-sewho { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:6px; }
 /* 연사 이름 — 12px 은 로고 옆에서 위계가 뒤집힌다(로고가 이름보다 먼저 읽힘). */
 .stk-live .lv-ses small { color:var(--muted); font-size:13.5px; font-weight:600; }
+/* "이름 | 소속·직책" — 대기 화면·랜딩과 같은 위계(이름이 더 진하고 구분자는 흐리다). */
+.stk-live .lv-sewho .who { display:flex; align-items:baseline; flex-wrap:wrap; gap:0 6px; }
+.stk-live .lv-sewho .who b { color:var(--text); font-weight:750; }
+.stk-live .lv-sewho .who .sep { opacity:.38; font-weight:400; }
 .stk-live .lv-ses .st { margin-left:auto; align-self:center; font-size:11px; font-weight:700; color:var(--sub); white-space:nowrap; }
 .stk-live .lv-ses.now .st { color:var(--key); display:inline-flex; align-items:center; gap:5px; }
 .stk-live .lv-ses.now .st .d { width:6px; height:6px; border-radius:50%; background:var(--key); animation:lvPulse 1.9s infinite; }
@@ -821,12 +826,25 @@ export default function LiveContentStk({
                               {/* 연사 이름 줄 오른쪽에 로고 — 대기 화면·랜딩 팝업과 같은 배치.
                                   연사 없는 유형은 이름을 안 그린다(cleanSessionText 는 레거시 "null"
                                   문자열도 걸러 준다 — 예전엔 휴식 행 밑에 회색 "null" 이 찍혔다). */}
-                              {(s.logoUrl || (sessionHasSpeaker(s.type) && cleanSessionText(s.speaker))) && (
-                                <div className="lv-sewho">
-                                  {sessionHasSpeaker(s.type) && cleanSessionText(s.speaker) && <small>{cleanSessionText(s.speaker)}</small>}
-                                  {s.logoUrl && <img className="lv-selogo" src={s.logoUrl} alt="" />}
-                                </div>
-                              )}
+                              {(() => {
+                                /* 대기 화면·랜딩 타임테이블과 같은 표기 — "이름 | 소속·직책".
+                                   같은 목록의 다른 상태라 표기가 갈라지면 바로 눈에 띈다. */
+                                const sp = parseSpeaker(cleanSessionText(s.speaker), cleanSessionText(s.speakerCompany));
+                                const hasWho = Boolean(sp.name || sp.company);
+                                if (!s.logoUrl && !(sessionHasSpeaker(s.type) && hasWho)) return null;
+                                return (
+                                  <div className="lv-sewho">
+                                    {sessionHasSpeaker(s.type) && hasWho && (
+                                      <small className="who">
+                                        {Boolean(sp.name) && <b>{sp.name}</b>}
+                                        {Boolean(sp.name && sp.company) && <span className="sep" aria-hidden="true">|</span>}
+                                        {Boolean(sp.company) && <span className="co">{sp.company}</span>}
+                                      </small>
+                                    )}
+                                    {s.logoUrl && <img className="lv-selogo" src={s.logoUrl} alt="" />}
+                                  </div>
+                                );
+                              })()}
                               {s.status === "now" && (
                                 <div className="lv-prog"><span style={{ width: `${pct}%` }} /></div>
                               )}

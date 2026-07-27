@@ -443,6 +443,13 @@ ${sessionLogoCss(".lnd .lnd-modal-logo", { plate: true })}
   display: grid; grid-template-columns: 190px minmax(0, 1fr) auto; align-items: center;
   list-style: none; cursor: pointer;
 }
+/* 배치를 **명시**한다(자동 배치 금지). 자동 배치는 앞줄로 되돌아가지 못해서, 모바일에서
+   내용이 두 열을 다 쓰는 순간(grid-column: 1 / -1) 셰브론이 다음 줄로 밀려 내용 아래
+   자기 줄을 차지했다 — 실측(375px): summary 가 3행이 되고 셰브론이 폭 347px 로 혼자 한 줄.
+   열을 적어 두면 소스 순서·자동 흐름과 무관하게 자리가 고정된다. */
+.lnd .schedule-time { grid-area: 1 / 1; }
+.lnd .schedule-content { grid-area: 1 / 2; }
+.lnd .schedule-chev { grid-area: 1 / 3; }
 .lnd .schedule-summary.is-static { cursor: default; }
 .lnd .schedule-summary::-webkit-details-marker { display: none; }
 /* 펼침 셰브론 — 오른쪽 끝. 열리면 180도. 색은 행 색을 따라간다(반전 행에서도 보이게). */
@@ -620,10 +627,12 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 @media (max-width: 410px) {
   .lnd .session-card { width: 100%; max-width: 310px; }
   .lnd .session-card h3 { font-size: 16px; }
-  /* 모바일 1열 — 시각이 윗줄, 내용이 아랫줄. 셰브론은 시각 줄의 오른쪽에 붙는다. */
+  /* 모바일 — 1행: 시각 | 셰브론, 2행: 내용(두 열 span). 세 자리를 다 적어야 셰브론이
+     내용 아래로 밀리지 않는다(위 주석의 자동 배치 함정). */
   .lnd .schedule-summary { grid-template-columns: minmax(0, 1fr) auto; gap: 0; }
-  .lnd .schedule-content { grid-column: 1 / -1; }
-  .lnd .schedule-chev { align-self: start; padding-top: 10px; }
+  .lnd .schedule-time { grid-area: 1 / 1; }
+  .lnd .schedule-chev { grid-area: 1 / 2; align-self: center; padding-right: 14px; }
+  .lnd .schedule-content { grid-area: 2 / 1 / 3 / -1; }
   .lnd .schedule-time { padding: 10px 14px 6px; border-right: 0; border-bottom: 1px solid rgba(21, 32, 51, .15); }
   .lnd .is-break .schedule-time { border-color: rgba(255, 255, 255, .14); }
   .lnd .schedule-content { padding: 7px 14px 12px; }

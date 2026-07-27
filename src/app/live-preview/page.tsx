@@ -77,10 +77,10 @@ const MOCK = {
    * 예전엔 3행 전부 session/qa 였고, 첫 행 제목이 "오프닝 —" 인데 type 은 session 인 모순이 있었다.
    */
   sessions: [
-    { id: "s1", number: 1, type: "opening", title: "환영 인사", speaker: "김민준", speakerPhotoUrl: null, logoUrl: null, description: "마하스튜디오 대표", startTime: "19:00", endTime: "19:10" },
-    { id: "s2", number: 2, type: "session", title: "왜 지금 마케팅 자동화인가", speaker: "김민준", speakerPhotoUrl: null, logoUrl: "/next.svg", description: "마하스튜디오 대표 · 마케팅 자동화 10년", startTime: "19:10", endTime: "19:40" },
+    { id: "s1", number: 1, type: "opening", title: "환영 인사", speaker: "김민준 | 마하스튜디오 대표", speakerPhotoUrl: null, logoUrl: null, description: "마하스튜디오 대표", startTime: "19:00", endTime: "19:10" },
+    { id: "s2", number: 2, type: "session", title: "왜 지금 마케팅 자동화인가", speaker: "김민준", speakerCompany: "마하스튜디오 대표", speakerPhotoUrl: null, logoUrl: "/next.svg", description: "마하스튜디오 대표 · 마케팅 자동화 10년", startTime: "19:10", endTime: "19:40" },
     { id: "s3", number: 3, type: "break", title: "휴식", speaker: null, speakerPhotoUrl: null, logoUrl: null, description: null, startTime: "19:40", endTime: "19:50" },
-    { id: "s4", number: 4, type: "session", title: "전시 리드를 매출로 전환하는 4단계", speaker: "이서연", speakerPhotoUrl: null, logoUrl: "/vercel.svg", description: "그로스 리드 · 前 대형 전시 운영", startTime: "19:50", endTime: "20:20" },
+    { id: "s4", number: 4, type: "session", title: "전시 리드를 매출로 전환하는 4단계", speaker: "이서연", speakerCompany: "엑스포럼 그로스 리드", speakerPhotoUrl: null, logoUrl: "/vercel.svg", description: "그로스 리드 · 前 대형 전시 운영", startTime: "19:50", endTime: "20:20" },
     { id: "s5", number: 5, type: "qa", title: "라이브 Q&A", speaker: "전체 연사", speakerPhotoUrl: null, logoUrl: null, description: "참가자 질문에 실시간으로 답합니다.", startTime: "20:20", endTime: "20:50" },
     { id: "s6", number: 6, type: "closing", title: "마무리 · 경품 추첨", speaker: "운영사무국", speakerPhotoUrl: null, logoUrl: null, description: null, startTime: "20:50", endTime: "21:00" },
   ],
@@ -94,7 +94,7 @@ interface RealWebinar {
   config: Record<string, unknown>;
   theme: Record<string, string> | null;
   chatEnabled: boolean;
-  sessions: { id: string; number: number; type?: string; title: string; speaker: string | null; speakerPhotoUrl: string | null; logoUrl?: string | null; description: string | null; startTime: string; endTime: string }[];
+  sessions: { id: string; number: number; type?: string; title: string; speaker: string | null; speakerCompany?: string | null; speakerPhotoUrl: string | null; logoUrl?: string | null; description: string | null; startTime: string; endTime: string }[];
 }
 
 export default function LivePreviewPage() {
@@ -132,7 +132,8 @@ export default function LivePreviewPage() {
           sessions: Array.isArray(w.sessions)
             ? w.sessions.map((s: Record<string, unknown>) => ({
                 id: String(s.id), number: Number(s.number), type: s.type as string | undefined, title: String(s.title),
-                speaker: (s.speaker as string) ?? null, speakerPhotoUrl: (s.speakerPhotoUrl as string) ?? null,
+                speaker: (s.speaker as string) ?? null, speakerCompany: (s.speakerCompany as string) ?? null,
+                speakerPhotoUrl: (s.speakerPhotoUrl as string) ?? null,
                 description: (s.description as string) ?? null, startTime: String(s.startTime), endTime: String(s.endTime),
               }))
             : [],

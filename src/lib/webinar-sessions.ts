@@ -155,3 +155,23 @@ export function sessionKicker(type: string | null | undefined, displayNumber: nu
   if (meta?.kicker) return meta.kicker;
   return displayNumber === null ? "Session" : `Session ${displayNumber}`;
 }
+
+/**
+ * 연사 표기 분리 — 새 데이터는 speakerCompany 컬럼, 레거시는 speaker 의 "이름 | 회사" 결합형.
+ *
+ * 왜 공용인가: 같은 연사를 그리는 곳이 네 군데다(랜딩 타임테이블 · 랜딩 상세 팝업 ·
+ * 대기 화면 세션 순서 · 라이브 세션 목록). 각자 raw speaker 를 쓰면 레거시 결합형에서
+ * 구분자가 두 번 나오거나 소속이 이름 안에 박혀 나온다 — 실제로 랜딩만 파싱하고 대기·라이브는
+ * raw 를 쓰고 있었다.
+ */
+export function parseSpeaker(
+  speaker: string | null | undefined,
+  company: string | null | undefined,
+): { name: string; company: string } {
+  const raw = (speaker ?? "").trim();
+  const co = (company ?? "").trim();
+  if (co) return { name: raw, company: co };
+  const idx = raw.indexOf("|");
+  if (idx >= 0) return { name: raw.slice(0, idx).trim(), company: raw.slice(idx + 1).trim() };
+  return { name: raw, company: "" };
+}
