@@ -68,11 +68,14 @@ const EXTRA_CSS = `
 /* 로고 규격은 webinar-logo.ts 한 곳에서 온다 — 랜딩·대기·시청이 같은 크기여야 한다
    (예전엔 22/132 · 22/140 · 20/120 으로 갈라져 같은 로고가 면마다 다르게 보였다). */
 ${sessionLogoCss(".stk-live .plw-logo", { plate: true })}
-.stk-live .plw-logo { margin-top:8px; }
-.stk-live .plw-who { display:flex; align-items:center; gap:8px; margin-top:8px; }
+/* 로고는 이름 **바로 오른쪽**에 붙인다 — margin-left:auto 로 패널 끝까지 밀면 목록이 넓을 때
+   이름과 수십~수백 px 떨어져 서로 무관한 요소처럼 보인다(랜딩 팝업은 블록이 좁아 끝 정렬이 맞다). */
+.stk-live .plw-logo { margin-left:4px; }
+.stk-live .plw-who { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:8px; }
 .stk-live .plw-who .av { width:26px; height:26px; border-radius:50%; overflow:hidden; background:var(--key-dim); color:var(--key); display:grid; place-items:center; font-size:11px; font-weight:750; }
 .stk-live .plw-who .av img { width:100%; height:100%; object-fit:cover; }
-.stk-live .plw-who small { font-size:12.5px; color:var(--muted); font-weight:600; }
+/* 연사 이름 — 12.5px 은 로고 옆에서 작아 보여 위계가 뒤집혔다(로고가 이름보다 먼저 읽힘). */
+.stk-live .plw-who small { font-size:14px; color:var(--text); font-weight:650; }
 `;
 
 interface Session {
@@ -244,11 +247,23 @@ export default function PreLiveWaiting({
                       <div>
                         <span className="kd">{kd}</span>
                         <h4>{sn.title}</h4>
-                        {sn.logoUrl && <img className="plw-logo" src={sn.logoUrl} alt="" />}
-                        {sessionHasSpeaker(sn.type) && speaker && (
+                        {/**
+                          * 연사 이름 줄 오른쪽에 로고 — 랜딩 상세 팝업과 같은 배치다.
+                          * 예전엔 제목과 연사 사이에 로고가 끼어서 제목→누가 흐름이 끊겼고,
+                          * 줄마다 로고 유무에 따라 세로 리듬이 달라졌다.
+                          *
+                          * 로고만 있고 연사가 없는 세션(오프닝·클로징)에서도 줄을 그린다 —
+                          * 게이트에서 로고를 빼면 그 세션의 로고가 통째로 사라진다.
+                          */}
+                        {(sn.logoUrl || (sessionHasSpeaker(sn.type) && speaker)) && (
                           <div className="plw-who">
-                            <span className="av">{sn.speakerPhotoUrl ? <img src={sn.speakerPhotoUrl} alt={speaker} /> : speaker[0]}</span>
-                            <small>{speaker}</small>
+                            {sessionHasSpeaker(sn.type) && speaker && (
+                              <>
+                                <span className="av">{sn.speakerPhotoUrl ? <img src={sn.speakerPhotoUrl} alt={speaker} /> : speaker[0]}</span>
+                                <small>{speaker}</small>
+                              </>
+                            )}
+                            {sn.logoUrl && <img className="plw-logo" src={sn.logoUrl} alt="" />}
                           </div>
                         )}
                       </div>

@@ -293,8 +293,11 @@ const WATCH_CSS = `
 /* 로고 규격은 webinar-logo.ts 한 곳에서 온다(랜딩·대기와 같은 크기). 예전엔 여기만 20px 이라
    같은 로고가 대기 화면보다 작아 보였다. */
 ${sessionLogoCss(".stk-live .lv-selogo", { plate: true })}
-.stk-live .lv-selogo { margin:6px 0 0; }
-.stk-live .lv-ses small { color:var(--sub); font-size:12px; }
+/* 로고는 이름 바로 오른쪽 — 끝까지 밀면 넓은 목록에서 이름과 떨어져 무관해 보인다. */
+.stk-live .lv-selogo { margin-left:4px; }
+.stk-live .lv-sewho { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:6px; }
+/* 연사 이름 — 12px 은 로고 옆에서 위계가 뒤집힌다(로고가 이름보다 먼저 읽힘). */
+.stk-live .lv-ses small { color:var(--muted); font-size:13.5px; font-weight:600; }
 .stk-live .lv-ses .st { margin-left:auto; align-self:center; font-size:11px; font-weight:700; color:var(--sub); white-space:nowrap; }
 .stk-live .lv-ses.now .st { color:var(--key); display:inline-flex; align-items:center; gap:5px; }
 .stk-live .lv-ses.now .st .d { width:6px; height:6px; border-radius:50%; background:var(--key); animation:lvPulse 1.9s infinite; }
@@ -815,10 +818,15 @@ export default function LiveContentStk({
                                   <span className={`lv-setype${isPauseSession(s.type) ? " muted" : ""}`}>{sessionTypeLabel(s.type)}</span>
                                 )}
                               </h4>
-                              {s.logoUrl && <img className="lv-selogo" src={s.logoUrl} alt="" />}
-                              {/* 연사 없는 유형은 안 그린다. cleanSessionText 는 레거시 "null" 문자열도
-                                  걸러 준다(예전엔 휴식 행 밑에 회색 "null" 이 찍혔다). */}
-                              {sessionHasSpeaker(s.type) && cleanSessionText(s.speaker) && <small>{cleanSessionText(s.speaker)}</small>}
+                              {/* 연사 이름 줄 오른쪽에 로고 — 대기 화면·랜딩 팝업과 같은 배치.
+                                  연사 없는 유형은 이름을 안 그린다(cleanSessionText 는 레거시 "null"
+                                  문자열도 걸러 준다 — 예전엔 휴식 행 밑에 회색 "null" 이 찍혔다). */}
+                              {(s.logoUrl || (sessionHasSpeaker(s.type) && cleanSessionText(s.speaker))) && (
+                                <div className="lv-sewho">
+                                  {sessionHasSpeaker(s.type) && cleanSessionText(s.speaker) && <small>{cleanSessionText(s.speaker)}</small>}
+                                  {s.logoUrl && <img className="lv-selogo" src={s.logoUrl} alt="" />}
+                                </div>
+                              )}
                               {s.status === "now" && (
                                 <div className="lv-prog"><span style={{ width: `${pct}%` }} /></div>
                               )}

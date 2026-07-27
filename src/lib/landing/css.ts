@@ -237,7 +237,7 @@ export const LANDING_CSS = `
 .lnd .session-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; }
 .lnd .session-card {
   position: relative;
-  width: calc(50% - 8px); max-width: 420px; aspect-ratio: 210 / 297; /* A4 세로 */
+  width: calc(50% - 8px); max-width: 372px; aspect-ratio: 210 / 297; /* A4 세로 */
   overflow: hidden; border-radius: 9px;
   background: linear-gradient(160deg, #1b2130, #12161f 60%, #0c0f16);
   box-shadow: var(--shadow);
@@ -269,14 +269,14 @@ export const LANDING_CSS = `
 /* 이름·회사(왼쪽) 과 '자세히 보기'(오른쪽 하단) 를 한 줄에 — baseline 이 아니라 flex-end 로
    맞춘다. 회사명이 있으면 왼쪽이 두 줄이 되는데, 그때 링크가 첫 줄에 붙어 뜨지 않게. */
 .lnd .session-foot { width: 100%; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
-.lnd .speaker { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; color: #dfe5f0; font-size: 14px; }
+.lnd .speaker { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; color: #dfe5f0; font-size: 15.5px; }
 .lnd .speaker b { color: #fff; font-weight: 800; }
-.lnd .speaker-co { color: #b9c2d1; font-size: 12.5px; font-weight: 600; letter-spacing: -.01em; }
+.lnd .speaker-co { color: #b9c2d1; font-size: 13.5px; font-weight: 600; letter-spacing: -.01em; }
 .lnd .session-more {
   flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
-  font-size: 13px; font-weight: 800; letter-spacing: -.01em; color: var(--primary-bright);
+  font-size: 14px; font-weight: 800; letter-spacing: -.01em; color: var(--primary-bright);
 }
-.lnd .session-more svg { width: 15px; height: 15px; }
+.lnd .session-more svg { width: 16px; height: 16px; }
 
 /* ── body 직계 고정 레이어 ── 모달처럼 뷰포트에 붙어야 하는 것만 여기 산다.
    외부 사이트(아임웹)에 마운트되면 조상에 position:relative/transform 이 있어
@@ -392,7 +392,8 @@ ${sessionLogoCss(".lnd .lnd-modal-logo", { plate: true })}
   border: 1px solid var(--primary-ink); color: var(--primary-ink);
   font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; vertical-align: 2px;
 }
-.lnd .schedule-speaker { display: block; margin-top: 2px; color: #586074; font-size: 11px; }
+/* 연사 이름 — 11px 은 로고보다 작아 보여 위계가 뒤집혔다(로고가 이름보다 눈에 먼저 들어옴). */
+.lnd .schedule-speaker { display: block; margin-top: 3px; color: #4b5364; font-size: 13.5px; font-weight: 600; }
 /* 세션 로고 — 규격은 webinar-logo.ts 한 곳에서 온다(랜딩·대기·시청이 같은 크기여야 한다).
    밝은 타임테이블 행에서는 흰 판을 끈다 — 흰 배경에 흰 판은 네모 테두리로만 보인다. */
 ${sessionLogoCss(".lnd .schedule-logo")}
@@ -482,7 +483,7 @@ ${sessionLogoCss(".lnd .schedule-logo")}
   .lnd .scroll-cue { bottom: 28px; }
   .lnd .section { width: min(100% - 28px, var(--max)); }
   .lnd .session-cards { gap: 14px; }
-  .lnd .session-card { width: min(calc(50% - 7px), 268px); }
+  .lnd .session-card { width: min(calc(50% - 7px), 252px); }
   .lnd .session-card-body { inset: auto 12px 12px; }
   .lnd .session-card h3 { margin: 9px 0 14px; font-size: 14px; }
   .lnd .session-time { min-height: 25px; font-size: 10px; }

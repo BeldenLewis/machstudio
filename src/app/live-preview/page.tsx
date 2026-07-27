@@ -78,9 +78,9 @@ const MOCK = {
    */
   sessions: [
     { id: "s1", number: 1, type: "opening", title: "환영 인사", speaker: "김민준", speakerPhotoUrl: null, logoUrl: null, description: "마하스튜디오 대표", startTime: "19:00", endTime: "19:10" },
-    { id: "s2", number: 2, type: "session", title: "왜 지금 마케팅 자동화인가", speaker: "김민준", speakerPhotoUrl: null, logoUrl: null, description: "마하스튜디오 대표 · 마케팅 자동화 10년", startTime: "19:10", endTime: "19:40" },
+    { id: "s2", number: 2, type: "session", title: "왜 지금 마케팅 자동화인가", speaker: "김민준", speakerPhotoUrl: null, logoUrl: "/next.svg", description: "마하스튜디오 대표 · 마케팅 자동화 10년", startTime: "19:10", endTime: "19:40" },
     { id: "s3", number: 3, type: "break", title: "휴식", speaker: null, speakerPhotoUrl: null, logoUrl: null, description: null, startTime: "19:40", endTime: "19:50" },
-    { id: "s4", number: 4, type: "session", title: "전시 리드를 매출로 전환하는 4단계", speaker: "이서연", speakerPhotoUrl: null, logoUrl: null, description: "그로스 리드 · 前 대형 전시 운영", startTime: "19:50", endTime: "20:20" },
+    { id: "s4", number: 4, type: "session", title: "전시 리드를 매출로 전환하는 4단계", speaker: "이서연", speakerPhotoUrl: null, logoUrl: "/vercel.svg", description: "그로스 리드 · 前 대형 전시 운영", startTime: "19:50", endTime: "20:20" },
     { id: "s5", number: 5, type: "qa", title: "라이브 Q&A", speaker: "전체 연사", speakerPhotoUrl: null, logoUrl: null, description: "참가자 질문에 실시간으로 답합니다.", startTime: "20:20", endTime: "20:50" },
     { id: "s6", number: 6, type: "closing", title: "마무리 · 경품 추첨", speaker: "운영사무국", speakerPhotoUrl: null, logoUrl: null, description: null, startTime: "20:50", endTime: "21:00" },
   ],
