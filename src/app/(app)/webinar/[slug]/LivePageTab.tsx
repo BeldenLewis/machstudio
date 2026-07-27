@@ -244,7 +244,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
    * 종료 화면 설문 연결 — **3중 소유를 단일 결정으로**.
    *
    * 지금까지 종료 화면에 설문이 뜨려면 세 곳이 맞아야 했다:
-   *   ① config.livePage.screens.ended.survey 토글 (여기)
+   *   ① config.livePage.ended.survey 토글 (여기) — screens 층은 없다
    *   ② 자체 설문의 showOnEnded (설문 탭)  ‖  ③ config.surveyUrl (여기)
    * 그래서 설문 탭에서 '종료 화면에 연결' 을 켜도 ①이 꺼져 있으면 **아무 일도 일어나지 않았다.**
    * 게다가 자체 설문이 외부 URL 보다 우선하므로, 둘 다 있으면 URL 은 조용히 무시됐다.

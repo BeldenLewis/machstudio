@@ -422,7 +422,7 @@ function SurveyEditor({
     onMetaChanged({ [key]: value });
 
     /**
-     * 여기서 종료 화면 토글(config.livePage.screens.ended.survey)까지 켜고 싶지만 **할 수 없다.**
+     * 여기서 종료 화면 토글(config.livePage.ended.survey)까지 켜고 싶지만 **할 수 없다.**
      * 서버의 config 병합은 최상위 얕은 병합이라(mergeJson) `config: { livePage: { … } }` 를 보내면
      * **livePage 전체가 교체**된다 — CTA·자료·공지·대기 화면 설정이 통째로 날아간다.
      * livePage 를 온전히 보내려면 현재 값을 알아야 하고, 그건 이 탭이 들고 있지 않다(스냅샷을
@@ -714,7 +714,7 @@ export default function SurveyTab({
   webinarName?: string;
   theme?: Record<string, string>;
   /**
-   * 종료 화면의 설문 영역(config.livePage.screens.ended.survey)이 켜져 있는가.
+   * 종료 화면의 설문 영역(config.livePage.ended.survey)이 켜져 있는가.
    * 꺼져 있으면 '종료 화면에 연결' 을 켜도 시청자에게 아무것도 보이지 않는다 —
    * 이 탭은 그 사실을 알려 주기만 하고, 켜는 결정은 시청 화면 › 종료 › '설문 연결' 소관이다.
    */

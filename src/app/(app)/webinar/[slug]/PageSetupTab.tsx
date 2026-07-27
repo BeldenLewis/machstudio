@@ -8,6 +8,7 @@ import RegistrationFormTab from "./RegistrationFormTab";
 import LivePageTab, { type WatchState } from "./LivePageTab";
 import { AutosaveScope, AggregateAutosaveIndicator } from "@/components/ui/autosave-scope";
 import { checkWebinarReadiness, readinessBySection } from "@/lib/webinar-readiness";
+import { normalizeLivePageConfig } from "@/lib/webinar-config";
 import { isRealSession } from "@/lib/webinar-sessions";
 import SurveyTab from "./SurveyTab";
 import { type OperateSection } from "./OperateTab";
@@ -129,10 +130,16 @@ export default function PageSetupTab({
   /**
    * 종료 화면의 설문 영역이 켜져 있는가 — 설문 탭의 "켰는데 안 보인다" 안내 판정에 쓴다.
    * 저장 위치가 config 안쪽이라 여기서 읽어 내려보낸다(설문 탭은 config 를 받지 않는다).
+   *
+   * 경로를 손으로 파고들다 **한 층을 잘못 넣어** `livePage.screens.ended.survey` 를 읽고 있었다.
+   * 실제 저장 형태에 screens 층은 없다(normalizeLivePageConfig 가 `lp.ended` 를 읽는다) —
+   * 그래서 이 값은 구조적으로 항상 false 였고, 설문 탭의 "종료 화면 설문 영역이 꺼져 있어요"
+   * 경고가 **토글과 무관하게 늘** 떠 있었다(실 데이터 확인: livePage 최상위 키에 ended 가 있고
+   * ended.survey=true 인 웨비나에서도 false).
+   *
+   * 그래서 손파싱을 버리고 정규화 함수를 쓴다 — 경로 지식이 한 곳(webinar-config.ts)에만 있게.
    */
-  const endedSurveyAreaOn =
-    ((((webinar.config?.livePage as Record<string, unknown> | undefined)?.screens as Record<string, unknown> | undefined)
-      ?.ended as Record<string, unknown> | undefined)?.survey) === true;
+  const endedSurveyAreaOn = normalizeLivePageConfig(webinar.config ?? {}).ended.survey;
 
   /**
    * 준비 상태 — "시청자에게 빈 화면은 없어요" 검사(순수 함수 + vitest 로 검증).
