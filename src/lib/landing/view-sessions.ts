@@ -152,7 +152,13 @@ export function createSessionDialog(
   opts: { onClose: () => void },
 ): HTMLElement {
   const sp = parseSpeaker(session.speaker, session.speakerCompany);
-  const hasSpeaker = Boolean(sp.name || sp.company || session.speakerBio);
+  const hasSpeakerInfo = Boolean(sp.name || sp.company || session.speakerBio);
+  /**
+   * 로고도 이 블록의 렌더 조건이다 — 로고는 주최·협력사 마크라 **연사가 없는 세션**
+   * (오프닝·클로징)에도 있을 수 있다. 게이트를 연사 정보로만 두면 그런 세션에서 로고가
+   * 통째로 사라진다. 반대로 로고만 있는 경우엔 아바타·이름 줄을 그리지 않는다(빈 원 방지).
+   */
+  const hasSpeaker = hasSpeakerInfo || Boolean(session.logoUrl);
   const photo = session.speakerPhotoUrl;
   const titleId = m.sectionId("modal-title");
 
@@ -207,14 +213,6 @@ export function createSessionDialog(
       { class: "lnd-modal-main" },
       h("span", { class: "lnd-modal-time" }, session.startTime, "–", session.endTime),
       h("h3", { id: titleId }, session.title),
-      /**
-       * 세션 로고 — 제목 바로 아래. 연사 블록 안이 아니라 여기 두는 이유: 로고는 주최·협력사
-       * 마크라 **연사가 없는 세션(오프닝·클로징)에도 있을 수 있다.** 연사 블록에 넣으면
-       * hasSpeaker 가 false 인 세션에서 로고가 통째로 사라진다. 크기는 다른 면과 같은 규격
-       * (webinar-logo.ts) — 같은 로고가 타임테이블과 팝업에서 다른 크기로 보이지 않게.
-       */
-      Boolean(session.logoUrl) &&
-        h("img", { class: "lnd-modal-logo", src: session.logoUrl, alt: "", loading: "lazy" }),
       Boolean(session.description) && h("p", { class: "lnd-modal-desc" }, session.description),
       hasSpeaker &&
         h(
@@ -223,17 +221,23 @@ export function createSessionDialog(
           h(
             "div",
             { class: "lnd-modal-speaker-head" },
-            h(
-              "span",
-              { class: "lnd-modal-avatar", "aria-hidden": "true" },
-              photo ? h("img", { src: photo, alt: "" }) : sp.name.trim().charAt(0) || "·",
-            ),
-            h(
-              "div",
-              { class: "lnd-modal-speaker-id" },
-              Boolean(sp.name) && h("b", null, sp.name),
-              Boolean(sp.company) && h("span", null, sp.company),
-            ),
+            hasSpeakerInfo &&
+              h(
+                "span",
+                { class: "lnd-modal-avatar", "aria-hidden": "true" },
+                photo ? h("img", { src: photo, alt: "" }) : sp.name.trim().charAt(0) || "·",
+              ),
+            hasSpeakerInfo &&
+              h(
+                "div",
+                { class: "lnd-modal-speaker-id" },
+                Boolean(sp.name) && h("b", null, sp.name),
+                Boolean(sp.company) && h("span", null, sp.company),
+              ),
+            /* 로고는 이 줄의 **오른쪽 끝**(margin-left:auto). 이름·소속과 같은 줄에 두면
+               "누가 · 어디" 가 한눈에 읽히고, 제목 아래에 두었을 때처럼 본문 흐름을 끊지 않는다. */
+            Boolean(session.logoUrl) &&
+              h("img", { class: "lnd-modal-logo", src: session.logoUrl, alt: "", loading: "lazy" }),
           ),
           Boolean(session.speakerBio) &&
             h(

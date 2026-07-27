@@ -343,12 +343,14 @@ export const LANDING_CSS = `
   background: var(--primary); color: var(--on-primary); font-size: 12px; font-weight: 850; font-variant-numeric: tabular-nums;
 }
 .lnd .lnd-modal-main h3 { margin: 14px 0 0; font-size: clamp(21px, 2.4vw, 27px); font-weight: 900; letter-spacing: -.035em; line-height: 1.25; word-break: keep-all; }
-/* 팝업 로고 — 어두운 글래스 배경이라 흰 판을 깐다(투명 PNG 가 대부분). */
-${sessionLogoCss(".lnd .lnd-modal-logo", { plate: true })}
-.lnd .lnd-modal-logo { margin: 14px 0 0; }
 .lnd .lnd-modal-desc { margin: 14px 0 0; color: #c4ccd9; font-size: 15px; line-height: 1.7; white-space: pre-line; word-break: keep-all; }
 .lnd .lnd-modal-speaker { margin-top: 22px; padding: 18px; border-radius: 14px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .08); }
-.lnd .lnd-modal-speaker-head { display: flex; align-items: center; gap: 13px; }
+/* 아바타·이름(왼쪽) + 로고(오른쪽 끝). 좁은 화면에서 셋이 한 줄에 안 들어가면 줄바꿈하고,
+   그때도 margin-left:auto 가 남아 로고는 자기 줄의 오른쪽에 붙는다. */
+.lnd .lnd-modal-speaker-head { display: flex; align-items: center; flex-wrap: wrap; gap: 13px; }
+/* 팝업 로고 — 어두운 글래스 배경이라 흰 판을 깐다(투명 PNG 가 대부분). */
+${sessionLogoCss(".lnd .lnd-modal-logo", { plate: true })}
+.lnd .lnd-modal-logo { margin-left: auto; }
 .lnd .lnd-modal-avatar { width: 52px; height: 52px; border-radius: 999px; overflow: hidden; flex-shrink: 0; display: grid; place-items: center; background: var(--primary-soft, #2a3040); color: #fff; font-weight: 800; font-size: 20px; }
 .lnd .lnd-modal-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .lnd .lnd-modal-speaker-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
