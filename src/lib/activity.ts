@@ -66,6 +66,7 @@ export type ActivityAction =
   | "webinar.poll_deleted"
   | "webinar.chat_host_posted"
   | "webinar.chat_deleted"
+  | "webinar.qa_deleted"
   | "webinar.reminder_sent"
   | "webinar.registration_deleted"
   | "webinar.registrations_bulk_deleted"

@@ -317,7 +317,9 @@ const WATCH_CSS = `
 .stk-live .lv-switch .knob { position:absolute; top:2px; left:2px; width:21px; height:21px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.3); transition:transform .22s cubic-bezier(.2,.8,.2,1); }
 .stk-live .lv-switch[aria-checked="true"] { background:var(--key); border-color:transparent; }
 .stk-live .lv-switch[aria-checked="true"] .knob { transform:translateX(19px); }
-.stk-live .lv-notice { margin-top:16px; padding:14px 18px; border:1px solid var(--key-border); border-radius:var(--radius-sm); background:var(--key-dim); color:var(--muted); font-size:12.5px; line-height:1.7; word-break:keep-all; }
+/* 안내 문구도 어드민이 직접 쓰는 여러 줄 텍스트다 — 편집기 textarea 는 줄바꿈을 받는데
+   여기서 한 줄로 흘리면 입력한 모양과 다르게 나간다. */
+.stk-live .lv-notice { margin-top:16px; padding:14px 18px; border:1px solid var(--key-border); border-radius:var(--radius-sm); background:var(--key-dim); color:var(--muted); font-size:12.5px; line-height:1.7; word-break:keep-all; white-space:pre-line; }
 /* CTA 모달 — 폼(자체 설문)·URL 임베드 공용 */
 .stk-live .lv-ctamodal-backdrop { position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(8,8,12,0.62); backdrop-filter:blur(4px); animation:lvFade .18s ease; }
 @keyframes lvFade { from { opacity:0; } }

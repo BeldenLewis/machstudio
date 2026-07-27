@@ -446,8 +446,15 @@ export default function LandingPageTab({
               renderRow={({ item, patch: p }) => (
                 <>
                   <div className="flex gap-2">
-                    <input aria-label="프로그램 배지" className={`${inputCls} w-24 shrink-0`} value={item.icon} onChange={(e) => p({ icon: e.target.value })} placeholder="배지 (예: Q&A)" />
-                    <input aria-label="프로그램 제목" className={inputCls} value={item.title} onChange={(e) => p({ title: e.target.value })} placeholder="제목" />
+                    {/* 제목이 먼저다 — 이 값이 공개 노출을 가른다(제목이 비면 카드가 아예 안 나간다).
+                        배지는 선택값이라 뒤로. 폭은 **래퍼가 갖는다**: inputCls(FIELD_CLS)에 이미
+                        w-full 이 있어서 입력에 w-24 를 덧붙여도 무효다(컴파일된 CSS 에서 .w-full 이
+                        뒤에 와서 이긴다). 그래서 배지가 행을 다 먹고 제목이 24px 조각으로 밀려
+                        **입력할 수 없는 칸**이 돼 있었다(실측: 624px vs 24px). */}
+                    <input aria-label="프로그램 제목" className={inputCls} value={item.title} onChange={(e) => p({ title: e.target.value })} placeholder="제목 (필수 — 비우면 공개 페이지에 안 나와요)" />
+                    <div className="w-24 shrink-0">
+                      <input aria-label="프로그램 배지" className={inputCls} value={item.icon} onChange={(e) => p({ icon: e.target.value })} placeholder="배지" />
+                    </div>
                   </div>
                   <textarea aria-label="프로그램 설명" className={`${inputCls} resize-none`} rows={2} value={item.description} onChange={(e) => p({ description: e.target.value })} placeholder="설명 (줄바꿈 유지)" />
                 </>
@@ -516,8 +523,11 @@ export default function LandingPageTab({
               renderRow={({ item, patch: p }) => (
                 <>
                   <div className="flex gap-2">
-                    <input aria-label="FAQ 카테고리" className={`${inputCls} w-28 shrink-0`} value={item.category} onChange={(e) => p({ category: e.target.value })} placeholder="카테고리" />
-                    <input aria-label="FAQ 질문" className={inputCls} value={item.question} onChange={(e) => p({ question: e.target.value })} placeholder="질문" />
+                    {/* 질문이 먼저다 — 이 값이 공개 노출을 가른다. 폭은 래퍼가 갖는다(위 프로그램 주석 참고). */}
+                    <input aria-label="FAQ 질문" className={inputCls} value={item.question} onChange={(e) => p({ question: e.target.value })} placeholder="질문 (필수 — 비우면 공개 페이지에 안 나와요)" />
+                    <div className="w-28 shrink-0">
+                      <input aria-label="FAQ 카테고리" className={inputCls} value={item.category} onChange={(e) => p({ category: e.target.value })} placeholder="분류" />
+                    </div>
                   </div>
                   <textarea aria-label="FAQ 답변" className={`${inputCls} resize-none`} rows={2} value={item.answer} onChange={(e) => p({ answer: e.target.value })} placeholder="답변 (줄바꿈 유지)" />
                 </>

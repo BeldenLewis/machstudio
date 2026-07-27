@@ -661,7 +661,7 @@ function SurveyEditor({
                 onChange={(e) => setClosesDraft(e.target.value)}
                 onBlur={(e) => void commitClosesAt(e.target.value)}
                 aria-label="마감 예약 시각"
-                className={`${FIELD_CLS} w-auto min-h-0 px-1.5 py-1 text-[11px] tabular-nums`}
+                className={`${FIELD_CLS} min-h-0 px-1.5 py-1 text-[11px] tabular-nums`}
               />
               {survey.closesAt && (
                 <button

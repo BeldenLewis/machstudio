@@ -41,7 +41,10 @@ const EXTRA_CSS = `
 .stk-live .plw-panel { background:var(--card); border-radius:var(--radius); box-shadow:var(--card-shadow); padding:24px; }
 .stk-live .plw-panel h3 { font-size:13px; font-weight:750; color:var(--muted); margin:0 0 4px; }
 .stk-live .plw-panel .big { font-size:25px; font-weight:800; letter-spacing:-.03em; color:var(--text); }
-.stk-live .plw-panel .desc { margin-top:18px; padding-top:18px; border-top:1px solid var(--line); font-size:13.5px; line-height:1.7; color:var(--muted); word-break:keep-all; }
+/* pre-line 필수 — 같은 설명이 히어로(.live-desc)에서는 줄바꿈을 살리는데 이 패널에서만 한 줄로
+   흘러서, 어드민이 넣은 줄바꿈이 화면 두 곳에서 다르게 보였다.
+   (AGENTS 공통: "사용자 텍스트(설명 등)는 줄바꿈을 보존해 표시") */
+.stk-live .plw-panel .desc { margin-top:18px; padding-top:18px; border-top:1px solid var(--line); font-size:13.5px; line-height:1.7; color:var(--muted); word-break:keep-all; white-space:pre-line; }
 .stk-live .plw-proof { display:flex; align-items:center; gap:14px; margin-top:18px; }
 .stk-live .plw-avatars { display:flex; }
 .stk-live .plw-avatars span { width:34px; height:34px; border-radius:50%; border:2.5px solid var(--card); margin-left:-11px; display:grid; place-items:center; font-size:12px; font-weight:750; color:#fff; }

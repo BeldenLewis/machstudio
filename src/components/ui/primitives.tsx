@@ -273,6 +273,18 @@ const FIELD_BODY =
   "disabled:cursor-not-allowed disabled:opacity-50 " +
   R.control;
 
+/**
+ * FIELD_CLS 는 **폭을 소유한다**(FIELD_BODY 가 w-full 로 시작).
+ *
+ * 호출부에서 `${FIELD_CLS} w-28` 처럼 폭 클래스를 덧붙이면 **아무 효과가 없다** — 같은 레이어·
+ * 같은 명시도라 컴파일된 CSS 의 소스 순서가 승자를 정하고, .w-full 이 .w-24/.w-28/.w-auto 보다
+ * 뒤에 온다. className 문자열에서 뒤에 쓴 것은 무효다.
+ *
+ * 이 함정에 세 곳이 걸렸고 그중 둘은 사용자가 **입력할 수 없는 24px 조각**을 만들었다
+ * (랜딩 프로그램 제목·FAQ 질문 — 그 두 필드가 공개 노출을 가르는 값이라 "추가해도 안 나온다"
+ * 로 보고됐다). 좁은 칸이 필요하면 **래퍼가 폭을 갖고 입력은 w-full 을 유지**한다:
+ *   <div className="w-28 shrink-0"><input className={FIELD_CLS} /></div>
+ */
 export const FIELD_CLS = `${FIELD_BODY} ${FINISH.s2}`;
 /** 오류 상태 입력 — FIELD_CLS 와 **둘 중 하나**만 쓴다(위 s2Danger 주석 참고). */
 export const FIELD_CLS_DANGER = `${FIELD_BODY} ${FINISH.s2Danger}`;
