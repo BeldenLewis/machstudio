@@ -51,7 +51,8 @@ export function buildLandingModel(webinar: LandingWebinar, opts: BuildLandingMod
   const brand = lp.brand.trim() || webinar.name;
   const titleLines = lp.titleLines.length ? lp.titleLines : [webinar.name];
   const subtitle = lp.subtitle.trim() || (webinar.description ?? "").split("\n")[0] || "";
-  const dateStr = `${formatKst(webinar.liveStartAt, { year: "numeric", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false })} KST`;
+  // 24시간제는 formatKst 기본값이다(datetime.ts) — 여기서 다시 넘기면 규칙이 두 곳에 산다.
+  const dateStr = `${formatKst(webinar.liveStartAt, { year: "numeric", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", minute: "2-digit" })} KST`;
   // 상태별 CTA — 예전엔 상태와 무관하게 항상 "사전 등록하기 → ?view=signup" 이었다.
   // 종료된 웨비나가 등록을 권하고, 라이브 중에는 ?view=signup 이 대기 화면을 고정해
   // 등록자가 입장하지 못했다(배너는 상태별로 바뀌는데 히어로만 안 바뀜).

@@ -323,6 +323,18 @@ ${ATTRIBUTION_CORE_JS}
       /* 제목이 닫기 버튼 아래로 파고들지 않게 자리를 비운다 — 웨비나 이름이 길면 두 줄이 되면서
          절대배치된 X 와 겹쳤다(모바일에서 특히). 모달로 열릴 때만 필요한 여백이라 여기서 건다. */
       ".mw-modal-card .mw-form-title { padding-right: 44px; }",
+      /* 등록 완료 팝업 — 인라인 성공 문구는 폼 아래에 붙어서, 스크롤하지 않으면
+         아무 반응이 없는 것처럼 보였다(제출 버튼이 화면 하단이면 문구가 접힌 곳에 생긴다). */
+      /* 문구 길이를 가정하지 않는다: successMessage 는 주최측이 쓰는 값이라 길어질 수 있다.
+         실측(375×812, 30줄) — max-height 없이는 카드가 1490px 로 자라 제목이 화면 위로(-339px)
+         잘리고 확인 버튼이 Y=1125 에 놓여 누를 수 없었다. 그래서 **본문만** 스크롤하고
+         체크·제목·확인은 고정한다(시청자 모달 ViewerModal 과 같은 규칙).
+         dvh: 모바일 주소창이 접히면 vh 는 실제보다 커서 아래가 잘린다. */
+      ".mw-done-card { position: relative; display: flex; flex-direction: column; width: 100%; max-width: 380px; max-height: calc(100dvh - 40px); padding: 32px 26px 26px; border-radius: 16px; background: #fff; color: #111; box-shadow: 0 24px 64px rgba(0,0,0,0.28); text-align: center; }",
+      ".mw-done-mark { flex: none; width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: rgba(18,183,106,0.14); color: #12B76A; font-size: 26px; line-height: 1; }",
+      ".mw-done-title { flex: none; margin: 0 0 8px; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }",
+      ".mw-done-desc { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; margin: 0; font-size: 13.5px; line-height: 1.65; color: #555; white-space: pre-line; word-break: keep-all; }",
+      ".mw-done-btn { flex: none; margin-top: 22px; width: 100%; height: 46px; border: 0; border-radius: 11px; font: inherit; font-size: 14.5px; font-weight: 700; color: #fff; cursor: pointer; }",
       /* 터치 최소 44px */
       "@media (max-width: 600px) { .mw-modal-close { width: 44px; height: 44px; } .mw-modal-card .mw-form-title { padding-right: 48px; } }",
       // 캘린더 추가는 모바일에서만 — PC 는 네이티브 캘린더 연동이 없어 실효가 낮고 배너만 붐빈다.
@@ -769,9 +781,13 @@ ${ATTRIBUTION_CORE_JS}
         }
         var c = (CFG.components || {});
         var fw = c.formWidget || {};
-        showMsg("success", fw.successMessage || "사전등록이 완료되었습니다! 웨비나 당일 등록하신 연락처/이메일로 입장하실 수 있어요.");
+        /* 팝업으로 알린다(openDonePopup 주석 참고). 인라인 문구도 남긴다 — 팝업을 닫은 뒤
+           폼 자리에 아무 흔적이 없으면 "등록됐나?" 를 다시 묻게 된다. */
+        var doneText = fw.successMessage || "웨비나 당일 등록하신 연락처·이메일로 바로 입장할 수 있어요.";
+        showMsg("success", doneText);
         formEl.querySelectorAll("input, select, button").forEach(function(node) { node.disabled = true; });
         submitBtn.textContent = "등록 완료";
+        openDonePopup(doneText);
         if (opts && opts.onSuccess) opts.onSuccess();
       }).catch(function() {
         showMsg("error", "네트워크 오류가 발생했어요. 잠시 후 다시 시도해주세요.");
@@ -910,6 +926,43 @@ ${ATTRIBUTION_CORE_JS}
     document.body.appendChild(overlay);
     buildFormInto(formHost, null);
     activateFormModal(overlay);
+  }
+
+  /**
+   * 등록 완료 팝업.
+   *
+   * 왜 인라인 문구를 버렸나: 성공 문구가 폼 **아래**에 생겨서, 제출 버튼이 화면 하단에 있으면
+   * 문구가 접힌 영역에 나타난다. 그러면 눌렀는데 아무 반응이 없는 것처럼 보이고 다시 누른다
+   * (그러면 중복 안내를 만난다). 자체 페이지의 완료 팝업과 같은 판단이다.
+   *
+   * 폼 모달 위에도 뜰 수 있어야 하므로 z-index 를 폼 모달(999950)보다 높게 잡는다.
+   * 자동으로 닫지 않는다 — 시간으로 닫으면 봤는지를 보장할 수 없다.
+   */
+  function openDonePopup(message) {
+    var accent = theme().accent;
+    var overlay = el("div", "mw-modal-overlay mw-reset");
+    overlay.style.zIndex = "999955";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "사전등록 완료");
+    var card = el("div", "mw-done-card");
+    card.appendChild(el("div", "mw-done-mark", "\u2713"));
+    card.appendChild(el("p", "mw-done-title", "사전등록이 완료됐어요"));
+    card.appendChild(el("p", "mw-done-desc", message));
+    var ok = el("button", "mw-done-btn", "확인");
+    ok.type = "button";
+    ok.style.background = accent;
+    function close() {
+      try { overlay.remove(); } catch (e) {}
+      /* 폼이 모달 안에 있었다면 함께 닫는다 — 비활성화된 폼만 남겨 두면 막힌 화면처럼 보인다. */
+      try { if (document.getElementById("mw-form-modal")) closeFormModal(); } catch (e) {}
+    }
+    ok.addEventListener("click", close);
+    overlay.addEventListener("click", function(ev) { if (ev.target === overlay) close(); });
+    card.appendChild(ok);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    try { ok.focus(); } catch (e) {}
   }
 
   /* 랜딩 런타임(/w/l/{slug})은 별도 번들이라 함수를 직접 못 부른다 → 문서 이벤트로 연결한다.

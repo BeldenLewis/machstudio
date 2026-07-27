@@ -315,6 +315,17 @@ export const LANDING_CSS = `
   position: relative;
   width: min(920px, calc(100% - 32px)); max-height: min(90svh, 900px);
   display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  /**
+   * grid-template-rows: minmax(0, 1fr) 이 **없으면 긴 약력에서 스크롤이 죽는다.**
+   * (이 주석은 템플릿 리터럴 안이라 백틱을 쓸 수 없다 — 쓰면 CSS 문자열이 거기서 끊긴다.)
+   * 기본 auto 트랙은 내용 높이로 커지는데, 모달은 max-height 로 잘리고 overflow:hidden 이라
+   * 넘친 부분에 닿을 방법이 없어진다. 안쪽 .lnd-modal-main 의 overflow-y:auto 도 무효다 —
+   * 트랙(=자기 높이)이 내용만큼 크니 스크롤할 여지가 0 이다.
+   * 실측(375×700, 약력 8단락): 모달 630px 인데 그리드 행 1156px, main clientHeight 1156,
+   * scrollTop 이 0 에서 안 움직임. minmax(0,1fr) 로 행이 줄어들 수 있게 하면 main 이 스크롤한다.
+   * 데스크톱도 같은 구조라 함께 고쳐진다(뷰포트가 커서 늦게 드러날 뿐이었다).
+   */
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden; border-radius: 18px;
   background: rgba(19, 23, 32, .72);
   -webkit-backdrop-filter: blur(26px) saturate(1.3); backdrop-filter: blur(26px) saturate(1.3);
@@ -323,10 +334,14 @@ export const LANDING_CSS = `
   animation: lnd-modal-pop .22s cubic-bezier(.2, .8, .3, 1);
 }
 .lnd .lnd-modal:not(.has-photo) { grid-template-columns: minmax(0, 1fr); width: min(600px, calc(100% - 32px)); }
+/* 닫기 버튼은 **스크롤과 무관하게 항상 같은 자리**다 — 스크롤하는 건 .lnd-modal-main 이고
+   이 버튼은 모달(스크롤하지 않는 상자)에 absolute 로 붙어 있다. 반투명 판만으로는 아래로
+   지나가는 본문 글자와 겹쳐 읽기 어려워, 불투명도를 올리고 블러를 깔았다. */
 .lnd .lnd-modal-close {
   position: absolute; top: 12px; right: 12px; z-index: 3;
   width: 38px; height: 38px; display: grid; place-items: center; border-radius: 999px; color: #fff;
-  background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .14);
+  background: rgba(28, 34, 48, .82); border: 1px solid rgba(255, 255, 255, .18);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
   transition: background .18s ease;
 }
 .lnd .lnd-modal-close:hover { background: rgba(255, 255, 255, .2); }
@@ -337,12 +352,13 @@ export const LANDING_CSS = `
 .lnd .lnd-modal-photo-cap { position: absolute; z-index: 1; left: 20px; bottom: 18px; display: flex; flex-direction: column; gap: 3px; color: #fff; }
 .lnd .lnd-modal-photo-cap b { font-size: 16px; font-weight: 800; letter-spacing: -.02em; }
 .lnd .lnd-modal-photo-cap span { font-size: 12px; color: #cfd6e2; }
-.lnd .lnd-modal-main { padding: 30px; overflow-y: auto; }
+.lnd .lnd-modal-main { min-height: 0; padding: 30px; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .lnd .lnd-modal-time {
   display: inline-flex; align-items: center; min-height: 26px; padding: 0 9px; border-radius: 4px;
   background: var(--primary); color: var(--on-primary); font-size: 12px; font-weight: 850; font-variant-numeric: tabular-nums;
 }
-.lnd .lnd-modal-main h3 { margin: 14px 0 0; font-size: clamp(21px, 2.4vw, 27px); font-weight: 900; letter-spacing: -.035em; line-height: 1.25; word-break: keep-all; }
+/* 제목이 닫기 버튼 아래로 파고들지 않게 — 버튼(38px + 여백)만큼 오른쪽을 비운다. */
+.lnd .lnd-modal-main h3 { padding-right: 46px; margin: 14px 0 0; font-size: clamp(21px, 2.4vw, 27px); font-weight: 900; letter-spacing: -.035em; line-height: 1.25; word-break: keep-all; }
 .lnd .lnd-modal-desc { margin: 14px 0 0; color: #c4ccd9; font-size: 15px; line-height: 1.7; white-space: pre-line; word-break: keep-all; }
 .lnd .lnd-modal-speaker { margin-top: 22px; padding: 18px; border-radius: 14px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .08); }
 /* 아바타·이름(왼쪽) + 로고(오른쪽 끝). 좁은 화면에서 셋이 한 줄에 안 들어가면 줄바꿈하고,
@@ -362,7 +378,7 @@ ${sessionLogoCss(".lnd .lnd-modal-logo", { plate: true })}
 @keyframes lnd-modal-fade { from { opacity: 0; } }
 @keyframes lnd-modal-pop { from { opacity: 0; transform: translateY(10px); } }
 @media (max-width: 640px) {
-  .lnd .lnd-modal, .lnd .lnd-modal.has-photo { grid-template-columns: minmax(0, 1fr); width: calc(100% - 24px); }
+  .lnd .lnd-modal, .lnd .lnd-modal.has-photo { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); width: calc(100% - 24px); }
   .lnd .lnd-modal-photo { display: none; }
   .lnd .lnd-modal-main { padding: 24px 20px; }
 }
