@@ -17,6 +17,7 @@ import {
   Loader2,
   Plus,
   Save,
+  MessageCircleQuestion,
   Search,
   Trash2,
   Upload,
@@ -26,7 +27,8 @@ import {
 import { toast } from "sonner";
 import { formatKst } from "@/lib/datetime";
 import { parseMemo } from "@/lib/webinar-memo";
-import type { SurveyQuestion } from "@/lib/webinar-survey";
+import { formatSurveyAnswer, isEmptySurveyAnswer, type SurveyQuestion } from "@/lib/webinar-survey";
+import { qaStatusLabel } from "@/lib/webinar-qa";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { InlineError } from "@/components/ui/inline-error";
 
@@ -69,12 +71,24 @@ interface Registration {
   enteredAt: string | null;
   lastPingAt: string | null;
   surveyResponses: SurveyResponse[];
+  qaItems: QAItem[];
 }
 
 interface Survey {
   id: string;
   title: string;
   questions: SurveyQuestion[];
+}
+
+/** 이 사람이 라이브 중 남긴 문의. 등록과 연결된 것만 온다(익명 문의는 운영 콘솔에서 본다). */
+interface QAItem {
+  id: string;
+  registrationId: string;
+  question: string;
+  status: string;
+  sessionNumber: number | null;
+  voteCount: number;
+  createdAt: string;
 }
 
 interface SurveyResponse {
@@ -299,11 +313,6 @@ function connectedMin(r: { connectedSeconds?: number; stayMinutes: number }) {
   return (r.connectedSeconds ?? 0) > 0 ? Math.floor((r.connectedSeconds as number) / 60) : r.stayMinutes;
 }
 
-function formatSurveyAnswer(question: SurveyQuestion, answer: unknown) {
-  const value = Array.isArray(answer) ? answer.join(", ") : String(answer);
-  return question.type === "rating" || question.type === "nps" ? `${value}점` : value;
-}
-
 function SortHeader({
   label,
   sortKey,
@@ -387,9 +396,17 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
         current.push(response);
         responsesByRegistration.set(response.registrationId, current);
       }
-      const rows: Registration[] = (data.registrations ?? []).map((registration: Omit<Registration, "surveyResponses">) => ({
+      const qaByRegistration = new Map<string, QAItem[]>();
+      for (const item of data.qaItems ?? []) {
+        if (!item.registrationId) continue;
+        const current = qaByRegistration.get(item.registrationId) ?? [];
+        current.push(item);
+        qaByRegistration.set(item.registrationId, current);
+      }
+      const rows: Registration[] = (data.registrations ?? []).map((registration: Omit<Registration, "surveyResponses" | "qaItems">) => ({
         ...registration,
         surveyResponses: responsesByRegistration.get(registration.id) ?? [],
+        qaItems: qaByRegistration.get(registration.id) ?? [],
       }));
       setRegistrations(rows);
       setTotal(data.total ?? 0);
@@ -451,23 +468,50 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
     }
   };
 
-  const handleExportSelected = async () => {
-    const ids = [...selectedIds];
-    if (!ids.length) return;
-    const res = await fetch(`/api/webinars/${webinarId}/registrations/export?ids=${encodeURIComponent(ids.join(","))}`);
+  /**
+   * 명단 CSV 받기 — 전체·선택 두 버튼이 같은 일을 한다.
+   *
+   * 미연결 안내가 여기 있는 이유: 명단은 1행=1명 표라서, 등록과 연결되지 않은 설문 응답·문의
+   * (공유 링크로 답한 사람, 미검증 시청자)는 붙일 행이 없다. 파일에서 조용히 빠지면
+   * "설문 40건이라던데 파일엔 37명" 이 되어 숫자를 못 믿게 되므로, 서버가 헤더로 알려준
+   * 개수를 그 자리에서 말한다(본문 끝에 열 수가 다른 블록을 붙이면 피벗이 깨진다).
+   */
+  const downloadRegistrantsCsv = async (query: string, filename: string) => {
+    const res = await fetch(`/api/webinars/${webinarId}/registrations/export${query}`);
     // 403(권한 없음) 등 서버가 알려준 사유를 그대로 보여준다 — "실패"만 뜨면 원인을 알 수 없다.
     if (!res.ok) {
       const msg = await res.json().then((d) => d?.error).catch(() => null);
       toast.error(msg || "내보내기 실패");
       return;
     }
+    const unlinkedSurveys = Number(res.headers.get("X-Mach-Unlinked-Surveys") ?? 0);
+    const unlinkedQa = Number(res.headers.get("X-Mach-Unlinked-Qa") ?? 0);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `registrations-${webinarId}-selected.csv`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+
+    const unlinked = [
+      unlinkedSurveys > 0 ? `설문 응답 ${unlinkedSurveys}건` : null,
+      unlinkedQa > 0 ? `문의 ${unlinkedQa}건` : null,
+    ].filter(Boolean);
+    if (unlinked.length) {
+      toast.info(`${unlinked.join(" · ")}은 등록자와 연결되지 않아 명단에 없어요`, {
+        description: "공유 링크로 답하거나 미검증 상태로 남긴 것들이에요.",
+      });
+    }
+  };
+
+  const handleExportSelected = async () => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    await downloadRegistrantsCsv(
+      `?ids=${encodeURIComponent(ids.join(","))}`,
+      `registrations-${webinarId}-selected.csv`,
+    );
   };
 
   useEffect(() => {
@@ -558,6 +602,11 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
     [selectedRegistration],
   );
   const bulkParsed = useMemo(() => parseBulkText(bulkText), [bulkText]);
+  /* 이 페이지에 문의가 하나라도 있나 — 문의 열을 켤지 판단한다. 페이지 단위인 이유:
+     목록 API 가 현재 페이지 등록자분만 문의를 내려주므로, 전체 기준으로 켜려면
+     별도 집계가 필요하다. 문의가 있는 페이지에서만 열이 나타나는 건 명단이 넓어지지
+     않는다는 이점이 더 크다고 봤다. */
+  const hasAnyQa = useMemo(() => registrations.some((r) => r.qaItems.length > 0), [registrations]);
   const parsedBulk = bulkParsed.rows;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   // 마지막 페이지의 마지막 항목을 지우면 page 가 범위를 벗어나 가짜 '등록자 없음' 빈 화면에 갇힌다 — 범위 밖이면 마지막 페이지로 당김.
@@ -573,22 +622,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
     }
   };
 
-  const handleExport = async () => {
-    const res = await fetch(`/api/webinars/${webinarId}/registrations/export`);
-    // 403(권한 없음) 등 서버가 알려준 사유를 그대로 보여준다 — "실패"만 뜨면 원인을 알 수 없다.
-    if (!res.ok) {
-      const msg = await res.json().then((d) => d?.error).catch(() => null);
-      toast.error(msg || "내보내기 실패");
-      return;
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `registrations-${webinarId}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleExport = () => downloadRegistrantsCsv("", `registrations-${webinarId}.csv`);
 
   const submitManual = async () => {
     setIsSaving(true);
@@ -707,9 +741,13 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
         return;
       }
       toast.success("등록자 정보가 저장됐어요");
-      // 등록 정보 PATCH 응답에는 설문 응답을 싣지 않는다. 상세 패널을 열어 둔 채 저장해도
-      // 이미 불러온 설문 답변이 사라지지 않도록 그대로 보존한다.
-      setSelectedRegistration((previous) => previous ? { ...data.registration, surveyResponses: previous.surveyResponses } : data.registration);
+      // 등록 정보 PATCH 응답에는 설문 응답·문의를 싣지 않는다. 상세 패널을 열어 둔 채 저장해도
+      // 이미 불러온 답변과 문의가 사라지지 않도록 그대로 보존한다.
+      setSelectedRegistration((previous) =>
+        previous
+          ? { ...data.registration, surveyResponses: previous.surveyResponses, qaItems: previous.qaItems }
+          : data.registration,
+      );
       await fetchRegistrations();
     } finally {
       setIsSaving(false);
@@ -1182,6 +1220,42 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                 </section>
               )}
 
+              {/* 문의 — 설문과 나란히 둔다. 예전엔 라이브 콘솔 안에만 있어서 "이 사람이 뭘
+                  물었나" 를 보려면 사람 화면을 떠나 문의 목록에서 이름을 찾아야 했다.
+                  설문과 달리 0건이면 섹션 자체를 접는다: 설문은 "미응답" 이 정보지만(보낸
+                  설문에 답을 안 한 것), 문의는 안 한 게 기본이라 빈 칸이 정보가 아니다. */}
+              {selectedRegistration.qaItems.length > 0 && (
+                <section className="space-y-2.5 border-t border-border pt-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-semibold">남긴 문의</h4>
+                      <p className="mt-1 text-xs text-muted-foreground">라이브 중 이 등록자가 보낸 질문이에요.</p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-violet-500/10 px-2 py-1 text-[11px] font-medium text-violet-600 dark:text-violet-400">
+                      {selectedRegistration.qaItems.length}건
+                    </span>
+                  </div>
+
+                  <ul className="space-y-2">
+                    {selectedRegistration.qaItems.map((item) => (
+                      <li key={item.id} className="rounded-xl border border-border bg-secondary/20 p-3">
+                        <p className="whitespace-pre-wrap break-words text-xs leading-relaxed">{item.question}</p>
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <span
+                            className={`rounded-full px-1.5 py-0.5 ${item.status === "answered" ? "bg-green-500/10 text-green-600 dark:text-green-400" : "bg-secondary"}`}
+                          >
+                            {qaStatusLabel(item.status)}
+                          </span>
+                          {item.sessionNumber ? <span>세션 {item.sessionNumber}</span> : null}
+                          {item.voteCount > 0 ? <span>추천 {item.voteCount}</span> : null}
+                          <span className="ml-auto">{formatDate(item.createdAt)}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
               <div className="flex gap-2 border-t border-border pt-4">
                 <motion.button
                   whileHover={{ y: -1 }}
@@ -1272,6 +1346,10 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="업종" sortKey="industry" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="마케팅" sortKey="agreeMarketing" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
                     {surveys.length > 0 && <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">설문</th>}
+                    {/* 문의 열은 이 페이지에 문의가 하나라도 있을 때만 — 대부분의 웨비나에서
+                        대부분의 등록자는 문의를 남기지 않아, 늘 켜 두면 빈 열이 명단을 넓힌다.
+                        (설문 열이 surveys.length 로 판단하는 것과 같은 이중 게이트 원칙) */}
+                    {hasAnyQa && <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">문의</th>}
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="접속" sortKey="stayMinutes" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="최초 입장" sortKey="enteredAt" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="등록일" sortKey="submittedAt" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
@@ -1324,6 +1402,23 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                           >
                             {r.surveyResponses.length === 0 ? "미응답" : r.surveyResponses.length === surveys.length ? "응답 완료" : `${r.surveyResponses.length}/${surveys.length} 응답`}
                           </button>
+                        </td>
+                      )}
+                      {hasAnyQa && (
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {r.qaItems.length > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => openRegistrationDetail(r)}
+                              className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-600 transition-colors hover:brightness-95 dark:text-violet-400"
+                              title="문의 보기"
+                            >
+                              <MessageCircleQuestion className="h-3 w-3" />
+                              {r.qaItems.length}건
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">-</span>
+                          )}
                         </td>
                       )}
                       <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
