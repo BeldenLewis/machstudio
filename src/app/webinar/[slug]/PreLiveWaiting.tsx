@@ -6,7 +6,7 @@ import { CalendarPlus, Share2, Bell } from "lucide-react";
 import { buildStkCss } from "./LiveContentStk";
 import { formatKst } from "@/lib/datetime";
 import type { LivePageConfig } from "@/lib/webinar-config";
-import { buildSessionNumbering } from "@/lib/webinar-sessions";
+import { buildSessionNumbering, cleanSessionText, isPauseSession, sessionHasSpeaker, sessionKicker } from "@/lib/webinar-sessions";
 
 /**
  * 등록 완료 ~ 라이브 오픈 전 대기 화면.
@@ -61,6 +61,9 @@ const EXTRA_CSS = `
 .stk-live .plw-row .kd { display:inline-block; font-size:10px; font-weight:750; letter-spacing:.06em; text-transform:uppercase; color:var(--key); background:var(--key-dim); padding:2px 7px; border-radius:6px; margin-bottom:6px; }
 .stk-live .plw-row.brk .kd { color:var(--sub); background:color-mix(in srgb,var(--text) 6%,transparent); }
 .stk-live .plw-row h4 { font-size:14.5px; font-weight:700; letter-spacing:-.01em; line-height:1.35; color:var(--text); margin:0; }
+/* 로고는 자르지 않는다(contain) — 연사 사진의 원형 크롭과 다른 처리다. 배경이 투명한 PNG 가
+   많아 흰 판을 깔아야 어두운 시청 화면에서도 보인다. 높이만 고정하고 폭은 비율에 맡긴다. */
+.stk-live .plw-logo { display:block; height:22px; width:auto; max-width:132px; object-fit:contain; margin-top:8px; background:#fff; border-radius:4px; padding:2px 4px; }
 .stk-live .plw-who { display:flex; align-items:center; gap:8px; margin-top:8px; }
 .stk-live .plw-who .av { width:26px; height:26px; border-radius:50%; overflow:hidden; background:var(--key-dim); color:var(--key); display:grid; place-items:center; font-size:11px; font-weight:750; }
 .stk-live .plw-who .av img { width:100%; height:100%; object-fit:cover; }
@@ -74,6 +77,7 @@ interface Session {
   title: string;
   speaker: string | null;
   speakerPhotoUrl?: string | null;
+  logoUrl?: string | null;
   description?: string | null;
   startTime: string;
   endTime: string;
@@ -218,20 +222,28 @@ export default function PreLiveWaiting({
                 {/* 개수는 실제 세션만 — 휴식·Q&A 를 세면 "3개 세션"이 "5개 세션"으로 부풀었다 */}
                 <div className="h"><h3>세션 순서</h3><span>{agendaNumbering.realCount}개 세션</span></div>
                 {webinar.sessions.map((sn) => {
-                  const brk = sn.type === "break";
-                  // Session 번호도 표시 순번 — 원본 number 면 휴식이 낀 뒤로 "Session 4"부터 시작한다
-                  const kd = brk ? "Break" : sn.type === "qa" ? "Q&A" : `Session ${agendaNumbering.displayNumber(sn.number) ?? sn.number}`;
+                  /**
+                   * 종류 표기는 유형 표가 만든다(sessionKicker). 예전엔 여기서 삼항 체인이었고,
+                   * 표에 없는 유형이 else 로 떨어져 `Session ${displayNumber ?? sn.number}` 가 됐다 —
+                   * 세션이 아니면 displayNumber 가 null 이라 폴백이 **DB 진행 순서 원본**을 찍어서
+                   * 오프닝(number 1)과 첫 세션(표시번호 1)이 한 화면에 둘 다 "Session 1" 이 됐다.
+                   */
+                  const kd = sessionKicker(sn.type, agendaNumbering.displayNumber(sn.number));
+                  // 톤다운은 **빈 시간(휴식)에만**. 오프닝·클로징은 세션으로 세지 않지만 콘텐츠다.
+                  const muted = isPauseSession(sn.type);
+                  const speaker = cleanSessionText(sn.speaker);
                   return (
-                    <div className={`plw-row ${brk ? "brk" : ""}`} key={sn.id}>
+                    <div className={`plw-row ${muted ? "brk" : ""}`} key={sn.id}>
                       <div className="tm">{sn.startTime}</div>
                       <span className="mk" />
                       <div>
                         <span className="kd">{kd}</span>
                         <h4>{sn.title}</h4>
-                        {!brk && sn.speaker && sn.speaker !== "null" && (
+                        {sn.logoUrl && <img className="plw-logo" src={sn.logoUrl} alt="" />}
+                        {sessionHasSpeaker(sn.type) && speaker && (
                           <div className="plw-who">
-                            <span className="av">{sn.speakerPhotoUrl ? <img src={sn.speakerPhotoUrl} alt={sn.speaker} /> : sn.speaker[0]}</span>
-                            <small>{sn.speaker}</small>
+                            <span className="av">{sn.speakerPhotoUrl ? <img src={sn.speakerPhotoUrl} alt={speaker} /> : speaker[0]}</span>
+                            <small>{speaker}</small>
                           </div>
                         )}
                       </div>

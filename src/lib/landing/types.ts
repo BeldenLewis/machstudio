@@ -11,6 +11,8 @@ export interface LandingSession {
   speaker: string | null;
   speakerCompany?: string | null;
   speakerPhotoUrl?: string | null;
+  /** 세션에 붙는 조직 마크. 사람 사진과 달리 원본 비율 유지(잘리면 글자를 못 읽는다). */
+  logoUrl?: string | null;
   description?: string | null;
   speakerBio?: string | null;
   startTime: string;

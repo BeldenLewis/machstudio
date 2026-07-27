@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { DEFAULT_SESSION_TYPE, SESSION_TYPE_VALUES } from "@/lib/webinar-sessions";
 import { logActivity } from "@/lib/activity";
 
 async function authorize(webinarId: string, userId: string) {
@@ -55,16 +56,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!startTime || !endTime) {
     return NextResponse.json({ error: "세션 시간을 입력해주세요" }, { status: 400 });
   }
+  /**
+   * 유형은 400 으로 거른다. 예전엔 모르는 값을 조용히 "session" 으로 **강제 저장**했다 —
+   * 새 유형을 추가할 때 클라이언트는 성공(201)을 받고 저장된 값만 다르니, "왜 유형이 안 바뀌지"
+   * 로 한참 헤맨다. 목록의 정본은 SESSION_TYPES(src/lib/webinar-sessions.ts).
+   */
+  const type = body.type === undefined ? DEFAULT_SESSION_TYPE : String(body.type);
+  if (!SESSION_TYPE_VALUES.includes(type)) {
+    return NextResponse.json({ error: "세션 유형을 확인해주세요" }, { status: 400 });
+  }
 
   const session = await prisma.webinarSession.create({
     data: {
       webinarId: webinar.id,
       number,
-      type: ["session", "qa", "break"].includes(String(body.type)) ? String(body.type) : "session",
+      type,
       title,
       speaker: String(body.speaker ?? "").trim() || null,
       speakerCompany: String(body.speakerCompany ?? "").trim() || null,
       speakerPhotoUrl: String(body.speakerPhotoUrl ?? "").trim() || null,
+      logoUrl: String(body.logoUrl ?? "").trim() || null,
       description: String(body.description ?? "").trim() || null,
       speakerBio: String(body.speakerBio ?? "").trim() || null,
       startTime,

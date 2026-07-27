@@ -8,6 +8,7 @@ import RegistrationFormTab from "./RegistrationFormTab";
 import LivePageTab, { type WatchState } from "./LivePageTab";
 import { AutosaveScope, AggregateAutosaveIndicator } from "@/components/ui/autosave-scope";
 import { checkWebinarReadiness, readinessBySection } from "@/lib/webinar-readiness";
+import { isRealSession } from "@/lib/webinar-sessions";
 import SurveyTab from "./SurveyTab";
 import { type OperateSection } from "./OperateTab";
 import LandingPageTab from "./LandingPageTab";
@@ -24,6 +25,7 @@ interface WebinarSession {
   speaker: string | null;
   speakerCompany: string | null;
   speakerPhotoUrl: string | null;
+  logoUrl: string | null;
   description: string | null;
   speakerBio: string | null;
   startTime: string;
@@ -139,11 +141,13 @@ export default function PageSetupTab({
   const issues = useMemo(
     () => checkWebinarReadiness({
       name: webinar.name,
-      sessionCount: webinar.sessions.length,
+      // 실제 세션만 센다 — 전체 행 수를 넘기면 휴식·Q&A·오프닝만 있는 웨비나가
+      // "대기 아젠다에 보여 줄 세션이 있다" 로 오판된다(빈 아젠다가 시청자에게 나간다).
+      sessionCount: webinar.sessions.filter(isRealSession).length,
       config: webinar.config,
       hasLinkedEndedSurvey,
     }),
-    [webinar.name, webinar.sessions.length, webinar.config, hasLinkedEndedSurvey],
+    [webinar.name, webinar.sessions, webinar.config, hasLinkedEndedSurvey],
   );
   const issuesBySection = useMemo(() => readinessBySection(issues), [issues]);
 

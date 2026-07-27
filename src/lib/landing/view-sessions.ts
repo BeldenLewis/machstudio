@@ -11,6 +11,7 @@
  * ESC·포커스 트랩·스크롤 잠금도 여기서 하지 않는다(레이어를 소유한 mount 쪽 책임).
  */
 
+import { isPauseSession, sessionHasSpeaker, sessionTypeMeta } from "@/lib/webinar-sessions";
 import { cx, h, svg } from "./h";
 import { parseSpeaker } from "./model";
 import type { LandingModel, LandingSession } from "./types";
@@ -102,10 +103,12 @@ export function renderTimetable(m: LandingModel): HTMLElement | null {
       "ul",
       { class: "schedule rv" },
       m.timetableRows.map((row) => {
-        const type = row.type ?? "session";
+        const meta = sessionTypeMeta(row.type);
         return h(
           "li",
-          { class: cx("schedule-row", type === "break" && "is-break") },
+          // 반전(어두운 행)은 **빈 시간에만**. 오프닝·클로징·Q&A 는 세션으로 세지 않지만
+          // 콘텐츠라서 일반 행으로 그리고, 대신 아래 태그로 종류를 말한다.
+          { class: cx("schedule-row", isPauseSession(row.type) && "is-break") },
           h("div", { class: "schedule-time" }, row.startTime, "–", row.endTime),
           h(
             "div",
@@ -114,9 +117,14 @@ export function renderTimetable(m: LandingModel): HTMLElement | null {
               "span",
               { class: "schedule-name" },
               row.title,
-              type === "qa" && h("span", { class: "tag" }, "Live Q&A"),
+              // 태그 문구도 유형 표에서 — 여기만 "Live Q&A" 로 갈라져 있었다
+              Boolean(meta?.landingTag) && h("span", { class: "tag" }, meta!.landingTag!),
             ),
-            type === "session" && Boolean(row.speaker) && h("span", { class: "schedule-speaker" }, row.speaker),
+            // 연사 표시 판정을 hasSpeaker 로 통일. 예전엔 `=== "session"` 정확일치라
+            // **Q&A 의 "전체 연사" 가 랜딩에서만 사라졌다**(라이브는 `!== "break"` 로 보여 줬다).
+            sessionHasSpeaker(row.type) && Boolean(row.speaker) && h("span", { class: "schedule-speaker" }, row.speaker),
+            Boolean(row.logoUrl) &&
+              h("img", { class: "schedule-logo", src: row.logoUrl, alt: "", loading: "lazy" }),
           ),
         );
       }),

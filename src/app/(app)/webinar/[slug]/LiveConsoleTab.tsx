@@ -40,7 +40,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { WEBINAR_STATUS_META } from "@/lib/webinar-status";
 import { isSurveyAcceptingResponses, type SurveyQuestion } from "@/lib/webinar-survey";
 import { formatKst } from "@/lib/datetime";
-import { isRealSession } from "@/lib/webinar-sessions";
+import { isPauseSession, isRealSession, sessionTypeLabel } from "@/lib/webinar-sessions";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -1468,13 +1468,18 @@ function RunningOrder({ sessions, liveStartAt }: { sessions: WebinarForConsole["
               <div className="min-w-0 flex-1">
                 <div className={`flex items-center gap-1.5 text-[13px] ${state === "done" ? "text-muted-foreground" : "font-medium"}`}>
                   <span className="truncate">{s.title}</span>
-                  {/* 휴식·Q&A 는 세션이 아니라는 걸 러닝오더에서도 알 수 있어야 한다.
-                      예전엔 휴식에 아무 표시가 없어 운영자가 실제 세션과 구분할 수 없었다. */}
-                  {s.type === "break" && (
-                    <span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">휴식</span>
-                  )}
-                  {s.type === "qa" && (
-                    <span className="shrink-0 rounded bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-500">Q&amp;A</span>
+                  {/* 세션이 아닌 항목은 러닝오더에서도 구분돼야 한다 — 라이브 중에 운영자가
+                      "지금이 세션인가 오프닝인가" 를 여기서 읽는다. 예전엔 break/qa 두 개만
+                      하드코딩돼 있고 default 가 없어서, 유형이 늘면 배지가 아예 안 붙었다.
+                      빈 시간(휴식)만 회색 — 나머지는 콘텐츠라 키컬러를 유지한다. */}
+                  {!isRealSession(s) && sessionTypeLabel(s.type) && (
+                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                      isPauseSession(s.type)
+                        ? "bg-secondary text-muted-foreground"
+                        : "bg-violet-500/10 text-violet-500"
+                    }`}>
+                      {sessionTypeLabel(s.type)}
+                    </span>
                   )}
                 </div>
                 <div className="text-[11px] tabular-nums text-muted-foreground">{s.startTime} – {s.endTime}</div>

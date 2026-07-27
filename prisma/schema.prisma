@@ -548,11 +548,18 @@ model WebinarSession {
   id              String  @id @default(cuid())
   webinarId       String
   number          Int
-  type            String  @default("session") // "session" | "qa" | "break"
+  // 유형 목록의 정본은 src/lib/webinar-sessions.ts 의 SESSION_TYPES 다(현재 5종:
+  // opening | session | qa | break | closing). 여기 enum·CHECK 를 두지 않는 이유는
+  // 유형 추가가 마이그레이션 없이 코드 화이트리스트만으로 끝나게 하려는 것 — 대신
+  // 무결성은 CRUD 라우트가 그 상수로 검증해서 지킨다.
+  type            String  @default("session")
   title           String
   speaker         String? // 연사 이름(레거시 데이터는 "이름 | 회사" 결합형일 수 있음 — 표시 시 파싱)
   speakerCompany  String? // 소속·직책 (랜딩 상세 팝업에서 이름과 분리 표시)
   speakerPhotoUrl String?
+  // 세션에 붙는 조직 마크(주최·협력사, 오프닝·클로징의 브랜드). speakerPhotoUrl 과 별개다 —
+  // 사진은 원형 크롭이고 로고는 잘리면 안 되므로 표시 처리가 다르다(object-fit: contain).
+  logoUrl         String?
   description     String? // 세션 내용(주제 상세)
   speakerBio      String? // 연사 약력·경력 (랜딩 상세 팝업)
   startTime       String

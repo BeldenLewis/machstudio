@@ -8,9 +8,23 @@ import { CSS } from "@dnd-kit/utilities";
 import { Clock, Edit3, GripVertical, ImagePlus, Link2, Loader2, Plus, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useUndoableDelete } from "@/components/ui/use-undoable-delete";
-import { SPEAKER_PHOTO_ACCEPT, SPEAKER_PHOTO_MAX_LABEL, validateSpeakerPhoto } from "@/lib/webinar-speaker-photo";
-import { cleanSessionText, isRealSession } from "@/lib/webinar-sessions";
-import { btnCls, FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
+import {
+  SESSION_LOGO_ACCEPT,
+  SESSION_LOGO_MAX_LABEL,
+  SPEAKER_PHOTO_ACCEPT,
+  SPEAKER_PHOTO_MAX_LABEL,
+  validateSessionLogo,
+  validateSpeakerPhoto,
+} from "@/lib/webinar-speaker-photo";
+import {
+  DEFAULT_SESSION_TYPE,
+  SESSION_TYPES,
+  cleanSessionText,
+  isRealSession,
+  sessionHasSpeaker,
+  sessionTypeLabel,
+} from "@/lib/webinar-sessions";
+import { btnCls, FIELD_CLS, FINISH, R, Segmented } from "@/components/ui/primitives";
 
 /**
  * 이 목록을 EditableList(골격)로 이관하지 않는다 — 판정 근거를 남긴다.
@@ -42,13 +56,8 @@ import { btnCls, FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
-// 세션 유형 — 라이브 Q&A 칩은 "세션"만, 아젠다엔 전부(유형 표시)
-const SESSION_TYPES = [
-  { value: "session", label: "세션" },
-  { value: "qa", label: "Q&A" },
-  { value: "break", label: "휴식" },
-] as const;
-const TYPE_LABEL: Record<string, string> = { session: "세션", qa: "Q&A", break: "휴식" };
+// 유형 목록·라벨·연사 유무는 src/lib/webinar-sessions.ts 가 소유한다. 예전엔 이 파일에만
+// 3종 목록과 라벨맵이 있어서, 뷰어·랜딩·운영 콘솔이 각자 자기 사본을 들고 갈라졌다.
 
 interface WebinarSession {
   id: string;
@@ -58,6 +67,7 @@ interface WebinarSession {
   speaker: string | null;
   speakerCompany: string | null;
   speakerPhotoUrl: string | null;
+  logoUrl: string | null;
   description: string | null;
   speakerBio: string | null;
   startTime: string;
@@ -71,6 +81,7 @@ interface SessionForm {
   speaker: string;
   speakerCompany: string;
   speakerPhotoUrl: string;
+  logoUrl: string;
   description: string;
   speakerBio: string;
   startTime: string;
@@ -79,11 +90,12 @@ interface SessionForm {
 
 const emptyForm: SessionForm = {
   number: "",
-  type: "session",
+  type: DEFAULT_SESSION_TYPE,
   title: "",
   speaker: "",
   speakerCompany: "",
   speakerPhotoUrl: "",
+  logoUrl: "",
   description: "",
   speakerBio: "",
   startTime: "",
@@ -93,11 +105,12 @@ const emptyForm: SessionForm = {
 function toForm(session: WebinarSession): SessionForm {
   return {
     number: String(session.number),
-    type: session.type || "session",
+    type: session.type || DEFAULT_SESSION_TYPE,
     title: session.title,
     speaker: session.speaker ?? "",
     speakerCompany: session.speakerCompany ?? "",
     speakerPhotoUrl: session.speakerPhotoUrl ?? "",
+    logoUrl: session.logoUrl ?? "",
     description: session.description ?? "",
     speakerBio: session.speakerBio ?? "",
     startTime: session.startTime,
@@ -163,6 +176,95 @@ function SessionRow({
   );
 }
 
+/** 유형별 제목 예시 — 삼항 체인이던 것을 표로. 유형이 늘 때 체인을 늘리지 않게. */
+const TITLE_PLACEHOLDER: Record<string, string> = {
+  opening: "예: 개회사 · 환영 인사",
+  session: "예: AI 기반 데이터 분석 플랫폼의 혁신",
+  qa: "예: 라이브 Q&A",
+  break: "예: 휴식",
+  closing: "예: 마무리 인사 · 경품 추첨",
+};
+
+/**
+ * 이미지 한 칸 — "파일 업로드 / URL 입력" 전환 + 미리보기.
+ *
+ * 연사 사진과 로고가 이 컴포넌트를 공유하되 **미리보기 모양만 다르다**:
+ *  - circle  : 원형 크롭(object-cover). 사람 얼굴은 잘려도 되고, 오히려 정렬이 예뻐진다.
+ *  - contain : 원본 비율 유지(object-contain). 로고를 원형으로 크롭하면 글자가 잘려 못 읽는다.
+ * 이 구분이 로고를 연사 사진 필드에 얹지 않고 따로 둔 이유다.
+ */
+function ImagePicker({
+  title, hint, shape, source, onSourceChange, value, onValueChange,
+  accept, maxLabel, busy, inputRef, onPick, urlPlaceholder, noun,
+}: {
+  title: string;
+  hint: string;
+  shape: "circle" | "contain";
+  source: "upload" | "url";
+  onSourceChange: (next: "upload" | "url") => void;
+  value: string;
+  onValueChange: (next: string) => void;
+  accept: string;
+  maxLabel: string;
+  busy: boolean;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  onPick: (file: File) => void;
+  urlPlaceholder: string;
+  noun: string;
+}) {
+  return (
+    <>
+      <label className="text-xs text-muted-foreground mb-1.5 block">{title}</label>
+      <Segmented
+        className="mb-2"
+        label={`${title} 입력 방식`}
+        value={source}
+        onChange={onSourceChange}
+        options={[
+          { value: "upload", label: <><ImagePlus className="h-3.5 w-3.5" />파일 업로드</> },
+          { value: "url", label: <><Link2 className="h-3.5 w-3.5" />URL 입력</> },
+        ]}
+      />
+      {source === "upload" ? (
+        <div className="flex items-center gap-3 rounded-xl border border-dashed border-border bg-secondary/20 px-3 py-2.5">
+          {value && (
+            // 외부 URL도 지원하므로 Next Image 최적화 도메인 제한을 적용하지 않는다.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={value}
+              alt={`선택한 ${noun} 미리보기`}
+              className={
+                shape === "circle"
+                  ? `h-9 w-9 shrink-0 rounded-full object-cover ${FINISH.hairlineOut}`
+                  // 로고는 배경이 투명한 PNG 가 많아 흰 판을 깔아야 다크에서도 보인다.
+                  : `h-9 w-16 shrink-0 rounded-md bg-white object-contain p-1 ${FINISH.hairlineOut}`
+              }
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium">JPG, PNG, WebP, GIF · 최대 {maxLabel}</p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{hint}</p>
+          </div>
+          <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
+            className={btnCls("quiet", "shrink-0 px-2.5 py-1.5 text-xs disabled:opacity-50")}>
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
+            {busy ? "업로드 중" : value ? `${noun} 변경` : `${noun} 선택`}
+          </button>
+          <input ref={inputRef} type="file" accept={accept} className="sr-only" onChange={(e) => {
+            const file = e.currentTarget.files?.[0];
+            if (file) onPick(file);
+          }} />
+        </div>
+      ) : (
+        <input type="url" aria-label={`${noun} URL`} value={value}
+          onChange={(e) => onValueChange(e.target.value)}
+          placeholder={urlPlaceholder}
+          className={FIELD_CLS} />
+      )}
+    </>
+  );
+}
+
 function SessionFormFields({
   webinarId,
   form,
@@ -173,32 +275,54 @@ function SessionFormFields({
   setForm: Dispatch<SetStateAction<SessionForm>>;
 }) {
   const [photoSource, setPhotoSource] = useState<"upload" | "url">("upload");
-  const [isUploading, setIsUploading] = useState(false);
+  const [logoSource, setLogoSource] = useState<"upload" | "url">("upload");
+  /** 업로드 중인 종류 — 두 업로드가 스피너를 공유하면 로고를 올릴 때 사진 버튼도 돈다. */
+  const [uploading, setUploading] = useState<null | "photo" | "logo">(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isBreak = form.type === "break";
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  /**
+   * 연사 입력을 보일지 — 유형 표(webinar-sessions.ts)가 정한다.
+   * 예전엔 `form.type === "break"` 였고, 그 판정이 화면마다 극성까지 달랐다(시청 화면은
+   * `!== "break"`, 랜딩은 `=== "session"`). 오프닝·클로징은 사람이 서는 순서라 연사를 받는다.
+   */
+  const hasSpeaker = sessionHasSpeaker(form.type);
   /* 라벨↔입력을 id 로 묶는다. useId 인 이유: 이 폼은 '추가'와 '수정'이 동시에 열릴 수 있어
      고정 id("ses-order")면 두 벌이 겹쳐 라벨이 엉뚱한 칸을 가리켰다. */
   const uid = useId();
 
-  const uploadPhoto = async (file: File) => {
-    const validationError = validateSpeakerPhoto(file);
+  /**
+   * 사진·로고 업로드 — 엔드포인트와 담을 필드만 다르고 나머지는 같아 하나로 묶었다.
+   * catch 가 반드시 있어야 한다: 예전엔 try/finally 뿐이라 네트워크 실패가 unhandled rejection
+   * 으로 사라지고 어드민은 "눌렀는데 아무 일도 없다" 만 봤다(랜딩 업로드 쪽 주석과 같은 이유).
+   */
+  const uploadImage = async (
+    file: File,
+    kind: "photo" | "logo",
+  ) => {
+    const spec = kind === "photo"
+      ? { validate: validateSpeakerPhoto, endpoint: "speaker-photo", field: "speakerPhotoUrl", noun: "연사 사진", ref: fileInputRef }
+      : { validate: validateSessionLogo, endpoint: "session-logo", field: "logoUrl", noun: "로고", ref: logoInputRef };
+
+    const validationError = spec.validate(file);
     if (validationError) { toast.error(validationError); return; }
 
-    setIsUploading(true);
+    setUploading(kind);
     try {
       const body = new FormData();
       body.set("file", file);
-      const res = await fetch(`/api/webinars/${webinarId}/speaker-photo`, { method: "POST", body });
+      const res = await fetch(`/api/webinars/${webinarId}/${spec.endpoint}`, { method: "POST", body });
       const data = await res.json().catch(() => null);
       if (!res.ok || typeof data?.url !== "string") {
-        toast.error(data?.error ?? "사진 업로드에 실패했어요.");
+        toast.error(data?.error ?? `${spec.noun} 업로드에 실패했어요.`);
         return;
       }
-      setForm((f) => ({ ...f, speakerPhotoUrl: data.url }));
-      toast.success("연사 사진을 올렸어요");
+      setForm((f) => ({ ...f, [spec.field]: data.url }));
+      toast.success(`${spec.noun}을 올렸어요`);
+    } catch {
+      toast.error("업로드 중 문제가 생겼어요. 연결을 확인하고 다시 시도해주세요.");
     } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      setUploading(null);
+      if (spec.ref.current) spec.ref.current.value = "";
     }
   };
 
@@ -237,13 +361,14 @@ function SessionFormFields({
           type="text"
           value={form.title}
           onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-          placeholder={form.type === "break" ? "예: 휴식" : form.type === "qa" ? "예: 라이브 Q&A" : "예: AI 기반 데이터 분석 플랫폼의 혁신"}
+          placeholder={TITLE_PLACEHOLDER[form.type] ?? TITLE_PLACEHOLDER.session}
           className={FIELD_CLS}
         />
       </div>
-      {/* 휴식엔 연사가 없다 → 연사 입력칸을 아예 감춘다. 비워 두라고 안내하는 대신 안 보이게 하는 게
-          맞다(빈칸이 있으면 채우게 된다). Q&A 는 "전체 연사"처럼 적을 수 있어 그대로 둔다. */}
-      {!isBreak && (
+      {/* 연사가 없는 유형(휴식)은 연사 입력칸을 아예 감춘다. 비워 두라고 안내하는 대신 안 보이게
+          하는 게 맞다(빈칸이 있으면 채우게 된다). Q&A 는 "전체 연사", 오프닝·클로징은 진행자를
+          적을 수 있어 그대로 둔다 — 판정은 유형 표의 hasSpeaker 하나가 한다. */}
+      {hasSpeaker && (
         <>
           <div className="col-span-12 sm:col-span-4">
             <label htmlFor={`${uid}-speaker`} className="text-xs text-muted-foreground mb-1 block">연사 이름</label>
@@ -300,7 +425,7 @@ function SessionFormFields({
           className={`${FIELD_CLS} resize-y leading-relaxed`}
         />
       </div>
-      {!isBreak && (
+      {hasSpeaker && (
       <div className="col-span-12">
         <label htmlFor={`${uid}-bio`} className="text-xs text-muted-foreground mb-1 block">연사 약력·경력</label>
         <textarea
@@ -314,48 +439,45 @@ function SessionFormFields({
         <p className="mt-1 text-[11px] text-muted-foreground">랜딩 상세 팝업의 &lsquo;약력&rsquo; 영역에 표시돼요. 줄바꿈이 그대로 유지됩니다.</p>
       </div>
       )}
-      {!isBreak && (
-      <div className="col-span-12">
-        <label className="text-xs text-muted-foreground mb-1.5 block">연사 사진 (선택)</label>
-        <div className="flex items-center gap-1 mb-2" role="group" aria-label="연사 사진 입력 방식">
-          <button type="button" onClick={() => setPhotoSource("upload")}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors ${photoSource === "upload" ? "bg-violet-500 text-white" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
-            <ImagePlus className="w-3.5 h-3.5" />파일 업로드
-          </button>
-          <button type="button" onClick={() => setPhotoSource("url")}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors ${photoSource === "url" ? "bg-violet-500 text-white" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
-            <Link2 className="w-3.5 h-3.5" />URL 입력
-          </button>
+      {hasSpeaker && (
+        <div className="col-span-12">
+          <ImagePicker
+            title="연사 사진 (선택)"
+            hint="랜딩 세션 카드·상세 팝업과 라이브 아젠다에 함께 쓰여요."
+            shape="circle"
+            source={photoSource}
+            onSourceChange={setPhotoSource}
+            value={form.speakerPhotoUrl}
+            onValueChange={(v) => setForm((f) => ({ ...f, speakerPhotoUrl: v }))}
+            accept={SPEAKER_PHOTO_ACCEPT}
+            maxLabel={SPEAKER_PHOTO_MAX_LABEL}
+            busy={uploading === "photo"}
+            inputRef={fileInputRef}
+            onPick={(file) => void uploadImage(file, "photo")}
+            urlPlaceholder="https://... (라이브 페이지 아젠다에 원형 사진으로 표시돼요)"
+            noun="사진"
+          />
         </div>
-        {photoSource === "upload" ? (
-          <div className="flex items-center gap-3 rounded-xl border border-dashed border-border bg-secondary/20 px-3 py-2.5">
-            {form.speakerPhotoUrl && (
-              // 외부 URL도 지원하므로 Next Image 최적화 도메인 제한을 적용하지 않는다.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={form.speakerPhotoUrl} alt="선택한 연사 사진 미리보기" className={`w-9 h-9 rounded-full object-cover ${FINISH.hairlineOut}`} />
-            )}
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium">JPG, PNG, WebP, GIF · 최대 {SPEAKER_PHOTO_MAX_LABEL}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">랜딩 세션 카드·상세 팝업과 라이브 아젠다에 함께 쓰여요.</p>
-            </div>
-            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading}
-              className={btnCls("quiet", "shrink-0 px-2.5 py-1.5 text-xs disabled:opacity-50")}>
-              {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImagePlus className="w-3.5 h-3.5" />}
-              {isUploading ? "업로드 중" : form.speakerPhotoUrl ? "사진 변경" : "사진 선택"}
-            </button>
-            <input ref={fileInputRef} type="file" accept={SPEAKER_PHOTO_ACCEPT} className="sr-only" onChange={(e) => {
-              const file = e.currentTarget.files?.[0];
-              if (file) void uploadPhoto(file);
-            }} />
-          </div>
-        ) : (
-          <input type="url" aria-label="연사 사진 URL" value={form.speakerPhotoUrl}
-            onChange={(e) => setForm((f) => ({ ...f, speakerPhotoUrl: e.target.value }))}
-            placeholder="https://... (라이브 페이지 아젠다에 원형 사진으로 표시돼요)"
-            className={FIELD_CLS} />
-        )}
-      </div>
       )}
+      {/* 로고는 연사와 무관하다 — 휴식에도 협력사 마크를 붙일 수 있어 hasSpeaker 로 가리지 않는다. */}
+      <div className="col-span-12">
+        <ImagePicker
+          title="로고 (선택)"
+          hint="주최·협력사 마크예요. 잘리지 않게 원본 비율로 표시돼요(원형 크롭인 연사 사진과 다릅니다)."
+          shape="contain"
+          source={logoSource}
+          onSourceChange={setLogoSource}
+          value={form.logoUrl}
+          onValueChange={(v) => setForm((f) => ({ ...f, logoUrl: v }))}
+          accept={SESSION_LOGO_ACCEPT}
+          maxLabel={SESSION_LOGO_MAX_LABEL}
+          busy={uploading === "logo"}
+          inputRef={logoInputRef}
+          onPick={(file) => void uploadImage(file, "logo")}
+          urlPlaceholder="https://... (랜딩 타임테이블·라이브 아젠다에 표시돼요)"
+          noun="로고"
+        />
+      </div>
     </div>
   );
 }
@@ -453,6 +575,7 @@ export default function SessionsTab({
     speaker: form.speaker.trim() || null,
     speakerCompany: form.speakerCompany.trim() || null,
     speakerPhotoUrl: form.speakerPhotoUrl.trim() || null,
+    logoUrl: form.logoUrl.trim() || null,
     description: form.description.trim() || null,
     speakerBio: form.speakerBio.trim() || null,
     startTime: form.startTime,
@@ -524,10 +647,10 @@ export default function SessionsTab({
     if (editingId === session.id) setEditingId(null);
     undoableRemove({
       key: session.id,
-      // 휴식·Q&A 를 "세션 3" 이라고 부르지 않는다 — 유형 이름으로 말한다
+      // 세션이 아닌 행을 "세션 3" 이라고 부르지 않는다 — 유형 이름으로 말한다
       message: isRealSession(session)
         ? `세션 ${session.number}을(를) 삭제했어요`
-        : `${TYPE_LABEL[session.type ?? ""] ?? "항목"}을(를) 삭제했어요`,
+        : `${sessionTypeLabel(session.type) ?? "항목"}을(를) 삭제했어요`,
       onOptimistic: () => setPendingDeleteIds((prev) => new Set(prev).add(session.id)),
       onUndo: () => setPendingDeleteIds((prev) => { const n = new Set(prev); n.delete(session.id); return n; }),
       commit: async () => {
@@ -551,13 +674,14 @@ export default function SessionsTab({
           <p className="mt-1 text-xs text-muted-foreground/70">
             끌어서 순서를 바꿀 수 있어요. 연사 사진은 각 세션에서 올리면 랜딩 세션 카드·상세 팝업과 라이브 아젠다에 함께 쓰여요.
           </p>
-          {/* 세션 수와 진행 순서 항목 수를 나눠 보여준다 — 휴식·Q&A 는 순서를 차지하지만 세션이 아니다.
-              둘이 다를 때만 뒤 문구를 붙여, 휴식이 없는 웨비나에선 군더더기가 없다. */}
+          {/* 세션 수와 진행 순서 항목 수를 나눠 보여준다 — 오프닝·Q&A·휴식·클로징은 순서를
+              차지하지만 세션이 아니다. 둘이 다를 때만 뒤 문구를 붙여 군더더기를 없앤다.
+              유형 이름을 열거하지 않는다 — 열거하면 유형이 늘 때마다 이 문구를 고쳐야 한다. */}
           {sortedSessions.length > 0 && (
             <p className="mt-1 text-xs text-muted-foreground/70">
               세션 {realSessionCount}개
               {sortedSessions.length !== realSessionCount && (
-                <> · 진행 순서 {sortedSessions.length}개 (휴식·Q&amp;A 포함)</>
+                <> · 진행 순서 {sortedSessions.length}개 (세션 외 항목 포함)</>
               )}
             </p>
           )}
@@ -679,8 +803,8 @@ export default function SessionsTab({
                     {session.number}
                   </div>
                   {/* 연사 사진 썸네일 — 목록에서 사진이 붙었는지 바로 보이게. 예전엔 편집을 열어야만
-                      알 수 있어서 "사진 첨부 기능이 없다"고 읽혔다. 휴식엔 연사가 없으니 안 그린다. */}
-                  {session.type !== "break" && session.speakerPhotoUrl && (
+                      알 수 있어서 "사진 첨부 기능이 없다"고 읽혔다. 연사 없는 유형엔 안 그린다. */}
+                  {sessionHasSpeaker(session.type) && session.speakerPhotoUrl && (
                     // 외부 URL 도 허용하므로 next/image 도메인 제한을 적용하지 않는다
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -690,11 +814,25 @@ export default function SessionsTab({
                       className={`h-9 w-9 shrink-0 rounded-full object-cover ${FINISH.hairlineOut}`}
                     />
                   )}
+                  {/* 로고 썸네일 — 사진과 같은 이유로 목록에 노출한다. 유형과 무관(휴식에도 붙일 수 있다).
+                      원형으로 자르지 않는다 — 로고는 잘리면 글자를 못 읽는다. */}
+                  {session.logoUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={session.logoUrl}
+                      alt={`${session.title || "세션"} 로고`}
+                      title="로고 — 랜딩 타임테이블·라이브 아젠다에 표시돼요"
+                      className={`h-9 w-14 shrink-0 rounded-md bg-white object-contain p-1 ${FINISH.hairlineOut}`}
+                    />
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      {session.type && session.type !== "session" && (
+                      {/* 세션이 아닌 행만 유형 배지를 단다(세션은 번호가 이미 유형을 말한다).
+                          라벨을 모르는 값이면 배지를 안 그린다 — 예전엔 `?? session.type` 폴백이라
+                          표에 없는 값이 영문 원문으로 찍혔다. */}
+                      {!isRealSession(session) && sessionTypeLabel(session.type) && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-500 font-semibold">
-                          {TYPE_LABEL[session.type] ?? session.type}
+                          {sessionTypeLabel(session.type)}
                         </span>
                       )}
                       <h4 className="text-sm font-medium">{session.title}</h4>

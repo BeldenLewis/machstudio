@@ -383,6 +383,14 @@ export const LANDING_CSS = `
   font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; vertical-align: 2px;
 }
 .lnd .schedule-speaker { display: block; margin-top: 2px; color: #586074; font-size: 11px; }
+/* 세션 로고 — 자르지 않는다(contain). .session-photo 는 inset:0/cover 로 전면 크롭이라
+   로고를 넣으면 글자가 잘려 못 읽는다. 높이만 고정하고 폭은 원본 비율에 맡긴다. */
+.lnd .schedule-logo {
+  display: block; margin-top: 6px; height: 22px; width: auto; max-width: 140px;
+  object-fit: contain; object-position: left center;
+}
+/* 반전된 휴식 행에서도 로고가 보이게 흰 판을 깐다(투명 PNG 가 대부분). */
+.lnd .is-break .schedule-logo { background: #fff; border-radius: 4px; padding: 2px 4px; }
 
 /* ── 다크 존(Programs~FAQ) — 지브라 구분 ── */
 .lnd .dark-zone { position: relative; background: var(--ink); }

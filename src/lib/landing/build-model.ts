@@ -9,6 +9,7 @@
 
 import { formatKst } from "@/lib/datetime";
 import { normalizeLandingPageConfig, safeHttpUrl } from "@/lib/webinar-config";
+import { isRealSession } from "@/lib/webinar-sessions";
 import { SAFE_HEX, TOC_DEF, onPrimaryFor } from "./model";
 import type { LandingModel, LandingSession, LandingStatusInfo, LandingTocItem, LandingWebinar } from "./types";
 
@@ -79,7 +80,12 @@ export function buildLandingModel(webinar: LandingWebinar, opts: BuildLandingMod
 
   // 임베드는 호출자가 만든 임의의 객체를 넘길 수 있어 세션 배열 부재를 방어한다(파트너 문서에서 throw 금지).
   const sessions: LandingSession[] = Array.isArray(webinar.sessions) ? webinar.sessions : [];
-  const sessionCards = lp.sessions.enabled ? sessions.filter((s) => (s.type ?? "session") === "session") : [];
+  /**
+   * 세션 카드는 **실제 세션만** — isRealSession 을 쓴다. 예전엔 여기서 `=== "session"` 을
+   * 직접 비교해 헬퍼의 복제였고, 헬퍼만 고치면 랜딩 카드만 옛 규칙으로 남아 타임테이블
+   * (전체 통과)과 어긋난 화면이 시청자에게 나갔다.
+   */
+  const sessionCards = lp.sessions.enabled ? sessions.filter(isRealSession) : [];
   const timetableRows = lp.timetable.enabled ? sessions : [];
 
   const introTitle = lp.intro.title.trim() || subtitle;

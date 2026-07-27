@@ -76,6 +76,7 @@ interface WebinarSession {
   speaker: string | null;
   speakerCompany: string | null;
   speakerPhotoUrl: string | null;
+  logoUrl: string | null;
   description: string | null;
   speakerBio: string | null;
   startTime: string;
