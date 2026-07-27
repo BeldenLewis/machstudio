@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
+import { ensureAppUser } from "@/lib/app-user";
 
 // 현재 워크스페이스 + 프로젝트 목록
 export async function GET() {
@@ -9,13 +10,16 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "인증 필요" }, { status: 401 });
 
+  /* 여기가 DB User 행을 보장하는 자리다 — 앱 화면을 열면 WorkspaceProvider 가 이 라우트를
+     반드시 부르고, 이미 user 행을 읽고 있었다(isSuperAdmin). 없을 때만 만들므로 평상시
+     쿼리 수는 그대로다. 왜 로그인 시점에 만들어야 하는지는 ensureAppUser 주석 참고. */
   const [memberships, dbUser] = await Promise.all([
     prisma.workspaceMember.findMany({
       where: { userId: user.id, workspace: { deletedAt: null } },
       include: { workspace: { include: { projects: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } } } } },
       orderBy: { joinedAt: "asc" },
     }),
-    prisma.user.findUnique({ where: { id: user.id }, select: { isSuperAdmin: true } }),
+    ensureAppUser(user),
   ]);
 
   // env 기반 root 어드민 또는 DB 플래그
