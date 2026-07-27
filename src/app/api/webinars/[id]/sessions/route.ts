@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { safeHttpUrl } from "@/lib/webinar-config";
+import { serializeSpeakerLinks } from "@/lib/webinar-speaker-links";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_SESSION_TYPE, SESSION_TYPE_VALUES } from "@/lib/webinar-sessions";
@@ -78,6 +80,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       logoUrl: String(body.logoUrl ?? "").trim() || null,
       description: String(body.description ?? "").trim() || null,
       speakerBio: String(body.speakerBio ?? "").trim() || null,
+      // 링크는 문자열 trim 이 아니라 스킴 검증을 거친다 — javascript:·data: 가 랜딩 href 에
+      // 닿으면 안 된다(랜딩은 남의 사이트에 붙는다). safeHttpUrl 이 아니면 빈 값이 된다.
+      speakerHomepage: safeHttpUrl(body.speakerHomepage) || null,
+      speakerLinks: serializeSpeakerLinks(body.speakerLinks) ?? undefined,
       startTime,
       endTime,
     },

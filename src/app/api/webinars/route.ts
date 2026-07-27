@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma";
 import { logActivity } from "@/lib/activity";
 import { assertScheduleOrder, parseWebinarDate, WebinarScheduleError } from "@/lib/webinar-schedule";
 
@@ -81,11 +82,13 @@ export async function POST(request: Request) {
   let components: unknown = undefined;
   // speakerCompany·speakerBio 가 빠져 있어서, 복제하면 연사 소속·약력이 조용히 사라졌다
   // (랜딩 세션 상세 팝업이 이 두 값을 쓴다). 세션 스키마의 텍스트 필드를 전부 싣는다.
+  // **세션에 필드를 추가하면 이 목록에도 넣어야 한다** — 빠지면 복제본에서만 조용히 없어진다.
   let clonedSessions: {
     number: number; type: string; title: string;
     speaker: string | null; speakerCompany: string | null; speakerPhotoUrl: string | null;
     logoUrl: string | null;
     description: string | null; speakerBio: string | null;
+    speakerHomepage: string | null; speakerLinks: Prisma.InputJsonValue | typeof Prisma.DbNull;
     startTime: string; endTime: string;
   }[] = [];
 
@@ -103,6 +106,7 @@ export async function POST(request: Request) {
             speaker: true, speakerCompany: true, speakerPhotoUrl: true,
             logoUrl: true,
             description: true, speakerBio: true,
+            speakerHomepage: true, speakerLinks: true,
             startTime: true, endTime: true,
           },
           orderBy: { number: "asc" },
@@ -115,7 +119,12 @@ export async function POST(request: Request) {
     const srcConfig = (source.config ?? {}) as Record<string, unknown>;
     config = srcConfig.registrationForm ? { registrationForm: srcConfig.registrationForm } : {};
     components = source.components ?? undefined;
-    clonedSessions = source.sessions;
+    /* speakerLinks 는 Json 컬럼이라 null 을 그대로 넘길 수 없다 — Prisma 는 JSON 필드의
+       "값을 비운다" 를 DbNull 로 표현한다(그냥 null 은 타입 오류). */
+    clonedSessions = source.sessions.map((s) => ({
+      ...s,
+      speakerLinks: s.speakerLinks === null ? Prisma.DbNull : (s.speakerLinks as Prisma.InputJsonValue),
+    }));
   }
 
   const webinar = await prisma.webinar.create({

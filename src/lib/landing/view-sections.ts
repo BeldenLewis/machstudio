@@ -196,9 +196,11 @@ export function renderFaq(m: LandingModel, ctx: FaqViewCtx): HTMLElement | null 
         .map((item, index) =>
           h(
             "details",
-            { class: "faq-item", open: index === 0 ? "" : null },
+            // data-acc: 아코디언 모션 대상(effects.attachAccordion). 타임테이블과 같은 계약이다 —
+            // 답 본문을 래퍼로 감싸야 높이를 잴 수 있다(details 는 닫히면 내용이 즉시 감춰진다).
+            { class: "faq-item", "data-acc": "", open: index === 0 ? "" : null },
             h("summary", null, item.question),
-            h("p", null, item.answer),
+            h("div", { class: "faq-body", "data-acc-body": "" }, h("p", null, item.answer)),
           ),
         ),
     ),

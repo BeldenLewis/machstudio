@@ -25,6 +25,7 @@ import {
   sessionTypeLabel,
 } from "@/lib/webinar-sessions";
 import { btnCls, FIELD_CLS, FINISH, R, Segmented } from "@/components/ui/primitives";
+import { normalizeSpeakerLinks, parseSpeakerLink, SPEAKER_LINKS_MAX } from "@/lib/webinar-speaker-links";
 
 /**
  * 이 목록을 EditableList(골격)로 이관하지 않는다 — 판정 근거를 남긴다.
@@ -70,6 +71,8 @@ interface WebinarSession {
   logoUrl: string | null;
   description: string | null;
   speakerBio: string | null;
+  speakerHomepage: string | null;
+  speakerLinks: unknown;
   startTime: string;
   endTime: string;
 }
@@ -84,6 +87,9 @@ interface SessionForm {
   logoUrl: string;
   description: string;
   speakerBio: string;
+  speakerHomepage: string;
+  /** 편집 중에는 문자열 배열로 다룬다 — 저장 시 라우트가 스킴을 검증하고 정규화한다. */
+  speakerLinks: string[];
   startTime: string;
   endTime: string;
 }
@@ -98,6 +104,8 @@ const emptyForm: SessionForm = {
   logoUrl: "",
   description: "",
   speakerBio: "",
+  speakerHomepage: "",
+  speakerLinks: [],
   startTime: "",
   endTime: "",
 };
@@ -113,6 +121,9 @@ function toForm(session: WebinarSession): SessionForm {
     logoUrl: session.logoUrl ?? "",
     description: session.description ?? "",
     speakerBio: session.speakerBio ?? "",
+    speakerHomepage: session.speakerHomepage ?? "",
+    // 저장된 값(URL 배열)을 그대로 편집칸으로. 잘못된 값은 정규화가 이미 걸렀다.
+    speakerLinks: normalizeSpeakerLinks(session.speakerLinks).map((l) => l.url),
     startTime: session.startTime,
     endTime: session.endTime,
   };
@@ -440,6 +451,82 @@ function SessionFormFields({
       </div>
       )}
       {hasSpeaker && (
+      <div className="col-span-12 sm:col-span-6">
+        <label htmlFor={`${uid}-homepage`} className="text-xs text-muted-foreground mb-1 block">홈페이지 (선택)</label>
+        <input
+          id={`${uid}-homepage`}
+          type="url"
+          inputMode="url"
+          value={form.speakerHomepage}
+          onChange={(e) => setForm((f) => ({ ...f, speakerHomepage: e.target.value }))}
+          placeholder="https://example.com"
+          className={FIELD_CLS}
+        />
+        {/* 검증은 제출 전에 그 자리에서 — 저장 후 조용히 비워지면 왜 사라졌는지 알 수 없다. */}
+        {form.speakerHomepage.trim() && !parseSpeakerLink(form.speakerHomepage) ? (
+          <p className="mt-1 text-[11px] text-red-500">https:// 로 시작하는 주소를 넣어주세요. 지금 값은 저장되지 않아요.</p>
+        ) : (
+          <p className="mt-1 text-[11px] text-muted-foreground">랜딩 상세 팝업의 &lsquo;홈페이지 바로가기&rsquo;로 표시돼요.</p>
+        )}
+      </div>
+      )}
+      {hasSpeaker && (
+      <div className="col-span-12 sm:col-span-6">
+        <span className="text-xs text-muted-foreground mb-1 block">SNS 링크 (선택 · 최대 {SPEAKER_LINKS_MAX}개)</span>
+        <div className="space-y-1.5">
+          {form.speakerLinks.map((url, i) => {
+            const link = parseSpeakerLink(url);
+            const invalid = url.trim() !== "" && !link;
+            return (
+              <div key={i}>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="url"
+                    inputMode="url"
+                    aria-label={`SNS 링크 ${i + 1}`}
+                    value={url}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        speakerLinks: f.speakerLinks.map((v, j) => (j === i ? e.target.value : v)),
+                      }))
+                    }
+                    placeholder="https://www.linkedin.com/in/..."
+                    className={FIELD_CLS}
+                  />
+                  {/* 플랫폼은 주소에서 읽는다 — 고르게 하지 않는 이유는 webinar-speaker-links.ts 주석 참고. */}
+                  {link && (
+                    <span className="shrink-0 rounded-md bg-secondary px-1.5 py-1 text-[10px] text-muted-foreground">
+                      {link.label}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, speakerLinks: f.speakerLinks.filter((_, j) => j !== i) }))}
+                    aria-label={`SNS 링크 ${i + 1} 삭제`}
+                    className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                {invalid && <p className="mt-1 text-[11px] text-red-500">https:// 로 시작하는 주소만 저장돼요.</p>}
+              </div>
+            );
+          })}
+        </div>
+        {form.speakerLinks.length < SPEAKER_LINKS_MAX && (
+          <button
+            type="button"
+            onClick={() => setForm((f) => ({ ...f, speakerLinks: [...f.speakerLinks, ""] }))}
+            className="mt-1.5 inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <Plus className="h-3 w-3" />링크 추가
+          </button>
+        )}
+        <p className="mt-1 text-[11px] text-muted-foreground">랜딩 상세 팝업 맨 아래에 아이콘으로 표시돼요.</p>
+      </div>
+      )}
+      {hasSpeaker && (
         <div className="col-span-12">
           <ImagePicker
             title="연사 사진 (선택)"
@@ -578,6 +665,10 @@ export default function SessionsTab({
     logoUrl: form.logoUrl.trim() || null,
     description: form.description.trim() || null,
     speakerBio: form.speakerBio.trim() || null,
+    speakerHomepage: form.speakerHomepage.trim() || null,
+    /* 빈 칸(링크 추가만 누르고 안 채운 행)은 보내지 않는다 — 라우트가 어차피 떨어뜨리지만,
+       여기서 걸러 두면 "저장했는데 빈 행이 남았다" 는 인상이 안 남는다. */
+    speakerLinks: form.speakerLinks.map((u) => u.trim()).filter(Boolean),
     startTime: form.startTime,
     endTime: form.endTime,
   });

@@ -30,6 +30,8 @@ interface WebinarSession {
   logoUrl: string | null;
   description: string | null;
   speakerBio: string | null;
+  speakerHomepage: string | null;
+  speakerLinks: unknown;
   startTime: string;
   endTime: string;
 }

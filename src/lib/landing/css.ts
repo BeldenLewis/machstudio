@@ -325,7 +325,10 @@ export const LANDING_CSS = `
    * scrollTop 이 0 에서 안 움직임. minmax(0,1fr) 로 행이 줄어들 수 있게 하면 main 이 스크롤한다.
    * 데스크톱도 같은 구조라 함께 고쳐진다(뷰포트가 커서 늦게 드러날 뿐이었다).
    */
-  grid-template-rows: minmax(0, 1fr);
+  /* 1행: 사진|본문(줄어들 수 있어야 한다 — 위 주석 참고), 2행: SNS(내용 높이).
+     암시 행(grid-auto-rows)에 맡기지 않고 적어 둔다 — 무엇이 줄어들 수 있는 행인지가
+     이 모달의 스크롤 동작을 정하는 값이라 눈에 보여야 한다. */
+  grid-template-rows: minmax(0, 1fr) auto;
   overflow: hidden; border-radius: 18px;
   background: rgba(19, 23, 32, .72);
   -webkit-backdrop-filter: blur(26px) saturate(1.3); backdrop-filter: blur(26px) saturate(1.3);
@@ -337,6 +340,32 @@ export const LANDING_CSS = `
 /* 닫기 버튼은 **스크롤과 무관하게 항상 같은 자리**다 — 스크롤하는 건 .lnd-modal-main 이고
    이 버튼은 모달(스크롤하지 않는 상자)에 absolute 로 붙어 있다. 반투명 판만으로는 아래로
    지나가는 본문 글자와 겹쳐 읽기 어려워, 불투명도를 올리고 블러를 깔았다. */
+/* 홈페이지 바로가기 — 약력 아래. 채운 버튼이 아니라 텍스트 링크다:
+   모달의 주 행동은 "읽기" 이고 이건 이어서 볼 수 있는 곳을 가리키는 보조 링크다. */
+.lnd .lnd-modal-home {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 16px;
+  color: #fff; font-size: 13.5px; font-weight: 700; text-decoration: none;
+  border-bottom: 1px solid rgba(255, 255, 255, .35); padding-bottom: 2px;
+  transition: border-color .18s ease, gap .18s ease;
+}
+.lnd .lnd-modal-home:hover { border-color: #fff; gap: 9px; }
+.lnd .lnd-modal-home svg { width: 15px; height: 15px; }
+/* SNS — 모달 **맨 밑**. 아이콘만 두고 이름은 aria-label/title 로만 둔다(줄이 길어지면
+   밑이 무거워져서, 읽고 나가는 흐름의 끝이 아니라 새 과제처럼 보인다). */
+.lnd .lnd-modal-sns {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 14px 30px 18px;
+  border-top: 1px solid rgba(255, 255, 255, .1);
+}
+.lnd .lnd-modal-sns-link {
+  width: 38px; height: 38px; border-radius: 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, .08); color: rgba(255, 255, 255, .78);
+  transition: background .18s ease, color .18s ease, transform .18s ease;
+}
+.lnd .lnd-modal-sns-link:hover { background: rgba(255, 255, 255, .16); color: #fff; transform: translateY(-1px); }
+.lnd .lnd-modal-sns-link svg { width: 19px; height: 19px; }
+
 .lnd .lnd-modal-close {
   position: absolute; top: 12px; right: 12px; z-index: 3;
   width: 38px; height: 38px; display: grid; place-items: center; border-radius: 999px; color: #fff;
@@ -388,10 +417,14 @@ ${sessionLogoCss(".lnd .lnd-modal-logo", { plate: true })}
 
 /* ── 타임테이블 ── */
 .lnd .schedule { display: grid; gap: 10px; list-style: none; }
+/* li 는 카드 껍데기만 — 2열(시각 | 내용)은 안쪽 .schedule-summary 가 잡는다.
+   왜 여기서 그리드를 뺐나: 펼치기를 넣으면서 li 의 자식이 details 하나가 되어, li 의 열
+   정의가 details 하나에 먹혔다(시간칸이 190px 대신 내용 폭으로 줄고 시각·제목이 다른 줄로
+   갈라졌다). summary 에 subgrid 를 주는 방법도 있지만 부모(details)가 그리드가 아니라
+   폴백한다 — 열 정의를 실제로 그리는 요소에 두는 쪽이 구조가 정직하다.
+   overflow:hidden 은 펼침 영역이 카드 모서리를 넘지 않게. */
 .lnd .schedule-row {
-  min-height: 62px;
-  display: grid; grid-template-columns: 190px 1fr; align-items: center;
-  border-radius: 6px; background: #f8f9fc; color: #111724;
+  border-radius: 6px; background: #f8f9fc; color: #111724; overflow: hidden;
   box-shadow: 0 10px 28px rgba(3, 9, 26, .12);
 }
 .lnd .schedule-row.is-break { background: rgba(58, 63, 98, .94); color: #f3f5fa; }
@@ -401,6 +434,41 @@ ${sessionLogoCss(".lnd .lnd-modal-logo", { plate: true })}
   font-size: 19px; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .lnd .is-break .schedule-time { border-color: rgba(255, 255, 255, .25); color: #fff; }
+/* 접힌 줄은 클릭 대상 전체가 summary 다 — 시각은 그대로 두고 마커만 없앤다.
+   is-static 은 펼칠 것이 없는 행(상세·로고 둘 다 없음) — 커서를 손가락으로 바꾸지 않는다. */
+.lnd .schedule-acc { display: block; }
+/* 시각 | 내용 | 셰브론. 셰브론 열은 펼칠 수 없는 행에서는 자리를 차지하지 않는다(auto + 자식 없음). */
+.lnd .schedule-summary {
+  min-height: 62px;
+  display: grid; grid-template-columns: 190px minmax(0, 1fr) auto; align-items: center;
+  list-style: none; cursor: pointer;
+}
+.lnd .schedule-summary.is-static { cursor: default; }
+.lnd .schedule-summary::-webkit-details-marker { display: none; }
+/* 펼침 셰브론 — 오른쪽 끝. 열리면 180도. 색은 행 색을 따라간다(반전 행에서도 보이게). */
+.lnd .schedule-chev {
+  display: flex; align-items: center; justify-content: center;
+  padding-right: 18px; color: currentColor; opacity: .55;
+  transition: transform .22s cubic-bezier(.22,.61,.36,1), opacity .18s ease;
+}
+.lnd .schedule-chev svg { width: 18px; height: 18px; }
+.lnd .schedule-summary:hover .schedule-chev { opacity: .9; }
+.lnd details[open] > .schedule-summary .schedule-chev { transform: rotate(180deg); }
+/* 상세 — 높이 애니메이션 대상(effects.attachAccordion). CSS 로는 열림 상태만 잡고,
+   여닫는 모션은 JS 가 인라인 height 로 그린다(details 는 닫히면 내용이 즉시 감춰진다). */
+.lnd .schedule-detail { overflow: hidden; }
+.lnd .schedule-detail-in {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 18px;
+  padding: 2px 20px 16px 20px;
+  border-top: 1px solid rgba(21, 32, 51, .12);
+  margin: 0 20px;
+}
+.lnd .is-break .schedule-detail-in { border-color: rgba(255, 255, 255, .18); }
+.lnd .schedule-desc {
+  margin: 12px 0 0; min-width: 0; flex: 1 1 auto;
+  color: #4b5364; font-size: 13.5px; line-height: 1.7; white-space: pre-line; word-break: keep-all;
+}
+.lnd .is-break .schedule-desc { color: #d6dae6; }
 .lnd .schedule-content { padding: 10px 20px; }
 .lnd .schedule-name { display: block; font-size: 15px; font-weight: 850; letter-spacing: -.02em; word-break: keep-all; }
 .lnd .schedule-name .tag {
@@ -408,12 +476,22 @@ ${sessionLogoCss(".lnd .lnd-modal-logo", { plate: true })}
   border: 1px solid var(--primary-ink); color: var(--primary-ink);
   font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; vertical-align: 2px;
 }
-/* 연사 이름 — 11px 은 로고보다 작아 보여 위계가 뒤집혔다(로고가 이름보다 눈에 먼저 들어옴). */
-.lnd .schedule-speaker { display: block; margin-top: 3px; color: #4b5364; font-size: 13.5px; font-weight: 600; }
+/* 연사 줄 — "이름 | 소속·직책" 한 줄. 접힌 상태에서 훑는 데 필요한 건 시각·무엇·누구뿐이라
+   로고는 여기서 빼고 펼침 영역으로 옮겼다(줄마다 로고 폭이 달라 눈이 걸렸다).
+   이름을 소속보다 진하게 둬서 구분자가 없어도 어디까지가 이름인지 읽힌다. */
+.lnd .schedule-speaker {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 6px;
+  margin-top: 3px; color: #4b5364; font-size: 13.5px;
+}
+.lnd .schedule-speaker b { font-weight: 750; color: #2b3242; }
+.lnd .is-break .schedule-speaker b { color: #eef1f7; }
+.lnd .schedule-speaker .sep { opacity: .38; font-weight: 400; }
+.lnd .schedule-speaker .co { font-weight: 500; }
 /* 세션 로고 — 규격은 webinar-logo.ts 한 곳에서 온다(랜딩·대기·시청이 같은 크기여야 한다).
    밝은 타임테이블 행에서는 흰 판을 끈다 — 흰 배경에 흰 판은 네모 테두리로만 보인다. */
 ${sessionLogoCss(".lnd .schedule-logo")}
-.lnd .schedule-logo { margin-top: 6px; }
+/* 펼침 영역 오른쪽 — 상세 본문과 나란히. flex:none 이라야 긴 본문에 눌려 찌그러지지 않는다. */
+.lnd .schedule-logo { flex: none; margin-top: 12px; }
 /* 반전된 휴식 행에서도 로고가 보이게 흰 판을 깐다(투명 PNG 가 대부분). */
 .lnd .is-break .schedule-logo { background: #fff; border-radius: 4px; padding: 2px 4px; }
 
@@ -505,7 +583,10 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 .lnd .faq-item summary::-webkit-details-marker { display: none; }
 .lnd .faq-item summary::after { content: "+"; color: #b9c1cf; font-size: 21px; font-weight: 400; }
 .lnd .faq-item[open] summary::after { content: "\\2212"; }
-.lnd .faq-item p { padding: 0 18px 20px; color: #c0c7d2; font-size: 13px; white-space: pre-line; }
+/* 답 본문은 래퍼로 감싼다 — 아코디언 모션이 높이를 재는 대상(data-acc-body).
+   패딩을 p 가 아니라 여기 두면 height 0 에서 패딩이 남아 닫혀도 틈이 보이는 일이 없다. */
+.lnd .faq-body { overflow: hidden; }
+.lnd .faq-item p { margin: 0; padding: 0 18px 20px; color: #c0c7d2; font-size: 13px; white-space: pre-line; }
 
 /* ── 스크롤 리빌(transform 전용 — JS 미실행에서도 콘텐츠 가시) ── */
 .lnd .rv { transform: translateY(12px); transition: transform .5s cubic-bezier(.22, .7, .2, 1); }
@@ -526,7 +607,7 @@ ${sessionLogoCss(".lnd .schedule-logo")}
   .lnd .session-card-body { inset: auto 12px 12px; }
   .lnd .session-card h3 { margin: 9px 0 14px; font-size: 14px; }
   .lnd .session-time { min-height: 25px; font-size: 10px; }
-  .lnd .schedule-row { min-height: 72px; grid-template-columns: 112px 1fr; }
+  .lnd .schedule-summary { min-height: 72px; grid-template-columns: 112px minmax(0, 1fr) auto; }
   .lnd .schedule-time { padding: 0 12px; font-size: 14px; }
   .lnd .schedule-content { padding: 10px 12px; }
   .lnd .schedule-name { font-size: 13px; }
@@ -539,7 +620,10 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 @media (max-width: 410px) {
   .lnd .session-card { width: 100%; max-width: 310px; }
   .lnd .session-card h3 { font-size: 16px; }
-  .lnd .schedule-row { grid-template-columns: 1fr; gap: 0; }
+  /* 모바일 1열 — 시각이 윗줄, 내용이 아랫줄. 셰브론은 시각 줄의 오른쪽에 붙는다. */
+  .lnd .schedule-summary { grid-template-columns: minmax(0, 1fr) auto; gap: 0; }
+  .lnd .schedule-content { grid-column: 1 / -1; }
+  .lnd .schedule-chev { align-self: start; padding-top: 10px; }
   .lnd .schedule-time { padding: 10px 14px 6px; border-right: 0; border-bottom: 1px solid rgba(21, 32, 51, .15); }
   .lnd .is-break .schedule-time { border-color: rgba(255, 255, 255, .14); }
   .lnd .schedule-content { padding: 7px 14px 12px; }
