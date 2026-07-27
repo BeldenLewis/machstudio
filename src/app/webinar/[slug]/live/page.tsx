@@ -10,7 +10,14 @@ import PreLiveWaiting from "../PreLiveWaiting";
 import EntryVerify from "../EntryVerify";
 import EndedScreen from "../EndedScreen";
 import { formatKst } from "@/lib/datetime";
-import { normalizeLivePageConfig, normalizeRegistrationForm, isValidPhone, isValidEmail, type WebinarRegistrationField } from "@/lib/webinar-config";
+import {
+  isValidEmail,
+  isValidPhone,
+  normalizeLivePageConfig,
+  normalizeRegistrationForm,
+  type WebinarRegistrationField,
+} from "@/lib/webinar-config";
+import { MultiChoiceField, SingleChoiceField } from "@/components/webinar/choice-fields";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -901,18 +908,21 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     return (
       <div key={field.key}>
         <label className="text-xs opacity-50 mb-1 block">{commonLabel}</label>
-        {field.type === "select" ? (
-          <select
+        {field.type === "multiple" ? (
+          <MultiChoiceField
+            field={field}
             value={String(value)}
-            onChange={(e) => setValue(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm bg-transparent focus:outline-none"
-            style={inputStyle}
-          >
-            <option value="">선택해주세요</option>
-            {(field.options ?? []).map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
+            onChange={setValue}
+            accent={accent}
+            inputStyle={inputStyle}
+          />
+        ) : field.type === "select" ? (
+          <SingleChoiceField
+            field={field}
+            value={String(value)}
+            onChange={setValue}
+            inputStyle={inputStyle}
+          />
         ) : (
           <>
             <input

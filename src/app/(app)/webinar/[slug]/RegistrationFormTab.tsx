@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type Dispatch, type ElementType, type ReactNode, type SetStateAction } from "react";
 import { motion } from "framer-motion";
-import { Plus, Trash2, GripVertical, Smartphone, AlignLeft, Mail, Phone, ListChecks, SquareCheck, ChevronDown } from "lucide-react";
+import { Plus, Trash2, GripVertical, Smartphone, AlignLeft, Mail, Phone, ListChecks, SquareCheck, ChevronDown, ListPlus } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
@@ -12,6 +12,7 @@ import { resolveConsentBody, consentSourceLabel } from "@/lib/consent-template";
 import { Switch } from "@/components/ui/switch";
 import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 import { OptionRows } from "@/components/ui/option-rows";
+import { maxSelectFor } from "@/lib/webinar-config";
 import { EditableList } from "@/components/ui/editable-list";
 import { normalizeRegistrationForm, type WebinarRegistrationField } from "@/lib/webinar-config";
 import { buildStkCss } from "@/app/webinar/[slug]/LiveContentStk";
@@ -40,10 +41,14 @@ const REG_TYPE_META: Record<FieldType, { label: string; desc: string; icon: Elem
   text: { label: "텍스트", desc: "한 줄 입력", icon: AlignLeft },
   email: { label: "이메일", desc: "이메일 주소", icon: Mail },
   tel: { label: "전화번호", desc: "숫자만", icon: Phone },
-  select: { label: "드롭다운", desc: "목록에서 선택", icon: ListChecks },
+  select: { label: "드롭다운", desc: "하나만 선택", icon: ListChecks },
+  multiple: { label: "복수 선택", desc: "여러 개 선택", icon: ListPlus },
   checkbox: { label: "체크박스", desc: "동의·확인", icon: SquareCheck },
 };
-const REG_TYPE_ORDER: FieldType[] = ["text", "email", "tel", "select", "checkbox"];
+// 선택형 둘(드롭다운·복수 선택)을 붙여 둔다 — 고를 때 비교하게 되는 짝이다.
+const REG_TYPE_ORDER: FieldType[] = ["text", "email", "tel", "select", "multiple", "checkbox"];
+/** 선택지를 쓰는 유형 — 옵션 편집·기타 허용·최대 개수가 여기 걸린다. */
+const CHOICE_TYPES: readonly FieldType[] = ["select", "multiple"];
 
 function useRegPopover() {
   const [open, setOpen] = useState(false);
@@ -112,12 +117,18 @@ function FieldCard({
   const TypeIcon = meta.icon;
 
   const options = field.options ?? [];
+  const optionCount = options.filter((o) => o.trim()).length;
+  // 화면에 적는 실제 제한 — 저장된 maxSelect 가 옵션 수 이상이면 무제한이 맞다(정규화와 같은 판정).
+  const liveMax = maxSelectFor({ type: field.type, maxSelect: field.maxSelect, options: options.filter((o) => o.trim()) });
 
   const changeType = (t: FieldType) => {
     typePop.setOpen(false);
     if (t === field.type) return;
     const next: Partial<RegistrationField> = { type: t };
-    if (t === "select" && options.filter(Boolean).length === 0) next.options = ["", ""];
+    // 선택형으로 바꿀 때 빈 옵션 두 줄을 깔아 준다 — 옵션 0개면 공개 폼에서 항목이 사라진다.
+    if (CHOICE_TYPES.includes(t) && options.filter(Boolean).length === 0) next.options = ["", ""];
+    // 드롭다운으로 되돌리면 복수 선택 전용 값은 버린다(남겨 두면 "최대 2개" 가 안 보이는 채로 저장된다).
+    if (t !== "multiple") next.maxSelect = undefined;
     patch(next);
   };
 
@@ -192,7 +203,7 @@ function FieldCard({
             </p>
           )}
 
-          {field.type === "select" && (
+          {CHOICE_TYPES.includes(field.type) && (
             <div className="space-y-1.5">
               {/**
                * 공용 OptionRows 로 이관 — 설문 탭의 선택지 코드와 사실상 같은 코드였다.
@@ -204,13 +215,57 @@ function FieldCard({
               <OptionRows
                 listId={`reg-field-${field.id}`}
                 value={options}
-                onChange={(next) => patch({ options: next })}
+                onChange={(next) =>
+                  patch({
+                    /**
+                     * 복수 선택 답변은 ", " 로 합친 한 문자열로 저장된다(customFields JSON).
+                     * 선택지 문구에 쉼표가 있으면 그 항목은 읽을 때 둘로 쪼개져 **체크가 유지되지
+                     * 않는다** — 눌러도 안 켜지는 것처럼 보이고 원인이 화면에 드러나지 않는다.
+                     * 안내가 아니라 입력 시점에 막는다. 드롭다운(select)은 값이 하나라 무관.
+                     */
+                    options: field.type === "multiple" ? next.map((o) => o.replace(/,/g, " ")) : next,
+                  })
+                }
                 ownerLabel="필드"
                 ownerTitle={field.label}
               />
               {options.filter(Boolean).length === 0 && field.enabled && (
                 <p className="text-[11px] text-amber-600">옵션이 없으면 등록 폼에 표시되지 않아요{field.required ? " — 필수 항목이라 등록도 막혀요" : ""}.</p>
               )}
+
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-0.5">
+                {/* 최대 개수 — 복수 선택에만. 옵션 수 이상이면 제한이 아니라서 저장하지 않는다
+                    (그 상태로 두면 "최대 3개" 라고 적힌 문구가 실제 제한 없이 공개 폼에 나간다). */}
+                {field.type === "multiple" && optionCount >= 2 && (
+                  <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    최대 선택 개수
+                    <input
+                      type="number"
+                      min={1}
+                      max={optionCount - 1}
+                      aria-label={`${field.label} 최대 선택 개수`}
+                      value={field.maxSelect ?? ""}
+                      placeholder="제한 없음"
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        patch({ maxSelect: Number.isInteger(n) && n >= 1 && n < optionCount ? n : undefined });
+                      }}
+                      className={`${inputCls} w-24 min-h-8 px-2 py-1 text-[11px] tabular-nums`}
+                    />
+                    <span>{liveMax === null ? "제한 없음" : `${liveMax}개까지`}</span>
+                  </label>
+                )}
+
+                {/* 기타(직접입력) — 드롭다운·복수 선택 공통. 고르면 자유 입력칸이 함께 뜬다. */}
+                <label className="flex items-center gap-2 text-[11px] text-muted-foreground select-none">
+                  <Switch
+                    checked={field.allowOther === true}
+                    onChange={(v) => patch({ allowOther: v || undefined })}
+                    label={`${field.label} 기타 직접입력 허용`}
+                  />
+                  기타(직접입력) 허용
+                </label>
+              </div>
             </div>
           )}
         </div>
@@ -264,7 +319,7 @@ function RegistrationFormPreview({
 }) {
   // 공개 폼과 같은 기준 — 빈 선택지 행(편집 중)은 없는 것으로 취급
   const visibleFields = fields.filter(
-    (field) => field.enabled && !(field.type === "select" && (field.options ?? []).filter((o) => o.trim()).length === 0),
+    (field) => field.enabled && !(CHOICE_TYPES.includes(field.type) && (field.options ?? []).filter((o) => o.trim()).length === 0),
   );
   const css = useMemo(() => buildStkCss(theme.accent, theme.text, theme.surface) + REG_PREVIEW_CSS, [theme.accent, theme.text, theme.surface]);
 
@@ -302,8 +357,24 @@ function RegistrationFormPreview({
                 return (
                   <div key={field.id}>
                     <label className="rp-label">{field.label}{field.required && <span className="rq">*</span>}</label>
-                    {field.type === "select" ? (
-                      <div className="rp-input ph">{(field.options ?? []).find((o) => o.trim()) ?? "선택해주세요"}</div>
+                    {field.type === "multiple" ? (
+                      /* 복수 선택은 미리보기에서도 체크 목록으로 — 드롭다운과 같은 모양이면
+                         어드민이 어느 유형을 골랐는지 미리보기로 확인할 수 없다. */
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        {(field.options ?? []).filter((o) => o.trim()).slice(0, 3).map((o, i) => (
+                          <span key={i} className="rp-consent"><span className="rp-check">✓</span>{o}</span>
+                        ))}
+                        {field.allowOther && <span className="rp-consent"><span className="rp-check">✓</span>기타(직접입력)</span>}
+                        {(() => {
+                          const m = maxSelectFor({ type: field.type, maxSelect: field.maxSelect, options: (field.options ?? []).filter((o) => o.trim()) });
+                          return m !== null ? <span className="rp-label" style={{ opacity: 0.7 }}>최대 {m}개</span> : null;
+                        })()}
+                      </div>
+                    ) : field.type === "select" ? (
+                      <div className="rp-input ph">
+                        {(field.options ?? []).find((o) => o.trim()) ?? "선택해주세요"}
+                        {field.allowOther ? " · 기타 입력 가능" : ""}
+                      </div>
                     ) : (
                       <div className="rp-input ph">{field.placeholder || (field.type === "email" ? "you@example.com" : field.type === "tel" ? "01012345678" : "입력해주세요")}</div>
                     )}

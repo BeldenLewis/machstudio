@@ -286,6 +286,15 @@ ${ATTRIBUTION_CORE_JS}
       ".mw-input:focus, .mw-select:focus { border-color: " + t.accent + "; }",
       ".mw-check { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: #555; margin-bottom: 10px; cursor: pointer; }",
       ".mw-check input { margin-top: 2px; accent-color: " + t.accent + "; }",
+      ".mw-check input:disabled { cursor: not-allowed; }",
+      /* 상한에 닿아 잠긴 칸은 흐리게 — 잠금이 보이지 않으면 클릭이 씹히는 것처럼 느껴진다 */
+      ".mw-check:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }",
+      ".mw-multi { display: flex; flex-direction: column; gap: 2px; }",
+      /* 터치 타깃 44px — 20px 행이 연달아 붙으면 모바일에서 옆 항목을 누른다(WCAG AA) */
+      ".mw-multi .mw-check { margin-bottom: 0; min-height: 44px; align-items: center; gap: 10px; }",
+      ".mw-multi .mw-check input { margin-top: 0; width: 16px; height: 16px; flex: none; }",
+      ".mw-multi .mw-input { margin-top: 4px; }",
+      ".mw-hint { font-size: 11px; color: #888; margin-top: 4px; }",
       ".mw-submit { width: 100%; margin-top: 8px; }",
       ".mw-msg { display: none; margin-top: 14px; padding: 12px 14px; border-radius: 9px; font-size: 13px; line-height: 1.55; }",
       ".mw-msg-error { display: block; background: rgba(220,38,38,0.08); border: 1px solid rgba(220,38,38,0.25); color: #b91c1c; }",
@@ -453,7 +462,70 @@ ${ATTRIBUTION_CORE_JS}
           if (field.required) label.appendChild(el("span", "mw-req", "*"));
           wrap.appendChild(label);
           var input;
-          if (field.type === "select") {
+          if (field.type === "multiple") {
+            /* 복수 선택 — 체크박스 묶음. 값은 고른 것을 ", " 로 합친 문자열이다
+               (배열이면 register 라우트가 거부한다 — webinar-config.ts 주석 참고).
+               상한에 닿으면 안 고른 칸만 잠근다: 고른 칸은 항상 해제할 수 있어야 빠져나온다. */
+            input = document.createElement("div");
+            input.className = "mw-multi";
+            var mOpts = field.options || [];
+            var mMax = (typeof field.maxSelect === "number" && field.maxSelect >= 1 && field.maxSelect < mOpts.length) ? field.maxSelect : 0;
+            var boxes = [];
+            var otherBox = null, otherText = null;
+            var syncLocks = function() {
+              if (!mMax) return;
+              var n = 0;
+              for (var b = 0; b < boxes.length; b++) if (boxes[b].checked) n++;
+              if (otherBox && otherBox.checked) n++;
+              for (var c = 0; c < boxes.length; c++) boxes[c].disabled = (n >= mMax && !boxes[c].checked);
+              if (otherBox) otherBox.disabled = (n >= mMax && !otherBox.checked);
+            };
+            for (var mi = 0; mi < mOpts.length; mi++) {
+              var mLab = el("label", "mw-check");
+              var mCb = document.createElement("input");
+              mCb.type = "checkbox";
+              mCb.value = mOpts[mi];
+              mCb.addEventListener("change", syncLocks);
+              boxes.push(mCb);
+              mLab.appendChild(mCb);
+              mLab.appendChild(el("span", "", mOpts[mi]));
+              input.appendChild(mLab);
+            }
+            if (field.allowOther) {
+              var oLab = el("label", "mw-check");
+              otherBox = document.createElement("input");
+              otherBox.type = "checkbox";
+              oLab.appendChild(otherBox);
+              oLab.appendChild(el("span", "", "기타(직접입력)"));
+              input.appendChild(oLab);
+              otherText = document.createElement("input");
+              otherText.className = "mw-input";
+              otherText.type = "text";
+              otherText.placeholder = "직접 입력해주세요";
+              otherText.style.display = "none";
+              otherText.setAttribute("aria-label", field.label + " 직접 입력");
+              /* 값은 ", " 로 합쳐 저장된다 — 자유입력의 쉼표는 항목 경계로 오해되어
+                 최대 개수 검증이 정상 답변을 거절한다. 입력 시점에 막는다. */
+              otherText.addEventListener("input", function() {
+                var clean = otherText.value.replace(/,/g, " ");
+                if (otherText.value !== clean) otherText.value = clean;
+              });
+              input.appendChild(otherText);
+              otherBox.addEventListener("change", function() {
+                otherText.style.display = otherBox.checked ? "" : "none";
+                if (!otherBox.checked) otherText.value = "";
+                syncLocks();
+              });
+            }
+            if (mMax) input.appendChild(el("div", "mw-hint", "최대 " + mMax + "개까지 선택할 수 있어요"));
+            /* 값 읽기를 엔트리에 붙인다 — 아래 수집 루프가 el.value 하나만 읽기 때문이다. */
+            input.__mwRead = function() {
+              var out = [];
+              for (var r = 0; r < boxes.length; r++) if (boxes[r].checked) out.push(boxes[r].value);
+              if (otherBox && otherBox.checked && String(otherText.value || "").trim()) out.push(String(otherText.value).trim());
+              return out.join(", ");
+            };
+          } else if (field.type === "select") {
             input = document.createElement("select");
             input.className = "mw-select";
             var empty = document.createElement("option");
@@ -466,6 +538,29 @@ ${ATTRIBUTION_CORE_JS}
               opt.value = options[j];
               opt.textContent = options[j];
               input.appendChild(opt);
+            }
+            if (field.allowOther) {
+              /* 기타를 고르면 자유 입력칸이 뜬다. 저장 값은 마커가 아니라 사용자가 쓴 문장이다 —
+                 마커를 저장하면 등록자 목록·CSV 에 "기타" 만 남아 아무 정보가 없다. */
+              var sOther = document.createElement("option");
+              sOther.value = "__mw_other__";
+              sOther.textContent = "기타(직접입력)";
+              input.appendChild(sOther);
+              var sText = document.createElement("input");
+              sText.className = "mw-input";
+              sText.type = "text";
+              sText.placeholder = "직접 입력해주세요";
+              sText.style.display = "none";
+              sText.setAttribute("aria-label", field.label + " 직접 입력");
+              var sel = input;
+              sel.addEventListener("change", function() {
+                sText.style.display = sel.value === "__mw_other__" ? "" : "none";
+                if (sel.value !== "__mw_other__") sText.value = "";
+              });
+              sel.__mwOtherText = sText;
+              sel.__mwRead = function() {
+                return sel.value === "__mw_other__" ? String(sText.value || "").trim() : String(sel.value || "");
+              };
             }
           } else {
             input = document.createElement("input");
@@ -483,6 +578,7 @@ ${ATTRIBUTION_CORE_JS}
           }
           input.setAttribute("data-mw-key", field.key);
           wrap.appendChild(input);
+          if (input.__mwOtherText) wrap.appendChild(input.__mwOtherText);
           inputs[field.key] = { el: input, field: field };
 
           /* 연락처·이메일 실시간 중복 확인 — 입력이 유효해지면 디바운스 후 조회 */
@@ -633,7 +729,10 @@ ${ATTRIBUTION_CORE_JS}
       for (var key in inputs) {
         if (!Object.prototype.hasOwnProperty.call(inputs, key)) continue;
         var entry = inputs[key];
-        var value = entry.field.type === "checkbox" ? (entry.el.checked ? "동의" : "") : String(entry.el.value || "").trim();
+        /* 복수 선택·기타 입력은 el.value 하나로 읽을 수 없어 렌더가 붙여 둔 읽기 함수를 쓴다. */
+        var value = entry.el.__mwRead
+          ? entry.el.__mwRead()
+          : entry.field.type === "checkbox" ? (entry.el.checked ? "동의" : "") : String(entry.el.value || "").trim();
         if (entry.field.required && !value) {
           showMsg("error", entry.field.label + " 항목을 입력해주세요.");
           return;
