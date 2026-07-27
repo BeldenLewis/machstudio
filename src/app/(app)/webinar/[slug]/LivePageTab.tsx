@@ -163,7 +163,7 @@ const inputCls = FIELD_CLS;
 // 만들기 › 대기/라이브/종료 화면 편집.
 // ⚠️ 세 메뉴가 하나의 인스턴스를 공유한다(PageSetupTab 그룹 키) — livePage 를 통째로 재구성해 저장하므로
 // 상태를 쪼개면 다른 화면 데이터가 유실된다. 렌더만 section 으로 게이트.
-export default function LivePageTab({ webinar, slug, state, onStateChange, onSilentUpdate, onGoToSurvey, onGoToConsole }: {
+export default function LivePageTab({ webinar, slug, state, onStateChange, onSilentUpdate, onGoToSurvey, onGoToConsole, confirmLiveOff }: {
   webinar: Webinar;
   slug: string;
   /** 편집 중인 시청 화면 상태. URL 이 단일 소스라 부모가 들고 있다(새로고침·딥링크 복원). */
@@ -174,6 +174,11 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
   onGoToSurvey?: () => void;
   /** "운영 → 라이브 콘솔에서" 를 누를 수 있게(다른 탭이라 껍데기가 이동시킨다). */
   onGoToConsole?: () => void;
+  /**
+   * 라이브 중 "끄는" 변경에 확인을 붙인다 — 켜는 쪽은 시청자에게 더 주는 변경이라 통과.
+   * 껍데기가 시청자 수를 알고 있어서 문구에 실제 인원이 들어간다.
+   */
+  confirmLiveOff?: (what: string, effect: string) => Promise<boolean>;
 }) {
   const livePage = (webinar.config?.livePage ?? {}) as Record<string, unknown>;
   const notify = (livePage.notify ?? {}) as Record<string, unknown>;
@@ -620,7 +625,13 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
             <div className="space-y-4">
               <Toggle
                 checked={form.chatEnabled}
-                onChange={(v) => setForm((f) => ({ ...f, chatEnabled: v }))}
+                onChange={(v) => {
+                  // 끌 때만 확인 — 라이브 중이면 시청자 화면에서 채팅 탭이 즉시 사라진다.
+                  if (v || !confirmLiveOff) { setForm((f) => ({ ...f, chatEnabled: v })); return; }
+                  void confirmLiveOff("채팅 탭", "시청 화면 참여 박스에서 채팅 탭이 사라져요.").then((ok) => {
+                    if (ok) setForm((f) => ({ ...f, chatEnabled: false }));
+                  });
+                }}
                 label="채팅 탭 사용"
                 desc="끄면 참여 박스에서 채팅 탭이 사라져요."
               />

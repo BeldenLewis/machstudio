@@ -145,12 +145,18 @@ export default function LandingPageTab({
   onSilentUpdate,
   onGoToSource,
   onGoToDeploy,
+  confirmLiveOff,
 }: {
   webinar: Webinar;
   onSilentUpdate: () => void;
   /** 안내 문구가 가리키는 곳으로 실제로 데려간다 — 문장만 남기면 사용자가 경로를 손으로 찾는다. */
   onGoToSource?: () => void;
   onGoToDeploy?: () => void;
+  /**
+   * 라이브 중 "끄는" 변경에 확인을 붙인다 — 켜는 쪽은 시청자에게 더 주는 변경이라 통과.
+   * 껍데기가 시청자 수를 알고 있어서 문구에 실제 인원이 들어간다.
+   */
+  confirmLiveOff?: (what: string, effect: string) => Promise<boolean>;
 }) {
   const uid = useId();
   const [state, setState] = useState<EditorState>(() => toEditorState(webinar.config));
@@ -223,7 +229,17 @@ export default function LandingPageTab({
           {/* 상단: 공개 스위치 + 저장 상태 + 미리보기 */}
           <div className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-card p-4 sm:p-5 ${FINISH.s1}`}>
             <div className="flex items-center gap-3">
-              <Switch checked={state.enabled} onChange={(v) => patch({ enabled: v })} label="랜딩 페이지 공개" />
+              <Switch
+                checked={state.enabled}
+                onChange={(v) => {
+                  // 끌 때만 확인 — 라이브 중이면 임베드된 등록 폼이 그 순간 비공개 안내로 바뀐다.
+                  if (v || !confirmLiveOff) { patch({ enabled: v }); return; }
+                  void confirmLiveOff("랜딩 페이지 공개", "링크와 임베드가 비공개 안내로 바뀌어요.").then((ok) => {
+                    if (ok) patch({ enabled: false });
+                  });
+                }}
+                label="랜딩 페이지 공개"
+              />
               <div>
                 <p className="text-sm font-semibold">{state.enabled ? "공개 중" : "비공개"}</p>
                 <p className="text-xs text-muted-foreground">

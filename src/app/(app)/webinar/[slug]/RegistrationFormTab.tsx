@@ -406,7 +406,15 @@ function ConsentBodyField({
   );
 }
 
-export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webinar: Webinar; onSilentUpdate: () => void }) {
+export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLiveOff }: {
+  webinar: Webinar;
+  onSilentUpdate: () => void;
+  /**
+   * 라이브 중 "끄는" 변경에 확인을 붙인다 — 켜는 쪽은 시청자에게 더 주는 변경이라 통과.
+   * 껍데기가 시청자 수를 알고 있어서 문구에 실제 인원이 들어간다.
+   */
+  confirmLiveOff?: (what: string, effect: string) => Promise<boolean>;
+}) {
   const uid = useId();
   const initial = normalizeRegistrationForm(webinar.config ?? {}, { includeDisabled: true });
   const [fields, setFields] = useState<RegistrationField[]>(initial.fields);
@@ -530,7 +538,13 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate }: { webin
                     key={opt.v}
                     type="button"
                     aria-pressed={liveReg === opt.v}
-                    onClick={() => setLiveReg(opt.v)}
+                    onClick={() => {
+                      // 지금 받고 있는 접수를 닫는 방향일 때만 확인 — 여는 방향은 통과.
+                      if (opt.v !== "closed" || liveReg === "closed" || !confirmLiveOff) { setLiveReg(opt.v); return; }
+                      void confirmLiveOff("사전등록 접수", "입장 확인 화면에서 사전등록 버튼이 사라져요.").then((ok) => {
+                        if (ok) setLiveReg("closed");
+                      });
+                    }}
                     className={`rounded-lg px-3 py-2 text-xs font-medium shadow-sm transition-colors ${
                       liveReg === opt.v ? "bg-violet-500 text-white" : "bg-background text-muted-foreground hover:text-foreground"
                     }`}

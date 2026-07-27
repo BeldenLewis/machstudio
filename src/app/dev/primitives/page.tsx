@@ -18,7 +18,35 @@
 
 import { useState } from "react";
 import { notFound } from "next/navigation";
-import { Surface, Field, FieldArea, FieldSelect, Btn, Chip, Segmented, R, FINISH, SELECTED } from "@/components/ui/primitives";
+import { Surface, Field, FieldArea, FieldSelect, Btn, Chip, Segmented, R, FINISH, SELECTED, btnCls } from "@/components/ui/primitives";
+import { ConfirmProvider, useConfirm } from "@/components/ui/confirm-dialog";
+import { liveOffConfirm } from "@/components/webinar/use-live-guard";
+
+/**
+ * 라이브 중 끄기 확인 — 실제 대화상자를 띄워 본다.
+ *
+ * 실물 만들기 화면에서는 **라이브 중인 웨비나가 있어야** 이 경로가 안 열린다. 공유 DB 의
+ * statusOverride 를 라이브로 바꿔서 확인하는 건 공개 페이지를 실제로 켜는 짓이라 하지 않는다.
+ * 문구·인원 분기는 vitest(live-guard.test.ts)가 보고, 여기서는 **대화상자 렌더·톤·포커스**를 본다.
+ */
+function LiveOffCase({ tag }: { tag: string }) {
+  const confirm = useConfirm();
+  const [last, setLast] = useState<string>("아직 안 눌렀어요");
+  const open = async (viewers: number | null) => {
+    const o = liveOffConfirm(true, viewers, "채팅 탭", "시청 화면 참여 박스에서 채팅 탭이 사라져요.");
+    setLast(o ? ((await confirm(o)) ? "끄기 선택" : "취소") : "확인 없음(라이브 아님)");
+  };
+  return (
+    <div className="space-y-2" data-testid={`liveoff-${tag}`}>
+      <div className="flex flex-wrap gap-1.5">
+        <button type="button" className={btnCls("quiet", "text-xs")} onClick={() => void open(1234)}>1,234명</button>
+        <button type="button" className={btnCls("quiet", "text-xs")} onClick={() => void open(0)}>0명</button>
+        <button type="button" className={btnCls("quiet", "text-xs")} onClick={() => void open(null)}>인원 모름</button>
+      </div>
+      <p className="text-[11px] text-muted-foreground" data-testid={`liveoff-result-${tag}`}>{last}</p>
+    </div>
+  );
+}
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -145,6 +173,10 @@ function Catalog({ tag }: { tag: string }) {
           <div className={"rounded-full bg-secondary px-3 py-2 text-[11px] " + FINISH.s2}>full · 별개 축</div>
         </div>
       </Row>
+
+      <Row label="라이브 중 끄기 확인 — 대화상자 실물">
+        <LiveOffCase tag={tag} />
+      </Row>
     </div>
   );
 }
@@ -153,6 +185,7 @@ export default function PrimitivesHarnessPage() {
   if (process.env.NODE_ENV === "production") notFound();
 
   return (
+    <ConfirmProvider>
     <div className="min-h-screen bg-background">
       <header className="border-b border-border px-5 py-4">
         <h1 className="text-base font-semibold">프리미티브 하니스</h1>
@@ -174,5 +207,6 @@ export default function PrimitivesHarnessPage() {
         </div>
       </div>
     </div>
+    </ConfirmProvider>
   );
 }

@@ -13,6 +13,8 @@ import { type OperateSection } from "./OperateTab";
 import LandingPageTab from "./LandingPageTab";
 import { FINISH, R, SELECTED_SURFACE, SELECTED_TEXT } from "@/components/ui/primitives";
 import SetupPreview from "./SetupPreview";
+import { useLiveViewers } from "@/components/webinar/use-live-viewers";
+import { useLiveOffGuard } from "@/components/webinar/use-live-guard";
 
 interface WebinarSession {
   id: string;
@@ -190,6 +192,12 @@ export default function PageSetupTab({
   const activeMeta = sections.find((item) => item.id === section) ?? sections[0];
   const ActiveIcon = activeMeta.icon;
 
+  // 라이브 중일 때만 요청한다 — 준비 중에는 폴러가 아예 돌지 않는다.
+  // isLive 는 optional prop 이라 undefined 를 false 로 접는다(모를 때는 "라이브 아님" 취급).
+  const liveViewers = useLiveViewers(webinar.id, isLive === true);
+  // 라이브 중 "끄는" 스위치에만 확인을 붙인다(켜는 건 시청자에게 더 주는 변경이라 사고가 아니다).
+  const confirmLiveOff = useLiveOffGuard(isLive === true, liveViewers);
+
   // 폼 탭은 자동저장이라 미저장 가드가 필요 없다 — 섹션 전환은 즉시(대기 중 저장은 각 탭이 언마운트 시 flush).
   const changeSection = (id: PageSetupSection) => {
     if (id === section) return;
@@ -202,13 +210,22 @@ export default function PageSetupTab({
     {/**
      * 방송 띠 — 라이브 중에는 이 화면의 자동저장이 **시청자에게 즉시 반영**된다.
      * 평소와 똑같이 보이면 운영자는 그 사실을 모른 채 문구를 고친다. 순수 표시(저장 없음).
+     *
+     * 사람 수를 함께 적는 이유: "바로 반영돼요" 는 규칙이고 "12명이 보고 있어요" 는 사실이다.
+     * 규칙은 읽고 넘기지만 사실은 손을 멈추게 한다. 숫자를 못 가져와도 문구는 그대로 유효하다.
      */}
     {isLive && (
-      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 bg-destructive px-4 py-2 text-xs text-white dark:text-[oklch(0.205_0_0)] sm:px-6 lg:px-8">
+      <div
+        role="status"
+        className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 bg-destructive px-4 py-2 text-xs text-white dark:text-[oklch(0.205_0_0)] sm:px-6 lg:px-8"
+      >
         <span className="inline-flex items-center gap-1.5 font-semibold tracking-wide">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" aria-hidden />
           ON AIR
         </span>
+        {liveViewers !== null && (
+          <span className="font-semibold tabular-nums">시청자 {liveViewers.toLocaleString()}명</span>
+        )}
         <span className="opacity-90">지금 고치는 값은 시청자 화면에 바로 반영돼요.</span>
       </div>
     )}
@@ -387,6 +404,7 @@ export default function PageSetupTab({
                     onSilentUpdate={onSilentUpdate}
                     onGoToSource={() => onSectionChange("source")}
                     onGoToDeploy={onJumpToTab ? () => onJumpToTab("deploy") : undefined}
+                    confirmLiveOff={confirmLiveOff}
                   />
                 </div>
               )}
@@ -400,6 +418,7 @@ export default function PageSetupTab({
                       workspace: webinar.workspace,
                     }}
                     onSilentUpdate={onSilentUpdate}
+                    confirmLiveOff={confirmLiveOff}
                   />
                 </div>
               )}
@@ -415,6 +434,7 @@ export default function PageSetupTab({
                     // 다른 탭이면 껍데기의 navigate. 문구가 말하는 곳으로 실제로 데려간다.
                     onGoToSurvey={() => onSectionChange("survey")}
                     onGoToConsole={onJumpToTab ? () => onJumpToTab("operate", "console") : undefined}
+                    confirmLiveOff={confirmLiveOff}
                   />
                 </div>
               )}

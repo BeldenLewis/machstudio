@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
-import { resolveWebinarStatus } from "@/lib/webinar-status";
+import { ACTIVE_VIEWER_WINDOW_MS, resolveWebinarStatus } from "@/lib/webinar-status";
 
 function pct(part: number, total: number) {
   if (!total) return 0;
@@ -38,7 +38,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!membership) return NextResponse.json({ error: "접근 권한 없음" }, { status: 403 });
 
   const now = new Date();
-  const activeSince = new Date(now.getTime() - 90 * 1000);
+  const activeSince = new Date(now.getTime() - ACTIVE_VIEWER_WINDOW_MS);
   const presenceSince = new Date(now.getTime() - 5 * 60 * 1000);
   // 체류 상한 — 방송 경과(예정 종료로 상한). 며칠째 방치된 세션의 체류 폭주 방지(analytics 와 동일 규칙).
   const capMinutes = Math.max(0, Math.floor((Math.min(now.getTime(), webinar.liveEndAt.getTime()) - webinar.liveStartAt.getTime()) / 60000));
