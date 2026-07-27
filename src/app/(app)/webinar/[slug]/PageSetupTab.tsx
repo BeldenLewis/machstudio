@@ -73,6 +73,8 @@ export default function PageSetupTab({
   watchState,
   onWatchStateChange,
   isLive,
+  canRegister,
+  isEnded,
 }: {
   webinar: Webinar;
   onUpdate: () => void;
@@ -84,12 +86,17 @@ export default function PageSetupTab({
   onWatchStateChange: (next: WatchState) => void;
   /** 방송 중인가 — 상단 띠 표시용(상태 판정은 page.tsx 의 resolveWebinarStatus 가 단일 소스). */
   isLive?: boolean;
+  /** 지금 등록을 받는가 — 레일 상태 점의 근거. 같은 판정을 여기서 다시 하지 않는다. */
+  canRegister?: boolean;
+  isEnded?: boolean;
 }) {
   /**
    * 종료 화면에 실제로 연결된 자체 설문이 있는가 — 준비 상태의 '설문 영역' 판정 근거.
    * 서버(info 라우트)와 같은 조건을 쓴다: showOnEnded + isOpen + 마감 전.
    */
   const [hasLinkedEndedSurvey, setHasLinkedEndedSurvey] = useState(false);
+  /** 열려 있는 설문이 하나라도 있는가 — 레일에서 '미사용' 과 '공개' 를 가른다. */
+  const [hasOpenSurvey, setHasOpenSurvey] = useState(false);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -98,9 +105,10 @@ export default function PageSetupTab({
         if (cancelled || !res.ok) return;
         const data = await res.json();
         const list = (data.surveys ?? []) as { showOnEnded?: boolean; isOpen?: boolean; closesAt?: string | null }[];
-        setHasLinkedEndedSurvey(list.some((v) =>
-          v.showOnEnded === true && v.isOpen === true &&
-          (!v.closesAt || new Date(v.closesAt).getTime() > Date.now())));
+        const isOpenNow = (v: { isOpen?: boolean; closesAt?: string | null }) =>
+          v.isOpen === true && (!v.closesAt || new Date(v.closesAt).getTime() > Date.now());
+        setHasLinkedEndedSurvey(list.some((v) => v.showOnEnded === true && isOpenNow(v)));
+        setHasOpenSurvey(list.some(isOpenNow));
       } catch { /* 준비 상태는 부가 정보라 실패해도 화면을 막지 않는다 */ }
     })();
     return () => { cancelled = true; };
@@ -141,6 +149,35 @@ export default function PageSetupTab({
   useEffect(() => {
     if (typeof window !== "undefined") window.localStorage.setItem("mach:setupPreview", previewOpen ? "1" : "0");
   }, [previewOpen]);
+
+  /**
+   * 레일 상태 점 — IA 문서의 `.sd`(pub / priv / off).
+   *
+   * 문서는 원본 정보에도 점을 주지만 여기서는 주지 않는다 — 원본은 **공개 면이 아니다**
+   * (문서 스스로 "네 산출물이 읽어가는 사실 한 벌" 이라고 쓴다). 산출물만 점을 갖는다.
+   *
+   * 점이 답하는 질문: **지금 시청자가 이 면에 닿을 수 있는가.**
+   *   공개   — 누구나 닿는다(랜딩, 접수 중인 등록 폼, 열린 설문)
+   *   등록자 — 등록한 사람만(시청 화면)
+   *   미사용 — 아직 없거나 닫혔다(설문 0개, 접수 마감)
+   * 판정 근거는 전부 실제 데이터다. 모르는 값은 점을 안 그린다(추측한 점이 더 나쁘다).
+   * canRegister 는 page.tsx 의 resolveWebinarStatus 가 준 값 — 여기서 다시 계산하지 않는다.
+   */
+  const surfaceState = (id: PageSetupSection): "public" | "registrant" | "off" | null => {
+    switch (id) {
+      case "source": return null;                     // 공개 면이 아니다
+      case "landing": return "public";                // 라우트가 항상 서브된다
+      case "registration": return canRegister === undefined ? null : canRegister ? "public" : "off";
+      case "watch": return "registrant";              // 등록자 전용(입장 확인 뒤)
+      case "survey": return hasOpenSurvey ? "public" : "off";
+    }
+  };
+  const DOT: Record<"public" | "registrant" | "off", { cls: string; label: string }> = {
+    public: { cls: "bg-emerald-500", label: "공개 중" },
+    registrant: { cls: "bg-violet-500", label: "등록자만" },
+    // 미사용은 채우지 않는다 — 색으로만 구분하면 색각에서 '있음/없음' 이 안 갈린다
+    off: { cls: "bg-transparent shadow-[inset_0_0_0_1.5px_var(--border)]", label: "미사용" },
+  };
 
   const activeMeta = sections.find((item) => item.id === section) ?? sections[0];
   const ActiveIcon = activeMeta.icon;
@@ -248,6 +285,20 @@ export default function PageSetupTab({
                 )}
                 <Icon className="relative z-10 h-4 w-4 shrink-0" />
                 <span className="relative z-10">{item.label}</span>
+                {(() => {
+                  const st = surfaceState(item.id);
+                  if (!st) return null;
+                  const d = DOT[st];
+                  // 점만으로 상태를 말하지 않는다 — title 로 문자열도 준다(색각·스크린리더)
+                  return (
+                    <span
+                      className={`relative z-10 h-1.5 w-1.5 shrink-0 rounded-full ${d.cls}`}
+                      title={`${item.label} — ${d.label}`}
+                      aria-label={`${item.label} ${d.label}`}
+                      role="img"
+                    />
+                  );
+                })()}
                 {/* 미완 개수 — 색만으로 알리지 않고 숫자를 함께 둔다(색각·흑백 출력) */}
                 {issuesBySection[item.id] > 0 && (
                   <span

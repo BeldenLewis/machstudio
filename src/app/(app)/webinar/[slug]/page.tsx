@@ -287,7 +287,9 @@ function WebinarDetail({ id }: { id: string }) {
   }
 
   // 상태 머신 기준 — statusOverride(수동 전환) 반영. 헤더 배지/아이콘 색이 운영 콘솔과 일치.
-  const status = resolveWebinarStatus(webinar).status;
+  // 상태는 여기서 한 번만 푼다 — 자식이 다시 계산하면 statusOverride 를 못 보고 헤더와 어긋난다.
+  const webinarStatus = resolveWebinarStatus(webinar);
+  const status = webinarStatus.status;
   const isLive = status === "live";
   const isEnded = status === "ended";
   const statusMeta = WEBINAR_STATUS_META[status];
@@ -446,7 +448,10 @@ function WebinarDetail({ id }: { id: string }) {
                 onSectionChange={(section) => navigate("create", section, { replace: true })}
                 watchState={watchState}
                 onWatchStateChange={setWatchState}
-                isLive={resolveWebinarStatus(webinar).status === "live"}
+                isLive={isLive}
+                // 레일 상태 점의 근거 — 같은 판정을 두 번 하지 않는다
+                canRegister={webinarStatus.canRegister}
+                isEnded={isEnded}
               />
             )}
             {activeTab === "deploy" && <DeployTab
