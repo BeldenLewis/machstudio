@@ -440,7 +440,21 @@ export default function PageSetupTab({
             showPreview ? "lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,44%)]" : ""
           }`}
         >
-        <div className="min-h-0 lg:overflow-hidden">
+        {/**
+         * `lg:h-full` 이 **없으면 미리보기를 끈 상태에서 스크롤이 죽는다.**
+         *
+         * 부모(위 div)는 미리보기가 켜져 있을 때만 lg:grid 다. 그때는 이 요소가 그리드 아이템이라
+         * 늘어나서 높이가 정해지고, 안쪽 `h-full` → `lg:h-full overflow-auto` 사슬이 성립한다.
+         * 미리보기를 끄면(그리고 노출 점검 섹션은 항상 끈다) 부모가 그냥 블록이 되어 이 요소의
+         * 높이가 auto 로 풀리고, 그러면 스크롤러의 `h-full` 도 auto → **뷰포트가 없어 스크롤이
+         * 생기지 않는다.** 그런데 부모에 lg:overflow-hidden 이 있어서 넘친 내용은 잘린다 —
+         * 즉 아래쪽을 볼 방법이 사라진다. 실측(재현 하니스): inner 높이 1944px(=내용 높이),
+         * scrollHeight === clientHeight, scrollTop 이 0 에서 움직이지 않음.
+         *
+         * flex-1 인 부모는 높이가 정해져 있으니 여기서 100% 를 잡으면 두 경우 모두 성립한다
+         * (그리드일 때도 height:100% 는 그리드 영역 기준이라 안전).
+         */}
+        <div className="min-h-0 lg:h-full lg:overflow-hidden">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={section}
