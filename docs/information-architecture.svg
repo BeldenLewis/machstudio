@@ -1,0 +1,638 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2280" height="2814" viewBox="0 0 2280 2814" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif">
+<defs><filter id="sh" x="-4%" y="-4%" width="108%" height="112%"><feDropShadow dx="0" dy="1.5" stdDeviation="3" flood-color="#2A1F45" flood-opacity="0.07"/></filter><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 1 L9 5 L0 9 z" fill="#9A93A8"/></marker></defs>
+<rect width="2280" height="2814" fill="#FBFAFD"/>
+<text x="48" y="62" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="38" font-weight="800" fill="#1B1725">mach studio <tspan font-weight="400" fill="#6E6780">— 전체 정보구조</tspan></text>
+<text x="48" y="92" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="13" fill="#9A93A8">커밋 c6d1dcd · feat/landing-links-timetable · 2026-07-27 · 코드에서 읽은 값만 적었다</text>
+<text x="2163" y="60" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="24" font-weight="700" fill="#6D4AFF" text-anchor="middle">약 190</text>
+<text x="2163" y="80" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" fill="#9A93A8" text-anchor="middle" letter-spacing="0.6">면(surface)</text>
+<text x="2059" y="60" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="24" font-weight="700" fill="#6D4AFF" text-anchor="middle">46</text>
+<text x="2059" y="80" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" fill="#9A93A8" text-anchor="middle" letter-spacing="0.6">lib 정본 모듈</text>
+<text x="1957" y="60" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="24" font-weight="700" fill="#6D4AFF" text-anchor="middle">42</text>
+<text x="1957" y="80" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" fill="#9A93A8" text-anchor="middle" letter-spacing="0.6">Prisma 모델</text>
+<text x="1862" y="60" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="24" font-weight="700" fill="#6D4AFF" text-anchor="middle">6</text>
+<text x="1862" y="80" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" fill="#9A93A8" text-anchor="middle" letter-spacing="0.6">공개 핸들러</text>
+<text x="1770" y="60" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="24" font-weight="700" fill="#6D4AFF" text-anchor="middle">136</text>
+<text x="1770" y="80" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" fill="#9A93A8" text-anchor="middle" letter-spacing="0.6">API 라우트</text>
+<text x="1691" y="60" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="24" font-weight="700" fill="#6D4AFF" text-anchor="middle">28</text>
+<text x="1691" y="80" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" fill="#9A93A8" text-anchor="middle" letter-spacing="0.6">페이지</text>
+<rect x="48" y="112" width="2184" height="1.5" fill="#1B1725" opacity="0.14"/>
+<text x="106.0" y="150.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="19" font-weight="700" fill="#1B1725">스코프 사슬</text>
+<text x="218.8" y="150.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9A93A8">거의 모든 화면은 워크스페이스 하나 + 프로젝트 하나가 걸린 상태에서만 의미가 있다</text>
+<rect x="106.0" y="172.0" width="2126.0" height="216.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<rect x="132.0" y="204.0" width="168.0" height="46.0" rx="8" fill="#FFFFFF" stroke="#6D4AFF" stroke-width="1.4"/>
+<rect x="132" y="204" width="168" height="46" rx="8" fill="#6D4AFF" opacity="0.07"/>
+<text x="216.0" y="224.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="14" font-weight="700" fill="#1B1725" text-anchor="middle">User</text>
+<text x="216.0" y="240.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="10.8" font-weight="400" fill="#6E6780" text-anchor="middle">로그인 계정 · isSuperAdmin</text>
+<path d="M306.0 227.0 L354.0 227.0" stroke="#9A93A8" stroke-width="1.4" marker-end="url(#ar)" fill="none"/>
+<rect x="360.0" y="204.0" width="192.0" height="46.0" rx="8" fill="#FFFFFF" stroke="#6D4AFF" stroke-width="1.4"/>
+<rect x="360" y="204" width="192" height="46" rx="8" fill="#6D4AFF" opacity="0.07"/>
+<text x="456.0" y="224.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="14" font-weight="700" fill="#1B1725" text-anchor="middle">Workspace</text>
+<text x="456.0" y="240.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="10.8" font-weight="400" fill="#6E6780" text-anchor="middle">최상위 테넌트 · slug</text>
+<text x="456.0" y="194.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11" font-weight="600" fill="#6D4AFF" text-anchor="middle">WorkspaceMember : OWNER · ADMIN · MEMBER</text>
+<path d="M558.0 227.0 L606.0 227.0" stroke="#9A93A8" stroke-width="1.4" marker-end="url(#ar)" fill="none"/>
+<rect x="612.0" y="204.0" width="168.0" height="46.0" rx="8" fill="#FFFFFF" stroke="#6D4AFF" stroke-width="1.4"/>
+<rect x="612" y="204" width="168" height="46" rx="8" fill="#6D4AFF" opacity="0.07"/>
+<text x="696.0" y="224.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="14" font-weight="700" fill="#1B1725" text-anchor="middle">Project</text>
+<text x="696.0" y="240.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="10.8" font-weight="400" fill="#6E6780" text-anchor="middle">소프트 삭제 · 공유 토큰 2쌍</text>
+<path d="M456.0 250 v34" stroke="#9A93A8" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<rect x="330.0" y="290.0" width="252.0" height="52.0" rx="8" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<text x="342.0" y="310.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#1B1725">워크스페이스 자산</text>
+<text x="342.0" y="328.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11" font-weight="400" fill="#6E6780">UTM 규칙 · 약관 템플릿 · API 토큰 · 활동 로그</text>
+<path d="M696.0 250 V262 H2075.6" stroke="#9A93A8" stroke-width="1.4" fill="none"/>
+<path d="M984.4 262 V282" stroke="#9A93A8" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<rect x="854.0" y="282.0" width="260.8" height="46.0" rx="8" fill="#FFFFFF" stroke="#6D4AFF" stroke-width="1.4"/>
+<rect x="854.0" y="282" width="260.8" height="46" rx="8" fill="#6D4AFF" opacity="0.07"/>
+<text x="984.4" y="302.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#1B1725" text-anchor="middle">CollectSource</text>
+<text x="984.4" y="318.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="10.8" font-weight="400" fill="#6E6780" text-anchor="middle">→ CollectRecord</text>
+<path d="M1257.2 262 V282" stroke="#9A93A8" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<rect x="1126.8" y="282.0" width="260.8" height="46.0" rx="8" fill="#FFFFFF" stroke="#6D4AFF" stroke-width="1.4"/>
+<rect x="1126.8" y="282" width="260.8" height="46" rx="8" fill="#6D4AFF" opacity="0.07"/>
+<text x="1257.2" y="302.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#1B1725" text-anchor="middle">Dashboard</text>
+<text x="1257.2" y="318.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="10.8" font-weight="400" fill="#6E6780" text-anchor="middle">→ Widget · 예약리포트</text>
+<path d="M1530.0 262 V282" stroke="#9A93A8" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<rect x="1399.6" y="282.0" width="260.8" height="46.0" rx="8" fill="#FFFFFF" stroke="#5A34F0" stroke-width="1.4"/>
+<rect x="1399.6" y="282" width="260.8" height="46" rx="8" fill="#5A34F0" opacity="0.07"/>
+<text x="1530.0" y="302.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#1B1725" text-anchor="middle">Webinar</text>
+<text x="1530.0" y="318.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="10.8" font-weight="400" fill="#6E6780" text-anchor="middle">→ 세션·등록자·인터랙션 21모델</text>
+<path d="M1802.8 262 V282" stroke="#9A93A8" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<rect x="1672.4" y="282.0" width="260.8" height="46.0" rx="8" fill="#FFFFFF" stroke="#6D4AFF" stroke-width="1.4"/>
+<rect x="1672.4" y="282" width="260.8" height="46" rx="8" fill="#6D4AFF" opacity="0.07"/>
+<text x="1802.8" y="302.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#1B1725" text-anchor="middle">UTMLink</text>
+<text x="1802.8" y="318.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="10.8" font-weight="400" fill="#6E6780" text-anchor="middle">→ ShortLink</text>
+<path d="M2075.6 262 V282" stroke="#9A93A8" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<rect x="1945.2" y="282.0" width="260.8" height="46.0" rx="8" fill="#FFFFFF" stroke="#6D4AFF" stroke-width="1.4"/>
+<rect x="1945.2" y="282" width="260.8" height="46" rx="8" fill="#6D4AFF" opacity="0.07"/>
+<text x="2075.6" y="302.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#1B1725" text-anchor="middle">AdPerfBatch</text>
+<text x="2075.6" y="318.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="10.8" font-weight="400" fill="#6E6780" text-anchor="middle">→ AdPerfRecord</text>
+<text x="854.0" y="250.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="400" fill="#9A93A8">프로젝트 하위 5개 계열 — 사이드바 5개 메뉴가 각각 이 중 하나를 다룬다</text>
+<text x="106.0" y="422.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="19" font-weight="700" fill="#1B1725">앱 면</text>
+<text x="162.9" y="422.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9A93A8">Supabase 세션 필요 · (app) 그룹 레이아웃 안</text>
+<rect x="106.0" y="444.0" width="692.7" height="282.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M106 454 a10 10 0 0 1 10 -10 h672.6666666666666 a10 10 0 0 1 10 10 v30 h-692.6666666666666 z" fill="#6D4AFF" opacity="0.075"/>
+<rect x="106" y="482" width="692.6666666666666" height="2" fill="#6D4AFF" opacity="0.55"/>
+<text x="120.0" y="470.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#6D4AFF">진입 · 인증</text>
+<text x="784.7" y="470.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#6D4AFF" text-anchor="end" letter-spacing="0.4">라우트 5</text>
+<circle cx="124.5" cy="504.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="132.0" y="509.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">/  로그인 (이메일·비밀번호 / Google)</text>
+<circle cx="124.5" cy="525.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="132.0" y="530.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">/signup  가입 — Auth 계정만 생성</text>
+<circle cx="124.5" cy="546.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="132.0" y="551.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">/reset-password  ·  /update</text>
+<circle cx="124.5" cy="567.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="132.0" y="572.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">/auth/callback  세션 교환 → 302</text>
+<text x="144.0" y="591.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">워크스페이스 유무를 확인하지 않는다</text>
+<rect x="120" y="596.0" width="664.6666666666666" height="1" fill="#E4DFEA"/>
+<text x="120.0" y="634.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1B1725">강제 온보딩 없음 — 0개는 정상 상태</text>
+<circle cx="124.5" cy="650.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="132.0" y="655.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">ensureAppUser() — 로그인 시 DB User 행 보장</text>
+<text x="144.0" y="674.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">없으면 관리자 목록에 안 보이고 초대도 실패한다</text>
+<circle cx="124.5" cy="690.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="132.0" y="695.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">WorkspaceGate — 0개면 안내 화면</text>
+<text x="144.0" y="714.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">주 메시지는 “초대를 기다린다”, 생성은 보조</text>
+<rect x="822.7" y="444.0" width="692.7" height="349.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M822.6666666666666 454 a10 10 0 0 1 10 -10 h672.6666666666666 a10 10 0 0 1 10 10 v30 h-692.6666666666666 z" fill="#6D4AFF" opacity="0.075"/>
+<rect x="822.6666666666666" y="482" width="692.6666666666666" height="2" fill="#6D4AFF" opacity="0.55"/>
+<text x="836.7" y="470.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#6D4AFF">앱 셸 · 설정</text>
+<text x="1501.3" y="470.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#6D4AFF" text-anchor="end" letter-spacing="0.4">모달 6</text>
+<text x="836.7" y="519.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1B1725">사이드바 — 위에서 아래 순서 그대로</text>
+<circle cx="841.1666666666666" cy="535.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="848.7" y="540.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">워크스페이스 스위처 · 프로젝트 선택기</text>
+<circle cx="841.1666666666666" cy="556.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="848.7" y="561.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">주 내비게이션 5개 (navItems 배열 순서)</text>
+<circle cx="841.1666666666666" cy="577.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="848.7" y="582.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">관리자 — isSuperAdmin 에게만</text>
+<circle cx="841.1666666666666" cy="598.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="848.7" y="603.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">알림 벨 (30초 폴링, 9+ 배지)</text>
+<circle cx="841.1666666666666" cy="619.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="848.7" y="624.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">테마 토글 · 프로필 메뉴</text>
+<rect x="836.6666666666666" y="629.0" width="664.6666666666666" height="1" fill="#E4DFEA"/>
+<text x="836.7" y="667.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1B1725">설정은 페이지가 아니라 모달이다</text>
+<text x="860.7" y="686.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">/settings → /dashboard, /settings/workspace → /settings → /dashboard. 면 0개</text>
+<circle cx="841.1666666666666" cy="702.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="848.7" y="707.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">워크스페이스 설정 — 일반 / UTM 규칙 / 약관</text>
+<text x="860.7" y="726.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">역할로 탭 수가 달라지는 유일한 화면</text>
+<circle cx="841.1666666666666" cy="742.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="848.7" y="747.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">프로필 · 알림 · API 토큰 · 알림 패널</text>
+<text x="860.7" y="766.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">초대 수락/거절의 유일한 UI = 알림 패널</text>
+<circle cx="841.1666666666666" cy="782.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="848.7" y="787.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">프로젝트 권한 (VIEWER/EDITOR/ADMIN)</text>
+<rect x="1539.3" y="444.0" width="692.7" height="206.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M1539.3333333333333 454 a10 10 0 0 1 10 -10 h672.6666666666666 a10 10 0 0 1 10 10 v30 h-692.6666666666666 z" fill="#B4530A" opacity="0.075"/>
+<rect x="1539.3333333333333" y="482" width="692.6666666666666" height="2" fill="#B4530A" opacity="0.55"/>
+<text x="1553.3" y="470.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#B4530A">/admin  관리자</text>
+<text x="2218.0" y="470.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#B4530A" text-anchor="end" letter-spacing="0.4">뷰 6</text>
+<text x="1553.3" y="503.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9A93A8">슈퍼어드민 전용 · 단일 페이지, ?view= 로 6뷰</text>
+<circle cx="1557.8333333333333" cy="527.5" r="2" fill="#B4530A" opacity="0.85"/>
+<text x="1565.3" y="532.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">개요 — 4개 카드에 현재 수치</text>
+<circle cx="1557.8333333333333" cy="548.5" r="2" fill="#B4530A" opacity="0.85"/>
+<text x="1565.3" y="553.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">?view=system  DB·환경변수 (읽기 전용)</text>
+<circle cx="1557.8333333333333" cy="569.5" r="2" fill="#B4530A" opacity="0.85"/>
+<text x="1565.3" y="574.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">?view=users  가입 7명 · 삭제 · 권한</text>
+<circle cx="1557.8333333333333" cy="590.5" r="2" fill="#B4530A" opacity="0.85"/>
+<text x="1565.3" y="595.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">?view=workspaces  이름·보관·영구삭제</text>
+<circle cx="1557.8333333333333" cy="611.5" r="2" fill="#B4530A" opacity="0.85"/>
+<text x="1565.3" y="616.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">?view=projects  프로젝트 7 / 소스 7</text>
+<circle cx="1557.8333333333333" cy="632.5" r="2" fill="#B4530A" opacity="0.85"/>
+<text x="1565.3" y="637.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">?view=activity  ActivityLog 12건</text>
+<text x="106.0" y="819.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="19" font-weight="700" fill="#1B1725">5개 도메인</text>
+<text x="210.5" y="819.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9A93A8">사이드바 순서 그대로</text>
+<rect x="106.0" y="841.0" width="513.5" height="257.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M106 851 a10 10 0 0 1 10 -10 h493.5 a10 10 0 0 1 10 10 v30 h-513.5 z" fill="#6D4AFF" opacity="0.075"/>
+<rect x="106" y="879" width="513.5" height="2" fill="#6D4AFF" opacity="0.55"/>
+<text x="120.0" y="867.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#6D4AFF">대시보드</text>
+<text x="605.5" y="867.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#6D4AFF" text-anchor="end" letter-spacing="0.4">/dashboard</text>
+<text x="144.0" y="904.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">화면 안 제목은 “실시간 보고서” — 고정 순서 한 장</text>
+<circle cx="124.5" cy="920.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="132.0" y="925.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">보고서 필터 (수집 폼 · UTM 3종 · 기여 기준)</text>
+<circle cx="124.5" cy="941.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="132.0" y="946.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">① 오늘의 사전등록 흐름 — 3지표·추이·히트맵</text>
+<circle cx="124.5" cy="962.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="132.0" y="967.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">② 주요 관람객 구성 — 차원 코드 고정, 최대 4</text>
+<circle cx="124.5" cy="983.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="132.0" y="988.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">③ 유입 경로 — 소스/매체/소스·매체 탭</text>
+<circle cx="124.5" cy="1004.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="132.0" y="1009.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">④ 이메일 도메인 TOP 10</text>
+<circle cx="124.5" cy="1025.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="132.0" y="1030.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">공유 모달 → /share/dashboard/[token]</text>
+<rect x="120" y="1035.0" width="485.5" height="1" fill="#E4DFEA"/>
+<text x="144.0" y="1061.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">원천 = CollectRecord</text>
+<text x="144.0" y="1080.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">뒤에 위젯 보드·예약 리포트 계층 — 편집 UI 없음</text>
+<rect x="643.5" y="841.0" width="513.5" height="242.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M643.5 851 a10 10 0 0 1 10 -10 h493.5 a10 10 0 0 1 10 10 v30 h-513.5 z" fill="#6D4AFF" opacity="0.075"/>
+<rect x="643.5" y="879" width="513.5" height="2" fill="#6D4AFF" opacity="0.55"/>
+<text x="657.5" y="867.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#6D4AFF">사전등록</text>
+<text x="1143.0" y="867.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#6D4AFF" text-anchor="end" letter-spacing="0.4">/collect</text>
+<circle cx="662.0" cy="901.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="669.5" y="906.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">/collect  소스 목록 · 활성 토글 · 백업 복구</text>
+<text x="657.5" y="937.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1B1725">/collect/[id]  탭 7개</text>
+<text x="681.5" y="956.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">수집 데이터 · 필드 · 스크립트 · 설치 · 설정 · 데이터 관리 · 활동</text>
+<text x="657.5" y="987.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1B1725">모달 7개</text>
+<text x="681.5" y="1006.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">레코드 상세 · 가져오기(2단계) · 중복 정리 · 정규화 · GDPR · 전체 삭제(3중 확인) ·</text>
+<text x="681.5" y="1025.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">설치 테스트</text>
+<rect x="657.5" y="1030.0" width="485.5" height="1" fill="#E4DFEA"/>
+<circle cx="662.0" cy="1053.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="669.5" y="1058.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">공개 면 /s/[id] — 1줄 설치 JS</text>
+<text x="681.5" y="1077.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">원천 = CollectRecord · FieldMapping · 보존정책</text>
+<rect x="1181.0" y="841.0" width="513.5" height="213.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M1181.0 851 a10 10 0 0 1 10 -10 h493.5 a10 10 0 0 1 10 10 v30 h-513.5 z" fill="#6D4AFF" opacity="0.075"/>
+<rect x="1181.0" y="879" width="513.5" height="2" fill="#6D4AFF" opacity="0.55"/>
+<text x="1195.0" y="867.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#6D4AFF">광고 성과</text>
+<text x="1680.5" y="867.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#6D4AFF" text-anchor="end" letter-spacing="0.4">/analytics</text>
+<text x="1219.0" y="904.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">탭이 아니라 위→아래 섹션 + 세그먼트</text>
+<circle cx="1199.5" cy="920.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="1207.0" y="925.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">성과 범위 — 매체 → 캠페인 → 광고세트 3단</text>
+<text x="1219.0" y="944.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">선택이 KPI·차트·테이블 전체에 반영</text>
+<circle cx="1199.5" cy="960.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="1207.0" y="965.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">소스 관리 (드로어) · 소스 추가 (드로어)</text>
+<text x="1219.0" y="984.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">파일/Sheets → 헤더 인식 → 매핑 → 미리보기</text>
+<circle cx="1199.5" cy="1000.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="1207.0" y="1005.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">공유 모달 → /share/analytics/[token]</text>
+<rect x="1195.0" y="1010.0" width="485.5" height="1" fill="#E4DFEA"/>
+<text x="1219.0" y="1036.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">정규화 정본 ad-parse.ts · 원본 행은 raw 보존</text>
+<rect x="1718.5" y="841.0" width="513.5" height="217.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M1718.5 851 a10 10 0 0 1 10 -10 h493.5 a10 10 0 0 1 10 10 v30 h-513.5 z" fill="#6D4AFF" opacity="0.075"/>
+<rect x="1718.5" y="879" width="513.5" height="2" fill="#6D4AFF" opacity="0.55"/>
+<text x="1732.5" y="867.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#6D4AFF">UTM 빌더</text>
+<text x="2218.0" y="867.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#6D4AFF" text-anchor="end" letter-spacing="0.4">/utm-builder</text>
+<circle cx="1737.0" cy="901.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="1744.5" y="906.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">목록 — 날짜별 / 캠페인별 그룹 2종</text>
+<circle cx="1737.0" cy="922.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="1744.5" y="927.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">행 펼침 — 전체 URL · 단축 URL · QR</text>
+<circle cx="1737.0" cy="943.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="1744.5" y="948.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">생성 드로어 2모드</text>
+<text x="1756.5" y="967.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">기본(질문형) / 고급(URL×source×medium 곱)</text>
+<circle cx="1737.0" cy="983.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="1744.5" y="988.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">수정 · 복제 드로어</text>
+<rect x="1732.5" y="993.0" width="485.5" height="1" fill="#E4DFEA"/>
+<text x="1756.5" y="1019.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">규칙값의 집은 여기가 아니다 — 워크스페이스 설정 모달</text>
+<circle cx="1737.0" cy="1035.5" r="2" fill="#6D4AFF" opacity="0.85"/>
+<text x="1744.5" y="1040.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">공개 면 /r/[code] — 302 리다이렉트</text>
+<text x="106.0" y="1124.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="19" font-weight="700" fill="#1B1725">웨비나</text>
+<text x="175.9" y="1124.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9A93A8">앱에서 가장 큰 도메인 — API 57 · 모델 21 · 위치는 URL 쿼리가 단일 소스</text>
+<rect x="106.0" y="1146.0" width="406.0" height="231.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M106.0 1156 a10 10 0 0 1 10 -10 h386.0 a10 10 0 0 1 10 10 v30 h-406.0 z" fill="#5A34F0" opacity="0.075"/>
+<rect x="106.0" y="1184" width="406.0" height="2" fill="#5A34F0" opacity="0.55"/>
+<text x="120.0" y="1172.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#5A34F0">허브 · 목록</text>
+<text x="498.0" y="1172.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#5A34F0" text-anchor="end" letter-spacing="0.4">진입</text>
+<circle cx="124.5" cy="1206.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="132.0" y="1211.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">/webinar  목록 — 스코프 목록 + 등록자 수</text>
+<text x="144.0" y="1230.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">만들기 · 다른 웨비나에서 복제 모달</text>
+<text x="144.0" y="1249.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">링크는 webinar.id, 라우트 파라미터명은 [slug]</text>
+<rect x="120.0" y="1254.0" width="378.0" height="1" fill="#E4DFEA"/>
+<text x="120.0" y="1292.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1B1725">/webinar/[slug]  허브 헤더</text>
+<circle cx="124.5" cy="1308.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="132.0" y="1313.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">상태 배지 · URL 복사 · 열기 · 미리보기</text>
+<circle cx="124.5" cy="1329.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="132.0" y="1334.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">··· 더보기 — 웨비나 삭제 (파괴 액션의 집)</text>
+<rect x="120.0" y="1339.0" width="378.0" height="1" fill="#E4DFEA"/>
+<text x="144.0" y="1365.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">?tab= create | deploy | operate | analytics</text>
+<rect x="536.0" y="1146.0" width="406.0" height="328.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M536.0 1156 a10 10 0 0 1 10 -10 h386.0 a10 10 0 0 1 10 10 v30 h-406.0 z" fill="#5A34F0" opacity="0.075"/>
+<rect x="536.0" y="1184" width="406.0" height="2" fill="#5A34F0" opacity="0.55"/>
+<text x="550.0" y="1172.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#5A34F0">만들기</text>
+<text x="928.0" y="1172.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#5A34F0" text-anchor="end" letter-spacing="0.4">?tab=create</text>
+<text x="574.0" y="1209.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">좌 레일 3그룹 6칸 + 본문 + 인접 미리보기</text>
+<text x="550.0" y="1240.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1B1725">사실</text>
+<circle cx="554.5" cy="1256.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="562.0" y="1261.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">원본 정보 — 이름·일정 / 진행 순서 / 브랜드</text>
+<text x="574.0" y="1280.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">진행 순서: 유형 5종 · 연사(이름·소속·약력·홈·SNS 6·사진) ·</text>
+<text x="574.0" y="1299.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">로고 · 내용</text>
+<text x="550.0" y="1330.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1B1725">산출물</text>
+<circle cx="554.5" cy="1346.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="562.0" y="1351.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">랜딩 페이지 · 등록 폼 · 설문</text>
+<circle cx="554.5" cy="1367.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="562.0" y="1372.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">시청 화면 — ?st= waiting|entry|live|ended</text>
+<text x="550.0" y="1403.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1B1725">확인</text>
+<circle cx="554.5" cy="1419.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="562.0" y="1424.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">노출 점검 — 6면 × 요소, 읽기 전용 거울</text>
+<text x="574.0" y="1443.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">레일의 준비 상태 미터가 여기서 파생</text>
+<rect x="550.0" y="1448.0" width="378.0" height="1" fill="#E4DFEA"/>
+<text x="574.0" y="1474.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">미리보기는 목업이 아니라 실물 iframe</text>
+<rect x="966.0" y="1146.0" width="406.0" height="236.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M966.0 1156 a10 10 0 0 1 10 -10 h386.0 a10 10 0 0 1 10 10 v30 h-406.0 z" fill="#5A34F0" opacity="0.075"/>
+<rect x="966.0" y="1184" width="406.0" height="2" fill="#5A34F0" opacity="0.55"/>
+<text x="980.0" y="1172.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#5A34F0">배포</text>
+<text x="1358.0" y="1172.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#5A34F0" text-anchor="end" letter-spacing="0.4">?tab=deploy</text>
+<text x="1004.0" y="1209.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">아임웹 부착의 단일 창구 — 카드 5장</text>
+<circle cx="984.5" cy="1225.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="992.0" y="1230.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">① 랜딩 임베드 — 직접 링크 + 위젯 코드</text>
+<circle cx="984.5" cy="1246.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="992.0" y="1251.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">② 하단 배너 문구 4칸 (상태별)</text>
+<circle cx="984.5" cy="1267.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="992.0" y="1272.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">③ 아임웹 사이트 연결</text>
+<text x="1004.0" y="1291.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">연결 배지 · 노출 웨비나 전환 · 스니펫 · 라이브 URL</text>
+<circle cx="984.5" cy="1307.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="992.0" y="1312.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">④ 마운트 마커 3종 (접힘)</text>
+<circle cx="984.5" cy="1328.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="992.0" y="1333.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">⑤ 부착 순서 5단계 (펼침)</text>
+<rect x="980.0" y="1338.0" width="378.0" height="1" fill="#E4DFEA"/>
+<text x="1004.0" y="1364.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">WebinarEmbedSite 는 프로젝트 자원인데 진입점이 여기 하나뿐</text>
+<rect x="1396.0" y="1146.0" width="406.0" height="290.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M1396.0 1156 a10 10 0 0 1 10 -10 h386.0 a10 10 0 0 1 10 10 v30 h-406.0 z" fill="#5A34F0" opacity="0.075"/>
+<rect x="1396.0" y="1184" width="406.0" height="2" fill="#5A34F0" opacity="0.55"/>
+<text x="1410.0" y="1172.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#5A34F0">운영</text>
+<text x="1788.0" y="1172.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#5A34F0" text-anchor="end" letter-spacing="0.4">?tab=operate</text>
+<text x="1410.0" y="1221.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1B1725">라이브 콘솔 — 레이아웃이 상태에 따라 두 벌</text>
+<circle cx="1414.5" cy="1237.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="1422.0" y="1242.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">상태 바 · 실시간 지표 6칸 · 동시 접속 추이</text>
+<circle cx="1414.5" cy="1258.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="1422.0" y="1263.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">러닝오더 · 문의·폼 응답 · 시청자(상위 8) · 운영 로그</text>
+<circle cx="1414.5" cy="1279.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="1422.0" y="1284.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">라이브: 인터랙션 카드+드로어 / Q&amp;A / 채팅</text>
+<circle cx="1414.5" cy="1300.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="1422.0" y="1305.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">비라이브: 아코디언 3그룹 — 인터랙션·참여·발송</text>
+<circle cx="1414.5" cy="1321.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="1422.0" y="1326.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">종료: 방송 요약 4칸 recap</text>
+<rect x="1410.0" y="1331.0" width="378.0" height="1" fill="#E4DFEA"/>
+<text x="1410.0" y="1369.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1B1725">등록자</text>
+<circle cx="1414.5" cy="1385.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="1422.0" y="1390.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">요약 5칸 · 표 14열 · 상세 드로어</text>
+<circle cx="1414.5" cy="1406.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="1422.0" y="1411.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">CSV 일괄등록 · CSV 내보내기</text>
+<text x="1434.0" y="1430.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">설문 응답 열 + 문의(Q&amp;A) 열 포함</text>
+<rect x="1826.0" y="1146.0" width="406.0" height="249.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M1826.0 1156 a10 10 0 0 1 10 -10 h386.0 a10 10 0 0 1 10 10 v30 h-406.0 z" fill="#5A34F0" opacity="0.075"/>
+<rect x="1826.0" y="1184" width="406.0" height="2" fill="#5A34F0" opacity="0.55"/>
+<text x="1840.0" y="1172.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#5A34F0">분석</text>
+<text x="2218.0" y="1172.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#5A34F0" text-anchor="end" letter-spacing="0.4">?tab=analytics</text>
+<text x="1864.0" y="1209.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">단일 스크롤 · 수동 새로고침만</text>
+<circle cx="1844.5" cy="1225.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="1852.0" y="1230.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">① 요약 KPI 8칸</text>
+<circle cx="1844.5" cy="1246.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="1852.0" y="1251.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">② 시청·참여 타임라인 (동시·입장·채팅·이벤트)</text>
+<circle cx="1844.5" cy="1267.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="1852.0" y="1272.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">③ 참여 성적표 — 투표 / Q&amp;A</text>
+<circle cx="1844.5" cy="1288.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="1852.0" y="1293.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">④ 설문 결과 — rating·nps·선택·text</text>
+<circle cx="1844.5" cy="1309.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="1852.0" y="1314.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">⑤ 리드 스코어링 0~100 (핫·웜·콜드·노쇼)</text>
+<circle cx="1844.5" cy="1330.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="1852.0" y="1335.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">⑥ 참가 퍼널 — 방문→등록→입장→30분→60분</text>
+<circle cx="1844.5" cy="1351.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="1852.0" y="1356.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">⑦ 일자별 등록 추이</text>
+<circle cx="1844.5" cy="1372.5" r="2" fill="#5A34F0" opacity="0.85"/>
+<text x="1852.0" y="1377.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">⑧ 유입 채널별 · ⑨ 캠페인별 + 광고비</text>
+<rect x="48" y="418" width="4" height="1074" rx="2" fill="#6D4AFF" opacity="0.5"/>
+<g transform="translate(74,955.0) rotate(-90)"><text x="0" y="0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#6D4AFF" text-anchor="middle" letter-spacing="3.4">앱 면</text></g>
+<text x="106.0" y="1504.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="19" font-weight="700" fill="#1B1725">공개 면</text>
+<text x="181.6" y="1504.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9A93A8">인증이 아니라 토큰·slug 가 접근을 결정한다</text>
+<rect x="106.0" y="1526.0" width="692.7" height="213.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M106 1536 a10 10 0 0 1 10 -10 h672.6666666666666 a10 10 0 0 1 10 10 v30 h-692.6666666666666 z" fill="#0E8F7E" opacity="0.075"/>
+<rect x="106" y="1564" width="692.6666666666666" height="2" fill="#0E8F7E" opacity="0.55"/>
+<text x="120.0" y="1552.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#0E8F7E">계통 A — 토큰 공유 링크</text>
+<text x="784.7" y="1552.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#0E8F7E" text-anchor="end" letter-spacing="0.4">면 3</text>
+<circle cx="124.5" cy="1586.5" r="2" fill="#0E8F7E" opacity="0.85"/>
+<text x="132.0" y="1591.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">/share/analytics/[token]  광고 성과 30일 요약</text>
+<text x="144.0" y="1610.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">Project.analyticsShareToken · 필터·드릴다운 없음</text>
+<circle cx="124.5" cy="1626.5" r="2" fill="#0E8F7E" opacity="0.85"/>
+<text x="132.0" y="1631.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">/share/dashboard/[token]  실시간 보고서</text>
+<text x="144.0" y="1650.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">앱과 같은 RealtimeReport 재사용 · 30일 고정</text>
+<circle cx="124.5" cy="1666.5" r="2" fill="#0E8F7E" opacity="0.85"/>
+<text x="132.0" y="1671.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">/share/[token]  위젯 보드 12열</text>
+<text x="144.0" y="1690.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">Dashboard.shareToken · 편집 UI 없음 → 실질 도달 불가</text>
+<rect x="120" y="1695.0" width="664.6666666666666" height="1" fill="#E4DFEA"/>
+<text x="144.0" y="1721.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">셋 다 deletedAt 을 확인한다 → 프로젝트 보관 시 즉시 닫힘</text>
+<rect x="822.7" y="1526.0" width="692.7" height="257.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M822.6666666666666 1536 a10 10 0 0 1 10 -10 h672.6666666666666 a10 10 0 0 1 10 10 v30 h-692.6666666666666 z" fill="#0E8F7E" opacity="0.075"/>
+<rect x="822.6666666666666" y="1564" width="692.6666666666666" height="2" fill="#0E8F7E" opacity="0.55"/>
+<text x="836.7" y="1552.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#0E8F7E">계통 B — 스크립트 배포</text>
+<text x="1501.3" y="1552.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#0E8F7E" text-anchor="end" letter-spacing="0.4">핸들러 4</text>
+<text x="860.7" y="1589.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">전부 인증 없음 · CORS * · noindex. 응답이 산출물이다</text>
+<circle cx="841.1666666666666" cy="1605.5" r="2" fill="#0E8F7E" opacity="0.85"/>
+<text x="848.7" y="1610.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">/w/[id]  웨비나 임베드 로더</text>
+<text x="860.7" y="1629.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">설정은 런타임 config (sessionStorage 60초 SWR)</text>
+<circle cx="841.1666666666666" cy="1645.5" r="2" fill="#0E8F7E" opacity="0.85"/>
+<text x="848.7" y="1650.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">/w/l/[slug]  랜딩 런타임 + boot(payload)</text>
+<text x="860.7" y="1669.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">데이터를 스크립트에 실어 요청 1회</text>
+<circle cx="841.1666666666666" cy="1685.5" r="2" fill="#0E8F7E" opacity="0.85"/>
+<text x="848.7" y="1690.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">/s/[id]  수집 스크립트   ·   /r/[code]  302</text>
+<rect x="836.6666666666666" y="1695.0" width="664.6666666666666" height="1" fill="#E4DFEA"/>
+<text x="836.7" y="1733.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1B1725">호스트 사이트 마운트</text>
+<text x="860.7" y="1752.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">landing-mount / hero-button / register-form / live(iframe+postMessage)</text>
+<text x="860.7" y="1771.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">마커 없이 자동: 하단 배너 · 등록 폼 모달</text>
+<rect x="1539.3" y="1526.0" width="692.7" height="302.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M1539.3333333333333 1536 a10 10 0 0 1 10 -10 h672.6666666666666 a10 10 0 0 1 10 10 v30 h-692.6666666666666 z" fill="#0E8F7E" opacity="0.075"/>
+<rect x="1539.3333333333333" y="1564" width="692.6666666666666" height="2" fill="#0E8F7E" opacity="0.55"/>
+<text x="1553.3" y="1552.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#0E8F7E">계통 C — 웨비나 시청자</text>
+<text x="2218.0" y="1552.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#0E8F7E" text-anchor="end" letter-spacing="0.4">면 약 40</text>
+<text x="1553.3" y="1601.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1B1725">/webinar/[slug]/landing</text>
+<text x="1577.3" y="1620.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">히어로 → About → Sessions → Time Table → [dark: Programs → Highlights → Audience → Join → FAQ]</text>
+<text x="1577.3" y="1639.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">좌측 목차 + 스크롤 스파이 · 연사 상세 팝업(홈·SNS)</text>
+<rect x="1553.3333333333333" y="1644.0" width="664.6666666666666" height="1" fill="#E4DFEA"/>
+<text x="1553.3" y="1682.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1B1725">/webinar/[slug]/live — 한 URL, 네 면</text>
+<circle cx="1557.8333333333333" cy="1698.5" r="2" fill="#0E8F7E" opacity="0.85"/>
+<text x="1565.3" y="1703.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">대기 — 카운트다운 · “N명이 함께 기다려요”</text>
+<circle cx="1557.8333333333333" cy="1719.5" r="2" fill="#0E8F7E" opacity="0.85"/>
+<text x="1565.3" y="1724.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">입장 확인 — 전화/이메일 인증 카드</text>
+<circle cx="1557.8333333333333" cy="1740.5" r="2" fill="#0E8F7E" opacity="0.85"/>
+<text x="1565.3" y="1745.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">시청 — 플레이어 + 탭 Q&amp;A/채팅/세션 + 푸시 레이어</text>
+<circle cx="1557.8333333333333" cy="1761.5" r="2" fill="#0E8F7E" opacity="0.85"/>
+<text x="1565.3" y="1766.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">종료 — 다시보기·설문 N장·자료·다음 웨비나</text>
+<rect x="1553.3333333333333" y="1771.0" width="664.6666666666666" height="1" fill="#E4DFEA"/>
+<text x="1553.3" y="1809.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13.5" font-weight="700" fill="#1B1725">/webinar/[slug]/survey/[surveyId]</text>
+<text x="1577.3" y="1828.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">SurveyForm 공유 — 인라인 검증 + localStorage 임시저장</text>
+<rect x="48" y="1500" width="4" height="346" rx="2" fill="#0E8F7E" opacity="0.5"/>
+<g transform="translate(74,1673.0) rotate(-90)"><text x="0" y="0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#0E8F7E" text-anchor="middle" letter-spacing="3.4">공개 면</text></g>
+<text x="106.0" y="1858.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="19" font-weight="700" fill="#1B1725">데이터 모델</text>
+<text x="218.8" y="1858.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9A93A8">42개 · enum 은 Role 하나뿐, 나머지 상태는 String + 코드 화이트리스트</text>
+<text x="122.0" y="1906.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#46568C">인증·조직</text>
+<rect x="250.0" y="1888.0" width="45.7" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="250" y="1888" width="45.7" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="260.0" y="1905.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">User</text>
+<rect x="302.7" y="1888.0" width="93.9" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="302.724" y="1888" width="93.9" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="312.7" y="1905.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">Workspace</text>
+<text x="386.6" y="1905.5" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11" font-weight="700" fill="#0E8F7E" text-anchor="end">◐</text>
+<rect x="403.6" y="1888.0" width="116.5" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="403.60299999999995" y="1888" width="116.5" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="413.6" y="1905.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WorkspaceMember</text>
+<rect x="527.1" y="1888.0" width="142.2" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="527.068" y="1888" width="142.2" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="537.1" y="1905.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WorkspaceInvitation</text>
+<rect x="676.3" y="1888.0" width="97.2" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="676.257" y="1888" width="97.2" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="686.3" y="1905.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">Notification</text>
+<rect x="780.4" y="1888.0" width="122.9" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="780.429" y="1888" width="122.9" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="790.4" y="1905.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">NotificationPref</text>
+<rect x="910.3" y="1888.0" width="71.4" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="910.3249999999999" y="1888" width="71.4" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="920.3" y="1905.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">ApiToken</text>
+<rect x="988.8" y="1888.0" width="90.7" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="988.7729999999999" y="1888" width="90.7" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="998.8" y="1905.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">ActivityLog</text>
+<rect x="1086.5" y="1888.0" width="84.3" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="1086.514" y="1888" width="84.3" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="1096.5" y="1905.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">Role(enum)</text>
+<text x="122.0" y="1934.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#46568C">프로젝트</text>
+<rect x="250.0" y="1916.0" width="81.0" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="250" y="1916" width="81.0" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="260.0" y="1933.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">Project</text>
+<text x="321.0" y="1933.5" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11" font-weight="700" fill="#0E8F7E" text-anchor="end">◐</text>
+<rect x="338.0" y="1916.0" width="103.6" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="338.017" y="1916" width="103.6" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="348.0" y="1933.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">ProjectMember</text>
+<text x="122.0" y="1962.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#46568C">광고 성과</text>
+<rect x="250.0" y="1944.0" width="174.3" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="250" y="1944" width="174.3" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="260.0" y="1961.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">AdPerformanceImportBatch</text>
+<rect x="431.3" y="1944.0" width="142.2" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="431.34400000000005" y="1944" width="142.2" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="441.3" y="1961.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">AdPerformanceRecord</text>
+<text x="122.0" y="1990.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#46568C">UTM·링크</text>
+<rect x="250.0" y="1972.0" width="77.9" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="250" y="1972" width="77.9" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="260.0" y="1989.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">UTMPreset</text>
+<rect x="334.9" y="1972.0" width="90.7" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="334.879" y="1972" width="90.7" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="344.9" y="1989.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">UTMTemplate</text>
+<rect x="432.6" y="1972.0" width="65.0" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="432.62" y="1972" width="65.0" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="442.6" y="1989.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">UTMLink</text>
+<rect x="504.6" y="1972.0" width="77.9" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="504.637" y="1972" width="77.9" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="514.6" y="1989.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">ShortLink</text>
+<text x="122.0" y="2018.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#46568C">수집</text>
+<rect x="250.0" y="2000.0" width="119.6" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="250" y="2000" width="119.6" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="260.0" y="2017.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">CollectSource</text>
+<text x="359.6" y="2017.5" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11" font-weight="700" fill="#0E8F7E" text-anchor="end">◐</text>
+<rect x="376.6" y="2000.0" width="97.2" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="376.60299999999995" y="2000" width="97.2" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="386.6" y="2017.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">FieldMapping</text>
+<rect x="480.8" y="2000.0" width="103.6" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="480.7749999999999" y="2000" width="103.6" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="490.8" y="2017.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">CollectRecord</text>
+<rect x="591.4" y="2000.0" width="161.5" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="591.3779999999999" y="2000" width="161.5" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="601.4" y="2017.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">CollectRetentionPolicy</text>
+<text x="122.0" y="2046.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#46568C">대시보드</text>
+<rect x="250.0" y="2028.0" width="77.9" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="250" y="2028" width="77.9" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="260.0" y="2045.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">Dashboard</text>
+<rect x="334.9" y="2028.0" width="116.5" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="334.879" y="2028" width="116.5" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="344.9" y="2045.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">DashboardWidget</text>
+<rect x="458.3" y="2028.0" width="116.5" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="458.344" y="2028" width="116.5" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="468.3" y="2045.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">ScheduledReport</text>
+<text x="122.0" y="2074.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#46568C">웨비나 코어</text>
+<rect x="250.0" y="2056.0" width="65.0" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="250" y="2056" width="65.0" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="260.0" y="2073.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">Webinar</text>
+<rect x="322.0" y="2056.0" width="110.0" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="322.017" y="2056" width="110.0" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="332.0" y="2073.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarSession</text>
+<rect x="439.1" y="2056.0" width="142.2" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="439.051" y="2056" width="142.2" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="449.1" y="2073.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarRegistration</text>
+<text x="122.0" y="2102.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#46568C">웨비나 인터랙션</text>
+<rect x="250.0" y="2084.0" width="93.9" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="250" y="2084" width="93.9" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="260.0" y="2101.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarQA</text>
+<text x="333.9" y="2101.5" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11" font-weight="700" fill="#B4530A" text-anchor="end">◈</text>
+<rect x="350.9" y="2084.0" width="103.6" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="350.879" y="2084" width="103.6" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="360.9" y="2101.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarQAVote</text>
+<rect x="461.5" y="2084.0" width="158.2" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="461.48199999999997" y="2084" width="158.2" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="471.5" y="2101.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarAnnouncement</text>
+<text x="609.7" y="2101.5" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11" font-weight="700" fill="#B4530A" text-anchor="end">◈</text>
+<rect x="626.7" y="2084.0" width="113.2" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="626.6709999999999" y="2084" width="113.2" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="636.7" y="2101.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarPopup</text>
+<text x="729.8" y="2101.5" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11" font-weight="700" fill="#B4530A" text-anchor="end">◈</text>
+<rect x="746.8" y="2084.0" width="129.3" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="746.843" y="2084" width="129.3" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="756.8" y="2101.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarPopupClick</text>
+<rect x="883.2" y="2084.0" width="106.7" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="883.17" y="2084" width="106.7" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="893.2" y="2101.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarPoll</text>
+<text x="979.9" y="2101.5" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11" font-weight="700" fill="#B4530A" text-anchor="end">◈</text>
+<rect x="996.9" y="2084.0" width="129.3" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="996.911" y="2084" width="129.3" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="1006.9" y="2101.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarPollOption</text>
+<rect x="1133.2" y="2084.0" width="116.5" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="1133.2379999999998" y="2084" width="116.5" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="1143.2" y="2101.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarPollVote</text>
+<rect x="1256.7" y="2084.0" width="135.8" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="1256.7029999999997" y="2084" width="135.8" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="1266.7" y="2101.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarChatMessage</text>
+<rect x="1399.5" y="2084.0" width="116.5" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="1399.4609999999998" y="2084" width="116.5" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="1409.5" y="2101.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarReminder</text>
+<rect x="1522.9" y="2084.0" width="138.9" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="1522.9259999999997" y="2084" width="138.9" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="1532.9" y="2101.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarTallyPush</text>
+<text x="1651.8" y="2101.5" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11" font-weight="700" fill="#B4530A" text-anchor="end">◈</text>
+<text x="122.0" y="2130.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#46568C">설문·배포·계측</text>
+<rect x="250.0" y="2112.0" width="119.6" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="250" y="2112" width="119.6" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="260.0" y="2129.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarSurvey</text>
+<text x="359.6" y="2129.5" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11" font-weight="700" fill="#B4530A" text-anchor="end">◈</text>
+<rect x="376.6" y="2112.0" width="155.1" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="376.60299999999995" y="2112" width="155.1" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="386.6" y="2129.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarSurveyResponse</text>
+<rect x="538.7" y="2112.0" width="138.9" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="538.654" y="2112" width="138.9" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="548.7" y="2129.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarEmbedSite</text>
+<text x="667.5" y="2129.5" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11" font-weight="700" fill="#0E8F7E" text-anchor="end">◐</text>
+<rect x="684.5" y="2112.0" width="174.3" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="684.55" y="2112" width="174.3" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="694.5" y="2129.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarAttendanceSegment</text>
+<rect x="865.9" y="2112.0" width="122.9" height="26.0" rx="6" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1"/>
+<rect x="865.894" y="2112" width="122.9" height="26" rx="6" fill="#46568C" opacity="0.05"/>
+<text x="875.9" y="2129.5" font-family="'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace" font-size="11.8" font-weight="500" fill="#1B1725">WebinarVisitStat</text>
+<rect x="106" y="1880" width="2126" height="268" rx="10" fill="none" stroke="#E4DFEA" stroke-width="1"/>
+<text x="110.0" y="2174.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="700" fill="#0E8F7E">◐</text>
+<text x="130.0" y="2174.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">소프트 삭제 (4개만) — deletedAt 후 30일에 cron/daily 가 Cascade 영구 삭제</text>
+<text x="589.3" y="2174.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="700" fill="#B4530A">◈</text>
+<text x="609.3" y="2174.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">부분 유니크 인덱스 — 스키마에 없고 SQL 에만 있다. db push 가 지운다(에러 없음)</text>
+<rect x="106.0" y="2188.0" width="692.7" height="184.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M106 2198 a10 10 0 0 1 10 -10 h672.6666666666666 a10 10 0 0 1 10 10 v30 h-692.6666666666666 z" fill="#46568C" opacity="0.075"/>
+<rect x="106" y="2226" width="692.6666666666666" height="2" fill="#46568C" opacity="0.55"/>
+<text x="120.0" y="2214.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#46568C">관계 · 파기 규칙</text>
+<circle cx="124.5" cy="2248.5" r="2" fill="#46568C" opacity="0.85"/>
+<text x="132.0" y="2253.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">Cascade 3계층 — Workspace → (멤버·프로젝트·수집·대시보드·웨비나·임베드·광고 17계열) → 각자의 자식</text>
+<circle cx="124.5" cy="2269.5" r="2" fill="#46568C" opacity="0.85"/>
+<text x="132.0" y="2274.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">SetNull 은 5곳뿐 — 사람·팝업·전시 웨비나가 사라져도 기록은 남긴다</text>
+<circle cx="124.5" cy="2290.5" r="2" fill="#46568C" opacity="0.85"/>
+<text x="132.0" y="2295.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">registrationId 를 가진 모델 8개 중 FK+cascade 는 AttendanceSegment 하나 → 등록자 삭제는 반드시</text>
+<text x="132.0" y="2316.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#6E6780">webinar-registrant-delete.ts 를 지난다</text>
+<text x="144.0" y="2335.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">파기 원칙: 행사 기록은 남기고 사람은 지운다 — 리마인더 삭제 / Q&amp;A·채팅은 본문 남기고 PII 제거 / 투표·클릭·응답은</text>
+<text x="144.0" y="2354.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">registrationId = null</text>
+<rect x="822.7" y="2188.0" width="692.7" height="182.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M822.6666666666666 2198 a10 10 0 0 1 10 -10 h672.6666666666666 a10 10 0 0 1 10 10 v30 h-692.6666666666666 z" fill="#46568C" opacity="0.075"/>
+<rect x="822.6666666666666" y="2226" width="692.6666666666666" height="2" fill="#46568C" opacity="0.55"/>
+<text x="836.7" y="2214.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#46568C">JSON 블롭과 정본 모듈</text>
+<text x="860.7" y="2251.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">설정은 대부분 컬럼이 아니라 JSON 블롭에 있고, 블롭마다 정규화 모듈이 하나씩 = 그것이 계약이다</text>
+<circle cx="841.1666666666666" cy="2267.5" r="2" fill="#46568C" opacity="0.85"/>
+<text x="848.7" y="2272.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">Webinar.config → webinar-config.ts  (registrationForm · livePage · landingPage)</text>
+<circle cx="841.1666666666666" cy="2288.5" r="2" fill="#46568C" opacity="0.85"/>
+<text x="848.7" y="2293.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">Webinar.components → 라이브 중에도 바꾸는 스위치만 여기</text>
+<text x="860.7" y="2312.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">채팅 모더레이션 값은 일부러 블롭이 아니라 전용 컬럼 — 설정탭 저장이 블롭을 덮어쓰는 것을 막기 위해</text>
+<circle cx="841.1666666666666" cy="2328.5" r="2" fill="#46568C" opacity="0.85"/>
+<text x="848.7" y="2333.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">Registration.memo 는 의사 JSON — String 인데 { memo, customFields }</text>
+<text x="860.7" y="2352.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">parseMemo/buildMemo 를 짝으로 써야 한다(과거 직접 저장으로 customFields 유실)</text>
+<rect x="1539.3" y="2188.0" width="692.7" height="249.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M1539.3333333333333 2198 a10 10 0 0 1 10 -10 h672.6666666666666 a10 10 0 0 1 10 10 v30 h-692.6666666666666 z" fill="#46568C" opacity="0.075"/>
+<rect x="1539.3333333333333" y="2226" width="692.6666666666666" height="2" fill="#46568C" opacity="0.55"/>
+<text x="1553.3" y="2214.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#46568C">크로스컷 규칙</text>
+<circle cx="1557.8333333333333" cy="2248.5" r="2" fill="#46568C" opacity="0.85"/>
+<text x="1565.3" y="2253.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">KST 표시 — formatKst 가 hourCycle h23 고정</text>
+<circle cx="1557.8333333333333" cy="2269.5" r="2" fill="#46568C" opacity="0.85"/>
+<text x="1565.3" y="2274.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">공개 라우트 레이트리밋 — Upstash Redis, 없으면 인메모리 폴백</text>
+<circle cx="1557.8333333333333" cy="2290.5" r="2" fill="#46568C" opacity="0.85"/>
+<text x="1565.3" y="2295.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">뷰어 폴링은 /live-state 하나로 통합 (라이브 전 /status 30초)</text>
+<text x="1577.3" y="2314.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">새 폴러를 추가하지 않는다</text>
+<circle cx="1557.8333333333333" cy="2330.5" r="2" fill="#46568C" opacity="0.85"/>
+<text x="1565.3" y="2335.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">크론 라우트 5개 중 vercel.json 이 예약하는 건 2개 — daily 가 3개를 흡수</text>
+<circle cx="1557.8333333333333" cy="2351.5" r="2" fill="#46568C" opacity="0.85"/>
+<text x="1565.3" y="2356.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">window.confirm 전면 제거 → 공용 확인 모달 (requireText 게이트)</text>
+<circle cx="1557.8333333333333" cy="2372.5" r="2" fill="#46568C" opacity="0.85"/>
+<text x="1565.3" y="2377.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">저장 버튼 대신 자동저장 표시 — AutosaveScope 로 화면당 하나</text>
+<circle cx="1557.8333333333333" cy="2393.5" r="2" fill="#46568C" opacity="0.85"/>
+<text x="1565.3" y="2398.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">삭제는 토스트 + 5초 유예 + 실행취소 · 로드 실패는 빈 상태로 위장하지 않는다</text>
+<circle cx="1557.8333333333333" cy="2414.5" r="2" fill="#46568C" opacity="0.85"/>
+<text x="1565.3" y="2419.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">개발 하니스 9개 — 프로덕션에서 notFound() + 미들웨어 차단</text>
+<rect x="48" y="1854" width="4" height="601" rx="2" fill="#46568C" opacity="0.5"/>
+<g transform="translate(74,2154.5) rotate(-90)"><text x="0" y="0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#46568C" text-anchor="middle" letter-spacing="3.4">데이터 · 규칙</text></g>
+<text x="106.0" y="2467.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="19" font-weight="700" fill="#1B1725">IA 상의 이음새 15건</text>
+<text x="290.2" y="2467.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9A93A8">지금의 정보구조가 답을 주지 못하는 질문들 — 대부분 버그가 아니라 “이 값의 집이 어디인가”가 정해지지 않은 자리</text>
+<rect x="106.0" y="2489.0" width="692.7" height="241.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M106 2499 a10 10 0 0 1 10 -10 h672.6666666666666 a10 10 0 0 1 10 10 v30 h-692.6666666666666 z" fill="#A8324A" opacity="0.075"/>
+<rect x="106" y="2527" width="692.6666666666666" height="2" fill="#A8324A" opacity="0.55"/>
+<text x="120.0" y="2515.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#A8324A">권한 · 수명 · 경계</text>
+<text x="784.7" y="2515.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#A8324A" text-anchor="end" letter-spacing="0.4">4</text>
+<circle cx="124.5" cy="2549.5" r="2" fill="#A8324A" opacity="0.85"/>
+<text x="132.0" y="2554.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">화면 × 역할 권한 매트릭스가 없다</text>
+<text x="144.0" y="2573.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">역할로 UI 를 가리는 곳은 워크스페이스 설정 모달 한 곳뿐 — MEMBER 도 전체 삭제·공유 관리 버튼을 다 보고 서버 403</text>
+<text x="144.0" y="2592.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">으로만 막힌다</text>
+<circle cx="124.5" cy="2608.5" r="2" fill="#A8324A" opacity="0.85"/>
+<text x="132.0" y="2613.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">데이터 수명이 세 갈래인데 한 표에 없다</text>
+<text x="144.0" y="2632.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">① 소프트 4개 → 30일 → 영구  ② 나머지 38개 즉시 하드  ③ CollectRecord 는 보존정책 자동</text>
+<circle cx="124.5" cy="2648.5" r="2" fill="#A8324A" opacity="0.85"/>
+<text x="132.0" y="2653.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">프로젝트를 보관해도 공개 웨비나 면은 살아 있다</text>
+<text x="144.0" y="2672.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">공개 웨비나 경로 전체에서 deletedAt 검사 0건 — 최대 30일간 신규 등록까지 받는다. 반면 공유 링크는 즉시 닫힌다</text>
+<circle cx="124.5" cy="2688.5" r="2" fill="#A8324A" opacity="0.85"/>
+<text x="132.0" y="2693.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">오류·빈 면이 불균일 · 전역 not-found 가 없다</text>
+<text x="144.0" y="2712.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">error.tsx 는 6곳에만 — /utm-builder·/admin 은 상위 경계로 떨어진다</text>
+<rect x="822.7" y="2489.0" width="692.7" height="222.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M822.6666666666666 2499 a10 10 0 0 1 10 -10 h672.6666666666666 a10 10 0 0 1 10 10 v30 h-692.6666666666666 z" fill="#A8324A" opacity="0.075"/>
+<rect x="822.6666666666666" y="2527" width="692.6666666666666" height="2" fill="#A8324A" opacity="0.55"/>
+<text x="836.7" y="2515.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#A8324A">정본이 갈린 자리</text>
+<text x="1501.3" y="2515.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#A8324A" text-anchor="end" letter-spacing="0.4">4</text>
+<circle cx="841.1666666666666" cy="2549.5" r="2" fill="#A8324A" opacity="0.85"/>
+<text x="848.7" y="2554.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">[slug] 가 두 개의 식별자 공간이다</text>
+<text x="860.7" y="2573.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">앱 면 /webinar/{id} vs 공개 면 /webinar/{slug} — 같은 접두어, 다른 의미</text>
+<circle cx="841.1666666666666" cy="2589.5" r="2" fill="#A8324A" opacity="0.85"/>
+<text x="848.7" y="2594.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">“등록자”가 두 테이블을 가리킨다</text>
+<text x="860.7" y="2613.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">/dashboard 는 CollectRecord 만, 웨비나 탭은 WebinarRegistration 만 — 정본 선언이 없다</text>
+<circle cx="841.1666666666666" cy="2629.5" r="2" fill="#A8324A" opacity="0.85"/>
+<text x="848.7" y="2634.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">UTM 규칙은 읽는 곳과 고치는 곳이 끊겨 있다</text>
+<text x="860.7" y="2653.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">빌더는 소비만 하고 설정 모달로 가는 링크가 0건. 규칙은 워크스페이스, 링크는 프로젝트 스코프</text>
+<circle cx="841.1666666666666" cy="2669.5" r="2" fill="#A8324A" opacity="0.85"/>
+<text x="848.7" y="2674.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">숏링크는 생성만 있고 회수 경로가 없다</text>
+<text x="860.7" y="2693.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">/r/[code] 는 조건 없이 리다이렉트 — UTM 링크를 지워도 영구히 산다</text>
+<rect x="1539.3" y="2489.0" width="692.7" height="222.0" rx="10" fill="#FFFFFF" stroke="#E4DFEA" stroke-width="1" filter="url(#sh)"/>
+<path d="M1539.3333333333333 2499 a10 10 0 0 1 10 -10 h672.6666666666666 a10 10 0 0 1 10 10 v30 h-692.6666666666666 z" fill="#A8324A" opacity="0.075"/>
+<rect x="1539.3333333333333" y="2527" width="692.6666666666666" height="2" fill="#A8324A" opacity="0.55"/>
+<text x="1553.3" y="2515.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="700" fill="#A8324A">소유가 어긋난 자리</text>
+<text x="2218.0" y="2515.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" font-weight="600" fill="#A8324A" text-anchor="end" letter-spacing="0.4">4</text>
+<circle cx="1557.8333333333333" cy="2549.5" r="2" fill="#A8324A" opacity="0.85"/>
+<text x="1565.3" y="2554.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">WebinarEmbedSite 는 프로젝트 자원인데 진입점이 웨비나 하나 안에 있다</text>
+<text x="1577.3" y="2573.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">A 의 배포 탭에서 노출 전환을 누르면 B 의 공개 노출이 조용히 끝난다</text>
+<circle cx="1557.8333333333333" cy="2589.5" r="2" fill="#A8324A" opacity="0.85"/>
+<text x="1565.3" y="2594.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">시청 화면의 정본이 필드 하나로 뒤집힌다</text>
+<text x="1577.3" y="2613.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">livePageUrl 이 있으면 고객 사이트, 없으면 자체 /live — 알려 주는 표시가 없다</text>
+<circle cx="1557.8333333333333" cy="2629.5" r="2" fill="#A8324A" opacity="0.85"/>
+<text x="1565.3" y="2634.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">위젯 보드는 실질적으로 도달 불가</text>
+<text x="1577.3" y="2653.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">모델·API·공개 면은 있는데 편집 UI 가 없다. 예약 리포트도 같다</text>
+<circle cx="1557.8333333333333" cy="2669.5" r="2" fill="#A8324A" opacity="0.85"/>
+<text x="1565.3" y="2674.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="13" font-weight="400" fill="#1B1725">공유 링크가 두 계통으로 병존한다</text>
+<text x="1577.3" y="2693.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">프로젝트 단위 2개 + 보드 단위 1개 — 세 번째는 위 때문에 도달 불가</text>
+<text x="106.0" y="2752.0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12" font-weight="400" fill="#6E6780">나머지 3건 = 인벤토리 감사가 잡은 누락(/webinar 목록 페이지 · GET/POST /api/webinars · 만들기·복제 모달) — 문서 §6.1 에 반영 완료</text>
+<rect x="48" y="2463" width="4" height="293" rx="2" fill="#A8324A" opacity="0.5"/>
+<g transform="translate(74,2609.5) rotate(-90)"><text x="0" y="0" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="12.5" font-weight="700" fill="#A8324A" text-anchor="middle" letter-spacing="3.4">이음새</text></g>
+<text x="48" y="2798" font-family="'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Helvetica Neue',Arial,sans-serif" font-size="11.5" fill="#9A93A8">문서 전문: docs/INFORMATION-ARCHITECTURE.md — 면 목록·라우트 인덱스·정본 모듈 지도 포함</text>
+</svg>
