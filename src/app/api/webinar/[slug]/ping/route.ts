@@ -52,6 +52,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   }
 
   const now = new Date();
+
+  /**
+   * 대기 화면 프레즌스 — "N명이 함께 기다려요" 밴드의 근거.
+   *
+   * heartbeat 와 **반드시 갈라야** 한다. heartbeat 는 isActive 를 세우고 connectedSeconds 를
+   * 누적하는데, 대기 시간이 거기 섞이면 접속 시간·입장률·시청 곡선이 전부 부풀어 오른다
+   * (방송을 안 봤는데 30분 시청한 사람이 된다). 그래서 여기서 찍는 것은 presencePingAt 하나뿐이고,
+   * 아래 시간 누적·구간 기록 블록에 닿기 전에 돌려보낸다.
+   *
+   * 라이브 시청자 수(live-state)는 `isActive: true` + 최근 프레즌스로 세므로 이 값이 새지 않는다.
+   */
+  if (event === "wait") {
+    const waited = await prisma.webinarRegistration.updateMany({
+      where: { id: registrationId, webinarId: webinar.id },
+      data: { presencePingAt: now },
+    });
+    return NextResponse.json(
+      { ok: waited.count > 0, status: statusInfo.status },
+      { headers: CORS_HEADERS },
+    );
+  }
+
   let updatedCount = 0;
   // 직전 ping 이후 경과분을 접속 시간에 더한다. 90초(SEGMENT_GAP_MS)를 넘으면 그 사이엔
   // 자리를 비운 것이므로 더하지 않는다 — 구간 합산과 같은 규칙이되, 겹침 이중계산이 불가능하다.

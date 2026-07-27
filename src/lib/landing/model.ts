@@ -31,15 +31,8 @@ export function onPrimaryFor(accent: string): string {
   return lum >= 0.78 ? "#1a1a1f" : "#ffffff";
 }
 
-// 연사 표기 분리: 새 데이터는 speakerCompany 컬럼, 레거시는 speaker 의 "이름 | 회사" 결합형을 파싱.
-export function parseSpeaker(
-  speaker: string | null | undefined,
-  company: string | null | undefined,
-): { name: string; company: string } {
-  const raw = (speaker ?? "").trim();
-  const co = (company ?? "").trim();
-  if (co) return { name: raw, company: co };
-  const idx = raw.indexOf("|");
-  if (idx >= 0) return { name: raw.slice(0, idx).trim(), company: raw.slice(idx + 1).trim() };
-  return { name: raw, company: "" };
-}
+/* parseSpeaker 는 webinar-sessions.ts 로 옮겼다 — 랜딩(타임테이블·상세 팝업)뿐 아니라
+   대기·라이브 화면의 세션 순서도 같은 규칙으로 "이름 | 소속·직책" 을 그려야 한다.
+   재수출해 두는 이유: 랜딩 뷰들이 이 모듈에서 가져오고 있고, 경로를 바꾸는 것과
+   규칙을 한 곳으로 모으는 것은 별개의 변경이다. */
+export { parseSpeaker } from "@/lib/webinar-sessions";

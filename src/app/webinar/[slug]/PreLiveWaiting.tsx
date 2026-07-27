@@ -6,8 +6,7 @@ import { CalendarPlus, Share2, Bell } from "lucide-react";
 import { buildStkCss } from "./LiveContentStk";
 import { formatKst } from "@/lib/datetime";
 import type { LivePageConfig } from "@/lib/webinar-config";
-import { buildSessionNumbering, cleanSessionText, isPauseSession, sessionHasSpeaker, sessionKicker } from "@/lib/webinar-sessions";
-import { sessionLogoCss } from "@/lib/webinar-logo";
+import { buildSessionNumbering, cleanSessionText, isPauseSession, parseSpeaker, sessionHasSpeaker, sessionKicker } from "@/lib/webinar-sessions";
 
 /**
  * 등록 완료 ~ 라이브 오픈 전 대기 화면.
@@ -65,17 +64,38 @@ const EXTRA_CSS = `
 .stk-live .plw-row .kd { display:inline-block; font-size:10px; font-weight:750; letter-spacing:.06em; text-transform:uppercase; color:var(--key); background:var(--key-dim); padding:2px 7px; border-radius:6px; margin-bottom:6px; }
 .stk-live .plw-row.brk .kd { color:var(--sub); background:color-mix(in srgb,var(--text) 6%,transparent); }
 .stk-live .plw-row h4 { font-size:14.5px; font-weight:700; letter-spacing:-.01em; line-height:1.35; color:var(--text); margin:0; }
-/* 로고 규격은 webinar-logo.ts 한 곳에서 온다 — 랜딩·대기·시청이 같은 크기여야 한다
-   (예전엔 22/132 · 22/140 · 20/120 으로 갈라져 같은 로고가 면마다 다르게 보였다). */
-${sessionLogoCss(".stk-live .plw-logo", { plate: true })}
-/* 로고는 이름 **바로 오른쪽**에 붙인다 — margin-left:auto 로 패널 끝까지 밀면 목록이 넓을 때
-   이름과 수십~수백 px 떨어져 서로 무관한 요소처럼 보인다(랜딩 팝업은 블록이 좁아 끝 정렬이 맞다). */
-.stk-live .plw-logo { margin-left:4px; }
 .stk-live .plw-who { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:8px; }
 .stk-live .plw-who .av { width:26px; height:26px; border-radius:50%; overflow:hidden; background:var(--key-dim); color:var(--key); display:grid; place-items:center; font-size:11px; font-weight:750; }
 .stk-live .plw-who .av img { width:100%; height:100%; object-fit:cover; }
 /* 연사 이름 — 12.5px 은 로고 옆에서 작아 보여 위계가 뒤집혔다(로고가 이름보다 먼저 읽힘). */
+/* "이름 | 소속·직책" — 랜딩 타임테이블과 같은 위계. 이름을 더 진하게 둬서 구분자가 흐려도
+   어디까지가 이름인지 읽힌다. gap 은 세로 0(줄바꿈 시 붙게), 가로 6px. */
+/* 함께 기다리는 사람 밴드 — 카운트다운 바로 아래. 숫자가 주인공이라 배경은 옅게 깔고
+   테두리 대신 그림자로 마감한다(AGENTS.md 공통: 외곽선 대신 그림자). */
+/* 가운데 정렬은 flex + fit-content + margin-inline 으로. inline-flex 는 부모의 text-align 을
+   따르는데 .live-inner 는 block/start 라 왼쪽에 붙었다(실측: 중심차 -82px). */
+.stk-live .plw-together {
+  display:flex; width:fit-content; align-items:center; gap:8px;
+  margin:18px auto 0; padding:9px 15px 9px 13px; border:0; border-radius:999px;
+  background:var(--key-dim); color:var(--text);
+  box-shadow:0 1px 2px rgba(0,0,0,.05), 0 6px 18px rgba(0,0,0,.06);
+  font-size:13.5px; font-weight:650; white-space:nowrap;
+}
+.stk-live .plw-together b { color:var(--key); font-weight:800; font-variant-numeric:tabular-nums; }
+/* 살아 있음을 말하는 점 — 라이브 배지와 같은 언어. reduced-motion 에서는 켜진 점으로 멈춘다. */
+.stk-live .plw-together .dot {
+  width:7px; height:7px; border-radius:50%; background:var(--key); flex:none;
+  animation:plw-breathe 2.4s ease-in-out infinite;
+}
+@keyframes plw-breathe { 0%,100% { opacity:.45; transform:scale(.85); } 50% { opacity:1; transform:scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .stk-live .plw-together .dot { animation:none; opacity:1; }
+}
 .stk-live .plw-who small { font-size:14px; color:var(--text); font-weight:650; }
+.stk-live .plw-who .who { display:flex; align-items:baseline; flex-wrap:wrap; gap:0 6px; }
+.stk-live .plw-who .who b { font-weight:750; }
+.stk-live .plw-who .who .sep { opacity:.38; font-weight:400; }
+.stk-live .plw-who .who .co { color:var(--muted); font-weight:600; }
 `;
 
 interface Session {
@@ -84,6 +104,7 @@ interface Session {
   type?: string;
   title: string;
   speaker: string | null;
+  speakerCompany?: string | null;
   speakerPhotoUrl?: string | null;
   logoUrl?: string | null;
   description?: string | null;
@@ -100,6 +121,8 @@ interface PreLiveWaitingProps {
   serverNowMs?: number;
   registered?: boolean;
   live: LivePageConfig;
+  /** 지금 대기 화면에 함께 있는 등록자 수. null = 서버가 세지 않는 구간(라이브 중). */
+  waitingCount?: number | null;
   registrantCount?: number;
   hasCalendar?: boolean;
   onCalendar?: () => void;
@@ -122,7 +145,7 @@ const AV_COLORS = ["#6D28D9", "#0EA5E9", "#F97316", "#10B981", "#E11D48"];
 
 export default function PreLiveWaiting({
   webinar, accent, text, surface, targetIso, serverNowMs, registered = true,
-  live, registrantCount, hasCalendar, onCalendar, onShare, shareCopied, onNotify, notify, centerAction, replaceCountdown = false,
+  live, waitingCount, registrantCount, hasCalendar, onCalendar, onShare, shareCopied, onNotify, notify, centerAction, replaceCountdown = false,
 }: PreLiveWaitingProps) {
   const css = useMemo(() => buildStkCss(accent || "#6D28D9", text || "#141320", surface || "#FFFFFF") + EXTRA_CSS, [accent, text, surface]);
   const targetMs = useMemo(() => new Date(targetIso).getTime(), [targetIso]);
@@ -183,6 +206,22 @@ export default function PreLiveWaiting({
           </>
         )}
 
+        {/**
+          * "N명이 함께 기다려요" — 카운트다운 바로 아래.
+          *
+          * 2명 미만이면 그리지 않는다. "1명이 함께 기다려요" 는 자기 자신이라 정보가 아니고,
+          * 텅 빈 대기실이라는 신호가 되어 오히려 이탈을 부른다. 사회적 증거는 있을 때만 말한다.
+          *
+          * null(서버가 세지 않는 구간 = 라이브 중)에도 그리지 않는다 — 그때는 시청자 수가
+          * 같은 자리를 맡는다. 마운트 전에는 숨긴다(SSR 과 값이 달라 깜빡이지 않게).
+          */}
+        {mounted && typeof waitingCount === "number" && waitingCount >= 2 && (
+          <div className="plw-together" role="status" aria-live="polite">
+            <span className="dot" aria-hidden="true" />
+            <span><b>{waitingCount.toLocaleString()}</b>명이 함께 기다려요</span>
+          </div>
+        )}
+
         {mounted && centerAction && !showCenterAction && <div className="plw-entry-panel">{centerAction}</div>}
 
         {(showCalendar || showShare || showNotify) && (
@@ -239,7 +278,11 @@ export default function PreLiveWaiting({
                   const kd = sessionKicker(sn.type, agendaNumbering.displayNumber(sn.number));
                   // 톤다운은 **빈 시간(휴식)에만**. 오프닝·클로징은 세션으로 세지 않지만 콘텐츠다.
                   const muted = isPauseSession(sn.type);
-                  const speaker = cleanSessionText(sn.speaker);
+                  /* 랜딩 타임테이블과 같은 표기 — "이름 | 소속·직책".
+                     parseSpeaker 를 거치는 이유: 레거시 speaker 가 "이름 | 회사" 결합형이라
+                     raw 로 쓰면 구분자가 두 번 나오거나 소속이 이름 안에 박혀 나온다. */
+                  const sp = parseSpeaker(cleanSessionText(sn.speaker), cleanSessionText(sn.speakerCompany));
+                  const hasWho = Boolean(sp.name || sp.company);
                   return (
                     <div className={`plw-row ${muted ? "brk" : ""}`} key={sn.id}>
                       <div className="tm">{sn.startTime}</div>
@@ -248,22 +291,25 @@ export default function PreLiveWaiting({
                         <span className="kd">{kd}</span>
                         <h4>{sn.title}</h4>
                         {/**
-                          * 연사 이름 줄 오른쪽에 로고 — 랜딩 상세 팝업과 같은 배치다.
-                          * 예전엔 제목과 연사 사이에 로고가 끼어서 제목→누가 흐름이 끊겼고,
-                          * 줄마다 로고 유무에 따라 세로 리듬이 달라졌다.
+                          * 로고는 그리지 않는다 — 랜딩 타임테이블의 접힌 줄과 같은 판단이다.
+                          * 훑을 때 필요한 건 시각·무엇·누구뿐이고, 마크는 그 셋에 기여하지 않으면서
+                          * 줄마다 폭이 달라 세로 리듬을 흔든다. 로고는 랜딩 타임테이블 펼침과
+                          * 연사 상세 팝업에서 본다.
                           *
-                          * 로고만 있고 연사가 없는 세션(오프닝·클로징)에서도 줄을 그린다 —
-                          * 게이트에서 로고를 빼면 그 세션의 로고가 통째로 사라진다.
+                          * 그래서 게이트도 연사 하나로 좁아졌다(예전엔 로고만 있는 오프닝·클로징에도
+                          * 줄을 그려야 해서 조건이 둘이었다).
                           */}
-                        {(sn.logoUrl || (sessionHasSpeaker(sn.type) && speaker)) && (
+                        {sessionHasSpeaker(sn.type) && hasWho && (
                           <div className="plw-who">
-                            {sessionHasSpeaker(sn.type) && speaker && (
-                              <>
-                                <span className="av">{sn.speakerPhotoUrl ? <img src={sn.speakerPhotoUrl} alt={speaker} /> : speaker[0]}</span>
-                                <small>{speaker}</small>
-                              </>
+                            {/* 아바타 이니셜은 이름에서 — 소속만 있는 세션에서는 그리지 않는다(빈 원 방지). */}
+                            {Boolean(sp.name) && (
+                              <span className="av">{sn.speakerPhotoUrl ? <img src={sn.speakerPhotoUrl} alt={sp.name} /> : sp.name[0]}</span>
                             )}
-                            {sn.logoUrl && <img className="plw-logo" src={sn.logoUrl} alt="" />}
+                            <small className="who">
+                              {Boolean(sp.name) && <b>{sp.name}</b>}
+                              {Boolean(sp.name && sp.company) && <span className="sep" aria-hidden="true">|</span>}
+                              {Boolean(sp.company) && <span className="co">{sp.company}</span>}
+                            </small>
                           </div>
                         )}
                       </div>
