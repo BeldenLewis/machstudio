@@ -31,6 +31,8 @@ function sourceHash() {
       .map((f) => join(root, "src/lib/landing", f)),
     join(root, "src/lib/webinar-config.ts"),
     join(root, "src/lib/datetime.ts"),
+    // 랜딩 CSS 가 로고 규격을 여기서 가져온다 — 빠뜨리면 규격을 고쳐도 번들이 stale 로 안 잡힌다
+    join(root, "src/lib/webinar-logo.ts"),
   ];
   const hash = createHash("sha256");
   for (const f of files) hash.update(readFileSync(f));

@@ -5,7 +5,15 @@
 // - 공개/제출 경로: normalizeRegistrationForm(config)            → enabled 필드만
 // - 어드민 편집 경로: normalizeRegistrationForm(config, { includeDisabled: true }) → 전체 필드
 
-export type WebinarFieldType = "text" | "email" | "tel" | "select" | "checkbox";
+/**
+ * 등록 폼 필드 유형.
+ *
+ * checkbox 와 multiple 은 다른 물건이다:
+ *   checkbox — 체크 하나(동의용). 값은 "예/아니오" 성격이고 required 면 체크를 요구한다.
+ *   multiple — 선택지 여러 개에서 **복수 선택**. 값은 고른 항목들을 합친 문자열이다.
+ * 이름을 나누는 이유: 기존 checkbox 로 저장된 동의 필드가 이미 있어서 의미를 바꿀 수 없다.
+ */
+export type WebinarFieldType = "text" | "email" | "tel" | "select" | "checkbox" | "multiple";
 
 export interface WebinarRegistrationField {
   id: string;
@@ -17,6 +25,20 @@ export interface WebinarRegistrationField {
   enabled: boolean;
   options: string[];
   system: boolean;
+  /**
+   * multiple 전용 — 최대 선택 개수. 없으면 무제한.
+   * 설문(webinar-survey.ts)의 maxSelect 와 같은 계약을 쓴다: 1 이상, 옵션 수보다 작을 때만
+   * 의미가 있다(옵션 전체 이상이면 무제한과 같아서 저장하지 않는다).
+   */
+  maxSelect?: number;
+  /**
+   * select·multiple 전용 — '기타(직접입력)' 선택지를 켠다.
+   *
+   * 켜면 공개 폼에 선택지 맨 아래 "기타" 가 하나 더 생기고, 고르면 자유 입력칸이 함께 뜬다.
+   * 저장 값에는 어드민이 정한 선택지가 아니라 **사용자가 쓴 문장**이 들어간다 — 그래서
+   * 서버가 값을 선택지 목록과 대조해 거부할 수 없다(그 검증을 넣으면 기타 답이 전부 막힌다).
+   */
+  allowOther?: boolean;
 }
 
 export interface WebinarRegistrationFormConfig {
@@ -32,7 +54,40 @@ export interface WebinarRegistrationFormConfig {
   submitLabel: string;
 }
 
-const FIELD_TYPES: readonly WebinarFieldType[] = ["text", "email", "tel", "select", "checkbox"];
+const FIELD_TYPES: readonly WebinarFieldType[] = ["text", "email", "tel", "select", "checkbox", "multiple"];
+
+/**
+ * 복수 선택 답변을 한 문자열로 합친다 / 되읽는다.
+ *
+ * 왜 배열이 아니라 문자열인가: 등록 답변은 customFields JSON 에 들어가고 register 라우트가
+ * 중첩 객체·배열을 거부한다(임의 구조가 그대로 직렬화돼 저장된 전례가 있어 막아 뒀다).
+ * 그리고 CSV export·등록자 상세·임베드 로더가 전부 값을 문자열로 다룬다. 그 계약을 깨지 않고
+ * 복수 선택을 담으려면 합친 문자열이 맞다.
+ *
+ * 구분자는 ", " — 사람이 CSV 에서 그대로 읽을 수 있어야 한다. 선택지 자체에 쉼표가 들어가면
+ * 되읽을 때 쪼개지지만, 그건 **개수 검증에만** 쓰이고 저장된 원문은 그대로 보존된다.
+ */
+export const MULTI_VALUE_SEPARATOR = ", ";
+
+export function joinMultiValue(values: readonly string[]): string {
+  return values.map((v) => v.trim()).filter(Boolean).join(MULTI_VALUE_SEPARATOR);
+}
+
+export function splitMultiValue(value: unknown): string[] {
+  return typeof value === "string"
+    ? value.split(",").map((v) => v.trim()).filter(Boolean)
+    : [];
+}
+
+/** 선택지를 쓰는 유형 — 옵션 0개 게이트·기타 허용·최대 개수가 여기 걸린다. */
+export const CHOICE_FIELD_TYPES: readonly WebinarFieldType[] = ["select", "multiple"];
+
+/** 선택지를 몇 개까지 고를 수 있나. 무제한이면 null. */
+export function maxSelectFor(field: Pick<WebinarRegistrationField, "type" | "maxSelect" | "options">): number | null {
+  if (field.type !== "multiple") return null;
+  const n = Number(field.maxSelect);
+  return Number.isInteger(n) && n >= 1 && n < field.options.length ? n : null;
+}
 
 // ── 연락처 정규화·유효성 — 등록/중복확인/입장확인/임베드 로더의 단일 규칙 ──
 // 레이어마다 임계값이 달라지는 드리프트 방지: 규칙 변경은 반드시 여기서만.
@@ -149,6 +204,12 @@ export function normalizeLivePageConfig(config: unknown): LivePageConfig {
 // 섹션은 "토글 ON + 실제 데이터 있음" 이중 게이트로만 노출된다(빈 껍데기 금지).
 // 세션·타임테이블 데이터는 여기 저장하지 않고 실제 세션(webinar.sessions)에서 파생한다.
 export interface LandingProgramItem { icon: string; title: string; description: string }
+/**
+ * "이런 분들께 추천합니다" 한 줄. 방문자가 **자기 얘기인지** 3초 안에 판별하게 하는 섹션이라
+ * 제목(대상)이 필수고 설명은 부연이다 — 제목이 비면 그 줄은 공개되지 않는다.
+ * icon 은 선택 — 비우면 뷰가 체크 표시를 그린다.
+ */
+export interface LandingAudienceItem { icon: string; title: string; description: string }
 export interface LandingHighlightItem { title: string; description: string }
 export interface LandingJoinStep { title: string; description: string }
 export interface LandingFaqItem { category: string; question: string; answer: string }
@@ -170,11 +231,21 @@ export interface LandingPageConfig {
   /** detailPopup: 세션 카드 클릭 시 연사 상세(주제·내용·사진·소속·약력) 팝업 열기 */
   sessions: { enabled: boolean; detailPopup: boolean };
   timetable: { enabled: boolean };
+  /**
+   * 이런 분들께 추천합니다 — 제목 문구까지 편집 가능하다.
+   * 다른 섹션 머리글은 "Programs"·"FAQ" 처럼 고정 영문인데 이것만 한국어 문장인 이유:
+   * 이 섹션의 머리글 자체가 카피다("이런 분들께 추천합니다" / "이런 고민이 있다면").
+   * 비우면 DEFAULT_LANDING_AUDIENCE_TITLE 이 나간다(저장 시점 값이 굳지 않게).
+   */
+  audience: { enabled: boolean; title: string; items: LandingAudienceItem[] };
   programs: { enabled: boolean; items: LandingProgramItem[] };
   highlights: { enabled: boolean; items: LandingHighlightItem[] };
   join: { enabled: boolean; steps: LandingJoinStep[] };
   faq: { enabled: boolean; items: LandingFaqItem[] };
 }
+
+/** 이런 분들께 추천합니다 — 머리글 기본 문구. 어드민이 비우면 이 값이 나간다. */
+export const DEFAULT_LANDING_AUDIENCE_TITLE = "이런 분들께 추천합니다";
 
 /** 온라인 웨비나 공통 참여 절차 — 사실 기반 기본값(어드민이 자유 수정) */
 export const DEFAULT_LANDING_JOIN_STEPS: LandingJoinStep[] = [
@@ -220,6 +291,7 @@ export function normalizeLandingPageConfig(
     : null;
 
   const intro = obj(lp.intro);
+  const audience = obj(lp.audience);
   const programs = obj(lp.programs);
   const highlights = obj(lp.highlights);
   const join = obj(lp.join);
@@ -236,6 +308,16 @@ export function normalizeLandingPageConfig(
     intro: { enabled: bool(intro.enabled, true), title: str(intro.title), body: str(intro.body) },
     sessions: { enabled: bool(obj(lp.sessions).enabled, true), detailPopup: bool(obj(lp.sessions).detailPopup, true) },
     timetable: { enabled: bool(obj(lp.timetable).enabled, true) },
+    audience: {
+      enabled: bool(audience.enabled, true),
+      // 머리글은 빈 값을 그대로 통과 — 뷰가 기본 문구를 쓴다(기본 문구를 나중에 고치면 같이 반영)
+      title: str(audience.title),
+      items: rows(
+        audience.items,
+        (r) => ({ icon: str(r.icon), title: str(r.title), description: str(r.description) }),
+        (r) => r.title.trim() !== "",
+      ),
+    },
     programs: {
       enabled: bool(programs.enabled, true),
       items: rows(
@@ -279,6 +361,24 @@ export const DEFAULT_REGISTRATION_FIELDS: WebinarRegistrationField[] = [
   { id: "industry", key: "industry", label: "업종", type: "text", placeholder: "", required: false, enabled: true, options: [], system: true },
 ];
 
+/**
+ * 선택형 필드의 부가 값(maxSelect·allowOther)만 따로 정규화한다.
+ *
+ * maxSelect 는 옵션 수보다 작을 때만 저장한다 — 옵션 전체 이상이면 "최대 3개" 라고 적혀 있는데
+ * 실제로는 아무 제한이 없는 상태가 되고, 그 문구가 화면에 그대로 나간다(설문과 같은 규칙).
+ * 두 값 모두 없으면 키를 아예 넣지 않는다 — config JSON 에 undefined 를 남기지 않으려고.
+ */
+function normalizeChoiceExtras(
+  saved: { maxSelect?: unknown; allowOther?: unknown } | undefined,
+  optionCount: number,
+): { maxSelect?: number; allowOther?: boolean } {
+  const out: { maxSelect?: number; allowOther?: boolean } = {};
+  const raw = Number(saved?.maxSelect);
+  if (Number.isInteger(raw) && raw >= 1 && raw < optionCount) out.maxSelect = raw;
+  if (saved?.allowOther === true) out.allowOther = true;
+  return out;
+}
+
 function normalizeFieldType(value: unknown): WebinarFieldType {
   return FIELD_TYPES.includes(value as WebinarFieldType) ? (value as WebinarFieldType) : "text";
 }
@@ -305,6 +405,7 @@ export function normalizeRegistrationForm(
       // 빈 옵션은 그릴 수 없다 — 편집 중 자동저장으로 빈 행이 저장돼도 읽기에서 걸러
       // 공개 폼에 빈 드롭다운 항목이 뜨거나(중복 key) 필수 검증이 등록을 막는 일을 방지.
       options: Array.isArray(saved?.options) ? saved.options.map(String).filter((s) => s.trim() !== "") : field.options,
+      ...normalizeChoiceExtras(saved, Array.isArray(saved?.options) ? saved.options.length : field.options.length),
       system: true,
     } satisfies WebinarRegistrationField;
   });
@@ -320,6 +421,7 @@ export function normalizeRegistrationForm(
       required: Boolean(item.required),
       enabled: item.enabled !== false,
       options: Array.isArray(item.options) ? item.options.map(String).filter((s) => s.trim() !== "") : [],
+      ...normalizeChoiceExtras(item, Array.isArray(item.options) ? item.options.length : 0),
       system: false,
     } satisfies WebinarRegistrationField));
 
@@ -341,10 +443,16 @@ export function normalizeRegistrationForm(
   );
 
   return {
-    // 공개 화면에서는 비활성 필드와 "옵션 0개 드롭다운"(그릴 수 없어 필수면 등록을 막는다)을 제외한다.
+    /**
+     * 공개 화면에서는 비활성 필드와 **선택지 0개인 선택형**을 제외한다.
+     * 그릴 수 없는 항목을 필수로 두면 등록 자체가 막히기 때문이다(드롭다운·복수 선택 공통).
+     * 단, '기타(직접입력)' 이 켜져 있으면 선택지가 없어도 자유 입력으로 답할 수 있으므로 남긴다.
+     */
     fields: opts?.includeDisabled
       ? fields
-      : fields.filter((field) => field.enabled !== false && !(field.type === "select" && !(field.options ?? []).length)),
+      : fields.filter((field) =>
+          field.enabled !== false
+          && !(CHOICE_FIELD_TYPES.includes(field.type) && !(field.options ?? []).length && field.allowOther !== true)),
     privacyText: typeof raw?.privacyText === "string" ? raw.privacyText : "[필수] 개인정보 수집 및 이용에 동의합니다",
     marketingText: typeof raw?.marketingText === "string" ? raw.marketingText : "[선택] 마케팅 정보 수신에 동의합니다",
     privacyBody: typeof raw?.privacyBody === "string" ? raw.privacyBody : "",

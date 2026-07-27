@@ -43,14 +43,24 @@ function sessionCardInner(m: LandingModel, session: LandingSession): (Node | fal
       { class: "session-card-body" },
       h("span", { class: "session-time" }, session.startTime, "–", session.endTime),
       h("h3", null, session.title),
+      /**
+       * 연사 정보와 '자세히 보기' 를 **한 줄**에 둔다 — 이름·회사는 왼쪽, 링크는 오른쪽 하단.
+       * 예전엔 세로로 쌓여서 링크가 이름 바로 아래 붙었는데, 카드 하단에서 두 정보가
+       * 같은 축을 쓰다 보니 시선이 어디서 멈춰야 하는지 애매했다. 좌우로 갈라 두면
+       * "누가" 와 "더 보기" 가 서로 다른 역할이라는 게 위치로 드러난다.
+       */
       h(
         "div",
-        { class: "speaker" },
-        Boolean(sp.name) && h("b", null, sp.name),
-        Boolean(sp.company) && h("span", { class: "speaker-co" }, sp.company),
+        { class: "session-foot" },
+        h(
+          "div",
+          { class: "speaker" },
+          Boolean(sp.name) && h("b", null, sp.name),
+          Boolean(sp.company) && h("span", { class: "speaker-co" }, sp.company),
+        ),
+        m.detailPopup &&
+          h("span", { class: "session-more", "aria-hidden": "true" }, "자세히 보기", arrowIcon()),
       ),
-      m.detailPopup &&
-        h("span", { class: "session-more", "aria-hidden": "true" }, "자세히 보기", arrowIcon()),
     ),
   ];
 }
@@ -142,7 +152,13 @@ export function createSessionDialog(
   opts: { onClose: () => void },
 ): HTMLElement {
   const sp = parseSpeaker(session.speaker, session.speakerCompany);
-  const hasSpeaker = Boolean(sp.name || sp.company || session.speakerBio);
+  const hasSpeakerInfo = Boolean(sp.name || sp.company || session.speakerBio);
+  /**
+   * 로고도 이 블록의 렌더 조건이다 — 로고는 주최·협력사 마크라 **연사가 없는 세션**
+   * (오프닝·클로징)에도 있을 수 있다. 게이트를 연사 정보로만 두면 그런 세션에서 로고가
+   * 통째로 사라진다. 반대로 로고만 있는 경우엔 아바타·이름 줄을 그리지 않는다(빈 원 방지).
+   */
+  const hasSpeaker = hasSpeakerInfo || Boolean(session.logoUrl);
   const photo = session.speakerPhotoUrl;
   const titleId = m.sectionId("modal-title");
 
@@ -205,17 +221,23 @@ export function createSessionDialog(
           h(
             "div",
             { class: "lnd-modal-speaker-head" },
-            h(
-              "span",
-              { class: "lnd-modal-avatar", "aria-hidden": "true" },
-              photo ? h("img", { src: photo, alt: "" }) : sp.name.trim().charAt(0) || "·",
-            ),
-            h(
-              "div",
-              { class: "lnd-modal-speaker-id" },
-              Boolean(sp.name) && h("b", null, sp.name),
-              Boolean(sp.company) && h("span", null, sp.company),
-            ),
+            hasSpeakerInfo &&
+              h(
+                "span",
+                { class: "lnd-modal-avatar", "aria-hidden": "true" },
+                photo ? h("img", { src: photo, alt: "" }) : sp.name.trim().charAt(0) || "·",
+              ),
+            hasSpeakerInfo &&
+              h(
+                "div",
+                { class: "lnd-modal-speaker-id" },
+                Boolean(sp.name) && h("b", null, sp.name),
+                Boolean(sp.company) && h("span", null, sp.company),
+              ),
+            /* 로고는 이 줄의 **오른쪽 끝**(margin-left:auto). 이름·소속과 같은 줄에 두면
+               "누가 · 어디" 가 한눈에 읽히고, 제목 아래에 두었을 때처럼 본문 흐름을 끊지 않는다. */
+            Boolean(session.logoUrl) &&
+              h("img", { class: "lnd-modal-logo", src: session.logoUrl, alt: "", loading: "lazy" }),
           ),
           Boolean(session.speakerBio) &&
             h(

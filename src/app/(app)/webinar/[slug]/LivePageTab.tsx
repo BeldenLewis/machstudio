@@ -12,6 +12,7 @@ import {
 import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { getYouTubeVideoId } from "@/lib/youtube";
 import { Switch } from "@/components/ui/switch";
+import { goesFor } from "@/lib/webinar-exposure";
 import { Blk, JumpLink, btnCls, FIELD_CLS, FIELD_CLS_DANGER, FINISH, R, SELECTED, Segmented } from "@/components/ui/primitives";
 
 /** 시청자에게 보이는 한 페이지의 네 순간. 어드민에서는 이 상태로 편집 대상을 고른다. */
@@ -252,28 +253,39 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
    *
    * 여기서는 셋을 하나의 3택으로 묶는다. 저장 위치는 그대로 두고 **결정만 한 자리로** 모은다.
    */
-  const linkedSurvey = surveyOptions?.find((s) => s.showOnEnded) ?? null;
+  /**
+   * 연결된 자체 설문은 **여러 개**일 수 있다 — 만족도 설문과 다음 회차 사전조사를 함께 거는 게
+   * 실제 운영 패턴이라 웨비나당 1개 제약을 걷었다(webinar-ended-surveys.ts 의 규칙).
+   * 자체 설문 vs 외부 URL 은 여전히 배타적이다 — 자체가 하나라도 있으면 URL 은 무시된다.
+   */
+  const linkedSurveys = surveyOptions?.filter((s) => s.showOnEnded) ?? [];
   const surveyLink: "none" | "internal" | "external" =
-    !screens.ended.survey ? "none" : linkedSurvey ? "internal" : "external";
+    !screens.ended.survey ? "none" : linkedSurveys.length > 0 ? "internal" : "external";
 
-  /** 자체 설문 연결/해제 — 설문은 별도 엔드포인트라 즉시 저장된다(설문 탭과 같은 방식). */
-  const setInternalSurvey = async (id: string | null) => {
+  /**
+   * 자체 설문 연결 토글 — 설문은 별도 엔드포인트라 즉시 저장된다(설문 탭과 같은 방식).
+   *
+   * ⚠ 예전 구현은 "연결하면 서버가 나머지를 자동으로 끈다(웨비나당 1개)" 에 기대어 로컬
+   * 상태에서 다른 행을 통째로 끄고 있었다. 그 서버 동작을 없앤 뒤에도 남아 있으면
+   * **화면만 하나로 보이고** 새로고침하면 다른 연결이 되살아난다. 지금은 건드린 행만 바꾼다.
+   */
+  const toggleInternalSurvey = async (id: string, on: boolean) => {
     const list = surveyOptions ?? [];
-    // 해제: 현재 연결된 것만 끈다. 연결: 서버가 나머지를 자동으로 끈다(웨비나당 1개).
-    const targets = id ? [{ id, on: true }] : list.filter((s) => s.showOnEnded).map((s) => ({ id: s.id, on: false }));
-    setSurveyOptions(list.map((s) => ({ ...s, showOnEnded: id ? s.id === id : false })));
-    for (const t of targets) {
-      const res = await fetch(`/api/webinars/${webinar.id}/surveys/${t.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ showOnEnded: t.on }),
-      });
-      if (!res.ok) {
-        toast.error("설문 연결을 바꾸지 못했어요");
-        setSurveyOptions(list); // 낙관적 업데이트 되돌리기
-        return;
-      }
+    setSurveyOptions(list.map((s) => (s.id === id ? { ...s, showOnEnded: on } : s)));
+    const res = await fetch(`/api/webinars/${webinar.id}/surveys/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ showOnEnded: on }),
+    });
+    if (!res.ok) {
+      toast.error("설문 연결을 바꾸지 못했어요");
+      setSurveyOptions(list); // 낙관적 업데이트 되돌리기
     }
+  };
+
+  /** 자체 설문 전체 해제 — '연결 안 함'·'외부 링크' 로 넘어갈 때. */
+  const unlinkAllSurveys = async () => {
+    for (const s of surveyOptions ?? []) if (s.showOnEnded) await toggleInternalSurvey(s.id, false);
   };
 
   const buildLivePage = () => {
@@ -435,7 +447,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
       {/* ══════════ 대기 ══════════ */}
       {state === "waiting" && (
         <>
-          <Blk title="화면 구성" tag="read" goes={["대기 화면"]} hint="대기 화면에 보여줄 요소예요. 데이터가 없으면 켜져 있어도 자동으로 숨겨져요.">
+          <Blk title="화면 구성" tag="read" goes={goesFor("waiting", "entry")} hint="대기 화면에 보여줄 요소예요. 데이터가 없으면 켜져 있어도 자동으로 숨겨져요.">
             <div className="space-y-2.5">
               <Toggle label="세션 순서(아젠다)" checked={screens.waiting.agenda} onChange={(v) => setW("agenda", v)} desc="세션 탭에 등록한 시간표가 타임라인으로 표시돼요" />
               <Toggle label="등록자 수(사회적 증거)" checked={screens.waiting.social} onChange={(v) => setW("social", v)} />
@@ -445,7 +457,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
             </div>
           </Blk>
 
-          <Blk title="캘린더" goes={["대기 화면"]} hint="&ldquo;캘린더에 추가&rdquo; 버튼이 여는 링크예요.">
+          <Blk title="캘린더" goes={goesFor("waiting", "entry")} hint="&ldquo;캘린더에 추가&rdquo; 버튼이 여는 링크예요.">
             <input aria-label="캘린더 URL" type="url" placeholder="https://calendar.google.com/..." value={form.calendarUrl}
               onChange={(e) => setForm((f) => ({ ...f, calendarUrl: e.target.value }))} className={inputCls} />
           </Blk>
@@ -456,7 +468,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
       {state === "live" && (
         <>
           {/* 영상 */}
-          <Blk title="영상" tag="risk" goes={["라이브 시청"]} pinned hint="시청 화면에 재생될 라이브 방송 소스예요.">
+          <Blk title="영상" tag="risk" goes={goesFor("live")} pinned hint="시청 화면에 재생될 라이브 방송 소스예요.">
             <div>
               <label htmlFor={`${uid}-yt`} className="text-xs text-muted-foreground mb-1 block">YouTube 공유 링크 또는 영상 ID</label>
               <input id={`${uid}-yt`} type="text" placeholder="예: https://youtu.be/dQw4w9WgXcQ" value={form.youtubeId}
@@ -471,7 +483,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
           </Blk>
 
           {/* 콘텐츠 */}
-          <Blk title="콘텐츠" goes={["라이브 시청"]} hint="시청 화면의 정보·안내 문구예요. 비워두면 표시되지 않아요.">
+          <Blk title="콘텐츠" goes={goesFor("live")} hint="시청 화면의 정보·안내 문구예요. 비워두면 표시되지 않아요.">
             <div className="space-y-3">
               <div>
                 <label htmlFor={`${uid}-contact`} className="text-xs text-muted-foreground mb-1 block">문의처 (정보 카드)</label>
@@ -487,7 +499,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
           </Blk>
 
           {/* 자료 받기 카드 (CTA) — 여러 장 */}
-          <Blk title="자료 받기 카드 (CTA)" goes={["라이브 시청"]} hint="시청 화면 하단에 표시돼요.">
+          <Blk title="자료 받기 카드 (CTA)" goes={goesFor("live")} hint="시청 화면 하단에 표시돼요.">
             {/**
              * 골격 이관. 여기서 고쳐지는 실제 결함이 하나 있다: 카드는 key={card.id} 로
              * 그려지는데 **수정·삭제는 인덱스**였다 — `updateCta(i, …)` 와 `filter((_, j) => j !== i)`.
@@ -593,7 +605,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
               켜고 끄는 스위치는 헤더 우측 action 으로 올린다(제목과 스위치가 한 줄). */}
           <Blk
             title="알림 받고 이어보기 카드"
-            goes={["라이브 시청"]}
+            goes={goesFor("live")}
             hint="시청 화면 하단에 다음 세션 알림·다시보기 안내 카드를 보여줘요."
             action={
               <Switch
@@ -620,7 +632,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
           </Blk>
 
           {/* 참여 구성 */}
-          <Blk title="참여 구성" tag="sync" goes={["라이브 시청"]}
+          <Blk title="참여 구성" tag="sync" goes={goesFor("live")}
             action={onGoToConsole ? <JumpLink onClick={onGoToConsole}>라이브 콘솔</JumpLink> : undefined} hint="시청 화면 참여 박스(Q&amp;A·채팅·세션) 구성이에요.">
             <div className="space-y-4">
               <Toggle
@@ -657,7 +669,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
       {state === "entry" && (
         <>
           {/* 입장 화면 */}
-          <Blk title="입장 화면" goes={["입장 확인"]} hint="라이브 중 미인증 방문자가 보는 입장 확인 화면이에요.">
+          <Blk title="입장 화면" goes={goesFor("entry")} hint="라이브 중 미인증 방문자가 보는 입장 확인 화면이에요.">
             <div>
               <Toggle label="실시간 시청자 수" checked={screens.entry.viewerCount} onChange={(v) => setScreens((s) => ({ ...s, entry: { viewerCount: v } }))}
                 desc="'지금 N명이 함께 보고 있어요' — 입장을 유도하는 사회적 증거예요" />
@@ -672,7 +684,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
         <>
           {/* 문구를 화면 구성보다 위에 둔다 — 종료 화면에서 시청자가 가장 먼저 읽는 부분이라
               편집 순서도 화면 순서와 같게 맞춘다. */}
-          <Blk title="인사말" goes={["종료 화면"]} hint="종료 화면 맨 위에 크게 보이는 문구예요. 비우면 기본 문구가 쓰여요.">
+          <Blk title="인사말" goes={goesFor("ended")} hint="종료 화면 맨 위에 크게 보이는 문구예요. 비우면 기본 문구가 쓰여요.">
             <div className="space-y-2">
               <div>
                 <label htmlFor="ended-title" className="mb-1 block text-xs text-muted-foreground">제목</label>
@@ -700,7 +712,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
             </div>
           </Blk>
 
-          <Blk title="화면 구성" tag="read" goes={["종료 화면"]} hint="종료 화면에 보여줄 요소예요. 데이터가 없으면 켜져 있어도 자동으로 숨겨져요.">
+          <Blk title="화면 구성" tag="read" goes={goesFor("ended")} hint="종료 화면에 보여줄 요소예요. 데이터가 없으면 켜져 있어도 자동으로 숨겨져요.">
             <div className="space-y-2.5">
               <Toggle label="다시보기 신청" checked={screens.ended.replay} onChange={(v) => setEn("replay", v)} desc="신청자는 알림 수신 목록에 담겨요 — 다시보기 링크를 이메일로 보내세요" />
               <Toggle label="자료 다운로드" checked={screens.ended.resources} onChange={(v) => setEn("resources", v)} desc="아래 자료를 1개 이상 추가해야 표시" />
@@ -709,7 +721,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
             </div>
           </Blk>
 
-          <Blk title="설문 연결" tag="sync" goes={["종료 화면"]} hint={<>종료 화면의 &ldquo;설문 참여하기&rdquo; 버튼이 무엇을 여는지 — 하나만 고르면 돼요.</>}>
+          <Blk title="설문 연결" tag="sync" goes={goesFor("ended")} hint={<>종료 화면에 어떤 설문을 걸지 — 자체 설문은 여러 개, 외부 링크는 하나예요.</>}>
             <div className="space-y-3 rounded-2xl bg-secondary/20 p-4">
               <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="설문 연결">
                 {([
@@ -723,14 +735,16 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                     role="radio"
                     aria-checked={surveyLink === opt.v}
                     onClick={() => {
-                      if (opt.v === "none") { setEn("survey", false); void setInternalSurvey(null); return; }
+                      if (opt.v === "none") { setEn("survey", false); void unlinkAllSurveys(); return; }
                       setEn("survey", true);
                       if (opt.v === "external") {
-                        // 자체 설문이 외부 URL 보다 우선하므로, 외부를 고르면 자체 연결을 반드시 끊는다 —
+                        // 자체 설문이 외부 URL 보다 우선하므로, 외부를 고르면 자체 연결을 전부 끊는다 —
                         // 안 끊으면 URL 을 입력해도 조용히 무시된다(예전의 그 혼란).
-                        void setInternalSurvey(null);
-                      } else if (!linkedSurvey && surveyOptions?.length) {
-                        void setInternalSurvey(surveyOptions[0].id);
+                        void unlinkAllSurveys();
+                      } else if (linkedSurveys.length === 0 && surveyOptions?.length) {
+                        // 자체 설문으로 넘어올 때 첫 칸을 켜 준다 — 아무것도 안 켜진 '자체 설문' 은
+                        // 화면상 외부와 구분되지 않고, 그 상태로는 버튼이 안 뜬다.
+                        void toggleInternalSurvey(surveyOptions[0].id, true);
                       }
                     }}
                     className={`rounded-lg px-3 py-2 text-xs font-medium shadow-sm transition-colors ${
@@ -751,19 +765,27 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                     {onGoToSurvey ? <JumpLink onClick={onGoToSurvey}>설문에서 먼저 만들기</JumpLink> : "만들기 → 설문에서 먼저 만들어 주세요"}
                   </p>
                 ) : (
+                  /* 드롭다운이 아니라 체크 목록인 이유: 여러 개를 걸 수 있게 됐고, 드롭다운은
+                     **하나만 고를 수 있다고 말한다.** 켜진 것이 전부 한눈에 보여야 종료 화면에
+                     카드가 몇 장 나가는지 알 수 있다(AGENTS §2 — 고치는 값은 항상 보이게). */
                   <div className="space-y-1.5">
-                    <label className="block text-xs text-muted-foreground" htmlFor="ended-survey-pick">연결할 설문</label>
-                    <select
-                      id="ended-survey-pick"
-                      value={linkedSurvey?.id ?? ""}
-                      onChange={(e) => void setInternalSurvey(e.target.value || null)}
-                      className={inputCls}
-                    >
-                      {surveyOptions.map((o) => <option key={o.id} value={o.id}>{o.title || "제목 없는 설문"}</option>)}
-                    </select>
+                    <p className="text-xs text-muted-foreground">연결할 설문 — 여러 개 고를 수 있어요</p>
+                    <div className="space-y-1">
+                      {surveyOptions.map((o) => (
+                        <label key={o.id} className="flex min-h-9 cursor-pointer items-center gap-2.5 text-[13px]">
+                          <input
+                            type="checkbox"
+                            checked={o.showOnEnded}
+                            onChange={(e) => void toggleInternalSurvey(o.id, e.target.checked)}
+                            className="size-4 shrink-0 accent-violet-500"
+                          />
+                          <span className={o.showOnEnded ? "" : "text-muted-foreground"}>{o.title || "제목 없는 설문"}</span>
+                        </label>
+                      ))}
+                    </div>
                     <p className="text-[11px] text-muted-foreground">
-                      웨비나당 하나만 연결돼요 — 다른 설문을 고르면 이전 연결은 자동으로 해제됩니다.
-                      설문이 닫혀 있거나 마감이 지나면 버튼도 표시되지 않아요.
+                      고른 순서가 아니라 <b className="font-medium">설문을 만든 순서</b>로 종료 화면에 나란히 놓여요.
+                      설문이 닫혀 있거나 마감이 지나면 그 카드는 표시되지 않아요.
                     </p>
                   </div>
                 )
@@ -783,7 +805,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
           </Blk>
 
           {screens.ended.resources && (
-            <Blk title="받아가세요 · 자료" goes={["종료 화면"]} hint="종료 화면에서 다운로드 리스트로 표시돼요.">
+            <Blk title="받아가세요 · 자료" goes={goesFor("ended")} hint="종료 화면에서 다운로드 리스트로 표시돼요.">
               {/* 공용 골격(EditableList)으로 통일 — 예전엔 key={i} 라 중간 행을 지우면 아래 행들의
                   입력값·IME 조합이 엉켰고, 삭제는 "삭제" 텍스트 버튼에 되돌리기가 없었고, 순서도 못 바꿨다. */}
               <EditableList
@@ -815,7 +837,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
           )}
 
           {screens.ended.nextWebinar && (
-            <Blk title="다음 웨비나" goes={["종료 화면"]} hint="종료 화면 하단에 사전등록 티저로 표시돼요.">
+            <Blk title="다음 웨비나" goes={goesFor("ended")} hint="종료 화면 하단에 사전등록 티저로 표시돼요.">
               <input aria-label="다음 웨비나 제목" className={inputCls} placeholder="제목 (예: 미국 아마존 입점 A to Z)" value={nextWeb.title} onChange={(e) => setNextWeb((n) => ({ ...n, title: e.target.value }))} />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input aria-label="다음 웨비나 일시" className={inputCls} placeholder="일시 (예: 8월 21일 오후 2시)" value={nextWeb.when} onChange={(e) => setNextWeb((n) => ({ ...n, when: e.target.value }))} />

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { motion } from "framer-motion";
 import {
   Plus, Trash2, GripVertical, Link2, Loader2, BarChart3,
-  Star, CircleDot, ListChecks, Gauge, AlignLeft, Copy, ChevronDown, ChevronRight, ArrowLeft, Info, X, Smartphone, CalendarClock, CircleCheckBig, ClipboardList,
+  Star, CircleDot, ListChecks, Gauge, AlignLeft, Copy, ChevronDown, ChevronRight, ArrowLeft, Info, X, Smartphone, CalendarClock, CircleCheckBig, ClipboardList, MousePointerClick,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
@@ -46,6 +46,7 @@ interface AdminSurvey {
   closesAt: string | null; // 마감 예약 — 지나면 isOpen 과 무관하게 응답 마감
   doneTitle: string | null; // 제출 완료 화면 제목(없으면 기본 문구)
   doneDescription: string | null; // 제출 완료 화면 설명
+  ctaLabel: string | null; // 종료 화면 카드의 버튼 문구(없으면 기본: 설문 참여하기)
   showOnEnded: boolean;
   isActive: boolean;
   _count?: { responses: number };
@@ -375,6 +376,7 @@ function SurveyEditor({
   const [questions, setQuestions] = useState<SurveyQuestion[]>(survey.questions);
   const [doneTitle, setDoneTitle] = useState(survey.doneTitle ?? "");
   const [doneDescription, setDoneDescription] = useState(survey.doneDescription ?? "");
+  const [ctaLabel, setCtaLabel] = useState(survey.ctaLabel ?? "");
   const [copied, setCopied] = useState(false);
   // 보관 문항(retired)은 편집 대상이 아니다 — 답변이 있어 정의만 남겨둔 것이라
   // 편집 목록·드래그에서 빼고 아래 별도 섹션에 읽기 전용으로 보여준다.
@@ -393,7 +395,7 @@ function SurveyEditor({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         keepalive: true,
-        body: JSON.stringify({ title, description, questions, doneTitle, doneDescription }),
+        body: JSON.stringify({ title, description, questions, doneTitle, doneDescription, ctaLabel }),
       });
       if (!res.ok) { toast.error("자동 저장 실패 — 잠시 후 다시 시도돼요", { id: "autosave-error" }); return false; }
       // 목록(마스터-디테일) 왕복 후 재진입해도 방금 저장한 값으로 초기화되도록 부모 캐시 동기화
@@ -404,11 +406,12 @@ function SurveyEditor({
         questions,
         doneTitle: doneTitle.trim() || null,
         doneDescription: doneDescription.trim() || null,
+        ctaLabel: ctaLabel.trim() || null,
       });
       return true;
     } catch { return false; }
   };
-  const { state: saveState, retry } = useAutosave({ title, description, questions, doneTitle, doneDescription }, save);
+  const { state: saveState, retry } = useAutosave({ title, description, questions, doneTitle, doneDescription, ctaLabel }, save);
   // 표시는 껍데기 한 곳에서 그린다(만들기 화면당 1개) — 저장 경로는 그대로 각자.
   useReportAutosave(saveState, retry);
 
@@ -621,6 +624,22 @@ function SurveyEditor({
             />
           </div>
 
+          {/* 종료 화면 카드의 버튼 문구 — "설문 참여하기" 를 이 설문에서만 다른 말로 바꾸고 싶을 때.
+              두 설문을 함께 걸었을 때 카드마다 다른 행동을 유도하는 문구(예: "설문 참여하기" vs
+              "사전 신청하기")를 쓸 수 있어야 두 버튼이 똑같아 보이지 않는다. */}
+          <div className={`space-y-1.5 bg-secondary p-3 ${R.surface} ${FINISH.s2}`}>
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+              <MousePointerClick className="h-3.5 w-3.5 text-violet-500" />종료 화면 버튼
+            </p>
+            <input
+              value={ctaLabel}
+              onChange={(e) => setCtaLabel(e.target.value)}
+              placeholder="버튼 문구 (비우면 기본: 설문 참여하기)"
+              aria-label="종료 화면 버튼 문구"
+              className="w-full bg-transparent text-[13px] font-medium outline-none placeholder:font-normal placeholder:text-muted-foreground/50"
+            />
+          </div>
+
           {questions.some((q) => !q.title.trim()) && (
             <p className="text-[11px] text-muted-foreground/70">제목이 빈 문항은 저장은 되지만 응답 화면에는 표시되지 않아요.</p>
           )}
@@ -778,11 +797,10 @@ export default function SurveyTab({
           theme={viewerTheme}
           survey={selected}
           onDeleted={() => { setSurveys((prev) => (prev ?? []).filter((item) => item.id !== selected.id)); setSelectedId(null); }}
+          /* 종료 화면 연결은 여러 개 가능 — 예전엔 여기서 다른 설문의 배지를 내렸다(서버의
+             원-액티브 강제와 짝). 서버 제약을 걷었으니 이 목록도 건드리지 않는다. */
           onMetaChanged={(patch) =>
-            setSurveys((prev) => (prev ?? []).map((item) => {
-              if (item.id !== selected.id) return patch.showOnEnded === true ? { ...item, showOnEnded: false } : item;
-              return { ...item, ...patch };
-            }))
+            setSurveys((prev) => (prev ?? []).map((item) => (item.id === selected.id ? { ...item, ...patch } : item)))
           }
         />
       </div>

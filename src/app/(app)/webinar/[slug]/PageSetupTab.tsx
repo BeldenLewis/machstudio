@@ -7,10 +7,9 @@ import SourceInfoTab from "./SourceInfoTab";
 import RegistrationFormTab from "./RegistrationFormTab";
 import LivePageTab, { type WatchState } from "./LivePageTab";
 import { AutosaveScope, AggregateAutosaveIndicator } from "@/components/ui/autosave-scope";
-import { checkWebinarReadiness, readinessBySection, type ReadinessSection } from "@/lib/webinar-readiness";
+import { readinessBySection, readinessFromExposure, type ReadinessSection } from "@/lib/webinar-readiness";
 import { buildExposureReport } from "@/lib/webinar-exposure";
 import { normalizeLivePageConfig } from "@/lib/webinar-config";
-import { isRealSession } from "@/lib/webinar-sessions";
 import SurveyTab from "./SurveyTab";
 import { type OperateSection } from "./OperateTab";
 import LandingPageTab from "./LandingPageTab";
@@ -157,23 +156,6 @@ export default function PageSetupTab({
    */
   const endedSurveyAreaOn = normalizeLivePageConfig(webinar.config ?? {}).ended.survey;
 
-  /**
-   * 준비 상태 — "시청자에게 빈 화면은 없어요" 검사(순수 함수 + vitest 로 검증).
-   * 완성도가 아니라 **토글 ON + 내용 있음** 이중 게이트만 본다.
-   */
-  const issues = useMemo(
-    () => checkWebinarReadiness({
-      name: webinar.name,
-      // 실제 세션만 센다 — 전체 행 수를 넘기면 휴식·Q&A·오프닝만 있는 웨비나가
-      // "대기 아젠다에 보여 줄 세션이 있다" 로 오판된다(빈 아젠다가 시청자에게 나간다).
-      sessionCount: webinar.sessions.filter(isRealSession).length,
-      config: webinar.config,
-      // 준비 상태는 boolean 계약이다 — 모르는 값은 "없다" 로 접는다(경고를 덜 내는 쪽).
-      hasLinkedEndedSurvey: hasLinkedEndedSurvey === true,
-    }),
-    [webinar.name, webinar.sessions, webinar.config, hasLinkedEndedSurvey],
-  );
-  const issuesBySection = useMemo(() => readinessBySection(issues), [issues]);
 
   /**
    * 미리보기 패널 열림 — 레이아웃 취향이라 세션 간 유지한다(매번 다시 열게 하면 성가시다).
@@ -248,6 +230,17 @@ export default function PageSetupTab({
     }),
     [webinar, isEnded, isLive, canRegister, hasOpenSurvey, hasLinkedEndedSurvey],
   );
+
+  /**
+   * 준비 상태 — 이제 **노출 리포트에서 파생**한다(webinar-readiness.ts 주석에 근거).
+   *
+   * 예전엔 여기서 checkWebinarReadiness 를 따로 불렀고, 그 함수가 config 를 다시 읽어
+   * 자기 게이트 식을 갖고 있었다. 두 판정기가 갈린 자리마다 준비 상태가 틀린 쪽이었다 —
+   * 특히 아젠다 세션 개수를 실제 세션만 세어(여기서 filter(isRealSession) 로 넘겼다)
+   * 오프닝·Q&A 만 있는 웨비나에 "사라져요" 라는 거짓 경고를 냈다. 뷰어는 전체 행으로 그린다.
+   */
+  const issues = useMemo(() => readinessFromExposure(exposure), [exposure]);
+  const issuesBySection = useMemo(() => readinessBySection(issues), [issues]);
 
   const activeMeta = sections.find((item) => item.id === section) ?? sections[0];
   const ActiveIcon = activeMeta.icon;

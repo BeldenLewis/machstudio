@@ -30,10 +30,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   // 상태머신 단일 판정 — 라이브 페이지가 운영 콘솔의 statusOverride·입장오픈 윈도를 반영하도록.
   const statusInfo = resolveWebinarStatus(webinar);
 
-  // 종료 화면에 연결된 자체 설문 — 있으면 외부 surveyUrl 보다 우선한다 (id/title 만 공개)
-  const endedSurvey = await prisma.webinarSurvey.findFirst({
+  /**
+   * 종료 화면에 연결된 자체 설문 — 있으면 외부 surveyUrl 보다 우선한다(공개 값은 id/제목/설명뿐).
+   * **여러 개** 걸 수 있다: 만족도 설문 + 다음 행사 사전조사처럼.
+   */
+  const endedSurveys = await prisma.webinarSurvey.findMany({
     where: { webinarId: webinar.id, showOnEnded: true, isOpen: true, OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }] },
-    select: { id: true, title: true },
+    // 만든 순서대로 — 종료 화면 카드 순서가 관리자 목록 순서와 같아야 어느 카드를 고칠지 알 수 있다
+    orderBy: { createdAt: "asc" },
+    select: { id: true, title: true, description: true, ctaLabel: true },
   });
 
   // config 는 뷰어가 실제로 쓰는 키만 allowlist 로 노출 — youtubeId(입장 verify 시 전달) 및
@@ -86,7 +91,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     {
       webinar: { ...publicWebinar, config },
       landingPreviewAllowed,
-      endedSurvey,
+      endedSurveys,
+      /* 한 배포 동안 남기는 단일 키 — 이 응답은 캐시될 수 있어서, 새 클라이언트가 옛 payload 를
+         받는 창이 있다. 그 창에서 설문 카드가 사라지지 않게 첫 번째를 그대로 실어 보낸다.
+         다음 배포에서 제거. */
+      endedSurvey: endedSurveys[0] ?? null,
       status: statusInfo.status,
       entryOpen: statusInfo.entryOpen,
       canRegister: statusInfo.canRegister,

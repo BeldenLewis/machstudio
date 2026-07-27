@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, BarChart3, Bell, ClipboardCheck, ExternalLink, Megaphone, MessageSquarePlus, X } from "lucide-react";
 import SurveyForm, { SURVEY_FORM_CSS, clearSurveyDraft } from "./SurveyForm";
+import ViewerModal from "./ViewerModal";
 import type { SurveyAnswers, SurveyQuestion } from "@/lib/webinar-survey";
 
 export interface LivePopup {
@@ -445,29 +446,11 @@ export default function LivePushLayer({
 
       {/* 설문 푸시 모달 — 팝업 모달이 떠 있을 땐 보류(팝업 우선). SurveyForm(STK 토큰) 재사용. */}
       {activeSurvey && !popup && (
-        <div
-          className="stk-live fixed inset-0 z-[65] flex items-center justify-center p-4"
-          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(5px)", WebkitBackdropFilter: "blur(5px)" }}
-          onClick={(e) => { if (e.target === e.currentTarget) dismissSurvey(); }}
-        >
+        /* 껍데기는 ViewerModal 공용 — 종료 화면 설문·등록 완료 팝업과 같은 구조를 쓴다
+           (콘텐츠만 스크롤하고 × 는 고정: 모바일에서 닫기 버튼이 밀려 나가지 않게). */
+        <ViewerModal surface={surface} text={text} soft={soft} label={activeSurvey.title} onClose={dismissSurvey}>
           <style dangerouslySetInnerHTML={{ __html: SURVEY_FORM_CSS }} />
-          <div
-            className="relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl shadow-2xl"
-            style={{ background: surface, color: text }}
-            role="dialog"
-            aria-modal="true"
-            aria-label={activeSurvey.title}
-          >
-            <button
-              onClick={dismissSurvey}
-              aria-label="설문 닫기"
-              className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg text-base transition-colors"
-              style={{ color: soft(50), background: soft(6) }}
-            >
-              ×
-            </button>
-            <div className="min-h-0 overflow-y-auto p-7">
-              {surveyDone ? (
+          {surveyDone ? (
                 <div className="py-10 text-center">
                   <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full" style={{ background: "color-mix(in srgb,#12B76A 14%,transparent)", color: "#12B76A" }}>✓</div>
                   <p className="text-lg font-bold">{activeSurvey.doneTitle?.trim() || "소중한 의견 감사합니다"}</p>
@@ -489,12 +472,10 @@ export default function LivePushLayer({
                     <SurveyForm key={surveyDraftKey(activeSurvey)} questions={activeSurvey.questions} submitting={surveySubmitting} onSubmit={submitSurvey} storageKey={surveyDraftKey(activeSurvey)} />
                   </div>
                   {surveyError && <p className="mt-3 text-[13px] text-red-400" role="alert">{surveyError}</p>}
-                  <p className="mt-3 text-center text-[11px]" style={{ color: soft(40) }}>닫으면 이 설문은 다시 표시되지 않아요.</p>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+              <p className="mt-3 text-center text-[11px]" style={{ color: soft(40) }}>닫으면 이 설문은 다시 표시되지 않아요.</p>
+            </>
+          )}
+        </ViewerModal>
       )}
 
       {/* 실시간 투표 토스트 — 우하단. 팝업 모달이 떠 있을 땐 숨김(팝업 우선), 닫히면 다시 노출. 색은 테마 구동. */}

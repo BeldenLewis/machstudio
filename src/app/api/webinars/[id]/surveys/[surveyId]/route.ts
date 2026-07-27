@@ -43,6 +43,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // 제출 완료 화면 문구 — 빈 값이면 null(노출면별 기본 문구로 폴백)
   if (body?.doneTitle !== undefined) data.doneTitle = String(body.doneTitle ?? "").trim() || null;
   if (body?.doneDescription !== undefined) data.doneDescription = String(body.doneDescription ?? "").trim() || null;
+  // 종료 화면 카드 버튼 문구 — 빈 값이면 null(EndedScreen 이 "설문 참여하기" 로 폴백)
+  if (body?.ctaLabel !== undefined) data.ctaLabel = String(body.ctaLabel ?? "").trim() || null;
   let retiredCount = 0;
   if (body?.questions !== undefined) {
     const incoming = normalizeSurveyQuestions(body.questions, { includeHidden: true });
@@ -84,13 +86,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
-  // 종료화면 연결도 웨비나당 1개만 — 켜면 다른 설문의 연결을 내린다
-  if (body?.showOnEnded === true) {
-    await prisma.webinarSurvey.updateMany({ where: { webinarId: id, showOnEnded: true, NOT: { id: surveyId } }, data: { showOnEnded: false } });
-    data.showOnEnded = true;
-  } else if (body?.showOnEnded === false) {
-    data.showOnEnded = false;
-  }
+  /**
+   * 종료 화면 연결은 **여러 개 가능**하다 — 만족도 설문과 다음 행사 사전조사를 함께 걸 수 있다.
+   * 예전엔 켤 때 다른 설문의 연결을 내렸는데(원-액티브), 스키마에는 그런 제약이 없었고
+   * 코드만 하나로 묶고 있었다. 종료 화면이 카드 목록이라 N개를 그리는 데 문제가 없다.
+   *
+   * 라이브 푸시(isActive)는 여전히 하나뿐이다 — 그건 화면을 덮는 오버레이라 겹치면 안 되고,
+   * 부분 유니크 인덱스가 DB 차원에서 보증한다(아래 블록). 두 축을 섞지 않는다.
+   */
+  if (typeof body?.showOnEnded === "boolean") data.showOnEnded = body.showOnEnded;
 
   // 라이브 푸시 활성화 — 원-액티브: 켤 때 기존 활성 설문을 먼저 내린다 (부분 유니크 인덱스가 레이스 보증, P2002→409)
   if (body?.isActive === true) {

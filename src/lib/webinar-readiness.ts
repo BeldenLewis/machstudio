@@ -1,14 +1,34 @@
-// 만들기 준비 상태 — "시청자에게 빈 화면은 없어요" 검사.
-//
-// 이 검사가 보는 것은 **완성도가 아니라 이중 게이트**다. AGENTS 의 공개 페이지 원칙:
-// "섹션은 config 토글 ON + 실제 데이터 있음 이중 게이트 — 빈 껍데기를 시청자에게 노출하지 않는다."
-// 그래서 "설명을 더 쓰세요" 같은 잔소리는 하지 않고, **켜 놨는데 내용이 없어서 시청자 화면에서
-// 조용히 사라지는 것**만 짚는다. 조용히 사라지는 게 문제인 이유: 운영자는 켰다고 믿는다.
-//
-// 순수 함수인 이유: 만들기 탭은 로그인 뒤에 있어 브라우저 자동화로 열 수 없다.
-// 판정 로직을 여기 두면 vitest 가 매 커밋마다 실제 조합을 검증한다.
+/**
+ * 만들기 준비 상태 — "시청자에게 빈 화면은 없어요" 검사.
+ *
+ * ── 이 파일은 이제 **판정하지 않는다** ─────────────────────────────────────────
+ * 예전에는 checkWebinarReadiness 가 config 를 직접 읽어 자기 게이트 식을 갖고 있었다.
+ * 노출 점검 표(webinar-exposure.ts)가 같은 질문에 답하기 시작한 뒤로 두 판정기가 갈렸고,
+ * 갈린 자리마다 **뷰어와 대조해 보면 준비 상태가 틀린 쪽**이었다:
+ *
+ *   · 대기 아젠다  — 실제 세션(type=session)만 세어 "세션이 없어요" 라고 경고했다.
+ *                    뷰어는 전체 행으로 아젠다를 그린다(PreLiveWaiting: sessions.length > 0).
+ *                    오프닝·Q&A 만 있는 웨비나가 "사라져요" 경고를 받았고, 그 말을 믿고
+ *                    토글을 끄면 **그때 실제로 사라졌다.**
+ *   · 랜딩        — programs/faq 의 **원시 배열 길이**를 셌다. 제목이 빈 행도 1로 세어
+ *                    "본문 있음" 이 되고, 그러면 '빈 페이지' 경고가 통째로 꺼졌다.
+ *                    정규화는 제목 없는 행을 버리므로 뷰어에는 그 섹션이 없다.
+ *                    반대 방향도 틀렸다 — 참여 절차는 입력하지 않아도 기본 3스텝이 나가는데
+ *                    steps 키가 없으면 0으로 세어 '내용 없음' 쪽으로 기울였다.
+ *   · 등록 폼     — `type !== "select"` 로 걸러서, 새로 생긴 복수 선택(multiple)의 선택지
+ *                    0개를 못 봤다. 또 '기타(직접입력)' 예외를 몰라 정상 항목을 고장으로 신고했다.
+ *
+ * 그래서 판정을 하나로 만들고 **표에서 파생**시킨다. 규칙은 하나다:
+ *   노출 표에서 state === "empty" 인 행 = 확인할 것 한 건.
+ * empty 의 정의가 이미 "켰는데 내용이 없어 조용히 사라진다" 이므로 준비 상태의 원래 계약과 같다.
+ *
+ * broken(렌더처 없는 코드 결함)은 넣지 않는다 — 운영자가 고칠 수 있는 게 아니다.
+ * default(입력 안 했지만 기본값이 나감)도 넣지 않는다 — 사라지지 않으므로 문제가 아니다.
+ *
+ * 순수 함수인 이유는 그대로다: 만들기 탭은 로그인 뒤에 있어 브라우저 자동화로 열 수 없다.
+ */
 
-import { normalizeLivePageConfig } from "./webinar-config";
+import type { ElementRow, ExposureReport } from "./webinar-exposure";
 
 export type ReadinessSection = "source" | "landing" | "registration" | "watch" | "survey";
 export type WatchStateId = "waiting" | "entry" | "live" | "ended";
@@ -26,131 +46,49 @@ export interface ReadinessIssue {
   severity: "blocking" | "empty";
 }
 
-export interface ReadinessInput {
-  name: string;
-  sessionCount: number;
-  config: Record<string, unknown> | null | undefined;
-  /** 종료 화면에 연결된(열려 있고 마감 전) 자체 설문이 있는가 — 서버 조건과 같은 판정을 넘겨받는다. */
-  hasLinkedEndedSurvey: boolean;
+/** 고치러 가는 자리를 사람 말로 — detail 은 "무엇이 문제인가" 다음에 "어디서 고치나" 를 답한다. */
+const WHERE: Record<ReadinessSection, string> = {
+  source: "원본 정보",
+  landing: "랜딩 페이지",
+  registration: "등록 폼",
+  watch: "시청 화면",
+  survey: "설문",
+};
+const WATCH_WHERE: Record<WatchStateId, string> = {
+  waiting: "시청 화면 › 대기",
+  entry: "시청 화면 › 입장",
+  live: "시청 화면 › 라이브",
+  ended: "시청 화면 › 종료",
+};
+
+function issueFrom(row: ElementRow): ReadinessIssue {
+  const where = row.owner === "watch" && row.watchState ? WATCH_WHERE[row.watchState] : WHERE[row.owner];
+  return {
+    section: row.owner,
+    ...(row.watchState ? { watchState: row.watchState } : {}),
+    // 표의 why 가 이미 "무엇이 어떻게 사라지는가" 한 줄이다 — 문구를 두 벌로 만들지 않는다.
+    title: row.why ?? `${row.label} 을 확인해주세요`,
+    detail: `${where}에서 고칠 수 있어요.`,
+    severity: row.blocks ? "blocking" : "empty",
+  };
 }
 
-const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
-
-/** 공개 폼에 실제로 뜨는 선택지 개수 — 저장·정규화와 같은 trim 기준으로 센다. */
-function liveOptionCount(options: unknown): number {
-  return Array.isArray(options) ? options.filter((o) => typeof o === "string" && o.trim() !== "").length : 0;
-}
-
-export function checkWebinarReadiness(input: ReadinessInput): ReadinessIssue[] {
-  const { name, sessionCount, config, hasLinkedEndedSurvey } = input;
-  const cfg = (config ?? {}) as Record<string, unknown>;
-  const out: ReadinessIssue[] = [];
-
-  // ── 원본 ──────────────────────────────────────────────
-  if (!name.trim()) {
-    out.push({
-      section: "source",
-      severity: "blocking",
-      title: "웨비나 이름이 비어 있어요",
-      detail: "이름이 없으면 저장되지 않고, 모든 공개 화면의 제목도 비어요.",
-    });
-  }
-
-  const screens = normalizeLivePageConfig(cfg);
-
-  // ── 시청 › 대기 ────────────────────────────────────────
-  if (screens.waiting.agenda && sessionCount === 0) {
-    out.push({
-      section: "watch", watchState: "waiting", severity: "empty",
-      title: "대기 화면 아젠다를 켰지만 세션이 없어요",
-      detail: "원본 정보 › 진행 순서에 세션을 넣지 않으면 이 영역은 시청자 화면에서 사라져요.",
-    });
-  }
-  if (screens.waiting.calendar && !str(cfg.calendarUrl)) {
-    out.push({
-      section: "watch", watchState: "waiting", severity: "empty",
-      title: "‘캘린더에 추가’ 를 켰지만 링크가 없어요",
-      detail: "시청 화면 › 대기의 캘린더 URL 을 채워야 버튼이 보여요.",
-    });
-  }
-
-  // ── 시청 › 라이브 ──────────────────────────────────────
-  if (!str(cfg.youtubeId)) {
-    out.push({
-      section: "watch", watchState: "live", severity: "blocking",
-      title: "라이브 영상이 연결되지 않았어요",
-      detail: "방송이 시작돼도 시청 화면에 영상이 나오지 않아요.",
-    });
-  }
-
-  // ── 시청 › 종료 ────────────────────────────────────────
-  if (screens.ended.resources && screens.resources.length === 0) {
-    out.push({
-      section: "watch", watchState: "ended", severity: "empty",
-      title: "자료 다운로드를 켰지만 자료가 없어요",
-      detail: "자료를 1개 이상 넣어야 종료 화면에 표시돼요.",
-    });
-  }
-  if (screens.ended.nextWebinar && !str(screens.nextWebinar?.title)) {
-    out.push({
-      section: "watch", watchState: "ended", severity: "empty",
-      title: "다음 웨비나를 켰지만 제목이 없어요",
-      detail: "제목을 입력해야 종료 화면에 카드가 표시돼요.",
-    });
-  }
-  // 종료 설문의 이중 조건 — 영역만 켜고 대상이 없으면 버튼이 안 뜬다.
-  if (screens.ended.survey && !hasLinkedEndedSurvey && !str(cfg.surveyUrl)) {
-    out.push({
-      section: "watch", watchState: "ended", severity: "empty",
-      title: "설문 영역을 켰지만 연결된 설문이 없어요",
-      detail: "시청 화면 › 종료 › 설문 연결에서 자체 설문이나 외부 링크를 골라야 버튼이 보여요.",
-    });
-  }
-
-  // ── 등록 ──────────────────────────────────────────────
-  // 공백만 남은 선택지는 저장·정규화 단계에서 걸러져 **그 항목 자체가 공개 폼에서 사라진다.**
-  // 어드민에는 '필수' 로 켜져 있는데 시청자 폼에는 없는 상태가 만들어지므로 반드시 짚는다.
-  const regForm = (cfg.registrationForm ?? {}) as Record<string, unknown>;
-  const fields = Array.isArray(regForm.fields) ? (regForm.fields as Record<string, unknown>[]) : [];
-  for (const f of fields) {
-    if (f.type !== "select" || f.enabled === false) continue;
-    if (liveOptionCount(f.options) > 0) continue;
-    out.push({
-      section: "registration", severity: "empty",
-      title: `‘${str(f.label) || "선택 항목"}’ 에 선택지가 없어요`,
-      detail: f.required === true
-        ? "선택지가 없으면 이 항목은 시청자 폼에서 아예 빠져요 — 필수로 켜 뒀어도 등록은 막히지 않아요."
-        : "선택지가 없으면 이 항목은 시청자 폼에 표시되지 않아요.",
-    });
-  }
-
-  // ── 랜딩 ──────────────────────────────────────────────
-  const landing = (cfg.landingPage ?? {}) as Record<string, unknown>;
-  if (landing.enabled === true) {
-    const titleLines = Array.isArray(landing.titleLines)
-      ? (landing.titleLines as unknown[]).filter((s) => typeof s === "string" && s.trim() !== "")
-      : [];
-    const sectionRows = (key: string, inner: string) => {
-      const o = (landing[key] ?? {}) as Record<string, unknown>;
-      return Array.isArray(o[inner]) ? (o[inner] as unknown[]).length : 0;
-    };
-    const bodyCount =
-      sectionRows("programs", "items") + sectionRows("highlights", "items") +
-      sectionRows("faq", "items") + sectionRows("join", "steps");
-    if (titleLines.length === 0 && bodyCount === 0) {
-      out.push({
-        section: "landing", severity: "empty",
-        title: "랜딩 페이지를 공개했지만 내용이 없어요",
-        detail: "제목도 본문 섹션도 비어 있어서 방문자에게 빈 페이지가 보여요.",
-      });
-    }
-  }
-
-  return out;
+/**
+ * 노출 리포트 → 확인할 것 목록.
+ *
+ * 정렬: 여정을 막는 것(blocking)이 먼저. 목록은 상위 4건만 보여 주므로, 급한 것이 랜딩 섹션
+ * 경고 여섯 개에 밀려 잘리면 그 자리가 제 일을 못 한다. 같은 급 안에서는 표의 행 순서를
+ * 유지한다(원본 → 랜딩 → 등록 → 시청 → 설문 = 만들기 레일 순서).
+ */
+export function readinessFromExposure(report: ExposureReport): ReadinessIssue[] {
+  const empties = report.elements.filter((r) => r.state === "empty");
+  const blocking = empties.filter((r) => r.blocks).map(issueFrom);
+  const rest = empties.filter((r) => !r.blocks).map(issueFrom);
+  return [...blocking, ...rest];
 }
 
 /** 섹션별 미완 개수 — 내비의 상태 점에 쓴다. */
-export function readinessBySection(issues: ReadinessIssue[]): Record<ReadinessSection, number> {
+export function readinessBySection(issues: readonly ReadinessIssue[]): Record<ReadinessSection, number> {
   const base: Record<ReadinessSection, number> = { source: 0, landing: 0, registration: 0, watch: 0, survey: 0 };
   for (const i of issues) base[i.section] += 1;
   return base;

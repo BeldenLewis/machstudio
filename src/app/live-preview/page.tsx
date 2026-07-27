@@ -12,9 +12,22 @@ import LiveContentStk from "@/app/webinar/[slug]/LiveContentStk";
 import EntryVerify from "@/app/webinar/[slug]/EntryVerify";
 import PreLiveWaiting from "@/app/webinar/[slug]/PreLiveWaiting";
 import EndedScreen from "@/app/webinar/[slug]/EndedScreen";
+import EndedSurveyDialog from "@/app/webinar/[slug]/EndedSurveyDialog";
+import type { EndedSurveyLink } from "@/lib/webinar-ended-surveys";
 import { normalizeLivePageConfig } from "@/lib/webinar-config";
 
 type State = "waiting" | "entry" | "live" | "ended";
+
+/**
+ * 목업 모드 전용 — 카드 2장이 어떻게 앉는지 확인용(실제 웨비나에서는 저장된 값만 쓴다).
+ * 두 번째 카드는 ctaLabel 을 지정해 버튼 문구가 설문마다 달라지는지도 함께 확인한다.
+ */
+const MOCK_ENDED_SURVEYS = [
+  // surveyId 가 있으면 종료 화면이 새 창 대신 팝업으로 연다 — 그 분기를 하니스에서 눌러 보게.
+  { url: "#survey-1", surveyId: "mock-1", title: "1분 만족도 설문", description: "오늘 어떠셨나요? 짧은 피드백이 다음 웨비나를 더 좋게 만들어요." },
+  // 두 번째는 외부 설문 URL 을 흉내 낸다(surveyId 없음) — 새 탭으로 가는 쪽이 그대로 남는지.
+  { url: "#survey-2", title: "다음 웨비나 주제 사전조사", description: "다음 회차에서 가장 듣고 싶은 주제를 골라주세요.", ctaLabel: "사전 신청하기" },
+];
 type ThemeKey = "dark" | "light";
 
 const THEMES: Record<ThemeKey, { bg: string; text: string; surface: string; accent: string }> = {
@@ -65,9 +78,9 @@ const MOCK = {
    */
   sessions: [
     { id: "s1", number: 1, type: "opening", title: "환영 인사", speaker: "김민준", speakerPhotoUrl: null, logoUrl: null, description: "마하스튜디오 대표", startTime: "19:00", endTime: "19:10" },
-    { id: "s2", number: 2, type: "session", title: "왜 지금 마케팅 자동화인가", speaker: "김민준", speakerPhotoUrl: null, logoUrl: null, description: "마하스튜디오 대표 · 마케팅 자동화 10년", startTime: "19:10", endTime: "19:40" },
+    { id: "s2", number: 2, type: "session", title: "왜 지금 마케팅 자동화인가", speaker: "김민준", speakerPhotoUrl: null, logoUrl: "/next.svg", description: "마하스튜디오 대표 · 마케팅 자동화 10년", startTime: "19:10", endTime: "19:40" },
     { id: "s3", number: 3, type: "break", title: "휴식", speaker: null, speakerPhotoUrl: null, logoUrl: null, description: null, startTime: "19:40", endTime: "19:50" },
-    { id: "s4", number: 4, type: "session", title: "전시 리드를 매출로 전환하는 4단계", speaker: "이서연", speakerPhotoUrl: null, logoUrl: null, description: "그로스 리드 · 前 대형 전시 운영", startTime: "19:50", endTime: "20:20" },
+    { id: "s4", number: 4, type: "session", title: "전시 리드를 매출로 전환하는 4단계", speaker: "이서연", speakerPhotoUrl: null, logoUrl: "/vercel.svg", description: "그로스 리드 · 前 대형 전시 운영", startTime: "19:50", endTime: "20:20" },
     { id: "s5", number: 5, type: "qa", title: "라이브 Q&A", speaker: "전체 연사", speakerPhotoUrl: null, logoUrl: null, description: "참가자 질문에 실시간으로 답합니다.", startTime: "20:20", endTime: "20:50" },
     { id: "s6", number: 6, type: "closing", title: "마무리 · 경품 추첨", speaker: "운영사무국", speakerPhotoUrl: null, logoUrl: null, description: null, startTime: "20:50", endTime: "21:00" },
   ],
@@ -152,6 +165,8 @@ export default function LivePreviewPage() {
   const [selectedSession, setSelectedSession] = useState<number | null>(null);
   const [chatOn, setChatOn] = useState(true);
   const [qaMode, setQaMode] = useState<"open" | "closed">("open");
+  // 종료 화면 설문 팝업 — 카드 CTA 를 누르면 열린다(새 창이 아니라는 것을 눌러서 확인).
+  const [openedSurvey, setOpenedSurvey] = useState<EndedSurveyLink | null>(null);
 
   const target = useMemo(() => new Date(Date.now() + (2 * 86400 + 5 * 3600 + 37 * 60) * 1000).toISOString(), []);
   // 라이브 프리뷰에선 세션이 진행 중으로 보이게 서버시각을 행사 중으로 고정.
@@ -240,8 +255,39 @@ export default function LivePreviewPage() {
       {state === "ended" && (
         <EndedScreen
           webinar={webinarData} accent={t.accent} text={t.text} surface={t.surface}
-          live={live} surveyUrl={((webinarData.config as Record<string, unknown>)?.surveyUrl as string) || undefined}
+          live={live}
+          /**
+           * 종료 화면 설문은 여러 개 걸 수 있다(카드 N장). 목업 모드에서는 2장을 태워
+           * 그리드가 실제로 2열로 앉는지 눈으로 확인한다 — 실제 웨비나(?slug=)에서는
+           * 그 웨비나에 저장된 값만 쓴다(있는 것을 보여줘야 미리보기다).
+           */
+          surveys={
+            real
+              ? (() => {
+                  const url = (real.config as Record<string, unknown>)?.surveyUrl;
+                  return typeof url === "string" && url ? [{ url }] : [];
+                })()
+              : MOCK_ENDED_SURVEYS
+          }
           onReplay={() => {}} onShare={() => {}}
+          onOpenSurvey={(sv) => setOpenedSurvey(sv)}
+        />
+      )}
+
+      {/* 종료 화면 설문 팝업 — 하니스에서는 목업 id 라 문항 조회가 404 로 떨어진다.
+          그래도 "새 창이 아니라 이 자리에 뜬다" 와 에러 상태 문구를 눌러서 확인할 수 있다. */}
+      {openedSurvey?.surveyId && (
+        <EndedSurveyDialog
+          slug="harness"
+          surveyId={openedSurvey.surveyId}
+          fallbackTitle={openedSurvey.title?.trim() || "설문"}
+          registrationId={null}
+          accent={t.accent}
+          surface={t.surface}
+          text={t.text}
+          soft={(pct) => `color-mix(in srgb, ${t.text} ${pct}%, transparent)`}
+          readOnly
+          onClose={() => setOpenedSurvey(null)}
         />
       )}
     </div>

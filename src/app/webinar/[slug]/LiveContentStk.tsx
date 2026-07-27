@@ -12,6 +12,7 @@ import { getYouTubeVideoId } from "@/lib/youtube";
 import { CheckCircle2, Send, Share2 } from "lucide-react";
 import { formatKst, kstDateString } from "@/lib/datetime";
 import { buildSessionNumbering, cleanSessionText, isPauseSession, isRealSession, sessionHasSpeaker, sessionTypeLabel } from "@/lib/webinar-sessions";
+import { sessionLogoCss } from "@/lib/webinar-logo";
 import SurveyForm, { SURVEY_FORM_CSS, clearSurveyDraft } from "./SurveyForm";
 import type { SurveyAnswers, SurveyQuestion } from "@/lib/webinar-survey";
 
@@ -289,9 +290,14 @@ const WATCH_CSS = `
 /* 휴식은 콘텐츠가 아니라 빈 시간이다 — 오프닝·Q&A·클로징과 같은 키컬러 강조를 주면 안 된다
    (어드민은 이미 휴식=회색으로 구분하고 있어 화면 간에 어긋나 있었다). */
 .stk-live .lv-setype.muted { background:color-mix(in srgb,var(--text) 8%,transparent); color:var(--sub); }
-/* 로고: 자르지 않고(contain) 높이만 고정. 투명 PNG 가 많아 흰 판을 깐다. */
-.stk-live .lv-selogo { display:block; height:20px; width:auto; max-width:120px; object-fit:contain; margin:6px 0 0; background:#fff; border-radius:4px; padding:2px 4px; }
-.stk-live .lv-ses small { color:var(--sub); font-size:12px; }
+/* 로고 규격은 webinar-logo.ts 한 곳에서 온다(랜딩·대기와 같은 크기). 예전엔 여기만 20px 이라
+   같은 로고가 대기 화면보다 작아 보였다. */
+${sessionLogoCss(".stk-live .lv-selogo", { plate: true })}
+/* 로고는 이름 바로 오른쪽 — 끝까지 밀면 넓은 목록에서 이름과 떨어져 무관해 보인다. */
+.stk-live .lv-selogo { margin-left:4px; }
+.stk-live .lv-sewho { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:6px; }
+/* 연사 이름 — 12px 은 로고 옆에서 위계가 뒤집힌다(로고가 이름보다 먼저 읽힘). */
+.stk-live .lv-ses small { color:var(--muted); font-size:13.5px; font-weight:600; }
 .stk-live .lv-ses .st { margin-left:auto; align-self:center; font-size:11px; font-weight:700; color:var(--sub); white-space:nowrap; }
 .stk-live .lv-ses.now .st { color:var(--key); display:inline-flex; align-items:center; gap:5px; }
 .stk-live .lv-ses.now .st .d { width:6px; height:6px; border-radius:50%; background:var(--key); animation:lvPulse 1.9s infinite; }
@@ -812,10 +818,15 @@ export default function LiveContentStk({
                                   <span className={`lv-setype${isPauseSession(s.type) ? " muted" : ""}`}>{sessionTypeLabel(s.type)}</span>
                                 )}
                               </h4>
-                              {s.logoUrl && <img className="lv-selogo" src={s.logoUrl} alt="" />}
-                              {/* 연사 없는 유형은 안 그린다. cleanSessionText 는 레거시 "null" 문자열도
-                                  걸러 준다(예전엔 휴식 행 밑에 회색 "null" 이 찍혔다). */}
-                              {sessionHasSpeaker(s.type) && cleanSessionText(s.speaker) && <small>{cleanSessionText(s.speaker)}</small>}
+                              {/* 연사 이름 줄 오른쪽에 로고 — 대기 화면·랜딩 팝업과 같은 배치.
+                                  연사 없는 유형은 이름을 안 그린다(cleanSessionText 는 레거시 "null"
+                                  문자열도 걸러 준다 — 예전엔 휴식 행 밑에 회색 "null" 이 찍혔다). */}
+                              {(s.logoUrl || (sessionHasSpeaker(s.type) && cleanSessionText(s.speaker))) && (
+                                <div className="lv-sewho">
+                                  {sessionHasSpeaker(s.type) && cleanSessionText(s.speaker) && <small>{cleanSessionText(s.speaker)}</small>}
+                                  {s.logoUrl && <img className="lv-selogo" src={s.logoUrl} alt="" />}
+                                </div>
+                              )}
                               {s.status === "now" && (
                                 <div className="lv-prog"><span style={{ width: `${pct}%` }} /></div>
                               )}

@@ -902,6 +902,7 @@ model WebinarSurvey {
   closesAt    DateTime? // 마감 예약 — 이 시각이 지나면 isOpen 과 무관하게 응답 마감
   doneTitle       String? // 제출 완료 화면 제목 (없으면 노출면별 기본 문구)
   doneDescription String? // 제출 완료 화면 설명
+  ctaLabel        String? // 종료 화면 카드의 버튼 문구 (없으면 기본: "설문 참여하기")
   showOnEnded Boolean   @default(false) // 종료 화면 만족도 설문 카드에 연결
   isActive    Boolean   @default(false) // 라이브 푸시 중
   pushedAt    DateTime? // 마지막 발행 시각 — 시청자 재노출 키(편집으로 바뀌는 updatedAt 과 분리)

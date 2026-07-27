@@ -190,6 +190,11 @@ const BLK_TAG: Record<BlkTag, { label: string; cls: string }> = {
  * `goes` 는 이 값이 **어느 공개 면에 나가는지** 를 적는다. IA 진단이 지적한 바로 그 구멍
  * ("테마 6컨트롤은 6개 공개 면 전부에 적용되는데 '라이브 페이지' 안에만 있었다")을
  * 화면에서 메꾸는 장치다. 주석이 아니라 UI 로 답한다.
+ *
+ * ⚠ 이 배열은 **손으로 적지 않는다** — `goesFor("waiting", "entry")` 로 노출 표에서 가져온다
+ * (webinar-exposure.ts). 문자열로 적던 동안 13곳이 각자 라벨을 들고 있어서, 없는 면을
+ * 약속해도·면 이름이 바뀌어도 아무도 몰랐다. 이 프리미티브는 도메인을 모르는 채로 두고
+ * (타입은 string[]) 타입 안전은 호출부의 goesFor 가 맡는다 — SurfaceId 오타는 컴파일 에러다.
  */
 export function Blk({
   title,
@@ -204,8 +209,8 @@ export function Blk({
   title: string;
   hint?: ReactNode;
   tag?: BlkTag;
-  /** 이 값이 나가는 공개 면 (예: ["랜딩", "대기", "종료"]) */
-  goes?: string[];
+  /** 이 값이 나가는 공개 면 — 반드시 `goesFor(...)` 의 반환값을 넘긴다(위 주석 참고). */
+  goes?: readonly string[];
   /** 가장 위험하고 자주 만지는 블록 — 한 화면에 하나만. 마감을 한 단 올린다. */
   pinned?: boolean;
   /** 헤더 우측 컨트롤(토글·링크 등). goes 와 함께 쓰면 goes 가 아래로 내려간다. */

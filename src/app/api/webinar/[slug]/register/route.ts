@@ -2,7 +2,16 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimitAsync } from "@/lib/ratelimit";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
-import { normalizeRegistrationForm, normalizePhone, normalizeEmail, isValidPhone, isValidEmail } from "@/lib/webinar-config";
+import {
+  CHOICE_FIELD_TYPES,
+  isValidEmail,
+  isValidPhone,
+  maxSelectFor,
+  normalizeEmail,
+  normalizePhone,
+  normalizeRegistrationForm,
+  splitMultiValue,
+} from "@/lib/webinar-config";
 import { parseUtmEnvelope } from "@/lib/webinar-attribution";
 
 const CORS_HEADERS = { "Access-Control-Allow-Origin": "*" };
@@ -84,13 +93,36 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   for (const field of fields) {
     if (!field.required) continue;
-    // 옵션이 하나도 없는 드롭다운은 화면에 그릴 수 없다 — 필수로 두면 등록 자체가 막히므로 건너뛴다.
-    if (field.type === "select" && !(field.options ?? []).length) continue;
+    // 선택지가 없어 그릴 수 없는 선택형은 필수로 둬도 건너뛴다(등록 자체가 막히므로).
+    // normalizeRegistrationForm 의 공개 필터와 같은 조건이어야 한다 — 어긋나면 화면에 없는
+    // 항목을 서버가 요구해 등록이 영구히 막힌다.
+    if (CHOICE_FIELD_TYPES.includes(field.type) && !(field.options ?? []).length && field.allowOther !== true) continue;
     const value = field.system ? body[field.key] : customAnswers[field.key];
     if (field.type === "checkbox") {
       if (!value) return NextResponse.json({ error: `${field.label} 항목에 동의해주세요` }, { status: 400, headers: CORS_HEADERS });
     } else if (String(value ?? "").trim() === "") {
       return NextResponse.json({ error: `${field.label} 항목을 입력해주세요` }, { status: 400, headers: CORS_HEADERS });
+    }
+  }
+
+  /**
+   * 복수 선택의 최대 개수 — 클라이언트가 막지만 서버도 센다(임베드 로더·직접 호출 경로가 있다).
+   *
+   * 값 자체를 선택지 목록과 대조하지는 않는다: '기타(직접입력)' 을 켜면 사용자가 쓴 문장이
+   * 그대로 들어오므로 목록 검증은 그 답을 전부 막는다. 개수만 본다.
+   * required 루프와 분리한 이유 — 선택하지 않은 것(빈 값)은 위에서 이미 걸렀고,
+   * 여기서는 "너무 많이 골랐나" 만 판단한다.
+   */
+  for (const field of fields) {
+    const max = maxSelectFor(field);
+    if (max === null) continue;
+    const raw = field.system ? body[field.key] : customAnswers[field.key];
+    const picked = splitMultiValue(raw);
+    if (picked.length > max) {
+      return NextResponse.json(
+        { error: `${field.label} 항목은 최대 ${max}개까지 선택할 수 있어요` },
+        { status: 400, headers: CORS_HEADERS },
+      );
     }
   }
 

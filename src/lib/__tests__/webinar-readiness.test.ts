@@ -1,187 +1,170 @@
-import { describe, it, expect } from "vitest";
-import { checkWebinarReadiness, readinessBySection, type ReadinessInput } from "@/lib/webinar-readiness";
+import { describe, expect, it } from "vitest";
+import { buildExposureReport, type ExposureInput } from "@/lib/webinar-exposure";
+import { readinessBySection, readinessFromExposure } from "@/lib/webinar-readiness";
 
 /**
- * normalizeLivePageConfig 의 기본값은 **대부분 ON** 이다
- * (waiting.agenda·social·calendar·share·notify, entry.viewerCount, ended.replay·survey·share = true /
- *  ended.resources·nextWebinar = false). 그래서 빈 config 는 그 자체로 "켜졌지만 내용 없음" 을 만든다.
- * 아래 CLEAN 은 그 기본값들을 실제로 충족시킨 상태 — 여기서 출발해야 각 케이스가 한 가지만 검증한다.
+ * 준비 상태는 이제 노출 표의 **파생**이다. 그래서 이 파일이 지켜야 하는 것이 바뀌었다:
+ * 게이트 식이 아니라 **파생 규칙**과, 예전 판정기가 틀렸던 자리들이 이제 맞는지다.
+ *
+ * 옛 테스트는 그 오판을 정답으로 못 박아 두고 있었다 — 예: FAQ 항목을 `{q, a}` 키로 만들어
+ * "본문 있음" 을 기대했는데, 정규화·뷰어는 `question` 키만 읽으므로 그 랜딩에는 FAQ 가 없다.
+ * 아래 케이스들은 전부 **뷰어 기준**으로 다시 썼다.
  */
-const CLEAN_CONFIG: Record<string, unknown> = {
-  youtubeId: "abc12345678",
-  calendarUrl: "https://calendar.example/e",
-  surveyUrl: "https://tally.so/x",
+
+const base: ExposureInput = {
+  name: "테스트 웨비나",
+  description: "설명",
+  slug: "t",
+  liveStartAt: "2026-08-20T10:00:00.000Z",
+  theme: { accentColor: "#6d28d9" },
+  config: {},
+  sessions: [],
+  hasOpenSurvey: false,
+  hasLinkedEndedSurvey: false,
 };
 
-const base = (over: Partial<ReadinessInput> = {}): ReadinessInput => ({
-  name: "그로스 컨퍼런스",
-  sessionCount: 3,
-  hasLinkedEndedSurvey: false,
-  config: CLEAN_CONFIG,
-  ...over,
-});
+const issues = (patch: Partial<ExposureInput> = {}) => readinessFromExposure(buildExposureReport({ ...base, ...patch }));
+const titles = (patch: Partial<ExposureInput> = {}) => issues(patch).map((i) => i.title);
+/** 영상은 어떤 픽스처에서도 비어 있으면 걸린다 — 다른 케이스를 볼 때 노이즈라 유효한 ID 를 넣는다. */
+const withVideo = (config: Record<string, unknown> = {}) => ({ config: { youtubeId: "dQw4w9WgXcQ", ...config } });
 
-/** 케이스별로 CLEAN 위에 livePage 토글만 얹는다 — 다른 검사가 함께 켜지지 않게. */
-const cfg = (over: Record<string, unknown>) => ({ ...CLEAN_CONFIG, ...over });
-
-const titles = (input: ReadinessInput) => checkWebinarReadiness(input).map((i) => i.title);
-const has = (input: ReadinessInput, needle: string) => titles(input).some((t) => t.includes(needle));
-
-describe("이름·영상 — 시청자 여정이 막히는 것", () => {
-  it("이름이 비면 blocking", () => {
-    const issues = checkWebinarReadiness(base({ name: "   " }));
-    const found = issues.find((i) => i.title.includes("이름"));
-    expect(found?.severity).toBe("blocking");
+describe("파생 규칙", () => {
+  it("empty 인 행만 확인할 것이 된다 — broken(코드 결함)과 default(기본값 나감)는 제외", () => {
+    const report = buildExposureReport({ ...base, ...withVideo() });
+    const list = readinessFromExposure(report);
+    expect(report.elements.some((e) => e.state === "broken")).toBe(true);
+    expect(report.elements.some((e) => e.state === "default")).toBe(true);
+    expect(list).toHaveLength(report.elements.filter((e) => e.state === "empty").length);
+    expect(list.every((i) => i.severity === "blocking" || i.severity === "empty")).toBe(true);
   });
 
-  it("영상 미연결은 blocking, 라이브 상태를 가리킨다", () => {
-    const issues = checkWebinarReadiness(base({ config: { ...CLEAN_CONFIG, youtubeId: "" } }));
-    const found = issues.find((i) => i.title.includes("라이브 영상"));
-    expect(found?.severity).toBe("blocking");
-    expect(found?.watchState).toBe("live");
-  });
-
-  it("정상 구성이면 아무것도 짚지 않는다", () => {
-    expect(checkWebinarReadiness(base())).toEqual([]);
-  });
-});
-
-/**
- * 이 describe 가 이 파일의 핵심이다 — 검사 기준은 "완성도" 가 아니라
- * **토글 ON + 내용 없음** 이라는 이중 게이트다. 켜져 있고 내용도 있으면 짚지 않아야 한다.
- */
-describe("이중 게이트 — 켰는데 내용이 없을 때만 짚는다", () => {
-  it("아젠다 ON + 세션 0개 → 짚는다", () => {
-    expect(has(base({ sessionCount: 0, config: cfg({ livePage: { waiting: { agenda: true } } }) }), "아젠다")).toBe(true);
-  });
-
-  it("아젠다 ON + 세션 있음 → 안 짚는다", () => {
-    expect(has(base({ sessionCount: 2, config: cfg({ livePage: { waiting: { agenda: true } } }) }), "아젠다")).toBe(false);
-  });
-
-  it("아젠다 OFF + 세션 0개 → 안 짚는다 (꺼 둔 건 문제가 아니다)", () => {
-    expect(has(base({ sessionCount: 0, config: cfg({ livePage: { waiting: { agenda: false } } }) }), "아젠다")).toBe(false);
-  });
-
-  it("캘린더 ON + URL 없음 → 짚고, URL 있으면 안 짚는다", () => {
-    const noUrl = { ...CLEAN_CONFIG, calendarUrl: "", livePage: { waiting: { calendar: true } } };
-    expect(has(base({ config: noUrl }), "캘린더")).toBe(true);
-    expect(has(base({ config: cfg({ livePage: { waiting: { calendar: true } } }) }), "캘린더")).toBe(false);
-  });
-
-  it("자료 ON + 자료 0개 → 짚고, 자료가 있으면 안 짚는다", () => {
-    expect(has(base({ config: cfg({ livePage: { ended: { resources: true } } }) }), "자료")).toBe(true);
-    const withRes = cfg({ livePage: { ended: { resources: true }, resources: [{ url: "https://a/b.pdf", label: "자료" }] } });
-    expect(has(base({ config: withRes }), "자료")).toBe(false);
-  });
-
-  it("다음 웨비나 ON + 제목 없음 → 짚는다", () => {
-    const on = cfg({ livePage: { ended: { nextWebinar: true }, nextWebinar: { title: "  ", when: "", url: "" } } });
-    expect(has(base({ config: on }), "다음 웨비나")).toBe(true);
-  });
-});
-
-describe("종료 설문 — 3중 조건이 맞아야 버튼이 뜬다", () => {
-  const areaOn = { ...CLEAN_CONFIG, surveyUrl: "", livePage: { ended: { survey: true } } };
-
-  it("영역만 켜고 대상이 없으면 짚는다", () => {
-    expect(has(base({ config: areaOn }), "설문 영역")).toBe(true);
-  });
-
-  it("자체 설문이 연결돼 있으면 안 짚는다", () => {
-    expect(has(base({ config: areaOn, hasLinkedEndedSurvey: true }), "설문 영역")).toBe(false);
-  });
-
-  it("외부 URL 이 있으면 안 짚는다", () => {
-    expect(has(base({ config: { ...areaOn, surveyUrl: "https://tally.so/x" } }), "설문 영역")).toBe(false);
-  });
-
-  it("공백만 있는 URL 은 없는 것으로 본다", () => {
-    expect(has(base({ config: { ...areaOn, surveyUrl: "   " } }), "설문 영역")).toBe(true);
-  });
-});
-
-describe("등록 선택지 — 공백만 남으면 항목이 조용히 사라진다", () => {
-  const withField = (options: unknown, extra: Record<string, unknown> = {}) => base({
-    config: cfg({
-      registrationForm: { fields: [{ id: "f1", type: "select", label: "관심 분야", enabled: true, options, ...extra }] },
-    }),
-  });
-
-  it("옵션 0개 → 짚는다", () => {
-    expect(has(withField([]), "관심 분야")).toBe(true);
-  });
-
-  it("공백만 있는 옵션 → 짚는다 (저장·정규화가 trim 으로 걸러 항목째 사라진다)", () => {
-    expect(has(withField(["  ", ""]), "관심 분야")).toBe(true);
-  });
-
-  it("값이 하나라도 있으면 안 짚는다", () => {
-    expect(has(withField(["", "마케팅"]), "관심 분야")).toBe(false);
-  });
-
-  it("필수로 켜 뒀으면 '등록은 막히지 않는다' 는 사실을 알려준다", () => {
-    const issues = checkWebinarReadiness(withField([], { required: true }));
-    expect(issues[0].detail).toContain("등록은 막히지 않아요");
-  });
-
-  it("꺼 둔 항목은 검사하지 않는다", () => {
-    expect(has(withField([], { enabled: false }), "관심 분야")).toBe(false);
-  });
-
-  it("select 가 아닌 항목은 검사하지 않는다", () => {
-    const input = base({
-      config: cfg({ registrationForm: { fields: [{ id: "f1", type: "text", label: "이름", enabled: true }] } }),
+  it("여정을 막는 것이 목록 맨 앞에 온다 — 상위 4건만 보여 주므로 밀리면 그 자리가 제 일을 못 한다", () => {
+    // 랜딩을 켜고 전부 비워 empty 를 여러 건 만든 뒤, 영상도 비워 blocking 을 섞는다
+    const list = issues({
+      config: {
+        landingPage: { enabled: true, intro: { enabled: true }, programs: { enabled: true }, faq: { enabled: true } },
+      },
     });
-    expect(checkWebinarReadiness(input)).toEqual([]);
+    expect(list.length).toBeGreaterThan(3);
+    expect(list[0].severity).toBe("blocking");
+    // blocking 이 전부 앞에 모여 있다
+    const firstEmpty = list.findIndex((i) => i.severity === "empty");
+    expect(list.slice(firstEmpty).every((i) => i.severity === "empty")).toBe(true);
+  });
+
+  it("고치러 갈 자리를 detail 에 적는다 — 시청 화면은 상태까지", () => {
+    const list = issues({ config: { livePage: { ended: { resources: true } } } });
+    const resources = list.find((i) => i.title.includes("자료"))!;
+    expect(resources.section).toBe("watch");
+    expect(resources.watchState).toBe("ended");
+    expect(resources.detail).toBe("시청 화면 › 종료에서 고칠 수 있어요.");
+  });
+
+  /**
+   * 개수만 적으면 무엇이 세어졌는지 알 수 없고, 기본값 ON 인 토글(대기 아젠다·캘린더)을
+   * 잊어 기대값을 잘못 쓰기 쉽다 — 실제로 처음 3이라고 적었다가 5에서 틀렸다.
+   */
+  it("섹션별 개수는 파생 목록에서 센다 — 시청 화면 5건은 대기 기본 토글까지 포함이다", () => {
+    const list = issues({ config: { livePage: { ended: { resources: true, nextWebinar: true } } } });
+    expect(list.filter((i) => i.section === "watch").map((i) => i.title)).toEqual([
+      "영상이 연결되지 않아 방송이 시작돼도 화면에 아무것도 안 나와요.", // blocking 이 먼저
+      "아젠다를 켰지만 세션이 없어요.",                                  // waiting.agenda 기본 ON
+      "버튼을 켰지만 캘린더 URL이 없어요.",                              // waiting.calendar 기본 ON
+      "자료 영역을 켰지만 자료가 없어요.",
+      "다음 웨비나를 켰지만 제목이 없어요.",
+    ]);
+    const by = readinessBySection(list);
+    expect(by.watch).toBe(5);
+    expect(by.landing).toBe(0); // 랜딩이 꺼져 있으면 랜딩 행은 전부 off — 경고를 쏟지 않는다
   });
 });
 
-describe("랜딩 — 공개했는데 빈 페이지", () => {
-  it("공개 + 제목·본문 전부 없음 → 짚는다", () => {
-    expect(has(base({ config: cfg({ landingPage: { enabled: true } }) }), "랜딩")).toBe(true);
+describe("예전 판정기가 틀렸던 자리 — 이제 뷰어와 같은 답을 낸다", () => {
+  /**
+   * 뷰어: PreLiveWaiting `showAgenda = live.waiting.agenda && webinar.sessions.length > 0`.
+   * 유형을 가리지 않는다. 예전 준비 상태는 실제 세션(type=session)만 세어 경고했고,
+   * 그 말을 믿고 토글을 끄면 그때 실제로 아젠다가 사라졌다.
+   */
+  it("오프닝·Q&A 만 있어도 아젠다는 나간다 — 경고하지 않는다", () => {
+    const sessions = [
+      { id: "1", title: "오프닝", type: "opening", number: 1 },
+      { id: "2", title: "Q&A", type: "qa", number: 2 },
+    ] as unknown as ExposureInput["sessions"];
+    expect(titles({ ...withVideo(), sessions }).some((t) => t.includes("아젠다"))).toBe(false);
+    // 세션이 아예 없으면 정상적으로 걸린다
+    expect(titles({ ...withVideo() }).some((t) => t.includes("아젠다"))).toBe(true);
   });
 
-  it("제목이 있으면 안 짚는다", () => {
-    expect(has(base({ config: cfg({ landingPage: { enabled: true, titleLines: ["함께 성장하는 법"] } }) }), "랜딩")).toBe(false);
+  /**
+   * 뷰어: 정규화가 제목 없는 행을 버린다. 예전엔 원시 배열 길이를 세어 제목 빈 행 하나로
+   * 랜딩 경고 전체가 꺼졌다("본문 있음" 으로 계산돼서).
+   */
+  it("제목 없는 프로그램 행은 내용으로 세지 않는다", () => {
+    const cfg = (items: unknown[]) =>
+      withVideo({ landingPage: { enabled: true, titleLines: ["제목"], programs: { enabled: true, items } } }).config;
+    expect(titles({ config: cfg([{ title: "" }]) }).some((t) => t.includes("프로그램"))).toBe(true);
+    expect(titles({ config: cfg([{ title: "세션 A" }]) }).some((t) => t.includes("프로그램"))).toBe(false);
   });
 
-  it("본문 섹션이 있으면 안 짚는다", () => {
-    const withFaq = cfg({ landingPage: { enabled: true, faq: { items: [{ q: "질문", a: "답" }] } } });
-    expect(has(base({ config: withFaq }), "랜딩")).toBe(false);
+  /** 섹션을 **일부러 끈** 랜딩은 문제가 아니다 — 예전엔 off 가 나올 길이 없어 거짓 경고가 났다. */
+  it("FAQ 를 끈 랜딩은 경고하지 않는다", () => {
+    const off = titles({ config: withVideo({ landingPage: { enabled: true, titleLines: ["제목"], faq: { enabled: false, items: [] } } }).config });
+    expect(off.some((t) => t.includes("FAQ"))).toBe(false);
+    const on = titles({ config: withVideo({ landingPage: { enabled: true, titleLines: ["제목"], faq: { enabled: true, items: [] } } }).config });
+    expect(on.some((t) => t.includes("FAQ"))).toBe(true);
   });
 
-  it("비공개면 내용이 없어도 안 짚는다", () => {
-    expect(has(base({ config: cfg({ landingPage: { enabled: false } }) }), "랜딩")).toBe(false);
+  /**
+   * 뷰어: 참여 절차는 steps 키가 없으면 기본 3단계가 주입된다. 예전엔 0으로 세어
+   * '빈 페이지' 경고를 만들었다 — 있지도 않은 문제였다.
+   */
+  it("랜딩을 켜기만 한 상태에서 '빈 페이지' 경고를 만들지 않는다", () => {
+    const list = titles({ config: withVideo({ landingPage: { enabled: true } }).config });
+    expect(list.some((t) => t.includes("빈 페이지"))).toBe(false);
+  });
+
+  /** #144 로 생긴 복수 선택 — 예전 루프는 `type !== "select"` 로 걸러 이걸 못 봤다. */
+  it("복수 선택도 선택지 0개면 걸린다 — 선택형 두 종류가 같은 게이트를 쓴다", () => {
+    for (const type of ["select", "multiple"]) {
+      const list = titles({
+        config: withVideo({ registrationForm: { fields: [{ key: "job", label: "직무", type, enabled: true, required: true, options: [] }] } }).config,
+      });
+      expect(list.some((t) => t.includes("선택지가 없어")), type).toBe(true);
+    }
+  });
+
+  /** '기타(직접입력)' 만으로도 답할 수 있는 항목은 정상이다 — 예전엔 고장으로 신고했다. */
+  it("기타(직접입력)가 켜져 있으면 선택지 0개여도 경고하지 않는다", () => {
+    const list = titles({
+      config: withVideo({ registrationForm: { fields: [{ key: "src", label: "유입경로", type: "multiple", enabled: true, options: [], allowOther: true }] } }).config,
+    });
+    expect(list.some((t) => t.includes("선택지가 없어"))).toBe(false);
+  });
+
+  it("끈 필드는 경고하지 않는다 — 의도된 부재다", () => {
+    const list = titles({
+      config: withVideo({ registrationForm: { fields: [{ key: "job", label: "직무", type: "select", enabled: false, options: [] }] } }).config,
+    });
+    expect(list.some((t) => t.includes("선택지가 없어"))).toBe(false);
   });
 });
 
-describe("입력 방어", () => {
-  it("config 가 null·undefined 여도 죽지 않는다", () => {
-    expect(() => checkWebinarReadiness(base({ config: null }))).not.toThrow();
-    expect(() => checkWebinarReadiness(base({ config: undefined }))).not.toThrow();
+describe("여정을 막는 것", () => {
+  it("이름과 영상은 blocking — 나머지 empty 와 급한 정도가 다르다", () => {
+    const noName = issues({ name: "", ...withVideo() });
+    expect(noName.find((i) => i.title.includes("이름"))!.severity).toBe("blocking");
+    const noVideo = issues().find((i) => i.title.includes("영상"))!;
+    expect(noVideo.severity).toBe("blocking");
+    expect(noVideo.watchState).toBe("live");
   });
 
-  it("드리프트된 JSON(배열·문자열)도 견딘다", () => {
-    const weird = cfg({ registrationForm: "망가진 값", landingPage: [1, 2] }) as unknown as Record<string, unknown>;
-    expect(() => checkWebinarReadiness(base({ config: weird }))).not.toThrow();
-  });
-});
-
-describe("readinessBySection", () => {
-  it("섹션별로 센다", () => {
-    const issues = checkWebinarReadiness(base({ name: "", config: { ...CLEAN_CONFIG, youtubeId: "" } }));
-    const by = readinessBySection(issues);
-    expect(by.source).toBe(1); // 이름
-    expect(by.watch).toBe(1);  // 영상
-    expect(by.survey).toBe(0);
-  });
-
-  it("갓 만든 웨비나(빈 config)는 기본값 때문에 이미 미완이 있다 — 기본값 ON 을 문서화", () => {
-    const issues = checkWebinarReadiness(base({ config: {} }));
-    const t = issues.map((i) => i.title).join(" | ");
-    expect(t).toContain("라이브 영상");   // youtubeId 없음
-    expect(t).toContain("캘린더");        // waiting.calendar 기본 ON + URL 없음
-    expect(t).toContain("설문 영역");     // ended.survey 기본 ON + 대상 없음
+  /**
+   * 뷰어는 getYouTubeVideoId 로 11자 ID 를 뽑아내야 iframe 을 그린다. 빈 문자열만 보던 동안
+   * 이런 값이 "연결됨" 으로 읽혀 운영자가 그대로 방송에 들어갔다.
+   */
+  it("유튜브 ID 를 읽을 수 없는 주소는 '연결됨' 이 아니다", () => {
+    const bad = titles({ config: { youtubeId: "https://www.youtube.com/@brand/live" } });
+    expect(bad.some((t) => t.includes("유튜브 ID를 읽지 못했어요"))).toBe(true);
+    expect(titles({ config: { youtubeId: "https://youtu.be/dQw4w9WgXcQ" } }).some((t) => t.includes("영상"))).toBe(false);
   });
 });

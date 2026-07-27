@@ -15,7 +15,7 @@ import { LANDING_CSS } from "./css";
 import { buildLandingModel } from "./build-model";
 import { h, clearNode } from "./h";
 import { renderHero, renderToc, scrollToSectionIn } from "./view-hero";
-import { renderIntro, renderPrograms, renderHighlights, renderJoin, renderFaq } from "./view-sections";
+import { renderIntro, renderAudience, renderPrograms, renderHighlights, renderJoin, renderFaq } from "./view-sections";
 import { renderSessions, renderTimetable, createSessionDialog } from "./view-sessions";
 import { attachReveal, attachAccentZone, attachTocSpy, attachTocVisibility } from "./effects";
 import { acquireLayer, createTocLayer, releaseLayer, lockScroll, unlockScroll, trapFocus } from "./overlay";
@@ -178,6 +178,19 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   if (programs) darkZone.appendChild(programs);
   const highlights = renderHighlights(m);
   if (highlights) darkZone.appendChild(highlights);
+  /**
+   * "이런 분들께 추천합니다" — Join 바로 위, **dark-zone 안**.
+   *
+   * dark-zone 안이어야 하는 이유가 색이다: 이 존은 `background: var(--ink)` 로 불투명한데,
+   * 그 밖의 섹션은 자기 배경이 없어서 `.lnd.on-accent { background: var(--primary) }` 가
+   * 켜지는 동안(세션·타임테이블 구간) **키컬러가 그대로 비친다.** 처음엔 About 다음에
+   * 뒀다가 그 색 변화가 보여서 여기로 옮겼다.
+   *
+   * 지브라(`.section:nth-of-type(even)`)의 짝은 한 칸 밀린다 — Join 이 띠를 얻고 FAQ 가
+   * 잃는다. 교대 자체는 유지되므로 패턴이 깨지는 건 아니다.
+   */
+  const audience = renderAudience(m);
+  if (audience) darkZone.appendChild(audience);
   const join = renderJoin(m);
   if (join) darkZone.appendChild(join);
 

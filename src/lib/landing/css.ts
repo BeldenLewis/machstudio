@@ -3,6 +3,8 @@
  * 다크 에디토리얼 고정 테마(의도된 단일 테마), 키컬러만 theme.accentColor 에서 파생.
  */
 
+import { sessionLogoCss } from "@/lib/webinar-logo";
+
 export const LANDING_CSS = `
 .lnd {
   --ink: #06080d;
@@ -235,7 +237,7 @@ export const LANDING_CSS = `
 .lnd .session-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; }
 .lnd .session-card {
   position: relative;
-  width: calc(50% - 8px); max-width: 460px; aspect-ratio: 210 / 297; /* A4 세로 */
+  width: calc(50% - 8px); max-width: 372px; aspect-ratio: 210 / 297; /* A4 세로 */
   overflow: hidden; border-radius: 9px;
   background: linear-gradient(160deg, #1b2130, #12161f 60%, #0c0f16);
   box-shadow: var(--shadow);
@@ -264,14 +266,17 @@ export const LANDING_CSS = `
   margin: 12px 0 20px;
   font-size: 17px; line-height: 1.35; letter-spacing: -.03em; word-break: keep-all;
 }
-.lnd .speaker { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; color: #dfe5f0; font-size: 12px; }
+/* 이름·회사(왼쪽) 과 '자세히 보기'(오른쪽 하단) 를 한 줄에 — baseline 이 아니라 flex-end 로
+   맞춘다. 회사명이 있으면 왼쪽이 두 줄이 되는데, 그때 링크가 첫 줄에 붙어 뜨지 않게. */
+.lnd .session-foot { width: 100%; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.lnd .speaker { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; color: #dfe5f0; font-size: 15.5px; }
 .lnd .speaker b { color: #fff; font-weight: 800; }
-.lnd .speaker-co { color: #aeb8c9; font-size: 11px; font-weight: 600; letter-spacing: -.01em; }
+.lnd .speaker-co { color: #b9c2d1; font-size: 13.5px; font-weight: 600; letter-spacing: -.01em; }
 .lnd .session-more {
-  display: inline-flex; align-items: center; gap: 5px; margin-top: 11px;
-  font-size: 11px; font-weight: 800; letter-spacing: -.01em; color: var(--primary-bright);
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+  font-size: 14px; font-weight: 800; letter-spacing: -.01em; color: var(--primary-bright);
 }
-.lnd .session-more svg { width: 13px; height: 13px; }
+.lnd .session-more svg { width: 16px; height: 16px; }
 
 /* ── body 직계 고정 레이어 ── 모달처럼 뷰포트에 붙어야 하는 것만 여기 산다.
    외부 사이트(아임웹)에 마운트되면 조상에 position:relative/transform 이 있어
@@ -340,7 +345,12 @@ export const LANDING_CSS = `
 .lnd .lnd-modal-main h3 { margin: 14px 0 0; font-size: clamp(21px, 2.4vw, 27px); font-weight: 900; letter-spacing: -.035em; line-height: 1.25; word-break: keep-all; }
 .lnd .lnd-modal-desc { margin: 14px 0 0; color: #c4ccd9; font-size: 15px; line-height: 1.7; white-space: pre-line; word-break: keep-all; }
 .lnd .lnd-modal-speaker { margin-top: 22px; padding: 18px; border-radius: 14px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .08); }
-.lnd .lnd-modal-speaker-head { display: flex; align-items: center; gap: 13px; }
+/* 아바타·이름(왼쪽) + 로고(오른쪽 끝). 좁은 화면에서 셋이 한 줄에 안 들어가면 줄바꿈하고,
+   그때도 margin-left:auto 가 남아 로고는 자기 줄의 오른쪽에 붙는다. */
+.lnd .lnd-modal-speaker-head { display: flex; align-items: center; flex-wrap: wrap; gap: 13px; }
+/* 팝업 로고 — 어두운 글래스 배경이라 흰 판을 깐다(투명 PNG 가 대부분). */
+${sessionLogoCss(".lnd .lnd-modal-logo", { plate: true })}
+.lnd .lnd-modal-logo { margin-left: auto; }
 .lnd .lnd-modal-avatar { width: 52px; height: 52px; border-radius: 999px; overflow: hidden; flex-shrink: 0; display: grid; place-items: center; background: var(--primary-soft, #2a3040); color: #fff; font-weight: 800; font-size: 20px; }
 .lnd .lnd-modal-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .lnd .lnd-modal-speaker-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -382,13 +392,12 @@ export const LANDING_CSS = `
   border: 1px solid var(--primary-ink); color: var(--primary-ink);
   font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; vertical-align: 2px;
 }
-.lnd .schedule-speaker { display: block; margin-top: 2px; color: #586074; font-size: 11px; }
-/* 세션 로고 — 자르지 않는다(contain). .session-photo 는 inset:0/cover 로 전면 크롭이라
-   로고를 넣으면 글자가 잘려 못 읽는다. 높이만 고정하고 폭은 원본 비율에 맡긴다. */
-.lnd .schedule-logo {
-  display: block; margin-top: 6px; height: 22px; width: auto; max-width: 140px;
-  object-fit: contain; object-position: left center;
-}
+/* 연사 이름 — 11px 은 로고보다 작아 보여 위계가 뒤집혔다(로고가 이름보다 눈에 먼저 들어옴). */
+.lnd .schedule-speaker { display: block; margin-top: 3px; color: #4b5364; font-size: 13.5px; font-weight: 600; }
+/* 세션 로고 — 규격은 webinar-logo.ts 한 곳에서 온다(랜딩·대기·시청이 같은 크기여야 한다).
+   밝은 타임테이블 행에서는 흰 판을 끈다 — 흰 배경에 흰 판은 네모 테두리로만 보인다. */
+${sessionLogoCss(".lnd .schedule-logo")}
+.lnd .schedule-logo { margin-top: 6px; }
 /* 반전된 휴식 행에서도 로고가 보이게 흰 판을 깐다(투명 PNG 가 대부분). */
 .lnd .is-break .schedule-logo { background: #fff; border-radius: 4px; padding: 2px 4px; }
 
@@ -402,6 +411,29 @@ export const LANDING_CSS = `
   background: var(--ink-soft);
 }
 
+/* ── 이런 분들께 추천합니다 ── (dark-zone 안 · Join 바로 위)
+   카드 그리드가 아니라 **체크 목록**이다. 이 섹션의 일은 읽히는 것이 아니라 훑으면서
+   나에 해당하는 줄을 찾는 것이라, 줄 단위로 눈이 내려가는 형태가 맞다.
+   판 색·그림자는 이웃(program-card·benefit-card·join-step)과 같은 값을 쓴다 —
+   같은 존 안에서 카드 마감이 갈리면 섹션 하나가 얹혀 있는 것처럼 보인다. */
+.lnd .audience-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; list-style: none; padding: 0; margin: 0; }
+.lnd .audience-item {
+  display: flex; align-items: flex-start; gap: 13px;
+  padding: 18px 20px; border-radius: 8px;
+  background: rgba(24, 31, 45, .94);
+  box-shadow: 0 18px 48px rgba(2, 8, 24, .25);
+}
+/* 체크 표시 — 아이콘을 비웠을 때의 기본. 키컬러 판 위에 놓아 목록의 리듬을 만든다. */
+.lnd .audience-mark {
+  flex-shrink: 0; width: 26px; height: 26px; border-radius: 8px;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+  color: var(--primary-bright);
+  font-size: 14px; font-weight: 900; line-height: 1;
+}
+.lnd .audience-body { min-width: 0; }
+.lnd .audience-body b { display: block; font-size: 16px; font-weight: 750; letter-spacing: -.02em; color: var(--paper); word-break: keep-all; }
+.lnd .audience-body p { margin: 5px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted); white-space: pre-line; word-break: keep-all; }
 .lnd .program-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .lnd .program-card, .lnd .benefit-card, .lnd .join-step {
   border-radius: 8px; background: rgba(24, 31, 45, .94);
@@ -474,7 +506,7 @@ export const LANDING_CSS = `
   .lnd .scroll-cue { bottom: 28px; }
   .lnd .section { width: min(100% - 28px, var(--max)); }
   .lnd .session-cards { gap: 14px; }
-  .lnd .session-card { width: min(calc(50% - 7px), 286px); }
+  .lnd .session-card { width: min(calc(50% - 7px), 252px); }
   .lnd .session-card-body { inset: auto 12px 12px; }
   .lnd .session-card h3 { margin: 9px 0 14px; font-size: 14px; }
   .lnd .session-time { min-height: 25px; font-size: 10px; }
@@ -482,7 +514,7 @@ export const LANDING_CSS = `
   .lnd .schedule-time { padding: 0 12px; font-size: 14px; }
   .lnd .schedule-content { padding: 10px 12px; }
   .lnd .schedule-name { font-size: 13px; }
-  .lnd .program-grid, .lnd .benefit-grid, .lnd .join-grid { grid-template-columns: 1fr; }
+  .lnd .program-grid, .lnd .benefit-grid, .lnd .join-grid, .lnd .audience-list { grid-template-columns: 1fr; }
   .lnd .benefit-card { min-height: 130px; }
   .lnd .faq-tabs { overflow-x: auto; justify-content: flex-start; padding-bottom: 4px; }
   .lnd .faq-tab { flex: 0 0 auto; }

@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
 import { normalizeRegistrationForm } from "@/lib/webinar-config";
+import { endedSurveyLinks } from "@/lib/webinar-ended-surveys";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -186,6 +187,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ siteId: 
 
   // 종료 화면에 연결된 자체 설문 — 라이브 페이지(info 라우트)와 같은 우선순위를 임베드에도 적용한다.
   // 이걸 안 실어 보내면 자체 설문만 설정한 웨비나는 아임웹 종료 배너·히어로가 통째로 비어 버린다.
+  /**
+   * 종료 화면 설문은 여러 개 걸 수 있지만 **임베드 배너·히어로는 CTA 한 줄**이라 첫 번째만 쓴다.
+   * 파트너 사이트 배너에 설문 버튼을 N개 늘어놓는 건 그 자리의 역할(한 줄 알림)에 맞지 않는다.
+   * 전체 목록이 필요하면 배너의 링크가 종료 화면으로 보내고, 거기서 카드 N장을 보여준다.
+   *
+   * orderBy 는 결정론을 위한 것이다 — 정렬 없는 findFirst 는 여러 개가 되는 순간
+   * 어느 설문이 뽑힐지 DB 순서에 달리고, 캐시된 임베드 설정이 조용히 다른 링크를 갖게 된다.
+   */
   const endedSurvey = await prisma.webinarSurvey.findFirst({
     where: {
       webinarId: webinar.id,
@@ -193,11 +202,17 @@ export async function GET(req: Request, { params }: { params: Promise<{ siteId: 
       isOpen: true,
       OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }],
     },
+    orderBy: { createdAt: "asc" },
     select: { id: true },
   });
-  const endedSurveyUrl = endedSurvey
-    ? `${appOrigin}/webinar/${encodeURIComponent(webinar.slug)}/survey/${endedSurvey.id}?src=ended`
-    : null;
+  /* 자체 설문 vs 외부 URL 의 배타적 폴백은 뷰어와 같은 함수로 판정한다 —
+     한쪽만 고치면 같은 웨비나가 면에 따라 다른 설문을 가리킨다. 여기서는 첫 번째만 쓴다. */
+  const endedSurveyUrl =
+    endedSurveyLinks(
+      endedSurvey ? [endedSurvey] : [],
+      config.surveyUrl,
+      (id) => `${appOrigin}/webinar/${encodeURIComponent(webinar.slug)}/survey/${id}?src=ended`,
+    )[0]?.url ?? null;
 
   const payload = {
     slug: webinar.slug,
@@ -232,7 +247,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ siteId: 
     },
     links: {
       livePageUrl: site.livePageUrl ?? null,
-      surveyUrl: endedSurveyUrl ?? (typeof config.surveyUrl === "string" ? config.surveyUrl : null),
+      surveyUrl: endedSurveyUrl,
       calendarUrl: typeof config.calendarUrl === "string" ? config.calendarUrl : null,
     },
     ics: buildIcs(webinar),
