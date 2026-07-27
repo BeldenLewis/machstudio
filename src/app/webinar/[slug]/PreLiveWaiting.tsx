@@ -7,6 +7,7 @@ import { buildStkCss } from "./LiveContentStk";
 import { formatKst } from "@/lib/datetime";
 import type { LivePageConfig } from "@/lib/webinar-config";
 import { buildSessionNumbering, cleanSessionText, isPauseSession, sessionHasSpeaker, sessionKicker } from "@/lib/webinar-sessions";
+import { sessionLogoCss } from "@/lib/webinar-logo";
 
 /**
  * 등록 완료 ~ 라이브 오픈 전 대기 화면.
@@ -64,9 +65,10 @@ const EXTRA_CSS = `
 .stk-live .plw-row .kd { display:inline-block; font-size:10px; font-weight:750; letter-spacing:.06em; text-transform:uppercase; color:var(--key); background:var(--key-dim); padding:2px 7px; border-radius:6px; margin-bottom:6px; }
 .stk-live .plw-row.brk .kd { color:var(--sub); background:color-mix(in srgb,var(--text) 6%,transparent); }
 .stk-live .plw-row h4 { font-size:14.5px; font-weight:700; letter-spacing:-.01em; line-height:1.35; color:var(--text); margin:0; }
-/* 로고는 자르지 않는다(contain) — 연사 사진의 원형 크롭과 다른 처리다. 배경이 투명한 PNG 가
-   많아 흰 판을 깔아야 어두운 시청 화면에서도 보인다. 높이만 고정하고 폭은 비율에 맡긴다. */
-.stk-live .plw-logo { display:block; height:22px; width:auto; max-width:132px; object-fit:contain; margin-top:8px; background:#fff; border-radius:4px; padding:2px 4px; }
+/* 로고 규격은 webinar-logo.ts 한 곳에서 온다 — 랜딩·대기·시청이 같은 크기여야 한다
+   (예전엔 22/132 · 22/140 · 20/120 으로 갈라져 같은 로고가 면마다 다르게 보였다). */
+${sessionLogoCss(".stk-live .plw-logo", { plate: true })}
+.stk-live .plw-logo { margin-top:8px; }
 .stk-live .plw-who { display:flex; align-items:center; gap:8px; margin-top:8px; }
 .stk-live .plw-who .av { width:26px; height:26px; border-radius:50%; overflow:hidden; background:var(--key-dim); color:var(--key); display:grid; place-items:center; font-size:11px; font-weight:750; }
 .stk-live .plw-who .av img { width:100%; height:100%; object-fit:cover; }

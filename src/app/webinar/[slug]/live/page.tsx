@@ -9,7 +9,9 @@ import LiveContentStk from "../LiveContentStk";
 import PreLiveWaiting from "../PreLiveWaiting";
 import EntryVerify from "../EntryVerify";
 import EndedScreen from "../EndedScreen";
-import { endedSurveyLinks, readEndedSurveys, type EndedSurveyRef } from "@/lib/webinar-ended-surveys";
+import { endedSurveyLinks, readEndedSurveys, type EndedSurveyLink, type EndedSurveyRef } from "@/lib/webinar-ended-surveys";
+import ViewerModal from "../ViewerModal";
+import EndedSurveyDialog from "../EndedSurveyDialog";
 import { formatKst } from "@/lib/datetime";
 import {
   isValidEmail,
@@ -226,6 +228,17 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const consentDefaultsAppliedRef = useRef(false);
   // 종료 화면에 연결된 자체 설문 (/info 가 내려줌) — 있으면 외부 surveyUrl 보다 우선
   const [endedSurveys, setEndedSurveys] = useState<EndedSurveyRef[]>([]);
+  /** 종료 화면 설문 팝업 — 새 창 대신 이 자리에서 답한다(EndedSurveyDialog). */
+  const [openedSurvey, setOpenedSurvey] = useState<EndedSurveyLink | null>(null);
+  /**
+   * 사전등록 완료 팝업 — 제출이 성공했다는 사실을 화면이 말해 준다.
+   *
+   * 예전엔 등록에 성공하면 모달만 조용히 닫혔다. 대기 화면으로 돌아오긴 하는데 그 화면이
+   * 등록 전과 크게 다르지 않아(카운트다운·아젠다는 그대로) "눌렸나?" 를 알 수 없었고,
+   * 실제로 다시 누르는 사람이 생긴다 — 그러면 중복 안내를 만난다.
+   * 임베드 폼은 이미 성공 문구를 인라인으로 띄우고 있어서, 자체 페이지만 침묵하고 있었다.
+   */
+  const [registerDone, setRegisterDone] = useState(false);
   // 동의 약관 전문 팝업 — 동의 문구 텍스트 클릭 시 (본문이 설정된 경우에만)
   const [termsModal, setTermsModal] = useState<{ kind: "privacy" | "marketing"; title: string; body: string } | null>(null);
 
@@ -687,6 +700,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       if (typeof data.youtubeId === "string") setVideoId(data.youtubeId);
       setRegistered(true);
       setRegModalOpen(false); // 등록 완료 — 모달을 닫고 대기 화면(등록자용)으로 돌아간다
+      setRegisterDone(true); // 완료 팝업 — 아래 ViewerModal 이 사용자가 닫을 때까지 남는다
       // 등록을 마쳤으면 signup 고정을 푼다 — 안 풀면 입장이 열려 있어도 대기 화면에 머문다.
       setViewParam(null);
 
@@ -851,6 +865,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const surface = theme.surfaceColor ?? "#1a1a1a";
   const accent = theme.accentColor ?? "#6d28d9";
   const text = theme.textColor ?? "#ffffff";
+  /** 텍스트 색에서 파생한 반투명 색 — 모달 껍데기가 테마를 따라가게(LivePushLayer 와 같은 식). */
+  const soft = (pct: number) => `color-mix(in srgb, ${text} ${pct}%, transparent)`;
   const font = theme.font ?? "Pretendard";
   const radius = theme.borderRadius ?? "16px";
   const registrationForm = normalizeRegistrationForm(webinar.config ?? {});
@@ -1320,6 +1336,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             surface={surface}
             live={live}
             surveys={surveyLinks}
+            onOpenSurvey={(s) => setOpenedSurvey(s)}
             // 다시보기 신청은 등록 이메일이 있어야 발송된다 — 미등록자에겐 버튼을 숨긴다(누르면 항상 400).
             onReplay={hasRegistration ? handleNotifyToggle : undefined}
             replayRequested={notifySubscribed}
@@ -1329,6 +1346,62 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           />
         )}
       </div>
+      )}
+
+      {/**
+       * 사전등록 완료 팝업 — 자동으로 닫지 않는다. 등록 직후 화면이 대기(등록자용)로 바뀌거나
+       * 라이브로 넘어가기도 해서, 시간으로 닫으면 "봤는지" 를 보장할 수 없다.
+       * 안내 문구는 임베드 폼의 성공 문구와 같은 말을 한다 — 같은 행동의 결과가 면에 따라
+       * 다르게 설명되면 안 된다.
+       */}
+      {registerDone && (
+        <ViewerModal
+          surface={surface}
+          text={text}
+          soft={soft}
+          label="사전등록 완료"
+          onClose={() => setRegisterDone(false)}
+          zIndex={80}
+          maxWidthClass="max-w-sm"
+        >
+          <div className="py-4 text-center">
+            <div
+              className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full text-2xl"
+              style={{ background: "color-mix(in srgb,#12B76A 14%,transparent)", color: "#12B76A" }}
+              aria-hidden
+            >
+              ✓
+            </div>
+            <p className="text-lg font-bold">사전등록이 완료됐어요</p>
+            <p className="mt-2 text-sm leading-relaxed" style={{ color: soft(65) }}>
+              웨비나 당일 등록하신 연락처·이메일로 바로 입장할 수 있어요.
+            </p>
+            <button
+              type="button"
+              onClick={() => setRegisterDone(false)}
+              className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl px-6 text-sm font-bold text-white"
+              style={{ background: accent }}
+            >
+              확인
+            </button>
+          </div>
+        </ViewerModal>
+      )}
+
+      {/* 종료 화면 설문 팝업 — 우리 설문만 여기로 온다(외부 URL 은 새 탭). */}
+      {openedSurvey?.surveyId && (
+        <EndedSurveyDialog
+          slug={slug}
+          surveyId={openedSurvey.surveyId}
+          fallbackTitle={openedSurvey.title?.trim() || "설문"}
+          registrationId={registrationId}
+          accent={accent}
+          surface={surface}
+          text={text}
+          soft={soft}
+          readOnly={isPreviewUrl()}
+          onClose={() => setOpenedSurvey(null)}
+        />
       )}
 
       {/* 동의 약관 전문 팝업 — 닫힘은 즉시 언마운트(느려진 exit 애니메이션이 투명 오버레이로 남아 클릭을 막는 것 방지) */}

@@ -3,6 +3,8 @@
  * 다크 에디토리얼 고정 테마(의도된 단일 테마), 키컬러만 theme.accentColor 에서 파생.
  */
 
+import { sessionLogoCss } from "@/lib/webinar-logo";
+
 export const LANDING_CSS = `
 .lnd {
   --ink: #06080d;
@@ -235,7 +237,7 @@ export const LANDING_CSS = `
 .lnd .session-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; }
 .lnd .session-card {
   position: relative;
-  width: calc(50% - 8px); max-width: 460px; aspect-ratio: 210 / 297; /* A4 세로 */
+  width: calc(50% - 8px); max-width: 420px; aspect-ratio: 210 / 297; /* A4 세로 */
   overflow: hidden; border-radius: 9px;
   background: linear-gradient(160deg, #1b2130, #12161f 60%, #0c0f16);
   box-shadow: var(--shadow);
@@ -264,14 +266,17 @@ export const LANDING_CSS = `
   margin: 12px 0 20px;
   font-size: 17px; line-height: 1.35; letter-spacing: -.03em; word-break: keep-all;
 }
-.lnd .speaker { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; color: #dfe5f0; font-size: 12px; }
+/* 이름·회사(왼쪽) 과 '자세히 보기'(오른쪽 하단) 를 한 줄에 — baseline 이 아니라 flex-end 로
+   맞춘다. 회사명이 있으면 왼쪽이 두 줄이 되는데, 그때 링크가 첫 줄에 붙어 뜨지 않게. */
+.lnd .session-foot { width: 100%; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.lnd .speaker { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; color: #dfe5f0; font-size: 14px; }
 .lnd .speaker b { color: #fff; font-weight: 800; }
-.lnd .speaker-co { color: #aeb8c9; font-size: 11px; font-weight: 600; letter-spacing: -.01em; }
+.lnd .speaker-co { color: #b9c2d1; font-size: 12.5px; font-weight: 600; letter-spacing: -.01em; }
 .lnd .session-more {
-  display: inline-flex; align-items: center; gap: 5px; margin-top: 11px;
-  font-size: 11px; font-weight: 800; letter-spacing: -.01em; color: var(--primary-bright);
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+  font-size: 13px; font-weight: 800; letter-spacing: -.01em; color: var(--primary-bright);
 }
-.lnd .session-more svg { width: 13px; height: 13px; }
+.lnd .session-more svg { width: 15px; height: 15px; }
 
 /* ── body 직계 고정 레이어 ── 모달처럼 뷰포트에 붙어야 하는 것만 여기 산다.
    외부 사이트(아임웹)에 마운트되면 조상에 position:relative/transform 이 있어
@@ -338,6 +343,9 @@ export const LANDING_CSS = `
   background: var(--primary); color: var(--on-primary); font-size: 12px; font-weight: 850; font-variant-numeric: tabular-nums;
 }
 .lnd .lnd-modal-main h3 { margin: 14px 0 0; font-size: clamp(21px, 2.4vw, 27px); font-weight: 900; letter-spacing: -.035em; line-height: 1.25; word-break: keep-all; }
+/* 팝업 로고 — 어두운 글래스 배경이라 흰 판을 깐다(투명 PNG 가 대부분). */
+${sessionLogoCss(".lnd .lnd-modal-logo", { plate: true })}
+.lnd .lnd-modal-logo { margin: 14px 0 0; }
 .lnd .lnd-modal-desc { margin: 14px 0 0; color: #c4ccd9; font-size: 15px; line-height: 1.7; white-space: pre-line; word-break: keep-all; }
 .lnd .lnd-modal-speaker { margin-top: 22px; padding: 18px; border-radius: 14px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .08); }
 .lnd .lnd-modal-speaker-head { display: flex; align-items: center; gap: 13px; }
@@ -383,12 +391,10 @@ export const LANDING_CSS = `
   font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; vertical-align: 2px;
 }
 .lnd .schedule-speaker { display: block; margin-top: 2px; color: #586074; font-size: 11px; }
-/* 세션 로고 — 자르지 않는다(contain). .session-photo 는 inset:0/cover 로 전면 크롭이라
-   로고를 넣으면 글자가 잘려 못 읽는다. 높이만 고정하고 폭은 원본 비율에 맡긴다. */
-.lnd .schedule-logo {
-  display: block; margin-top: 6px; height: 22px; width: auto; max-width: 140px;
-  object-fit: contain; object-position: left center;
-}
+/* 세션 로고 — 규격은 webinar-logo.ts 한 곳에서 온다(랜딩·대기·시청이 같은 크기여야 한다).
+   밝은 타임테이블 행에서는 흰 판을 끈다 — 흰 배경에 흰 판은 네모 테두리로만 보인다. */
+${sessionLogoCss(".lnd .schedule-logo")}
+.lnd .schedule-logo { margin-top: 6px; }
 /* 반전된 휴식 행에서도 로고가 보이게 흰 판을 깐다(투명 PNG 가 대부분). */
 .lnd .is-break .schedule-logo { background: #fff; border-radius: 4px; padding: 2px 4px; }
 
@@ -474,7 +480,7 @@ export const LANDING_CSS = `
   .lnd .scroll-cue { bottom: 28px; }
   .lnd .section { width: min(100% - 28px, var(--max)); }
   .lnd .session-cards { gap: 14px; }
-  .lnd .session-card { width: min(calc(50% - 7px), 286px); }
+  .lnd .session-card { width: min(calc(50% - 7px), 268px); }
   .lnd .session-card-body { inset: auto 12px 12px; }
   .lnd .session-card h3 { margin: 9px 0 14px; font-size: 14px; }
   .lnd .session-time { min-height: 25px; font-size: 10px; }

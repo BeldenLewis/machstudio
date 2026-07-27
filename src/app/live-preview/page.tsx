@@ -12,6 +12,8 @@ import LiveContentStk from "@/app/webinar/[slug]/LiveContentStk";
 import EntryVerify from "@/app/webinar/[slug]/EntryVerify";
 import PreLiveWaiting from "@/app/webinar/[slug]/PreLiveWaiting";
 import EndedScreen from "@/app/webinar/[slug]/EndedScreen";
+import EndedSurveyDialog from "@/app/webinar/[slug]/EndedSurveyDialog";
+import type { EndedSurveyLink } from "@/lib/webinar-ended-surveys";
 import { normalizeLivePageConfig } from "@/lib/webinar-config";
 
 type State = "waiting" | "entry" | "live" | "ended";
@@ -21,7 +23,9 @@ type State = "waiting" | "entry" | "live" | "ended";
  * 두 번째 카드는 ctaLabel 을 지정해 버튼 문구가 설문마다 달라지는지도 함께 확인한다.
  */
 const MOCK_ENDED_SURVEYS = [
-  { url: "#survey-1", title: "1분 만족도 설문", description: "오늘 어떠셨나요? 짧은 피드백이 다음 웨비나를 더 좋게 만들어요." },
+  // surveyId 가 있으면 종료 화면이 새 창 대신 팝업으로 연다 — 그 분기를 하니스에서 눌러 보게.
+  { url: "#survey-1", surveyId: "mock-1", title: "1분 만족도 설문", description: "오늘 어떠셨나요? 짧은 피드백이 다음 웨비나를 더 좋게 만들어요." },
+  // 두 번째는 외부 설문 URL 을 흉내 낸다(surveyId 없음) — 새 탭으로 가는 쪽이 그대로 남는지.
   { url: "#survey-2", title: "다음 웨비나 주제 사전조사", description: "다음 회차에서 가장 듣고 싶은 주제를 골라주세요.", ctaLabel: "사전 신청하기" },
 ];
 type ThemeKey = "dark" | "light";
@@ -161,6 +165,8 @@ export default function LivePreviewPage() {
   const [selectedSession, setSelectedSession] = useState<number | null>(null);
   const [chatOn, setChatOn] = useState(true);
   const [qaMode, setQaMode] = useState<"open" | "closed">("open");
+  // 종료 화면 설문 팝업 — 카드 CTA 를 누르면 열린다(새 창이 아니라는 것을 눌러서 확인).
+  const [openedSurvey, setOpenedSurvey] = useState<EndedSurveyLink | null>(null);
 
   const target = useMemo(() => new Date(Date.now() + (2 * 86400 + 5 * 3600 + 37 * 60) * 1000).toISOString(), []);
   // 라이브 프리뷰에선 세션이 진행 중으로 보이게 서버시각을 행사 중으로 고정.
@@ -264,6 +270,24 @@ export default function LivePreviewPage() {
               : MOCK_ENDED_SURVEYS
           }
           onReplay={() => {}} onShare={() => {}}
+          onOpenSurvey={(sv) => setOpenedSurvey(sv)}
+        />
+      )}
+
+      {/* 종료 화면 설문 팝업 — 하니스에서는 목업 id 라 문항 조회가 404 로 떨어진다.
+          그래도 "새 창이 아니라 이 자리에 뜬다" 와 에러 상태 문구를 눌러서 확인할 수 있다. */}
+      {openedSurvey?.surveyId && (
+        <EndedSurveyDialog
+          slug="harness"
+          surveyId={openedSurvey.surveyId}
+          fallbackTitle={openedSurvey.title?.trim() || "설문"}
+          registrationId={null}
+          accent={t.accent}
+          surface={t.surface}
+          text={t.text}
+          soft={(pct) => `color-mix(in srgb, ${t.text} ${pct}%, transparent)`}
+          readOnly
+          onClose={() => setOpenedSurvey(null)}
         />
       )}
     </div>

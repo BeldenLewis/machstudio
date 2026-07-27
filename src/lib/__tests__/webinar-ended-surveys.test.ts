@@ -13,7 +13,18 @@ const url = (id: string) => `/s/${id}`;
 describe("배타적 폴백 — 두 경로를 섞지 않는다", () => {
   it("자체 설문이 있으면 외부 URL 은 무시된다", () => {
     const links = endedSurveyLinks([{ id: "a" }], "https://tally.so/x", url);
-    expect(links).toEqual([{ url: "/s/a", title: null, description: null, ctaLabel: null }]);
+    expect(links).toEqual([{ url: "/s/a", surveyId: "a", title: null, description: null, ctaLabel: null }]);
+  });
+
+  /**
+   * surveyId 는 종료 화면이 **팝업으로 열지 새 탭으로 보낼지**를 가르는 값이다.
+   * 우리 설문이면 문항을 받아와 그 자리에서 답하게 하고, 외부 URL 은 남의 페이지라
+   * iframe 이 막힐 수 있어 새 탭이 정직하다. URL 문자열을 파싱해 판정하지 않는다 —
+   * 경로 형태가 바뀌면 조용히 오판한다.
+   */
+  it("우리 설문만 surveyId 를 갖는다 — 팝업 대상 판정 근거", () => {
+    expect(endedSurveyLinks([{ id: "a" }], null, url)[0].surveyId).toBe("a");
+    expect(endedSurveyLinks([], "https://tally.so/x", url)[0].surveyId).toBeUndefined();
   });
 
   it("자체 설문이 여러 개면 순서를 그대로 지킨다 — 어드민 목록 순서와 같아야 어느 카드인지 안다", () => {
@@ -37,8 +48,8 @@ describe("배타적 폴백 — 두 경로를 섞지 않는다", () => {
       null,
       url,
     );
-    expect(links[0]).toEqual({ url: "/s/a", title: "만족도", description: "1분", ctaLabel: null });
-    expect(links[1]).toEqual({ url: "/s/b", title: "사전조사", description: null, ctaLabel: null });
+    expect(links[0]).toEqual({ url: "/s/a", surveyId: "a", title: "만족도", description: "1분", ctaLabel: null });
+    expect(links[1]).toEqual({ url: "/s/b", surveyId: "b", title: "사전조사", description: null, ctaLabel: null });
   });
 
   /**

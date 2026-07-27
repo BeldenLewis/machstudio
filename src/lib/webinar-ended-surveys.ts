@@ -23,8 +23,20 @@ export type EndedSurveyRef = {
   ctaLabel?: string | null;
 };
 
-/** 화면이 그리는 카드 하나. */
-export type EndedSurveyLink = { url: string; title?: string | null; description?: string | null; ctaLabel?: string | null };
+/**
+ * 화면이 그리는 카드 하나.
+ *
+ * `surveyId` 가 있으면 **우리 설문**이다 — 종료 화면이 새 창 대신 팝업으로 문항을 띄운다.
+ * 없으면 외부 설문 URL(config.surveyUrl)이라 문항을 받아올 수 없어 새 탭으로 보낸다.
+ * URL 을 파싱해 판정하지 않는 이유: 경로 형태가 바뀌면 조용히 오판한다.
+ */
+export type EndedSurveyLink = {
+  url: string;
+  surveyId?: string | null;
+  title?: string | null;
+  description?: string | null;
+  ctaLabel?: string | null;
+};
 
 /**
  * 종료 화면에 그릴 설문 목록. `buildUrl` 이 면마다 다른 URL 형태를 만든다
@@ -36,7 +48,13 @@ export function endedSurveyLinks(
   buildUrl: (id: string) => string,
 ): EndedSurveyLink[] {
   if (surveys.length > 0) {
-    return surveys.map((s) => ({ url: buildUrl(s.id), title: s.title ?? null, description: s.description ?? null, ctaLabel: s.ctaLabel ?? null }));
+    return surveys.map((s) => ({
+      url: buildUrl(s.id),
+      surveyId: s.id,
+      title: s.title ?? null,
+      description: s.description ?? null,
+      ctaLabel: s.ctaLabel ?? null,
+    }));
   }
   // 외부 URL 은 제목·설명이 없다 — 화면이 기본 문구로 채운다.
   return typeof externalUrl === "string" && externalUrl.trim() !== "" ? [{ url: externalUrl }] : [];

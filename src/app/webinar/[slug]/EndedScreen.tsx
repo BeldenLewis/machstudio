@@ -72,6 +72,11 @@ interface EndedScreenProps {
    * 배열인 이유: 만족도 설문과 다음 행사 사전조사를 함께 거는 게 실제 운영 패턴이다.
    */
   surveys?: readonly EndedSurveyLink[];
+  /**
+   * 우리 설문 카드를 눌렀을 때 — 새 창 대신 이 콜백으로 팝업을 띄운다.
+   * 주지 않으면(미리보기 하니스 등) 링크 그대로 동작한다 — 팝업 로직 없이도 화면이 성립하게.
+   */
+  onOpenSurvey?: (survey: EndedSurveyLink) => void;
   onReplay?: () => void;
   replayRequested?: boolean;
   replayPending?: boolean;
@@ -80,7 +85,7 @@ interface EndedScreenProps {
 }
 
 export default function EndedScreen({
-  webinar, accent, text, surface, live, surveys,
+  webinar, accent, text, surface, live, surveys, onOpenSurvey,
   onReplay, replayRequested, replayPending, onShare, shareCopied,
 }: EndedScreenProps) {
   const css = useMemo(() => buildStkCss(accent || "#6D28D9", text || "#141320", surface || "#FFFFFF") + EXTRA_CSS, [accent, text, surface]);
@@ -128,9 +133,20 @@ export default function EndedScreen({
                 <span className="ic"><ClipboardCheck /></span>
                 <h3>{survey.title?.trim() || DEFAULT_SURVEY_TITLE}</h3>
                 <p style={{ whiteSpace: "pre-line" }}>{survey.description?.trim() || DEFAULT_SURVEY_DESCRIPTION}</p>
-                <a href={survey.url} target="_blank" rel="noopener noreferrer" className="en-btn soft">
-                  {survey.ctaLabel?.trim() || DEFAULT_SURVEY_CTA}
-                </a>
+                {/**
+                  * 우리 설문(surveyId 있음)은 **팝업**으로 — 종료 화면은 여정의 끝이라 새 탭이
+                  * 열리면 뒤에 있는 자료·다음 웨비나가 잊힌다. 외부 설문 URL 은 문항을 받아올 수
+                  * 없고 iframe 도 상대가 막을 수 있어 새 탭이 정직하다.
+                  */}
+                {survey.surveyId && onOpenSurvey ? (
+                  <button type="button" onClick={() => onOpenSurvey(survey)} className="en-btn soft">
+                    {survey.ctaLabel?.trim() || DEFAULT_SURVEY_CTA}
+                  </button>
+                ) : (
+                  <a href={survey.url} target="_blank" rel="noopener noreferrer" className="en-btn soft">
+                    {survey.ctaLabel?.trim() || DEFAULT_SURVEY_CTA}
+                  </a>
+                )}
               </div>
             ))}
           </div>

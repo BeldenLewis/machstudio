@@ -43,14 +43,24 @@ function sessionCardInner(m: LandingModel, session: LandingSession): (Node | fal
       { class: "session-card-body" },
       h("span", { class: "session-time" }, session.startTime, "–", session.endTime),
       h("h3", null, session.title),
+      /**
+       * 연사 정보와 '자세히 보기' 를 **한 줄**에 둔다 — 이름·회사는 왼쪽, 링크는 오른쪽 하단.
+       * 예전엔 세로로 쌓여서 링크가 이름 바로 아래 붙었는데, 카드 하단에서 두 정보가
+       * 같은 축을 쓰다 보니 시선이 어디서 멈춰야 하는지 애매했다. 좌우로 갈라 두면
+       * "누가" 와 "더 보기" 가 서로 다른 역할이라는 게 위치로 드러난다.
+       */
       h(
         "div",
-        { class: "speaker" },
-        Boolean(sp.name) && h("b", null, sp.name),
-        Boolean(sp.company) && h("span", { class: "speaker-co" }, sp.company),
+        { class: "session-foot" },
+        h(
+          "div",
+          { class: "speaker" },
+          Boolean(sp.name) && h("b", null, sp.name),
+          Boolean(sp.company) && h("span", { class: "speaker-co" }, sp.company),
+        ),
+        m.detailPopup &&
+          h("span", { class: "session-more", "aria-hidden": "true" }, "자세히 보기", arrowIcon()),
       ),
-      m.detailPopup &&
-        h("span", { class: "session-more", "aria-hidden": "true" }, "자세히 보기", arrowIcon()),
     ),
   ];
 }
@@ -197,6 +207,14 @@ export function createSessionDialog(
       { class: "lnd-modal-main" },
       h("span", { class: "lnd-modal-time" }, session.startTime, "–", session.endTime),
       h("h3", { id: titleId }, session.title),
+      /**
+       * 세션 로고 — 제목 바로 아래. 연사 블록 안이 아니라 여기 두는 이유: 로고는 주최·협력사
+       * 마크라 **연사가 없는 세션(오프닝·클로징)에도 있을 수 있다.** 연사 블록에 넣으면
+       * hasSpeaker 가 false 인 세션에서 로고가 통째로 사라진다. 크기는 다른 면과 같은 규격
+       * (webinar-logo.ts) — 같은 로고가 타임테이블과 팝업에서 다른 크기로 보이지 않게.
+       */
+      Boolean(session.logoUrl) &&
+        h("img", { class: "lnd-modal-logo", src: session.logoUrl, alt: "", loading: "lazy" }),
       Boolean(session.description) && h("p", { class: "lnd-modal-desc" }, session.description),
       hasSpeaker &&
         h(

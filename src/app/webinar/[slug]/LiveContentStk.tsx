@@ -12,6 +12,7 @@ import { getYouTubeVideoId } from "@/lib/youtube";
 import { CheckCircle2, Send, Share2 } from "lucide-react";
 import { formatKst, kstDateString } from "@/lib/datetime";
 import { buildSessionNumbering, cleanSessionText, isPauseSession, isRealSession, sessionHasSpeaker, sessionTypeLabel } from "@/lib/webinar-sessions";
+import { sessionLogoCss } from "@/lib/webinar-logo";
 import SurveyForm, { SURVEY_FORM_CSS, clearSurveyDraft } from "./SurveyForm";
 import type { SurveyAnswers, SurveyQuestion } from "@/lib/webinar-survey";
 
@@ -289,8 +290,10 @@ const WATCH_CSS = `
 /* 휴식은 콘텐츠가 아니라 빈 시간이다 — 오프닝·Q&A·클로징과 같은 키컬러 강조를 주면 안 된다
    (어드민은 이미 휴식=회색으로 구분하고 있어 화면 간에 어긋나 있었다). */
 .stk-live .lv-setype.muted { background:color-mix(in srgb,var(--text) 8%,transparent); color:var(--sub); }
-/* 로고: 자르지 않고(contain) 높이만 고정. 투명 PNG 가 많아 흰 판을 깐다. */
-.stk-live .lv-selogo { display:block; height:20px; width:auto; max-width:120px; object-fit:contain; margin:6px 0 0; background:#fff; border-radius:4px; padding:2px 4px; }
+/* 로고 규격은 webinar-logo.ts 한 곳에서 온다(랜딩·대기와 같은 크기). 예전엔 여기만 20px 이라
+   같은 로고가 대기 화면보다 작아 보였다. */
+${sessionLogoCss(".stk-live .lv-selogo", { plate: true })}
+.stk-live .lv-selogo { margin:6px 0 0; }
 .stk-live .lv-ses small { color:var(--sub); font-size:12px; }
 .stk-live .lv-ses .st { margin-left:auto; align-self:center; font-size:11px; font-weight:700; color:var(--sub); white-space:nowrap; }
 .stk-live .lv-ses.now .st { color:var(--key); display:inline-flex; align-items:center; gap:5px; }
