@@ -180,11 +180,6 @@ export function renderTimetable(m: LandingModel): HTMLElement | null {
         // 펼칠 거리가 있는가 — 상세 본문 또는 로고. 로고만 있어도 펼칠 값이 있다(주최 마크 확인).
         const expandable = Boolean(row.description || row.logoUrl);
 
-        /**
-         * 셰브론은 **제목 줄 안**에 둔다 — 오른쪽 열로 빼면 카드가 펼쳐져 키가 커졌을 때
-         * 화살표만 오른쪽 맨 위에 남아 정작 펼쳐진 내용과 멀어져 붕 떠 보인다.
-         * 제목 옆이면 자기가 여닫는 대상 바로 옆이라 카드 높이와 무관하게 자리가 자연스럽다.
-         */
         const head = [
           h("div", { class: "schedule-time" }, row.startTime, "–", row.endTime),
           h(
@@ -193,14 +188,9 @@ export function renderTimetable(m: LandingModel): HTMLElement | null {
             h(
               "span",
               { class: "schedule-name" },
-              h(
-                "span",
-                { class: "schedule-title" },
-                row.title,
-                // 태그 문구도 유형 표에서 — 여기만 "Live Q&A" 로 갈라져 있었다
-                Boolean(meta?.landingTag) && h("span", { class: "tag" }, meta!.landingTag!),
-              ),
-              expandable && h("span", { class: "schedule-chev", "aria-hidden": "true" }, chevronIcon()),
+              row.title,
+              // 태그 문구도 유형 표에서 — 여기만 "Live Q&A" 로 갈라져 있었다
+              Boolean(meta?.landingTag) && h("span", { class: "tag" }, meta!.landingTag!),
             ),
             /* 연사 표시 판정을 hasSpeaker 로 통일. 예전엔 `=== "session"` 정확일치라
                **Q&A 의 "전체 연사" 가 랜딩에서만 사라졌다**(라이브는 `!== "break"` 로 보여 줬다).
@@ -239,7 +229,7 @@ export function renderTimetable(m: LandingModel): HTMLElement | null {
             ? h(
                 "details",
                 { class: "schedule-acc", "data-acc": "" },
-                h("summary", { class: "schedule-summary" }, head),
+                h("summary", { class: "schedule-summary" }, head, h("span", { class: "schedule-chev", "aria-hidden": "true" }, chevronIcon())),
                 detail,
               )
             : h("div", { class: "schedule-summary is-static" }, head),

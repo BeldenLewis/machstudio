@@ -440,31 +440,38 @@ ${sessionLogoCss(".lnd .lnd-modal-logo", { plate: true })}
 /* 시각 | 내용 | 셰브론. 셰브론 열은 펼칠 수 없는 행에서는 자리를 차지하지 않는다(auto + 자식 없음). */
 .lnd .schedule-summary {
   min-height: 62px;
-  display: grid; grid-template-columns: 190px minmax(0, 1fr); align-items: center;
+  display: grid; grid-template-columns: 190px minmax(0, 1fr) auto; align-items: center;
   list-style: none; cursor: pointer;
 }
-/* 배치를 **명시**한다(자동 배치 금지). 모바일에서 내용이 두 열을 다 쓰는 순간
-   (grid-area 2 / 1 / 3 / -1) 자동 배치는 앞줄로 되돌아가지 못한다.
-   셰브론은 그리드 항목이 아니다 — 제목 줄(.schedule-name) 안에 있다(view-sessions 주석 참고). */
+/* 배치를 **명시**한다(자동 배치 금지). 자동 배치는 앞줄로 되돌아가지 못해서, 모바일에서
+   내용이 두 열을 다 쓰는 순간(grid-column: 1 / -1) 셰브론이 다음 줄로 밀려 내용 아래
+   자기 줄을 차지했다 — 실측(375px): summary 가 3행이 되고 셰브론이 폭 347px 로 혼자 한 줄.
+   열을 적어 두면 소스 순서·자동 흐름과 무관하게 자리가 고정된다. */
 .lnd .schedule-time { grid-area: 1 / 1; }
 .lnd .schedule-content { grid-area: 1 / 2; }
+.lnd .schedule-chev { grid-area: 1 / 3; }
 .lnd .schedule-summary.is-static { cursor: default; }
 .lnd .schedule-summary::-webkit-details-marker { display: none; }
-/* 제목 줄 — 제목(+태그)과 셰브론을 한 줄에. 셰브론은 제목이 아무리 길어도 밀리지 않게
-   flex:none, 제목은 줄바꿈할 수 있게 min-width:0. */
-.lnd .schedule-name { display: flex; align-items: baseline; gap: 8px; }
-.lnd .schedule-title { min-width: 0; }
-/* 펼침 셰브론 — 제목 **바로 오른쪽**. 열리면 180도.
-   오른쪽 열로 빼면 카드가 펼쳐졌을 때 화살표만 맨 위에 남아 내용과 멀어진다.
-   색은 행 색을 따라간다(반전 행에서도 보이게). */
+/**
+ * 펼침 셰브론 — 오른쪽 끝. 열리면 180도. 색은 행 색을 따라간다(반전 행에서도 보이게).
+ *
+ * **회전은 svg 에만 건다.** 예전엔 이 span(패딩을 가진 칸)을 회전시켰는데,
+ * rotate(180deg) 가 padding-right 를 왼쪽으로 뒤집어 안쪽 글리프가 오른쪽으로 18px 밀렸다
+ * → 접혔을 때와 펼쳤을 때 화살표 x 좌표가 어긋났다.
+ * span 의 박스는 회전해도 그대로라서, span 을 재면 "제자리" 로 보인다(그래서 놓쳤다).
+ * 여백은 span 이 갖고 움직이는 것은 svg 뿐 — 이제 뒤집힐 패딩이 없다.
+ */
 .lnd .schedule-chev {
-  flex: none; display: inline-flex; align-items: center; justify-content: center;
-  color: currentColor; opacity: .5;
-  transition: transform .22s cubic-bezier(.22,.61,.36,1), opacity .18s ease;
+  display: flex; align-items: center; justify-content: center;
+  padding-right: 18px; color: currentColor; opacity: .55;
+  transition: opacity .18s ease;
 }
-.lnd .schedule-chev svg { width: 17px; height: 17px; }
+.lnd .schedule-chev svg {
+  transition: transform .22s cubic-bezier(.22,.61,.36,1);
+}
+.lnd .schedule-chev svg { width: 18px; height: 18px; }
 .lnd .schedule-summary:hover .schedule-chev { opacity: .9; }
-.lnd details[open] .schedule-chev { transform: rotate(180deg); }
+.lnd details[open] > .schedule-summary .schedule-chev svg { transform: rotate(180deg); }
 /* 상세 — 높이 애니메이션 대상(effects.attachAccordion). CSS 로는 열림 상태만 잡고,
    여닫는 모션은 JS 가 인라인 height 로 그린다(details 는 닫히면 내용이 즉시 감춰진다). */
 .lnd .schedule-detail { overflow: hidden; }
@@ -481,7 +488,7 @@ ${sessionLogoCss(".lnd .lnd-modal-logo", { plate: true })}
 }
 .lnd .is-break .schedule-desc { color: #d6dae6; }
 .lnd .schedule-content { padding: 10px 20px; }
-.lnd .schedule-name { font-size: 15px; font-weight: 850; letter-spacing: -.02em; word-break: keep-all; }
+.lnd .schedule-name { display: block; font-size: 15px; font-weight: 850; letter-spacing: -.02em; word-break: keep-all; }
 .lnd .schedule-name .tag {
   display: inline-block; margin-left: 10px; padding: 2px 9px; border-radius: 999px;
   border: 1px solid var(--primary-ink); color: var(--primary-ink);
@@ -618,7 +625,7 @@ ${sessionLogoCss(".lnd .schedule-logo")}
   .lnd .session-card-body { inset: auto 12px 12px; }
   .lnd .session-card h3 { margin: 9px 0 14px; font-size: 14px; }
   .lnd .session-time { min-height: 25px; font-size: 10px; }
-  .lnd .schedule-summary { min-height: 72px; grid-template-columns: 112px minmax(0, 1fr); }
+  .lnd .schedule-summary { min-height: 72px; grid-template-columns: 112px minmax(0, 1fr) auto; }
   .lnd .schedule-time { padding: 0 12px; font-size: 14px; }
   .lnd .schedule-content { padding: 10px 12px; }
   .lnd .schedule-name { font-size: 13px; }
@@ -631,10 +638,12 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 @media (max-width: 410px) {
   .lnd .session-card { width: 100%; max-width: 310px; }
   .lnd .session-card h3 { font-size: 16px; }
-  /* 모바일 1열 — 시각이 윗줄, 내용이 아랫줄. 셰브론은 제목 줄 안에 있어 따로 배치하지 않는다. */
-  .lnd .schedule-summary { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  /* 모바일 — 1행: 시각 | 셰브론, 2행: 내용(두 열 span). 세 자리를 다 적어야 셰브론이
+     내용 아래로 밀리지 않는다(위 주석의 자동 배치 함정). */
+  .lnd .schedule-summary { grid-template-columns: minmax(0, 1fr) auto; gap: 0; }
   .lnd .schedule-time { grid-area: 1 / 1; }
-  .lnd .schedule-content { grid-area: 2 / 1; }
+  .lnd .schedule-chev { grid-area: 1 / 2; align-self: center; padding-right: 14px; }
+  .lnd .schedule-content { grid-area: 2 / 1 / 3 / -1; }
   .lnd .schedule-time { padding: 10px 14px 6px; border-right: 0; border-bottom: 1px solid rgba(21, 32, 51, .15); }
   .lnd .is-break .schedule-time { border-color: rgba(255, 255, 255, .14); }
   .lnd .schedule-content { padding: 7px 14px 12px; }
