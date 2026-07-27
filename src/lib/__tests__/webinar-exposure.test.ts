@@ -91,7 +91,7 @@ describe("랜딩 — 섹션을 끈 것과 켜 놓고 비운 것은 다르다", (
   });
 
   it("섹션을 끄면 off — 경고가 아니다", () => {
-    for (const key of ["intro", "programs", "highlights", "faq"]) {
+    for (const key of ["intro", "audience", "programs", "highlights", "faq"]) {
       expect(row(make({ config: cfg(key, false) }), `landing.${key}`).state, key).toBe("off");
     }
   });
@@ -99,6 +99,16 @@ describe("랜딩 — 섹션을 끈 것과 켜 놓고 비운 것은 다르다", (
   it("켜 놓고 비우면 empty", () => {
     expect(row(make({ config: cfg("programs", true) }), "landing.programs").state).toBe("empty");
     expect(row(make({ config: cfg("faq", true) }), "landing.faq").state).toBe("empty");
+    expect(row(make({ config: cfg("audience", true) }), "landing.audience").state).toBe("empty");
+  });
+
+  /**
+   * "이런 분들께 추천합니다" — 새로 생긴 섹션도 다른 섹션과 **같은 이중 게이트**를 쓴다는 증거.
+   * 제목(대상)이 빈 행은 정규화가 버리므로 내용으로 세지 않는다(프로그램·FAQ 와 같은 규칙).
+   */
+  it("추천 대상은 제목이 있는 항목만 내용으로 센다", () => {
+    expect(row(make({ config: cfg("audience", true, [{ title: "" }]) }), "landing.audience").state).toBe("empty");
+    expect(row(make({ config: cfg("audience", true, [{ title: "미국 진출 준비 중인 브랜드" }]) }), "landing.audience").state).toBe("on");
   });
 
   it("켜고 채우면 on", () => {

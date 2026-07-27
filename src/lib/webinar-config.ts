@@ -204,6 +204,12 @@ export function normalizeLivePageConfig(config: unknown): LivePageConfig {
 // 섹션은 "토글 ON + 실제 데이터 있음" 이중 게이트로만 노출된다(빈 껍데기 금지).
 // 세션·타임테이블 데이터는 여기 저장하지 않고 실제 세션(webinar.sessions)에서 파생한다.
 export interface LandingProgramItem { icon: string; title: string; description: string }
+/**
+ * "이런 분들께 추천합니다" 한 줄. 방문자가 **자기 얘기인지** 3초 안에 판별하게 하는 섹션이라
+ * 제목(대상)이 필수고 설명은 부연이다 — 제목이 비면 그 줄은 공개되지 않는다.
+ * icon 은 선택 — 비우면 뷰가 체크 표시를 그린다.
+ */
+export interface LandingAudienceItem { icon: string; title: string; description: string }
 export interface LandingHighlightItem { title: string; description: string }
 export interface LandingJoinStep { title: string; description: string }
 export interface LandingFaqItem { category: string; question: string; answer: string }
@@ -225,11 +231,21 @@ export interface LandingPageConfig {
   /** detailPopup: 세션 카드 클릭 시 연사 상세(주제·내용·사진·소속·약력) 팝업 열기 */
   sessions: { enabled: boolean; detailPopup: boolean };
   timetable: { enabled: boolean };
+  /**
+   * 이런 분들께 추천합니다 — 제목 문구까지 편집 가능하다.
+   * 다른 섹션 머리글은 "Programs"·"FAQ" 처럼 고정 영문인데 이것만 한국어 문장인 이유:
+   * 이 섹션의 머리글 자체가 카피다("이런 분들께 추천합니다" / "이런 고민이 있다면").
+   * 비우면 DEFAULT_LANDING_AUDIENCE_TITLE 이 나간다(저장 시점 값이 굳지 않게).
+   */
+  audience: { enabled: boolean; title: string; items: LandingAudienceItem[] };
   programs: { enabled: boolean; items: LandingProgramItem[] };
   highlights: { enabled: boolean; items: LandingHighlightItem[] };
   join: { enabled: boolean; steps: LandingJoinStep[] };
   faq: { enabled: boolean; items: LandingFaqItem[] };
 }
+
+/** 이런 분들께 추천합니다 — 머리글 기본 문구. 어드민이 비우면 이 값이 나간다. */
+export const DEFAULT_LANDING_AUDIENCE_TITLE = "이런 분들께 추천합니다";
 
 /** 온라인 웨비나 공통 참여 절차 — 사실 기반 기본값(어드민이 자유 수정) */
 export const DEFAULT_LANDING_JOIN_STEPS: LandingJoinStep[] = [
@@ -275,6 +291,7 @@ export function normalizeLandingPageConfig(
     : null;
 
   const intro = obj(lp.intro);
+  const audience = obj(lp.audience);
   const programs = obj(lp.programs);
   const highlights = obj(lp.highlights);
   const join = obj(lp.join);
@@ -291,6 +308,16 @@ export function normalizeLandingPageConfig(
     intro: { enabled: bool(intro.enabled, true), title: str(intro.title), body: str(intro.body) },
     sessions: { enabled: bool(obj(lp.sessions).enabled, true), detailPopup: bool(obj(lp.sessions).detailPopup, true) },
     timetable: { enabled: bool(obj(lp.timetable).enabled, true) },
+    audience: {
+      enabled: bool(audience.enabled, true),
+      // 머리글은 빈 값을 그대로 통과 — 뷰가 기본 문구를 쓴다(기본 문구를 나중에 고치면 같이 반영)
+      title: str(audience.title),
+      items: rows(
+        audience.items,
+        (r) => ({ icon: str(r.icon), title: str(r.title), description: str(r.description) }),
+        (r) => r.title.trim() !== "",
+      ),
+    },
     programs: {
       enabled: bool(programs.enabled, true),
       items: rows(

@@ -8,6 +8,9 @@ export const SAFE_HEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 /** 좌측 목차 정의 — 실제 노출은 섹션에 내용이 있을 때만. */
 export const TOC_DEF = [
   { id: "lnd-about", label: "About" },
+  // "이런 분들께 추천합니다" — About 다음, Sessions 앞. 방문자는 "이게 뭔가"(About) 다음에
+  // "내 얘기인가" 를 묻고, 그 답이 예일 때 비로소 연사가 궁금해진다.
+  { id: "lnd-audience", label: "Audience" },
   { id: "lnd-sessions", label: "Sessions" },
   { id: "lnd-timetable", label: "Time Table" },
   { id: "lnd-programs", label: "Programs" },

@@ -76,6 +76,9 @@ export interface LandingModel {
   faqCategories: string[];
   tocItems: LandingTocItem[];
   showIntro: boolean;
+  showAudience: boolean;
+  /** 편집된 머리글 또는 기본 문구 — 폴백은 모델에서 끝난다. */
+  audienceTitle: string;
   showPrograms: boolean;
   showHighlights: boolean;
   showJoin: boolean;

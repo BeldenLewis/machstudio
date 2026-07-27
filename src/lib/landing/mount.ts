@@ -15,7 +15,7 @@ import { LANDING_CSS } from "./css";
 import { buildLandingModel } from "./build-model";
 import { h, clearNode } from "./h";
 import { renderHero, renderToc, scrollToSectionIn } from "./view-hero";
-import { renderIntro, renderPrograms, renderHighlights, renderJoin, renderFaq } from "./view-sections";
+import { renderIntro, renderAudience, renderPrograms, renderHighlights, renderJoin, renderFaq } from "./view-sections";
 import { renderSessions, renderTimetable, createSessionDialog } from "./view-sessions";
 import { attachReveal, attachAccentZone, attachTocSpy, attachTocVisibility } from "./effects";
 import { acquireLayer, createTocLayer, releaseLayer, lockScroll, unlockScroll, trapFocus } from "./overlay";
@@ -167,6 +167,15 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   body.appendChild(renderHero(m));
   const intro = renderIntro(m);
   if (intro) body.appendChild(intro);
+  /**
+   * "이런 분들께 추천합니다" 는 dark-zone **밖**, About 다음에 둔다.
+   *   · 위치: 방문자는 "이게 뭔가"(About) 다음에 "내 얘기인가" 를 묻는다. 뒤로 밀면
+   *     연사·프로그램을 다 읽은 뒤에야 자기 판별을 하게 되고, 그때는 이미 이탈했다.
+   *   · dark-zone 밖인 이유: 그 안은 `.section:nth-of-type(even)` 지브라라
+   *     섹션을 하나 끼우면 **뒤따르는 기존 섹션들의 명암이 전부 뒤집힌다.**
+   */
+  const audience = renderAudience(m);
+  if (audience) body.appendChild(audience);
   const sessions = renderSessions(m, openSession);
   if (sessions) body.appendChild(sessions);
   const timetable = renderTimetable(m);

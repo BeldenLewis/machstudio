@@ -40,6 +40,16 @@ const mockWebinar = (origin: string): LandingWebinar => ({
       enabled: true,
       titleLines: ["리드를 매출로", "잇는 웨비나 운영"],
       detailPopup: true,
+      /** 새 섹션 — 머리글을 비워 기본 문구가 나오는지, 아이콘 유무가 섞였을 때를 함께 본다. */
+      audience: {
+        enabled: true,
+        title: "",
+        items: [
+          { icon: "", title: "미국 시장 진출을 준비하는 브랜드 담당자", description: "전시 참가는 결정했지만 후속 세일즈 설계가 막막한 분" },
+          { icon: "🎯", title: "전시·웨비나 리드를 매출로 잇고 싶은 마케터", description: "" },
+          { icon: "", title: "B2B 아웃바운드를 처음 세팅하는 팀", description: "무엇부터 손대야 할지 순서를 잡고 싶은 분\n(줄바꿈도 그대로 나갑니다)" },
+        ],
+      },
       sessions: { enabled: true },
       timetable: { enabled: true },
       programs: { enabled: false, items: [] },

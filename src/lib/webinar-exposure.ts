@@ -262,6 +262,7 @@ export function buildExposureReport(input: ExposureInput): ExposureReport {
   });
   add(L("hero", "히어로", true, true, ""));
   add(L("intro", "소개", lp.intro.enabled, lm.showIntro, "소개를 켰지만 제목·본문이 모두 비어 있어요."));
+  add(L("audience", "이런 분들께 추천합니다", lp.audience.enabled, lm.showAudience, "추천 대상을 켰지만 대상이 있는 항목이 없어요."));
   // 연사 카드·타임테이블은 섹션 토글이 없다 — 세션 표에서 파생되는 자리라 항상 켜져 있다.
   add(L("sessions", "연사 카드", true, lm.sessionCards.length > 0, "연사 카드에 표시할 세션이 없어요(오프닝·휴식·Q&A·클로징은 카드에서 빠져요)."));
   add(L("timetable", "타임테이블", true, lm.timetableRows.length > 0, "타임테이블에 표시할 세션이 없어요."));

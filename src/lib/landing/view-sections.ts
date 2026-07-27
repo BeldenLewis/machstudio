@@ -43,6 +43,44 @@ export function renderIntro(m: LandingModel): HTMLElement | null {
 }
 
 /** PROGRAMS — 아이콘 + 제목 + 설명 카드 그리드 */
+/**
+ * "이런 분들께 추천합니다" — 방문자가 **자기 얘기인지 판별**하는 섹션.
+ *
+ * Programs(아이콘+제목+설명 카드)·Highlights(번호 카드)와 다른 형태를 쓴다: 체크 목록.
+ * 세 섹션이 같은 카드 그리드면 스크롤에서 구분되지 않고, 이 섹션의 일은 "읽히는 것" 이 아니라
+ * "훑으면서 나에 해당하는 줄을 찾는 것" 이라 목록형이 맞다.
+ *
+ * 머리글은 다른 섹션과 달리 편집 가능하다 — 이 섹션의 머리글 자체가 카피이기 때문
+ * (webinar-config.ts 의 audience.title 주석 참고). 비면 기본 문구.
+ */
+export function renderAudience(m: LandingModel): HTMLElement | null {
+  if (!m.showAudience) return null;
+  const titleId = m.sectionId("lnd-audience-title");
+  return h(
+    "section",
+    { class: "section", id: m.sectionId("lnd-audience"), "aria-labelledby": titleId },
+    h("h2", { class: "section-title rv", id: titleId }, m.audienceTitle),
+    h(
+      "ul",
+      { class: "audience-list rv" },
+      m.lp.audience.items.map((item) =>
+        h(
+          "li",
+          { class: "audience-item" },
+          // 아이콘을 비우면 체크 표시. 이모지·짧은 글자를 넣으면 그게 대신 들어간다.
+          h("span", { class: "audience-mark", "aria-hidden": "true" }, item.icon.trim() || "✓"),
+          h(
+            "div",
+            { class: "audience-body" },
+            h("b", null, item.title),
+            item.description && h("p", null, item.description),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 export function renderPrograms(m: LandingModel): HTMLElement | null {
   if (!m.showPrograms) return null;
   return h(

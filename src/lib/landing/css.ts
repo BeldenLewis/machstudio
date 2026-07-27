@@ -411,6 +411,28 @@ ${sessionLogoCss(".lnd .schedule-logo")}
   background: var(--ink-soft);
 }
 
+/* ── 이런 분들께 추천합니다 ──
+   카드 그리드가 아니라 **체크 목록**이다. 이 섹션의 일은 읽히는 것이 아니라 훑으면서
+   나에 해당하는 줄을 찾는 것이라, 줄 단위로 눈이 내려가는 형태가 맞다.
+   dark-zone 밖(About 다음)이라 밝은 판 위에 얹는다 — 세션 카드와 톤이 겹치지 않게. */
+.lnd .audience-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; list-style: none; padding: 0; margin: 0; }
+.lnd .audience-item {
+  display: flex; align-items: flex-start; gap: 13px;
+  padding: 18px 20px; border-radius: 12px;
+  background: rgba(255, 255, 255, .045);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+/* 체크 표시 — 아이콘을 비웠을 때의 기본. 키컬러 판 위에 놓아 목록의 리듬을 만든다. */
+.lnd .audience-mark {
+  flex-shrink: 0; width: 26px; height: 26px; border-radius: 8px;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+  color: var(--primary-bright);
+  font-size: 14px; font-weight: 900; line-height: 1;
+}
+.lnd .audience-body { min-width: 0; }
+.lnd .audience-body b { display: block; font-size: 16px; font-weight: 750; letter-spacing: -.02em; color: var(--paper); word-break: keep-all; }
+.lnd .audience-body p { margin: 5px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted); white-space: pre-line; word-break: keep-all; }
 .lnd .program-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .lnd .program-card, .lnd .benefit-card, .lnd .join-step {
   border-radius: 8px; background: rgba(24, 31, 45, .94);
@@ -491,7 +513,7 @@ ${sessionLogoCss(".lnd .schedule-logo")}
   .lnd .schedule-time { padding: 0 12px; font-size: 14px; }
   .lnd .schedule-content { padding: 10px 12px; }
   .lnd .schedule-name { font-size: 13px; }
-  .lnd .program-grid, .lnd .benefit-grid, .lnd .join-grid { grid-template-columns: 1fr; }
+  .lnd .program-grid, .lnd .benefit-grid, .lnd .join-grid, .lnd .audience-list { grid-template-columns: 1fr; }
   .lnd .benefit-card { min-height: 130px; }
   .lnd .faq-tabs { overflow-x: auto; justify-content: flex-start; padding-bottom: 4px; }
   .lnd .faq-tab { flex: 0 0 auto; }

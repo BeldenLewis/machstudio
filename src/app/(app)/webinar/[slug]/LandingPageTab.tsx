@@ -15,6 +15,7 @@ import {
   type LandingFaqItem,
   type LandingHighlightItem,
   type LandingJoinStep,
+  type LandingAudienceItem,
   type LandingProgramItem,
 } from "@/lib/webinar-config";
 import { LANDING_IMAGE_ACCEPT, LANDING_VIDEO_ACCEPT, validateLandingMedia } from "@/lib/webinar-landing-media";
@@ -48,6 +49,8 @@ interface EditorState {
   sessionsEnabled: boolean;
   sessionsDetailPopup: boolean;
   timetableEnabled: boolean;
+  /** 이런 분들께 추천합니다 — 머리글 문구까지 편집한다(이 섹션의 머리글이 곧 카피다). */
+  audience: { enabled: boolean; title: string; items: WithRowKey<LandingAudienceItem>[] };
   programs: { enabled: boolean; items: WithRowKey<LandingProgramItem>[] };
   highlights: { enabled: boolean; items: WithRowKey<LandingHighlightItem>[] };
   join: { enabled: boolean; steps: WithRowKey<LandingJoinStep>[] };
@@ -72,6 +75,7 @@ function toEditorState(config: Record<string, unknown>): EditorState {
     sessionsDetailPopup: lp.sessions.detailPopup,
     timetableEnabled: lp.timetable.enabled,
     // 이 네 목록은 스키마에 id 가 없다 → 편집 중에만 클라이언트 키를 붙인다(저장 시 제거).
+    audience: { ...lp.audience, items: withRowKeys(lp.audience.items) },
     programs: { ...lp.programs, items: withRowKeys(lp.programs.items) },
     highlights: { ...lp.highlights, items: withRowKeys(lp.highlights.items) },
     join: { ...lp.join, steps: withRowKeys(lp.join.steps) },
@@ -94,6 +98,7 @@ function toConfigPayload(s: EditorState) {
     intro: s.intro,
     sessions: { enabled: s.sessionsEnabled, detailPopup: s.sessionsDetailPopup },
     timetable: { enabled: s.timetableEnabled },
+    audience: { ...s.audience, items: stripRowKeys(s.audience.items) },
     programs: { ...s.programs, items: stripRowKeys(s.programs.items) },
     highlights: { ...s.highlights, items: stripRowKeys(s.highlights.items) },
     join: { ...s.join, steps: stripRowKeys(s.join.steps) },
@@ -219,7 +224,7 @@ export default function LandingPageTab({
    */
   const previewUrl = `/webinar/${webinar.slug}/landing?preview=1`;
 
-  const setRows = <K extends "programs" | "highlights" | "faq">(key: K, items: EditorState[K]["items"]) =>
+  const setRows = <K extends "audience" | "programs" | "highlights" | "faq">(key: K, items: EditorState[K]["items"]) =>
     setState((prev) => ({ ...prev, [key]: { ...prev[key], items } }));
 
   return (
@@ -457,6 +462,48 @@ export default function LandingPageTab({
                     </div>
                   </div>
                   <textarea aria-label="프로그램 설명" className={`${inputCls} resize-none`} rows={2} value={item.description} onChange={(e) => p({ description: e.target.value })} placeholder="설명 (줄바꿈 유지)" />
+                </>
+              )}
+            />
+          </SectionCard>
+
+          {/* 이런 분들께 추천합니다 */}
+          <SectionCard
+            title="이런 분들께 추천합니다"
+            hint="방문자가 '내 얘기인가' 를 3초 안에 판별하는 자리 — 대상·상황을 한 줄씩. 머리글도 바꿀 수 있어요."
+            enabled={state.audience.enabled}
+            onToggle={(v) => patch({ audience: { ...state.audience, enabled: v } })}
+          >
+            {/* 머리글 — 다른 섹션은 영문 고정(Programs·FAQ)인데 이 섹션만 편집 가능하다.
+                머리글 자체가 카피라서다("이런 분들께 추천합니다" / "이런 고민이 있다면"). */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground" htmlFor="lp-audience-title">머리글</label>
+              <input
+                id="lp-audience-title"
+                className={inputCls}
+                value={state.audience.title}
+                onChange={(e) => patch({ audience: { ...state.audience, title: e.target.value } })}
+                placeholder="이런 분들께 추천합니다 (비우면 이 문구가 나가요)"
+              />
+            </div>
+            <EditableList
+              listId="lp-audience" itemNoun="대상" reorderable
+              items={state.audience.items} onChange={(next) => setRows("audience", next)}
+              rowKey={(r) => r[ROW_KEY]}
+              makeItem={() => ({ icon: "", title: "", description: "", [ROW_KEY]: crypto.randomUUID() })}
+              addLabel="대상 추가"
+              emptyState={<p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">아직 추천 대상이 없어요. 아래에서 추가하면 랜딩 페이지에 표시돼요.</p>}
+              renderRow={({ item, patch: p }) => (
+                <>
+                  <div className="flex gap-2">
+                    {/* 폭은 래퍼가 갖는다 — inputCls(FIELD_CLS)에 이미 w-full 이 있어서 입력에
+                        w-16 을 덧붙이면 무효다(컴파일된 CSS 에서 .w-full 이 뒤에 와 이긴다). */}
+                    <input aria-label="추천 대상" className={inputCls} value={item.title} onChange={(e) => p({ title: e.target.value })} placeholder="대상·상황 (필수 — 비우면 공개 페이지에 안 나와요)" />
+                    <div className="w-16 shrink-0">
+                      <input aria-label="아이콘" className={inputCls} value={item.icon} onChange={(e) => p({ icon: e.target.value })} placeholder="✓" />
+                    </div>
+                  </div>
+                  <textarea aria-label="추천 대상 설명" className={`${inputCls} resize-none`} rows={2} value={item.description} onChange={(e) => p({ description: e.target.value })} placeholder="부연 설명 (선택 · 줄바꿈 유지)" />
                 </>
               )}
             />
