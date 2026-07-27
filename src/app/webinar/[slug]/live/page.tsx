@@ -183,6 +183,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [viewerCount, setViewerCount] = useState<number | null>(null); // 실시간 동시 시청자 수(라이브)
   const [isTrulyLive, setIsTrulyLive] = useState(false); // status === "live" (입장오픈 전 창과 구분)
   const [entryOpenNow, setEntryOpenNow] = useState(false); // 입장 확인 창이 열렸는가 — signup 고정 상태의 "입장으로 돌아가기" 노출용
+  // 함께 기다리는 사람 수 — /status 가 함께 내려준다(별도 폴러를 만들지 않는다).
+  const [waitingCount, setWaitingCount] = useState<number | null>(null);
   // 채팅 상태
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -316,6 +318,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       const res = await fetch(`/api/webinar/${slug}/status`);
       if (!res.ok) return;
       const data = await res.json();
+      if (typeof data.waitingCount === "number" || data.waitingCount === null) setWaitingCount(data.waitingCount);
       const status: string = data.status;
       const entryOpen: boolean = data.entryOpen;
       if (typeof data.canRegister === "boolean") setCanRegister(data.canRegister);
@@ -566,12 +569,30 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     if (view === "live") return;
     // 종료 화면은 복구 확인 목적이라 저빈도(2분)로 — 대기 화면은 전환 감지가 중요해 30초 유지.
     const periodMs = view === "ended" ? 120_000 : 30_000;
+    /**
+     * 대기 프레즌스 — "N명이 함께 기다려요" 의 근거. 상태 폴과 **같은 주기**에 실어 보낸다
+     * (새 타이머를 만들지 않는다 — 이 프로젝트는 뷰어 폴러를 하나로 모아 왔다).
+     *
+     * event: "wait" 는 presencePingAt 만 찍는다. heartbeat 를 쓰면 isActive·connectedSeconds 가
+     * 올라가 대기 시간이 시청 시간·입장률로 들어간다(ping 라우트 주석 참고).
+     * 종료 화면에서는 보내지 않는다 — 기다리는 사람이 아니다.
+     */
+    const beat = () => {
+      if (view === "ended" || !registrationId) return;
+      void fetch(`/api/webinar/${slug}/ping`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ registrationId, event: "wait" }),
+      }).catch(() => {});
+    };
+    beat();
     const interval = setInterval(() => {
       if (document.hidden) return;
+      beat();
       void fetchStatus();
     }, periodMs);
     return () => clearInterval(interval);
-  }, [view, fetchStatus]);
+  }, [view, fetchStatus, registrationId, slug]);
 
   // 라이브 중 통합 폴링 — 12초 주기(탭 비활성 시 스킵). 공지·답변 Q&A·채팅·투표·팝업·Tally·상태를
   // 한 번의 요청으로 받는다. fetchLiveState 가 activeTab/채팅 여부를 반영하므로 탭 전환 시 이 이펙트가
@@ -1128,6 +1149,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               serverNowMs={serverNowMs}
               registered={hasRegistration}
               live={live}
+              waitingCount={waitingCount}
               hasCalendar={!!calendarUrl}
               onCalendar={calendarUrl ? () => window.open(calendarUrl, "_blank", "noopener,noreferrer") : undefined}
               onShare={handleShare}

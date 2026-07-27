@@ -77,6 +77,27 @@ ${sessionLogoCss(".stk-live .plw-logo", { plate: true })}
 /* 연사 이름 — 12.5px 은 로고 옆에서 작아 보여 위계가 뒤집혔다(로고가 이름보다 먼저 읽힘). */
 /* "이름 | 소속·직책" — 랜딩 타임테이블과 같은 위계. 이름을 더 진하게 둬서 구분자가 흐려도
    어디까지가 이름인지 읽힌다. gap 은 세로 0(줄바꿈 시 붙게), 가로 6px. */
+/* 함께 기다리는 사람 밴드 — 카운트다운 바로 아래. 숫자가 주인공이라 배경은 옅게 깔고
+   테두리 대신 그림자로 마감한다(AGENTS.md 공통: 외곽선 대신 그림자). */
+/* 가운데 정렬은 flex + fit-content + margin-inline 으로. inline-flex 는 부모의 text-align 을
+   따르는데 .live-inner 는 block/start 라 왼쪽에 붙었다(실측: 중심차 -82px). */
+.stk-live .plw-together {
+  display:flex; width:fit-content; align-items:center; gap:8px;
+  margin:18px auto 0; padding:9px 15px 9px 13px; border:0; border-radius:999px;
+  background:var(--key-dim); color:var(--text);
+  box-shadow:0 1px 2px rgba(0,0,0,.05), 0 6px 18px rgba(0,0,0,.06);
+  font-size:13.5px; font-weight:650; white-space:nowrap;
+}
+.stk-live .plw-together b { color:var(--key); font-weight:800; font-variant-numeric:tabular-nums; }
+/* 살아 있음을 말하는 점 — 라이브 배지와 같은 언어. reduced-motion 에서는 켜진 점으로 멈춘다. */
+.stk-live .plw-together .dot {
+  width:7px; height:7px; border-radius:50%; background:var(--key); flex:none;
+  animation:plw-breathe 2.4s ease-in-out infinite;
+}
+@keyframes plw-breathe { 0%,100% { opacity:.45; transform:scale(.85); } 50% { opacity:1; transform:scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .stk-live .plw-together .dot { animation:none; opacity:1; }
+}
 .stk-live .plw-who small { font-size:14px; color:var(--text); font-weight:650; }
 .stk-live .plw-who .who { display:flex; align-items:baseline; flex-wrap:wrap; gap:0 6px; }
 .stk-live .plw-who .who b { font-weight:750; }
@@ -107,6 +128,8 @@ interface PreLiveWaitingProps {
   serverNowMs?: number;
   registered?: boolean;
   live: LivePageConfig;
+  /** 지금 대기 화면에 함께 있는 등록자 수. null = 서버가 세지 않는 구간(라이브 중). */
+  waitingCount?: number | null;
   registrantCount?: number;
   hasCalendar?: boolean;
   onCalendar?: () => void;
@@ -129,7 +152,7 @@ const AV_COLORS = ["#6D28D9", "#0EA5E9", "#F97316", "#10B981", "#E11D48"];
 
 export default function PreLiveWaiting({
   webinar, accent, text, surface, targetIso, serverNowMs, registered = true,
-  live, registrantCount, hasCalendar, onCalendar, onShare, shareCopied, onNotify, notify, centerAction, replaceCountdown = false,
+  live, waitingCount, registrantCount, hasCalendar, onCalendar, onShare, shareCopied, onNotify, notify, centerAction, replaceCountdown = false,
 }: PreLiveWaitingProps) {
   const css = useMemo(() => buildStkCss(accent || "#6D28D9", text || "#141320", surface || "#FFFFFF") + EXTRA_CSS, [accent, text, surface]);
   const targetMs = useMemo(() => new Date(targetIso).getTime(), [targetIso]);
@@ -188,6 +211,22 @@ export default function PreLiveWaiting({
               <b>{formatKst(webinar.liveStartAt, { month: "long", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" })}</b> 라이브 시작
             </p>
           </>
+        )}
+
+        {/**
+          * "N명이 함께 기다려요" — 카운트다운 바로 아래.
+          *
+          * 2명 미만이면 그리지 않는다. "1명이 함께 기다려요" 는 자기 자신이라 정보가 아니고,
+          * 텅 빈 대기실이라는 신호가 되어 오히려 이탈을 부른다. 사회적 증거는 있을 때만 말한다.
+          *
+          * null(서버가 세지 않는 구간 = 라이브 중)에도 그리지 않는다 — 그때는 시청자 수가
+          * 같은 자리를 맡는다. 마운트 전에는 숨긴다(SSR 과 값이 달라 깜빡이지 않게).
+          */}
+        {mounted && typeof waitingCount === "number" && waitingCount >= 2 && (
+          <div className="plw-together" role="status" aria-live="polite">
+            <span className="dot" aria-hidden="true" />
+            <span><b>{waitingCount.toLocaleString()}</b>명이 함께 기다려요</span>
+          </div>
         )}
 
         {mounted && centerAction && !showCenterAction && <div className="plw-entry-panel">{centerAction}</div>}

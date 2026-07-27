@@ -233,7 +233,7 @@ export default function LivePreviewPage() {
       </div>
 
       {state === "waiting" && (
-        <PreLiveWaiting webinar={webinarData} accent={t.accent} text={t.text} surface={t.surface} targetIso={real?.liveStartAt ?? target} registered live={live} hasCalendar onCalendar={() => {}} onShare={() => {}} onNotify={() => {}} notify={{ subscribed: false, pending: false, error: "" }} />
+        <PreLiveWaiting webinar={webinarData} accent={t.accent} text={t.text} surface={t.surface} targetIso={real?.liveStartAt ?? target} registered live={live} waitingCount={137} hasCalendar onCalendar={() => {}} onShare={() => {}} onNotify={() => {}} notify={{ subscribed: false, pending: false, error: "" }} />
       )}
       {state === "entry" && (
         <EntryVerify
