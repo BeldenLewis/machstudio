@@ -39,10 +39,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
 
   const statusInfo = resolveWebinarStatus(webinar);
 
-  // /info 와 동일 — 종료 화면에 연결된 자체 설문. 미리보기가 실제 시청자와 같은 화면을 보도록.
-  const endedSurvey = await prisma.webinarSurvey.findFirst({
+  // /info 와 동일 — 종료 화면에 연결된 자체 설문(여러 개). 미리보기가 실제 시청자와 같은 화면을 보도록.
+  const endedSurveys = await prisma.webinarSurvey.findMany({
     where: { webinarId: webinar.id, showOnEnded: true, isOpen: true, OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }] },
-    select: { id: true, title: true },
+    // 만든 순서대로 — 종료 화면 카드 순서가 관리자 목록 순서와 같아야 어느 카드를 고칠지 알 수 있다
+    orderBy: { createdAt: "asc" },
+    select: { id: true, title: true, description: true },
   });
 
   const rawConfig = (webinar.config ?? {}) as Record<string, unknown>;
@@ -72,7 +74,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
       config,
     },
     youtubeId,
-    endedSurvey,
+    endedSurveys,
+    endedSurvey: endedSurveys[0] ?? null, // /info 와 같은 이유로 한 배포 동안 유지
     status: statusInfo.status,
     entryOpen: statusInfo.entryOpen,
     serverNow: new Date().toISOString(),

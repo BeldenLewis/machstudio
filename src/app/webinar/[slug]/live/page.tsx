@@ -9,6 +9,7 @@ import LiveContentStk from "../LiveContentStk";
 import PreLiveWaiting from "../PreLiveWaiting";
 import EntryVerify from "../EntryVerify";
 import EndedScreen from "../EndedScreen";
+import { endedSurveyLinks, readEndedSurveys, type EndedSurveyRef } from "@/lib/webinar-ended-surveys";
 import { formatKst } from "@/lib/datetime";
 import {
   isValidEmail,
@@ -224,7 +225,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const dupSeqRef = useRef(0);
   const consentDefaultsAppliedRef = useRef(false);
   // 종료 화면에 연결된 자체 설문 (/info 가 내려줌) — 있으면 외부 surveyUrl 보다 우선
-  const [endedSurvey, setEndedSurvey] = useState<{ id: string; title: string } | null>(null);
+  const [endedSurveys, setEndedSurveys] = useState<EndedSurveyRef[]>([]);
   // 동의 약관 전문 팝업 — 동의 문구 텍스트 클릭 시 (본문이 설정된 경우에만)
   const [termsModal, setTermsModal] = useState<{ kind: "privacy" | "marketing"; title: string; body: string } | null>(null);
 
@@ -275,7 +276,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       if (!res.ok) return;
       const data = await res.json();
       setWebinar(data.webinar);
-      setEndedSurvey(data.endedSurvey ?? null);
+      setEndedSurveys(readEndedSurveys(data));
       if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
 
       // 서버 상태머신 판정 사용 — statusOverride(운영 콘솔 수동 전환)·입장오픈 윈도 반영
@@ -492,7 +493,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             const data = await res.json();
             if (!alive) return; // json 파싱 대기 중 slug 변경/언마운트 — stale 데이터로 새 상태를 덮지 않게
             setWebinar(data.webinar);
-            setEndedSurvey(data.endedSurvey ?? null); // 미리보기도 실제 시청자와 같은 종료 화면 설문을 보도록
+            setEndedSurveys(readEndedSurveys(data)); // 미리보기도 실제 시청자와 같은 종료 화면 설문을 보도록
             if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
             setPreviewVideoId(typeof data.youtubeId === "string" ? data.youtubeId : null);
             setPreviewState(init);
@@ -869,10 +870,12 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       }
     } catch { /* 공유 취소·미지원 무시 */ }
   };
-  // 자체 설문(종료 화면 연결)이 있으면 우선, 없으면 외부 설문 URL(Tally 등) 폴백
-  const surveyUrl = endedSurvey
-    ? `/webinar/${slug}/survey/${endedSurvey.id}?src=ended`
-    : typeof webinar.config?.surveyUrl === "string" ? webinar.config.surveyUrl : "";
+  // 자체 설문 N개 vs 외부 URL 하나의 배타적 폴백 — 규칙은 webinar-ended-surveys.ts 한 곳에.
+  const surveyLinks = endedSurveyLinks(
+    endedSurveys,
+    webinar.config?.surveyUrl,
+    (id) => `/webinar/${slug}/survey/${id}?src=ended`,
+  );
   const live = normalizeLivePageConfig(webinar.config);
   // 등록 완료 여부 — 대기 화면은 모두에게 같은 걸 보여주고, 이 값으로 등록 CTA·폼만 켠다.
   const hasRegistration = registered || !!registrationId;
@@ -1316,7 +1319,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             text={text}
             surface={surface}
             live={live}
-            surveyUrl={surveyUrl || undefined}
+            surveys={surveyLinks}
             // 다시보기 신청은 등록 이메일이 있어야 발송된다 — 미등록자에겐 버튼을 숨긴다(누르면 항상 400).
             onReplay={hasRegistration ? handleNotifyToggle : undefined}
             replayRequested={notifySubscribed}

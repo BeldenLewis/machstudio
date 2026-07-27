@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Check, Play, ClipboardCheck, FileText, Download, Share2, Link2 } from "lucide-react";
 import { buildStkCss } from "./LiveContentStk";
 import { DEFAULT_ENDED_DESCRIPTION, DEFAULT_ENDED_TITLE, type LivePageConfig } from "@/lib/webinar-config";
+import type { EndedSurveyLink } from "@/lib/webinar-ended-surveys";
 
 /**
  * 라이브 종료 화면 — 감사 + 다음 스텝 전환.
@@ -13,13 +14,18 @@ import { DEFAULT_ENDED_DESCRIPTION, DEFAULT_ENDED_TITLE, type LivePageConfig } f
  */
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
+/** 제목·설명이 비었을 때의 기본 문구 — 외부 설문 URL 만 넣은 경우가 이 경로다. */
+const DEFAULT_SURVEY_TITLE = "1분 만족도 설문";
+const DEFAULT_SURVEY_DESCRIPTION = "오늘 어떠셨나요? 짧은 피드백이 다음 웨비나를 더 좋게 만들어요.";
+
 const EXTRA_CSS = `
 .stk-live .en-hero { text-align:center; display:flex; flex-direction:column; align-items:center; gap:16px; padding:8px 0 4px; }
 .stk-live .en-check { width:60px; height:60px; border-radius:50%; background:color-mix(in srgb,#12B76A 14%,transparent); color:#12B76A; display:grid; place-items:center; box-shadow:0 0 0 8px color-mix(in srgb,#12B76A 6%,transparent); }
 .stk-live .en-check svg { width:30px; height:30px; }
-.stk-live .en-actions { display:grid; gap:16px; margin:40px 0 32px; }
-.stk-live .en-actions.two { grid-template-columns:1fr 1fr; }
-@media (max-width:680px){ .stk-live .en-actions.two { grid-template-columns:1fr; } }
+/* 카드 수를 세지 않는다 — 설문을 여러 개 걸 수 있게 되면서 "2개면 2열" 이라는 손계산이
+   3개 이상에서 무너졌다. auto-fit + minmax 는 1개면 한 줄 전폭, 2개면 반반, 3개면 3열,
+   좁은 화면이면 자동으로 1열이 된다(별도 미디어쿼리 불필요). */
+.stk-live .en-actions { display:grid; gap:16px; margin:40px 0 32px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); }
 .stk-live .en-act { background:var(--card); border-radius:var(--radius); box-shadow:var(--card-shadow); padding:24px; display:flex; flex-direction:column; gap:6px; }
 .stk-live .en-act .ic { width:40px; height:40px; border-radius:11px; background:var(--key-dim); color:var(--key); display:grid; place-items:center; margin-bottom:8px; }
 .stk-live .en-act .ic svg { width:20px; height:20px; }
@@ -59,7 +65,11 @@ interface EndedScreenProps {
   text: string;
   surface: string;
   live: LivePageConfig;
-  surveyUrl?: string;
+  /**
+   * 종료 화면에 걸린 설문들 — 자체 설문 N개 또는 외부 설문 URL 하나.
+   * 배열인 이유: 만족도 설문과 다음 행사 사전조사를 함께 거는 게 실제 운영 패턴이다.
+   */
+  surveys?: readonly EndedSurveyLink[];
   onReplay?: () => void;
   replayRequested?: boolean;
   replayPending?: boolean;
@@ -68,17 +78,18 @@ interface EndedScreenProps {
 }
 
 export default function EndedScreen({
-  webinar, accent, text, surface, live, surveyUrl,
+  webinar, accent, text, surface, live, surveys,
   onReplay, replayRequested, replayPending, onShare, shareCopied,
 }: EndedScreenProps) {
   const css = useMemo(() => buildStkCss(accent || "#6D28D9", text || "#141320", surface || "#FFFFFF") + EXTRA_CSS, [accent, text, surface]);
 
   const showReplay = live.ended.replay && !!onReplay;
-  const showSurvey = live.ended.survey && !!surveyUrl;
+  // 이중 게이트 — 영역 토글 ON + 실제 설문 있음(AGENTS §4). 껍데기 카드를 시청자에게 안 보인다.
+  const surveyList = live.ended.survey ? (surveys ?? []).filter((s) => s.url) : [];
   const showResources = live.ended.resources && live.resources.length > 0;
   const showNext = live.ended.nextWebinar && !!live.nextWebinar;
   const showShare = live.ended.share && !!onShare;
-  const actionCount = (showReplay ? 1 : 0) + (showSurvey ? 1 : 0);
+  const actionCount = (showReplay ? 1 : 0) + surveyList.length;
 
   return (
     <div className="stk-live">
@@ -97,7 +108,7 @@ export default function EndedScreen({
         </div>
 
         {actionCount > 0 && (
-          <div className={`en-actions ${actionCount === 2 ? "two" : ""}`}>
+          <div className="en-actions">
             {showReplay && (
               <div className="en-act">
                 <span className="ic"><Play /></span>
@@ -108,14 +119,18 @@ export default function EndedScreen({
                 </motion.button>
               </div>
             )}
-            {showSurvey && (
-              <div className="en-act">
+            {surveyList.map((survey, i) => (
+              /* 제목·설명은 각 설문이 들고 있는 값을 쓴다 — 두 개를 걸었을 때 카드가
+                 똑같은 문구로 두 번 나오면 무엇을 누르는지 알 수 없다. 없으면 기본 문구. */
+              <div className="en-act" key={survey.url || i}>
                 <span className="ic"><ClipboardCheck /></span>
-                <h3>1분 만족도 설문</h3>
-                <p>오늘 어떠셨나요? 짧은 피드백이 다음 웨비나를 더 좋게 만들어요.</p>
-                <a href={surveyUrl} target="_blank" rel="noopener noreferrer" className="en-btn soft">설문 참여하기</a>
+                <h3>{survey.title?.trim() || DEFAULT_SURVEY_TITLE}</h3>
+                <p style={{ whiteSpace: "pre-line" }}>{survey.description?.trim() || DEFAULT_SURVEY_DESCRIPTION}</p>
+                <a href={survey.url} target="_blank" rel="noopener noreferrer" className="en-btn soft">
+                  설문 참여하기
+                </a>
               </div>
-            )}
+            ))}
           </div>
         )}
 

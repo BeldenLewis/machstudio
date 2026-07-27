@@ -778,11 +778,10 @@ export default function SurveyTab({
           theme={viewerTheme}
           survey={selected}
           onDeleted={() => { setSurveys((prev) => (prev ?? []).filter((item) => item.id !== selected.id)); setSelectedId(null); }}
+          /* 종료 화면 연결은 여러 개 가능 — 예전엔 여기서 다른 설문의 배지를 내렸다(서버의
+             원-액티브 강제와 짝). 서버 제약을 걷었으니 이 목록도 건드리지 않는다. */
           onMetaChanged={(patch) =>
-            setSurveys((prev) => (prev ?? []).map((item) => {
-              if (item.id !== selected.id) return patch.showOnEnded === true ? { ...item, showOnEnded: false } : item;
-              return { ...item, ...patch };
-            }))
+            setSurveys((prev) => (prev ?? []).map((item) => (item.id === selected.id ? { ...item, ...patch } : item)))
           }
         />
       </div>

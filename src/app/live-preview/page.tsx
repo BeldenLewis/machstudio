@@ -15,6 +15,12 @@ import EndedScreen from "@/app/webinar/[slug]/EndedScreen";
 import { normalizeLivePageConfig } from "@/lib/webinar-config";
 
 type State = "waiting" | "entry" | "live" | "ended";
+
+/** 목업 모드 전용 — 카드 2장이 어떻게 앉는지 확인용(실제 웨비나에서는 저장된 값만 쓴다). */
+const MOCK_ENDED_SURVEYS = [
+  { url: "#survey-1", title: "1분 만족도 설문", description: "오늘 어떠셨나요? 짧은 피드백이 다음 웨비나를 더 좋게 만들어요." },
+  { url: "#survey-2", title: "다음 웨비나 주제 사전조사", description: "다음 회차에서 가장 듣고 싶은 주제를 골라주세요." },
+];
 type ThemeKey = "dark" | "light";
 
 const THEMES: Record<ThemeKey, { bg: string; text: string; surface: string; accent: string }> = {
@@ -240,7 +246,20 @@ export default function LivePreviewPage() {
       {state === "ended" && (
         <EndedScreen
           webinar={webinarData} accent={t.accent} text={t.text} surface={t.surface}
-          live={live} surveyUrl={((webinarData.config as Record<string, unknown>)?.surveyUrl as string) || undefined}
+          live={live}
+          /**
+           * 종료 화면 설문은 여러 개 걸 수 있다(카드 N장). 목업 모드에서는 2장을 태워
+           * 그리드가 실제로 2열로 앉는지 눈으로 확인한다 — 실제 웨비나(?slug=)에서는
+           * 그 웨비나에 저장된 값만 쓴다(있는 것을 보여줘야 미리보기다).
+           */
+          surveys={
+            real
+              ? (() => {
+                  const url = (real.config as Record<string, unknown>)?.surveyUrl;
+                  return typeof url === "string" && url ? [{ url }] : [];
+                })()
+              : MOCK_ENDED_SURVEYS
+          }
           onReplay={() => {}} onShare={() => {}}
         />
       )}
