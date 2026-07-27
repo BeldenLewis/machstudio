@@ -7,7 +7,6 @@ import { buildStkCss } from "./LiveContentStk";
 import { formatKst } from "@/lib/datetime";
 import type { LivePageConfig } from "@/lib/webinar-config";
 import { buildSessionNumbering, cleanSessionText, isPauseSession, parseSpeaker, sessionHasSpeaker, sessionKicker } from "@/lib/webinar-sessions";
-import { sessionLogoCss } from "@/lib/webinar-logo";
 
 /**
  * 등록 완료 ~ 라이브 오픈 전 대기 화면.
@@ -65,12 +64,6 @@ const EXTRA_CSS = `
 .stk-live .plw-row .kd { display:inline-block; font-size:10px; font-weight:750; letter-spacing:.06em; text-transform:uppercase; color:var(--key); background:var(--key-dim); padding:2px 7px; border-radius:6px; margin-bottom:6px; }
 .stk-live .plw-row.brk .kd { color:var(--sub); background:color-mix(in srgb,var(--text) 6%,transparent); }
 .stk-live .plw-row h4 { font-size:14.5px; font-weight:700; letter-spacing:-.01em; line-height:1.35; color:var(--text); margin:0; }
-/* 로고 규격은 webinar-logo.ts 한 곳에서 온다 — 랜딩·대기·시청이 같은 크기여야 한다
-   (예전엔 22/132 · 22/140 · 20/120 으로 갈라져 같은 로고가 면마다 다르게 보였다). */
-${sessionLogoCss(".stk-live .plw-logo", { plate: true })}
-/* 로고는 이름 **바로 오른쪽**에 붙인다 — margin-left:auto 로 패널 끝까지 밀면 목록이 넓을 때
-   이름과 수십~수백 px 떨어져 서로 무관한 요소처럼 보인다(랜딩 팝업은 블록이 좁아 끝 정렬이 맞다). */
-.stk-live .plw-logo { margin-left:4px; }
 .stk-live .plw-who { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:8px; }
 .stk-live .plw-who .av { width:26px; height:26px; border-radius:50%; overflow:hidden; background:var(--key-dim); color:var(--key); display:grid; place-items:center; font-size:11px; font-weight:750; }
 .stk-live .plw-who .av img { width:100%; height:100%; object-fit:cover; }
@@ -298,29 +291,25 @@ export default function PreLiveWaiting({
                         <span className="kd">{kd}</span>
                         <h4>{sn.title}</h4>
                         {/**
-                          * 연사 이름 줄 오른쪽에 로고 — 랜딩 상세 팝업과 같은 배치다.
-                          * 예전엔 제목과 연사 사이에 로고가 끼어서 제목→누가 흐름이 끊겼고,
-                          * 줄마다 로고 유무에 따라 세로 리듬이 달라졌다.
+                          * 로고는 그리지 않는다 — 랜딩 타임테이블의 접힌 줄과 같은 판단이다.
+                          * 훑을 때 필요한 건 시각·무엇·누구뿐이고, 마크는 그 셋에 기여하지 않으면서
+                          * 줄마다 폭이 달라 세로 리듬을 흔든다. 로고는 랜딩 타임테이블 펼침과
+                          * 연사 상세 팝업에서 본다.
                           *
-                          * 로고만 있고 연사가 없는 세션(오프닝·클로징)에서도 줄을 그린다 —
-                          * 게이트에서 로고를 빼면 그 세션의 로고가 통째로 사라진다.
+                          * 그래서 게이트도 연사 하나로 좁아졌다(예전엔 로고만 있는 오프닝·클로징에도
+                          * 줄을 그려야 해서 조건이 둘이었다).
                           */}
-                        {(sn.logoUrl || (sessionHasSpeaker(sn.type) && hasWho)) && (
+                        {sessionHasSpeaker(sn.type) && hasWho && (
                           <div className="plw-who">
-                            {sessionHasSpeaker(sn.type) && hasWho && (
-                              <>
-                                {/* 아바타 이니셜은 이름에서 — 소속만 있는 세션에서는 그리지 않는다(빈 원 방지). */}
-                                {Boolean(sp.name) && (
-                                  <span className="av">{sn.speakerPhotoUrl ? <img src={sn.speakerPhotoUrl} alt={sp.name} /> : sp.name[0]}</span>
-                                )}
-                                <small className="who">
-                                  {Boolean(sp.name) && <b>{sp.name}</b>}
-                                  {Boolean(sp.name && sp.company) && <span className="sep" aria-hidden="true">|</span>}
-                                  {Boolean(sp.company) && <span className="co">{sp.company}</span>}
-                                </small>
-                              </>
+                            {/* 아바타 이니셜은 이름에서 — 소속만 있는 세션에서는 그리지 않는다(빈 원 방지). */}
+                            {Boolean(sp.name) && (
+                              <span className="av">{sn.speakerPhotoUrl ? <img src={sn.speakerPhotoUrl} alt={sp.name} /> : sp.name[0]}</span>
                             )}
-                            {sn.logoUrl && <img className="plw-logo" src={sn.logoUrl} alt="" />}
+                            <small className="who">
+                              {Boolean(sp.name) && <b>{sp.name}</b>}
+                              {Boolean(sp.name && sp.company) && <span className="sep" aria-hidden="true">|</span>}
+                              {Boolean(sp.company) && <span className="co">{sp.company}</span>}
+                            </small>
                           </div>
                         )}
                       </div>
