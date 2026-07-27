@@ -155,13 +155,23 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   ]);
 
   const registrationIds = registrations.map((registration) => registration.id);
-  const surveyResponses = registrationIds.length
-    ? await prisma.webinarSurveyResponse.findMany({
-        where: { webinarId: id, registrationId: { in: registrationIds } },
-        orderBy: { submittedAt: "desc" },
-        select: { surveyId: true, registrationId: true, answers: true, source: true, submittedAt: true },
-      })
-    : [];
+  /* 설문 응답과 문의를 같은 방식으로 붙인다 — 현재 페이지 등록자분만. 문의는 1인 N건이라
+     전량을 실으면 페이지당 전송량이 등록자 수와 무관하게 커진다.
+     정렬은 오래된 순: 상세 패널이 "무엇을 먼저 물었나" 순서로 읽히게. */
+  const [surveyResponses, qaItems] = registrationIds.length
+    ? await Promise.all([
+        prisma.webinarSurveyResponse.findMany({
+          where: { webinarId: id, registrationId: { in: registrationIds } },
+          orderBy: { submittedAt: "desc" },
+          select: { surveyId: true, registrationId: true, answers: true, source: true, submittedAt: true },
+        }),
+        prisma.webinarQA.findMany({
+          where: { webinarId: id, registrationId: { in: registrationIds } },
+          orderBy: { createdAt: "asc" },
+          select: { id: true, registrationId: true, question: true, status: true, sessionNumber: true, voteCount: true, createdAt: true },
+        }),
+      ])
+    : [[], []];
 
   // stats 는 검색 필터와 무관한 전체 집계(요약 카드용). total 은 검색 반영 페이지네이션용.
   return NextResponse.json({
@@ -175,6 +185,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       questions: normalizeSurveyQuestions(survey.questions, { includeHidden: true }),
     })),
     surveyResponses,
+    qaItems,
   });
 }
 

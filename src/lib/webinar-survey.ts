@@ -126,6 +126,36 @@ export function isSurveyAcceptingResponses(s: { isOpen: boolean; closesAt?: stri
 
 export type SurveyAnswers = Record<string, number | string | string[]>;
 
+/**
+ * 답변 한 칸을 사람이 읽는 문자열로.
+ *
+ * 화면(등록자 상세)과 CSV 가 **같은 함수**를 써야 한다 — 갈라지면 화면에는 "4점" 인데
+ * 내려받은 파일에는 "4" 로 적혀, 같은 응답인지 대조할 수 없다.
+ *
+ * 복수응답을 ", " 로 합치는 규칙은 등록 폼의 joinMultiValue 와 같다(webinar-config.ts).
+ * 값 자체에 쉼표가 있으면 항목 경계와 섞이지만, 설문 선택지는 운영자가 만든 값이고
+ * 여기서 고칠 방법이 없다 — CSV 는 셀 전체를 인용하므로 파일이 깨지지는 않는다.
+ */
+export function formatSurveyAnswer(question: Pick<SurveyQuestion, "type">, answer: unknown): string {
+  const value = Array.isArray(answer) ? answer.join(", ") : String(answer);
+  return question.type === "rating" || question.type === "nps" ? `${value}점` : value;
+}
+
+/** 답이 비었는가 — 화면은 그 문항을 건너뛰고, CSV 는 빈 칸을 남긴다. */
+export function isEmptySurveyAnswer(answer: unknown): boolean {
+  return answer === undefined || answer === null || answer === "" || (Array.isArray(answer) && answer.length === 0);
+}
+
+/**
+ * CSV 열 이름에 쓸 문항 라벨. 제목이 빈 문항(초안·보관)은 열이 사라지면 답변도 같이
+ * 안 보이게 되므로, 순번으로 자리를 만들어 준다.
+ */
+export function surveyQuestionColumnLabel(question: SurveyQuestion, index: number): string {
+  const title = question.title.trim();
+  const base = title || `문항 ${index + 1}`;
+  return question.retired ? `${base} (보관)` : base;
+}
+
 /** 서버측 응답 검증 — 유효한 답만 남긴 cleaned 를 반환. 필수 미응답/형식 오류면 error. */
 export function validateSurveyAnswers(
   questions: SurveyQuestion[],
