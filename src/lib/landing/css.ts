@@ -411,16 +411,17 @@ ${sessionLogoCss(".lnd .schedule-logo")}
   background: var(--ink-soft);
 }
 
-/* ── 이런 분들께 추천합니다 ──
+/* ── 이런 분들께 추천합니다 ── (dark-zone 안 · Join 바로 위)
    카드 그리드가 아니라 **체크 목록**이다. 이 섹션의 일은 읽히는 것이 아니라 훑으면서
    나에 해당하는 줄을 찾는 것이라, 줄 단위로 눈이 내려가는 형태가 맞다.
-   dark-zone 밖(About 다음)이라 밝은 판 위에 얹는다 — 세션 카드와 톤이 겹치지 않게. */
+   판 색·그림자는 이웃(program-card·benefit-card·join-step)과 같은 값을 쓴다 —
+   같은 존 안에서 카드 마감이 갈리면 섹션 하나가 얹혀 있는 것처럼 보인다. */
 .lnd .audience-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; list-style: none; padding: 0; margin: 0; }
 .lnd .audience-item {
   display: flex; align-items: flex-start; gap: 13px;
-  padding: 18px 20px; border-radius: 12px;
-  background: rgba(255, 255, 255, .045);
-  box-shadow: inset 0 0 0 1px var(--line);
+  padding: 18px 20px; border-radius: 8px;
+  background: rgba(24, 31, 45, .94);
+  box-shadow: 0 18px 48px rgba(2, 8, 24, .25);
 }
 /* 체크 표시 — 아이콘을 비웠을 때의 기본. 키컬러 판 위에 놓아 목록의 리듬을 만든다. */
 .lnd .audience-mark {

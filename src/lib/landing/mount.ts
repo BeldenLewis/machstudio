@@ -167,15 +167,6 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   body.appendChild(renderHero(m));
   const intro = renderIntro(m);
   if (intro) body.appendChild(intro);
-  /**
-   * "이런 분들께 추천합니다" 는 dark-zone **밖**, About 다음에 둔다.
-   *   · 위치: 방문자는 "이게 뭔가"(About) 다음에 "내 얘기인가" 를 묻는다. 뒤로 밀면
-   *     연사·프로그램을 다 읽은 뒤에야 자기 판별을 하게 되고, 그때는 이미 이탈했다.
-   *   · dark-zone 밖인 이유: 그 안은 `.section:nth-of-type(even)` 지브라라
-   *     섹션을 하나 끼우면 **뒤따르는 기존 섹션들의 명암이 전부 뒤집힌다.**
-   */
-  const audience = renderAudience(m);
-  if (audience) body.appendChild(audience);
   const sessions = renderSessions(m, openSession);
   if (sessions) body.appendChild(sessions);
   const timetable = renderTimetable(m);
@@ -187,6 +178,19 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   if (programs) darkZone.appendChild(programs);
   const highlights = renderHighlights(m);
   if (highlights) darkZone.appendChild(highlights);
+  /**
+   * "이런 분들께 추천합니다" — Join 바로 위, **dark-zone 안**.
+   *
+   * dark-zone 안이어야 하는 이유가 색이다: 이 존은 `background: var(--ink)` 로 불투명한데,
+   * 그 밖의 섹션은 자기 배경이 없어서 `.lnd.on-accent { background: var(--primary) }` 가
+   * 켜지는 동안(세션·타임테이블 구간) **키컬러가 그대로 비친다.** 처음엔 About 다음에
+   * 뒀다가 그 색 변화가 보여서 여기로 옮겼다.
+   *
+   * 지브라(`.section:nth-of-type(even)`)의 짝은 한 칸 밀린다 — Join 이 띠를 얻고 FAQ 가
+   * 잃는다. 교대 자체는 유지되므로 패턴이 깨지는 건 아니다.
+   */
+  const audience = renderAudience(m);
+  if (audience) darkZone.appendChild(audience);
   const join = renderJoin(m);
   if (join) darkZone.appendChild(join);
 

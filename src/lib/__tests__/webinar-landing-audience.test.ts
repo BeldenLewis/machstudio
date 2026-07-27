@@ -85,7 +85,15 @@ describe("이중 게이트", () => {
     expect(off).not.toContain("lnd-audience");
     const on = model({ audience: { enabled: true, items: [{ title: "마케터" }] } }).tocItems.map((t) => t.id);
     expect(on).toContain("lnd-audience");
-    // About 다음, Sessions 앞 — 방문자가 "내 얘기인가" 를 묻는 순서
-    expect(on.indexOf("lnd-audience")).toBe(on.indexOf("lnd-about") + 1);
+    /**
+     * Join 바로 앞 — 참여 방법을 읽기 직전에 "내 얘기인가" 를 확인시키고 등록으로 넘긴다.
+     * 처음엔 About 다음에 뒀는데, 그 자리는 dark-zone 밖이라 세션·타임테이블 구간에서
+     * 키컬러 배경이 섹션을 통과해 비쳤다(mount.ts 주석).
+     */
+    const withJoin = model({
+      audience: { enabled: true, items: [{ title: "마케터" }] },
+      join: { enabled: true, steps: [{ title: "사전 등록" }] },
+    }).tocItems.map((t) => t.id);
+    expect(withJoin.indexOf("lnd-audience")).toBe(withJoin.indexOf("lnd-join") - 1);
   });
 });
