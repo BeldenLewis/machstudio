@@ -328,7 +328,15 @@ export const LANDING_CSS = `
   box-shadow: var(--shadow);
   transform: translateZ(0);
   /* article/button 겸용 — 버튼일 때 기본 스타일 리셋 */
-  display: block; text-align: left; color: inherit; font: inherit; border: 0; padding: 0; appearance: none;
+  display: block; text-align: left; font: inherit; border: 0; padding: 0; appearance: none;
+  /* 카드 면은 **섹션 모드와 무관하게 어둡다**(위 고정 그라디언트 + ::after 하단 스크림).
+     그래서 글자도 항상 밝아야 한다. 예전엔 color: inherit 였는데, 세션 구간을 화이트로
+     두면 상속된 검은 글자가 어두운 카드에 얹혀 대비 1.02 로 사라졌다(실측).
+     이 카드 안에서만 다크 토큰을 못박는다 — 사진 위 텍스트라 판단 기준이 카드 면이다. */
+  --paper: #f6f8ff;
+  --body: #c3cad6;
+  --muted: #abb5c7;
+  color: var(--paper);
 }
 .lnd .session-card.is-clickable { cursor: pointer; transition: transform .22s ease, box-shadow .22s ease; }
 .lnd .session-card.is-clickable:hover { transform: translateY(-4px); box-shadow: 0 26px 54px rgba(0, 0, 0, .5); }
@@ -349,7 +357,8 @@ export const LANDING_CSS = `
 }
 .lnd .session-card h3 {
   margin: 12px 0 20px;
-  font-size: 17px; line-height: 1.35; letter-spacing: -.03em; word-break: keep-all;
+  /* 위와 같은 이유로 명시. 사진 위 17px 이라 800 은 무거워 750 으로 둔다. */
+  font-size: 17px; font-weight: 750; line-height: 1.35; letter-spacing: -.03em; word-break: keep-all;
 }
 /* 이름·회사(왼쪽) 과 '자세히 보기'(오른쪽 하단) 를 한 줄에 — baseline 이 아니라 flex-end 로
    맞춘다. 회사명이 있으면 왼쪽이 두 줄이 되는데, 그때 링크가 첫 줄에 붙어 뜨지 않게. */
@@ -641,7 +650,15 @@ ${sessionLogoCss(".lnd .schedule-logo")}
   background: var(--primary); color: var(--on-primary);
   font-size: 10px; font-weight: 900; letter-spacing: -.02em;
 }
-.lnd .program-card h3, .lnd .benefit-card h3, .lnd .join-step h3 { font-size: 19px; letter-spacing: -.03em; word-break: keep-all; }
+/* font-weight 를 **명시**한다. 이 앱 안에서는 Tailwind preflight 가 h1~h6 을
+   font-weight: inherit 로 두므로 .lnd 의 400 을 물려받아 얇게 나오고, 임베드된 외부
+   사이트(아임웹)에는 preflight 가 없어 UA 기본 bold(700)로 나온다 — 같은 페이지가
+   환경에 따라 다른 굵기로 렌더됐다(실측: 우리 앱 400 / 섹션 제목 900).
+   참여 방법 단계 제목(사전 등록·입장 확인·라이브 시청)이 눈에 걸려야 하는 자리라
+   세 카드 계열을 같은 800 으로 맞춘다 — 한쪽만 굵게 하면 형제 카드가 어긋난다. */
+.lnd .program-card h3, .lnd .benefit-card h3, .lnd .join-step h3 {
+  font-size: 19px; font-weight: 800; letter-spacing: -.03em; word-break: keep-all;
+}
 .lnd .program-card p, .lnd .benefit-card p, .lnd .join-step p {
   margin: 14px 0 0; color: var(--body);
   font-size: 13px; line-height: 1.7; white-space: pre-line; word-break: keep-all;
