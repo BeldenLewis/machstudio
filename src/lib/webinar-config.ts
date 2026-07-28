@@ -215,6 +215,48 @@ export interface LandingJoinStep { title: string; description: string }
 export interface LandingFaqItem { category: string; question: string; answer: string }
 export type LandingHeroMedia = { type: "image" | "video"; url: string } | null;
 
+/** 섹션 배경 모드. 섹션마다 라이트/다크를 따로 고른다. */
+export type LandingSectionBg = "light" | "dark";
+
+/**
+ * 모드를 고를 수 있는 섹션 — 순서는 랜딩 렌더 순서 그대로(편집 UI 도 이 순서를 쓴다).
+ *
+ * `sessions` 는 세션·타임테이블 구간의 **바탕**이다. 이 구간은 화면 중앙에 걸리면 배경이
+ * 웨비나 키컬러로 바뀌므로(`.accent-zone` + attachAccentZone) 섹션이 자기 배경을 칠할 수
+ * 없다 — 대신 루트가 칠하고, 전환이 걸리지 않은 동안 보이는 색이 이 값이다.
+ */
+export const LANDING_BG_SECTIONS = [
+  { key: "hero", label: "히어로", note: "미디어를 넣으면 글자는 항상 밝게 나갑니다" },
+  { key: "intro", label: "About (소개)", note: "" },
+  { key: "sessions", label: "세션 · 타임테이블", note: "스크롤이 이 구간에 걸리면 키컬러로 바뀝니다 — 그 전후에 보이는 바탕색" },
+  { key: "programs", label: "Programs", note: "" },
+  { key: "highlights", label: "Highlights", note: "" },
+  { key: "audience", label: "이런 분들께 추천합니다", note: "" },
+  { key: "join", label: "How to Join", note: "" },
+  { key: "faq", label: "FAQ", note: "" },
+] as const;
+
+export type LandingBgSectionKey = (typeof LANDING_BG_SECTIONS)[number]["key"];
+export type LandingSectionBgMap = Record<LandingBgSectionKey, LandingSectionBg>;
+
+/**
+ * 배경 키컬러 두 개. 글자·카드·선 색은 이 값에서 파생한다(css.ts 의 color-mix) —
+ * 운영자가 색을 6개 고르게 하면 대비가 깨진 조합이 반드시 나온다. 두 개만 받는다.
+ */
+export interface LandingColors { lightBg: string; darkBg: string }
+
+/** 현재 랜딩과 같은 색 — 기본값을 바꾸면 저장 안 한 웨비나의 외관이 바뀐다. */
+export const DEFAULT_LANDING_COLORS: LandingColors = { lightBg: "#f6f8ff", darkBg: "#06080d" };
+
+/** 기본은 전부 다크 — 이 기능이 들어오기 전과 같은 외관이어야 한다. */
+export const DEFAULT_LANDING_SECTION_BG: LandingSectionBgMap = {
+  hero: "dark", intro: "dark", sessions: "dark", programs: "dark",
+  highlights: "dark", audience: "dark", join: "dark", faq: "dark",
+};
+
+/** 6자리 hex 만 통과 — 공개 페이지 CSS 에 그대로 들어가는 값이라 문자열을 믿지 않는다. */
+const LANDING_HEX = /^#[0-9a-fA-F]{6}$/;
+
 export interface LandingPageConfig {
   enabled: boolean;
   heroMedia: LandingHeroMedia;
@@ -227,6 +269,10 @@ export interface LandingPageConfig {
   /** 일시 옆 라벨 (예: ONLINE LIVE) */
   venue: string;
   ctaLabel: string;
+  /** 라이트·다크 두 모드의 배경 키컬러 */
+  colors: LandingColors;
+  /** 섹션별 배경 모드 */
+  sectionBg: LandingSectionBgMap;
   intro: { enabled: boolean; title: string; body: string };
   /** detailPopup: 세션 카드 클릭 시 연사 상세(주제·내용·사진·소속·약력) 팝업 열기 */
   sessions: { enabled: boolean; detailPopup: boolean };
@@ -290,6 +336,10 @@ export function normalizeLandingPageConfig(
     ? { type: mediaRaw.type === "video" ? "video" : "image", url: mediaUrl }
     : null;
 
+  const hex = (v: unknown, def: string) => (typeof v === "string" && LANDING_HEX.test(v.trim()) ? v.trim().toLowerCase() : def);
+  const colors = obj(lp.colors);
+  const sectionBg = obj(lp.sectionBg) as Partial<LandingSectionBgMap>;
+
   const intro = obj(lp.intro);
   const audience = obj(lp.audience);
   const programs = obj(lp.programs);
@@ -305,6 +355,14 @@ export function normalizeLandingPageConfig(
     subtitle: str(lp.subtitle),
     venue: str(lp.venue) || "ONLINE LIVE",
     ctaLabel: str(lp.ctaLabel) || "사전 등록하기",
+    colors: {
+      lightBg: hex(colors.lightBg, DEFAULT_LANDING_COLORS.lightBg),
+      darkBg: hex(colors.darkBg, DEFAULT_LANDING_COLORS.darkBg),
+    },
+    sectionBg: LANDING_BG_SECTIONS.reduce((acc, s) => {
+      acc[s.key] = sectionBg[s.key] === "light" ? "light" : DEFAULT_LANDING_SECTION_BG[s.key];
+      return acc;
+    }, {} as LandingSectionBgMap),
     intro: { enabled: bool(intro.enabled, true), title: str(intro.title), body: str(intro.body) },
     sessions: { enabled: bool(obj(lp.sessions).enabled, true), detailPopup: bool(obj(lp.sessions).detailPopup, true) },
     timetable: { enabled: bool(obj(lp.timetable).enabled, true) },
