@@ -1,0 +1,92 @@
+import { describe, expect, it } from "vitest";
+import { LANDING_CSS } from "@/lib/landing/css";
+
+/**
+ * 랜딩 배경 모드 CSS 의 불변식.
+ *
+ * 이 파일이 존재하는 이유는 전부 **실제로 조용히 깨졌던 것들**이다. 렌더 결과를 눈으로
+ * 봐야 아는 종류라 브라우저에서 잡았고, 다시 깨지면 알아채기 어려우므로 문자열 수준에서
+ * 못박는다. CSS 를 파싱하지 않고 규칙 존재/부재만 본다 — 값의 정확성은 브라우저에서 재야 한다.
+ */
+
+describe("섹션 자식의 position 을 건드리지 않는다", () => {
+  /**
+   * `> * { position: relative }` 로 내용을 가상요소 위에 올렸더니, 그 규칙이
+   * `.lnd .scroll-cue`(position:absolute)를 특정도로 이겨(0,3,0 vs 0,2,0) About 하단
+   * 셰브론이 흐름에 들어가 오른쪽 끝으로 밀렸다. 기본값에서도 터지는 회귀였다
+   * (실측: 중앙 x=670 이어야 하는데 x=1305).
+   */
+  it("data-bg 섹션의 직계 자식에 position 을 주는 규칙이 없다", () => {
+    expect(LANDING_CSS).not.toMatch(/\[data-bg\][^{]*>\s*\*[^{]*\{[^}]*position/);
+  });
+
+  it("대신 isolation + z-index:-1 로 가상요소를 뒤에 둔다", () => {
+    expect(LANDING_CSS).toMatch(/\[data-bg\][^{]*\{[^}]*isolation:\s*isolate/);
+    expect(LANDING_CSS).toMatch(/\[data-bg\]::before\s*,?[\s\S]{0,120}z-index:\s*-1/);
+  });
+
+  it("스크롤 큐는 여전히 absolute 로 선언돼 있다", () => {
+    expect(LANDING_CSS).toMatch(/\.scroll-cue\s*\{[^}]*position:\s*absolute/);
+  });
+});
+
+describe("라이트 모드에서 어두운 전제의 장식을 끈다", () => {
+  /** 히어로의 검은 원판(::after)이 밝은 바탕에 남아 제목 대비가 1.14:1 이 됐다. */
+  it("라이트 히어로는 검은 원판(::after)을 끈다", () => {
+    expect(LANDING_CSS).toMatch(/\.hero\[data-bg="light"\]::after\s*\{[^}]*content:\s*none/);
+  });
+
+  it("라이트 히어로 링은 키컬러만 쓰고 어두운 stop 을 쓰지 않는다", () => {
+    const block = LANDING_CSS.match(/\.hero\[data-bg="light"\]::before\s*\{([^}]*)\}/);
+    expect(block).not.toBeNull();
+    // --primary-soft 는 키컬러를 검정 쪽으로 섞은 값 — 밝은 바탕에 어두운 띠를 만든다
+    expect(block![1]).not.toContain("--primary-soft");
+  });
+});
+
+describe("라이트 모드 토큰이 배경보다 어두운 쪽으로 파생된다", () => {
+  /**
+   * 흰색 쪽으로 섞으면 라이트 배경보다 밝아져 판·글자가 사라진다.
+   * (--card-2 는 lightBg #f6f8ff 에서 1.03:1, #ffffff 면 완전 동일색이었다.)
+   */
+  const lightBlock = () => {
+    const m = LANDING_CSS.match(/\[data-bg="light"\]\s*\{([\s\S]*?)\}/);
+    expect(m).not.toBeNull();
+    return m![1];
+  };
+
+  it("--card-2 는 --paper 쪽으로 섞는다", () => {
+    // 값 안에 var(--bg-light) 가 있어 [^)]* 로는 못 넘는다 — 한 선언 끝(;)까지 본다.
+    const decl = lightBlock().match(/--card-2:([^;]*);/);
+    expect(decl).not.toBeNull();
+    expect(decl![1]).toContain("var(--paper)");
+    expect(decl![1]).not.toContain("#ffffff");
+  });
+
+  it("--primary-bright 를 모드별로 재선언한다 — 밝은 키컬러가 배경에 붙지 않게", () => {
+    expect(lightBlock()).toMatch(/--primary-bright:\s*color-mix/);
+  });
+
+  it("--paper 는 mount 가 배경 휘도에서 정한 값을 받는다", () => {
+    expect(LANDING_CSS).toMatch(/--paper:\s*var\(--paper-light/);
+    expect(LANDING_CSS).toMatch(/--paper:\s*var\(--paper-dark/);
+  });
+});
+
+describe("판이 배경과 가까워도 형태가 남는다", () => {
+  /** .faq-item 만 형제 카드와 달리 그림자가 없어 라이트에서 판이 통째로 사라졌다. */
+  it("FAQ 카드에 카드 그림자가 있다", () => {
+    expect(LANDING_CSS).toMatch(/\.faq-item\s*\{[^}]*box-shadow:\s*var\(--card-shadow\)/);
+  });
+});
+
+describe("키컬러 전환 구간은 배경을 칠하지 않는다", () => {
+  /** accent-zone 이 자기 배경을 가지면 on-accent 전환이 가려진다. */
+  it("섹션 배경 규칙이 accent-zone 을 제외한다", () => {
+    expect(LANDING_CSS).toMatch(/\.section\[data-bg\]:not\(\.accent-zone\)/);
+  });
+
+  it("on-accent 는 여전히 루트 배경을 키컬러로 덮는다", () => {
+    expect(LANDING_CSS).toMatch(/\.lnd\.on-accent\s*\{\s*background:\s*var\(--primary\)/);
+  });
+});

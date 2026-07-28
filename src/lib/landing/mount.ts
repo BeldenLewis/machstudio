@@ -86,6 +86,25 @@ function ensureFont(): void {
   document.head.appendChild(link);
 }
 
+
+/**
+ * 배경 위에서 읽히는 글자색. 상대휘도로 고르고, 배경 색조를 아주 조금 섞어 톤을 맞춘다.
+ *
+ * 왜 CSS 상수가 아니라 여기서 계산하나: 편집 UI 는 "글자·카드·선 색은 배경에서 자동으로
+ * 따라옵니다" 라고 안내하는데, --paper 를 모드별 상수로 두면 그 말이 거짓이 된다.
+ * 정규화(normalizeLandingPageConfig)는 6자리 hex 형식만 보므로 운영자가 "다크 모드 배경"
+ * 에 #ffffff 를 고르는 것을 막지 못한다 — 그때 상수 --paper 면 대비 1.06:1 로 백지가 된다.
+ * 입력을 소스에서 정규화한다는 규칙(AGENTS.md)에 맞춰 주입 시점에 정한다.
+ */
+function paperFor(bg: string): string {
+  const hex = bg.replace("#", "");
+  const c = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const lin = c.map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
+  const lum = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  // 밝은 배경이면 잉크, 어두우면 종이색. 순백/순검 대신 배경 계열로 살짝 눕힌다.
+  return lum > 0.45 ? "#101828" : "#f6f8ff";
+}
+
 export function mountLanding(opts: MountLandingOptions): LandingHandle {
   const { mount, webinar, embedded, isPreview } = opts;
   const uid = nextUid();
@@ -104,9 +123,13 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
     style: {
       "--primary": m.accent,
       "--on-primary": m.onPrimary,
-      // 배경 키컬러 두 개 — 나머지 색(글자·선·카드)은 CSS 가 이 둘에서 파생한다.
+      // 배경 키컬러 두 개 — 나머지 색(선·카드)은 CSS 가 이 둘에서 파생한다.
       "--bg-light": m.lp.colors.lightBg,
       "--bg-dark": m.lp.colors.darkBg,
+      // 글자색은 각 배경의 휘도에서 정한다(paperFor) — 운영자가 모드에 어긋난 색을
+      // 골라도 읽히게. CSS 의 모드 블록이 이 두 변수를 --paper 로 집어간다.
+      "--paper-light": paperFor(m.lp.colors.lightBg),
+      "--paper-dark": paperFor(m.lp.colors.darkBg),
     },
     // 루트 모드 = 세션·타임테이블 구간의 바탕. 그 구간은 자기 배경을 칠하면
     // 키컬러 전환(.on-accent)이 가려지므로 루트가 칠한다.
@@ -119,7 +142,7 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
     root.appendChild(
       h(
         "div",
-        { style: { minHeight: "60vh", display: "grid", placeItems: "center", color: "#abb5c7", padding: "24px", textAlign: "center" } },
+        { style: { minHeight: "60vh", display: "grid", placeItems: "center", color: "var(--muted)", padding: "24px", textAlign: "center" } },
         "아직 공개되지 않은 페이지예요.",
       ),
     );

@@ -61,7 +61,8 @@ export const LANDING_CSS = `
    루트에도 걸린다(.lnd[data-bg]) — 세션·타임테이블 구간의 바탕이 루트 배경이기 때문. */
 .lnd[data-bg="dark"], .lnd [data-bg="dark"] {
   --sec-bg: var(--bg-dark);
-  --paper: #f6f8ff;
+  /* mount 가 배경 휘도에서 정해 인라인으로 심는다. 폴백은 예전 상수. */
+  --paper: var(--paper-dark, #f6f8ff);
   /* 카드면은 배경에서 뽑는다 — 키컬러성 어두운 배경(예: 진한 보라)에 회청색 카드가
      얹히면 섹션 하나가 남의 것처럼 보인다. 계수는 기존 값 rgb(24,31,45) 에 맞췄다. */
   --card: color-mix(in srgb, var(--bg-dark) 55%, #2d3a54);
@@ -70,10 +71,17 @@ export const LANDING_CSS = `
 }
 .lnd[data-bg="light"], .lnd [data-bg="light"] {
   --sec-bg: var(--bg-light);
-  --paper: #101828;
+  --paper: var(--paper-light, #101828);
   --card: #ffffff;
-  --card-2: color-mix(in srgb, var(--bg-light) 45%, #ffffff);
+  /* 배경보다 **어둡게** 뽑는다. 흰색 쪽으로 섞으면 라이트 배경보다 밝아져 판이 사라진다
+     (lightBg #f6f8ff 에서 1.03:1, #ffffff 면 완전 동일색). */
+  --card-2: color-mix(in srgb, var(--bg-light) 92%, var(--paper));
   --card-shadow: 0 12px 30px rgba(23, 32, 56, .10);
+  /* 강조 글자·아웃라인용 키컬러. 이름은 bright 지만 라이트 모드에서는 **어둡게** 가야
+     보인다 — 흰색 쪽으로 섞은 값은 밝은 배경에서 노랑 키컬러일 때 1.31:1 까지 떨어졌다.
+     48% 는 최악(밝은 노랑 #facc15)에서 .join-k(12px/900) 대비 4.74 로 AA 를 통과하는
+     가장 옅은 값이다 — 실측: 58% 3.53(탈락) / 48% 4.74 / 40% 6.08(탁해짐). */
+  --primary-bright: color-mix(in srgb, var(--primary) 48%, #05060a);
 }
 /* 두 모드 공통 파생 — 글자와 선은 --paper 와 --sec-bg **사이**에서 뽑는다.
    그래서 배경 키컬러만 바꿔도 대비가 유지된다. 선택자 특정도가 위 두 블록과 같으므로
@@ -97,14 +105,20 @@ export const LANDING_CSS = `
    width: min(100% - 36px, --max) 로 좁은 박스라 좌우에 루트 색이 그대로 남는다(실측).
    그래서 화면 폭을 덮는 가짜 요소를 뒤에 깐다(옛 .dark-zone 지브라가 쓰던 기법 그대로).
    루트에 overflow-x: hidden 이 있어 50vw 트릭이 가로 스크롤을 만들지 않는다. */
-.lnd .section[data-bg]:not(.accent-zone), .lnd .intro[data-bg] { position: relative; }
+/* isolation: isolate + z-index:-1 로 가상요소를 내용 **뒤**에 둔다.
+   예전에는 자식 전부에 > * { position: relative } 를 걸어 올렸는데, 그 규칙이
+   .lnd .scroll-cue(position:absolute)를 특정도로 이겨(0,3,0 vs 0,2,0) About 하단
+   셰브론이 흐름에 들어가 오른쪽 끝으로 밀렸다 — 기본값에서도 터지는 회귀였다(실측:
+   중앙 x=670 이어야 하는데 x=1305). 자식의 position 은 건드리지 않는다. */
+.lnd .section[data-bg]:not(.accent-zone), .lnd .intro[data-bg] {
+  position: relative; isolation: isolate;
+}
 .lnd .section[data-bg]:not(.accent-zone)::before,
 .lnd .intro[data-bg]::before {
-  content: ""; position: absolute; z-index: 0; top: 0; bottom: 0;
+  content: ""; position: absolute; z-index: -1; top: 0; bottom: 0;
   left: calc(50% - 50vw); right: calc(50% - 50vw);
   background: var(--sec-bg);
 }
-.lnd .section[data-bg] > *, .lnd .intro[data-bg] > * { position: relative; z-index: 1; }
 /* 지브라는 위 규칙보다 **특정도가 같거나 높고 뒤에** 와야 한다 —
    .lnd [data-band] 만으로는 위 규칙(:not 이 특정도를 올린다)에 져서 조용히 안 칠해진다.
    (이 블록 안에서는 백틱을 쓰지 않는다 — 이 파일 전체가 템플릿 리터럴이라 문자열이 끊긴다.) */
@@ -145,7 +159,8 @@ export const LANDING_CSS = `
 .lnd .preview-badge {
   position: fixed; left: 12px; top: 12px; z-index: 200;
   padding: 6px 12px; border-radius: 999px;
-  background: rgba(255, 255, 255, .92); color: #111827;
+  /* 흰 알약은 라이트 배경 위에서 1.06:1 로 사라진다 → 카드 토큰 + 그림자로 띄운다. */
+  background: var(--card); color: var(--paper); box-shadow: var(--card-shadow);
   font-size: 12px; font-weight: 800;
 }
 
@@ -225,6 +240,18 @@ export const LANDING_CSS = `
   width: min(55vw, 590px); aspect-ratio: 1;
   background: radial-gradient(circle at 50% 45%, #05070b 0 56%, #02040a 72%);
   box-shadow: 0 0 100px rgba(0, 0, 0, .8);
+}
+/* 라이트 히어로 — 위 두 장식은 어두운 바탕 전제다. 검은 원판(::after)과 링의 어두운
+   구간(--primary-soft)이 밝은 바탕에 그대로 얹히면 제목 대비가 1.14:1 로 사라진다.
+   원판은 끄고, 링은 키컬러만 옅게 번지는 형태로 바꾼다. */
+.lnd .hero[data-bg="light"]::after { content: none; }
+.lnd .hero[data-bg="light"]::before {
+  background: radial-gradient(circle,
+    transparent 0 38%,
+    color-mix(in srgb, var(--primary) 14%, transparent) 44%,
+    color-mix(in srgb, var(--primary) 26%, transparent) 52%,
+    transparent 66%);
+  filter: none; opacity: .9;
 }
 .lnd .hero-media { position: absolute; inset: 0; z-index: 1; overflow: hidden; }
 .lnd .hero-media img, .lnd .hero-media video { width: 100%; height: 100%; object-fit: cover; }
@@ -692,7 +719,9 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 }
 .lnd .faq-tab[aria-pressed="true"] { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
 .lnd .faq-list { display: grid; gap: 12px; }
-.lnd .faq-item { border-radius: 8px; background: var(--card-2); overflow: hidden; }
+/* 그림자는 형제 카드(.program-card/.benefit-card/.join-step/.audience-item)와 같은 값.
+   없으면 라이트 모드에서 배경과 색이 가까울 때 판이 통째로 사라진다. */
+.lnd .faq-item { border-radius: 8px; background: var(--card-2); overflow: hidden; box-shadow: var(--card-shadow); }
 .lnd .faq-item summary {
   min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 20px;
   padding: 0 18px; cursor: pointer; list-style: none;
