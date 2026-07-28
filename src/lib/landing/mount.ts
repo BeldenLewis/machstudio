@@ -184,9 +184,16 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
    */
   let prevMode: string | null = null;
   let runIndex = 0;
-  const paintBg = (el: HTMLElement, key: keyof typeof m.lp.sectionBg): HTMLElement => {
+  /**
+   * inRun: 지브라 교대에 참여하는가. 히어로는 **참여하지 않는다** — 화면을 꽉 채우고
+   * 자기 배경 처리(원형 장식·미디어 스크림)를 따로 갖는 면이라 띠의 짝이 아니다.
+   * 참여시켰더니 기본값(전부 다크)에서 히어로가 run 0 을 먹고 About 이 run 1 → 밴드를
+   * 받아, 예전에 #000 이던 About 이 rgb(20,22,28) 로 밝아졌다(실측). 교대는 About 부터 센다.
+   */
+  const paintBg = (el: HTMLElement, key: keyof typeof m.lp.sectionBg, inRun = true): HTMLElement => {
     const mode = m.lp.sectionBg[key];
     el.setAttribute("data-bg", mode);
+    if (!inRun) return el;
     if (mode === prevMode) runIndex += 1;
     else {
       runIndex = 0;
@@ -197,7 +204,7 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
     return el;
   };
 
-  body.appendChild(paintBg(renderHero(m), "hero"));
+  body.appendChild(paintBg(renderHero(m), "hero", false));
   const intro = renderIntro(m);
   if (intro) body.appendChild(paintBg(intro, "intro"));
   // 세션·타임테이블은 data-bg 를 받지 않는다 — 루트가 칠한다(위 root 주석).
