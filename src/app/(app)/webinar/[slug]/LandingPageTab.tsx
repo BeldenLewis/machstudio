@@ -12,6 +12,11 @@ import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { Switch } from "@/components/ui/switch";
 import {
   normalizeLandingPageConfig,
+  DEFAULT_LANDING_COLORS,
+  LANDING_BG_SECTIONS,
+  type LandingColors,
+  type LandingSectionBg,
+  type LandingSectionBgMap,
   type LandingFaqItem,
   type LandingHighlightItem,
   type LandingJoinStep,
@@ -46,6 +51,10 @@ interface EditorState {
   venue: string;
   ctaLabel: string;
   intro: { enabled: boolean; title: string; body: string };
+  /** 라이트·다크 두 모드의 배경 키컬러 */
+  colors: LandingColors;
+  /** 섹션별 배경 모드 */
+  sectionBg: LandingSectionBgMap;
   sessionsEnabled: boolean;
   sessionsDetailPopup: boolean;
   timetableEnabled: boolean;
@@ -71,6 +80,8 @@ function toEditorState(config: Record<string, unknown>): EditorState {
     venue: lp.venue,
     ctaLabel: lp.ctaLabel,
     intro: lp.intro,
+    colors: lp.colors,
+    sectionBg: lp.sectionBg,
     sessionsEnabled: lp.sessions.enabled,
     sessionsDetailPopup: lp.sessions.detailPopup,
     timetableEnabled: lp.timetable.enabled,
@@ -96,6 +107,8 @@ function toConfigPayload(s: EditorState) {
     venue: s.venue,
     ctaLabel: s.ctaLabel,
     intro: s.intro,
+    colors: s.colors,
+    sectionBg: s.sectionBg,
     sessions: { enabled: s.sessionsEnabled, detailPopup: s.sessionsDetailPopup },
     timetable: { enabled: s.timetableEnabled },
     audience: { ...s.audience, items: stripRowKeys(s.audience.items) },
@@ -104,6 +117,56 @@ function toConfigPayload(s: EditorState) {
     join: { ...s.join, steps: stripRowKeys(s.join.steps) },
     faq: { ...s.faq, items: stripRowKeys(s.faq.items) },
   };
+}
+
+/**
+ * 배경 키컬러 하나. 견본·hex·되돌리기를 한 줄에 둔다.
+ *
+ * 색 견본만은 포커스 링을 **감싼 쪽**에 그린다 — 실제 <input type=color> 는 opacity-0 으로
+ * 견본 위에 덮여 있어서, 전역 focus-visible 링이 투명 요소와 함께 사라진다.
+ * (BrandSection 이 같은 이유로 같은 구조를 쓴다 — 두 색 편집기의 조작감을 맞춘다.)
+ */
+function ColorField({
+  id,
+  label,
+  value,
+  fallback,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  fallback: string;
+  onChange: (next: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl bg-secondary/40 p-3">
+      <div className="relative rounded-lg focus-within:[outline:2px_solid_var(--ring)] focus-within:[outline-offset:2px]">
+        <div className="h-9 w-9 rounded-lg shadow-sm" style={{ backgroundColor: value }} />
+        <input
+          id={id}
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label={label}
+          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        />
+      </div>
+      <div className="min-w-0">
+        <label htmlFor={id} className="block text-xs font-medium">{label}</label>
+        <p className="font-mono text-xs text-muted-foreground">{value}</p>
+      </div>
+      {value.toLowerCase() !== fallback.toLowerCase() ? (
+        <button
+          type="button"
+          onClick={() => onChange(fallback)}
+          className="ml-auto text-xs text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground"
+        >
+          기본값
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 function SectionCard({
@@ -270,6 +333,56 @@ export default function LandingPageTab({
               </a>
             </div>
           </div>
+
+          {/* 배경 — 섹션 단위 모드 + 두 모드의 배경 키컬러.
+              전체에 영향하는 값이라 히어로보다 위에 둔다(원인이 결과보다 먼저 온다). */}
+          <SectionCard
+            title="배경"
+            hint="섹션마다 화이트·다크를 고르고, 두 모드의 배경색을 정해요. 글자·카드·선 색은 배경에서 자동으로 따라옵니다."
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ColorField
+                id={`${uid}-bg-light`}
+                label="화이트 모드 배경"
+                value={state.colors.lightBg}
+                fallback={DEFAULT_LANDING_COLORS.lightBg}
+                onChange={(lightBg) => patch({ colors: { ...state.colors, lightBg } })}
+              />
+              <ColorField
+                id={`${uid}-bg-dark`}
+                label="다크 모드 배경"
+                value={state.colors.darkBg}
+                fallback={DEFAULT_LANDING_COLORS.darkBg}
+                onChange={(darkBg) => patch({ colors: { ...state.colors, darkBg } })}
+              />
+            </div>
+
+            <div className="mt-4 space-y-1.5">
+              <p className={labelCls}>섹션별 모드</p>
+              {LANDING_BG_SECTIONS.map((sec) => (
+                <div
+                  key={sec.key}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-secondary/40 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{sec.label}</p>
+                    {sec.note ? <p className="text-xs text-muted-foreground">{sec.note}</p> : null}
+                  </div>
+                  <Segmented
+                    label={`${sec.label} 배경 모드`}
+                    value={state.sectionBg[sec.key]}
+                    onChange={(next) =>
+                      patch({ sectionBg: { ...state.sectionBg, [sec.key]: next as LandingSectionBg } })
+                    }
+                    options={[
+                      { value: "light" as LandingSectionBg, label: "화이트" },
+                      { value: "dark" as LandingSectionBg, label: "다크" },
+                    ]}
+                  />
+                </div>
+              ))}
+            </div>
+          </SectionCard>
 
           {/* 히어로 */}
           <SectionCard title="히어로" hint="첫 화면 — 비워두면 웨비나 이름·설명·일시가 자동으로 들어가요.">

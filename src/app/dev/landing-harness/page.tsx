@@ -11,6 +11,9 @@
  *   · 연사 카드에서 이름·회사가 읽히는 크기인가, '자세히 보기' 가 오른쪽 하단에 있는가
  *   · 카드를 누르면 팝업이 뜨고 그 안에 **로고**가 보이는가
  *   · 로고가 타임테이블과 팝업에서 **같은 크기**인가(webinar-logo.ts 규격)
+ *   · **섹션별 배경 모드**가 실제로 갈리는가, 라이트에서 글자·카드·선이 읽히는가
+ *     (`?bg=light` / `?bg=dark` / `?bg=mix` · `?lightbg=%23fff5e6` · `?darkbg=%231a0f2e`)
+ *   · 세션·타임테이블 구간에 스크롤이 걸리면 **키컬러로 바뀌는 전환**이 그대로인가
  */
 
 import { useEffect, useRef } from "react";
@@ -25,7 +28,19 @@ import type { LandingWebinar } from "@/lib/landing/types";
  * (실제 로고는 Supabase 스토리지의 절대 https URL 이라 이 조건을 이미 만족한다.)
  * 그래서 MOCK 을 모듈 스코프에 두지 못하고 마운트 시점에 origin 을 붙여 만든다.
  */
-const mockWebinar = (origin: string): LandingWebinar => ({
+type BgPreset = "light" | "dark" | "mix";
+
+/** ?bg=mix — 라이트와 다크를 번갈아 두어 경계와 지브라를 한 화면에서 본다. */
+function sectionBgFor(preset: BgPreset) {
+  if (preset === "mix") {
+    return { hero: "dark", intro: "light", sessions: "dark", programs: "light",
+             highlights: "light", audience: "dark", join: "light", faq: "light" } as const;
+  }
+  return { hero: preset, intro: preset, sessions: preset, programs: preset,
+           highlights: preset, audience: preset, join: preset, faq: preset } as const;
+}
+
+const mockWebinar = (origin: string, bg: BgPreset, lightBg: string, darkBg: string): LandingWebinar => ({
   id: "harness",
   name: "2026 스마트테크 코리아 마케팅 웨비나",
   slug: "harness",
@@ -38,6 +53,8 @@ const mockWebinar = (origin: string): LandingWebinar => ({
   config: {
     landingPage: {
       enabled: true,
+      colors: { lightBg, darkBg },
+      sectionBg: sectionBgFor(bg),
       titleLines: ["리드를 매출로", "잇는 웨비나 운영"],
       detailPopup: true,
       /** 새 섹션 — 머리글을 비워 기본 문구가 나오는지, 아이콘 유무가 섞였을 때를 함께 본다. */
@@ -52,8 +69,22 @@ const mockWebinar = (origin: string): LandingWebinar => ({
       },
       sessions: { enabled: true },
       timetable: { enabled: true },
-      programs: { enabled: false, items: [] },
-      highlights: { enabled: false, items: [] },
+      // 지브라(같은 모드가 연달아 올 때의 톤 교대)를 보려면 섹션이 여러 개여야 한다.
+      programs: {
+        enabled: true,
+        items: [
+          { icon: "01", title: "리드 수집 설계", description: "폼·랜딩·추적을 한 벌로 맞춥니다." },
+          { icon: "02", title: "후속 시퀀스", description: "등록 직후 72시간이 전환을 만듭니다." },
+        ],
+      },
+      highlights: {
+        enabled: true,
+        items: [
+          { title: "실제 화면으로", description: "슬라이드가 아니라 돌아가는 화면을 봅니다." },
+          { title: "질문 그 자리에서", description: "실시간 Q&A 로 막힌 지점을 풉니다." },
+          { title: "자료 제공", description: "종료 후 요약자료를 보내드립니다." },
+        ],
+      },
       // 아코디언 모션은 FAQ 와 타임테이블이 같은 헬퍼를 쓴다 — 둘 다 켜서 함께 확인한다.
       faq: {
         enabled: true,
@@ -116,9 +147,17 @@ export default function LandingHarnessPage() {
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+    const q = new URLSearchParams(window.location.search);
+    const raw = q.get("bg");
+    const bg: BgPreset = raw === "light" || raw === "mix" ? raw : "dark";
     const handle = mountLanding({
       mount: host,
-      webinar: mockWebinar(window.location.origin),
+      webinar: mockWebinar(
+        window.location.origin,
+        bg,
+        q.get("lightbg") || "#f6f8ff",
+        q.get("darkbg") || "#06080d",
+      ),
       embedded: false,
       isPreview: true, // 부작용(추적·전송) 차단
       origin: window.location.origin,

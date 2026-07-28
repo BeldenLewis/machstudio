@@ -4,7 +4,7 @@
  * 뷰 모듈들은 "그리기"만 하고, 문서 단위 관심사는 전부 여기서 소유한다:
  *  - 공개 게이트(비공개 랜딩이 외부 사이트에 새지 않게)
  *  - .lnd 루트 + 키컬러 변수 + 스타일/폰트 주입
- *  - dark-zone 래퍼(지브라 밴드 + on-accent 시 하단 섹션을 덮는 불투명 배경)
+ *  - 섹션별 배경 모드(data-bg) + 같은 모드가 연달아 올 때의 지브라(data-band)
  *  - 모달 수명주기: body 직계 레이어 포털 + 스크롤 잠금 + 포커스 트랩 + ESC
  *  - 목차: 별도 body 직계 레이어 포털 + 랜딩 이탈 시 감춤 (fixed 가 호스트 조상에 안 걸리게)
  *  - 부분 재렌더(FAQ 탭) 후 reveal 재관찰
@@ -101,7 +101,16 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   const root = h("div", {
     class: `lnd${embedded ? " embedded" : ""}`,
     lang: "ko",
-    style: { "--primary": m.accent, "--on-primary": m.onPrimary },
+    style: {
+      "--primary": m.accent,
+      "--on-primary": m.onPrimary,
+      // 배경 키컬러 두 개 — 나머지 색(글자·선·카드)은 CSS 가 이 둘에서 파생한다.
+      "--bg-light": m.lp.colors.lightBg,
+      "--bg-dark": m.lp.colors.darkBg,
+    },
+    // 루트 모드 = 세션·타임테이블 구간의 바탕. 그 구간은 자기 배경을 칠하면
+    // 키컬러 전환(.on-accent)이 가려지므로 루트가 칠한다.
+    "data-bg": m.lp.sectionBg.sessions,
   });
   if (opts.legacyIframe) root.setAttribute("data-legacy-iframe", "");
 
@@ -164,37 +173,66 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   // 임베드에선 호스트에 이미 <main> 이 있으므로 랜드마크를 중복시키지 않는다.
   const body = h(embedded ? "div" : "main", null);
 
-  body.appendChild(renderHero(m));
+  /**
+   * 섹션 배경 모드 — 섹션마다 `data-bg` 를 붙인다. 예전에는 `.dark-zone` 래퍼 하나가
+   * Programs~FAQ 를 덮었고, 그래서 그 밖의 섹션은 자기 배경이 없어 키컬러 전환이 켜지는
+   * 동안 키컬러가 그대로 비쳤다("이런 분들께" 를 존 안으로 옮겨야 했던 이유). 이제 각
+   * 섹션이 자기 배경을 칠하므로 그 제약이 없고, 배치는 순서만 따른다.
+   *
+   * 지브라는 `nth-of-type` 이 아니라 여기서 계산한다 — 라이트와 다크가 섞이면 순서 기반
+   * 교대는 무작위로 보인다. **같은 모드가 연달아 올 때만** 한 칸씩 톤을 낮춘다.
+   */
+  let prevMode: string | null = null;
+  let runIndex = 0;
+  /**
+   * inRun: 지브라 교대에 참여하는가. 히어로는 **참여하지 않는다** — 화면을 꽉 채우고
+   * 자기 배경 처리(원형 장식·미디어 스크림)를 따로 갖는 면이라 띠의 짝이 아니다.
+   * 참여시켰더니 기본값(전부 다크)에서 히어로가 run 0 을 먹고 About 이 run 1 → 밴드를
+   * 받아, 예전에 #000 이던 About 이 rgb(20,22,28) 로 밝아졌다(실측). 교대는 About 부터 센다.
+   */
+  const paintBg = (el: HTMLElement, key: keyof typeof m.lp.sectionBg, inRun = true): HTMLElement => {
+    const mode = m.lp.sectionBg[key];
+    el.setAttribute("data-bg", mode);
+    if (!inRun) return el;
+    if (mode === prevMode) runIndex += 1;
+    else {
+      runIndex = 0;
+      prevMode = mode;
+    }
+    if (runIndex % 2 === 1) el.setAttribute("data-band", "alt");
+    else el.removeAttribute("data-band");
+    return el;
+  };
+
+  body.appendChild(paintBg(renderHero(m), "hero", false));
   const intro = renderIntro(m);
-  if (intro) body.appendChild(intro);
+  if (intro) body.appendChild(paintBg(intro, "intro"));
+  // 세션·타임테이블은 data-bg 를 받지 않는다 — 루트가 칠한다(위 root 주석).
   const sessions = renderSessions(m, openSession);
   if (sessions) body.appendChild(sessions);
   const timetable = renderTimetable(m);
   if (timetable) body.appendChild(timetable);
+  // 두 섹션이 지브라 흐름을 끊는다(자기 배경이 없으므로 교대 대상이 아니다).
+  if (sessions || timetable) {
+    prevMode = null;
+    runIndex = 0;
+  }
 
-  // dark-zone: 지브라 밴드(nth-of-type)와 on-accent 시 불투명 배경이 여기 걸린다.
-  const darkZone = h("div", { class: "dark-zone" });
   const programs = renderPrograms(m);
-  if (programs) darkZone.appendChild(programs);
+  if (programs) body.appendChild(paintBg(programs, "programs"));
   const highlights = renderHighlights(m);
-  if (highlights) darkZone.appendChild(highlights);
-  /**
-   * "이런 분들께 추천합니다" — Join 바로 위, **dark-zone 안**.
-   *
-   * dark-zone 안이어야 하는 이유가 색이다: 이 존은 `background: var(--ink)` 로 불투명한데,
-   * 그 밖의 섹션은 자기 배경이 없어서 `.lnd.on-accent { background: var(--primary) }` 가
-   * 켜지는 동안(세션·타임테이블 구간) **키컬러가 그대로 비친다.** 처음엔 About 다음에
-   * 뒀다가 그 색 변화가 보여서 여기로 옮겼다.
-   *
-   * 지브라(`.section:nth-of-type(even)`)의 짝은 한 칸 밀린다 — Join 이 띠를 얻고 FAQ 가
-   * 잃는다. 교대 자체는 유지되므로 패턴이 깨지는 건 아니다.
-   */
+  if (highlights) body.appendChild(paintBg(highlights, "highlights"));
+  // "이런 분들께 추천합니다" — Join 바로 위. 참여 방법을 읽기 직전에 "내 얘기인가" 를 한 번 더 확인시킨다.
   const audience = renderAudience(m);
-  if (audience) darkZone.appendChild(audience);
+  if (audience) body.appendChild(paintBg(audience, "audience"));
   const join = renderJoin(m);
-  if (join) darkZone.appendChild(join);
+  if (join) body.appendChild(paintBg(join, "join"));
 
   // FAQ 는 카테고리 탭 상태가 있어 부분 재렌더된다.
+  // 배경 모드·지브라는 **재렌더마다 다시 붙여야 한다** — 노드가 새로 만들어지므로
+  // 한 번만 붙이면 카테고리를 누른 순간 배경이 사라진다. 그래서 값을 미리 굳혀 둔다.
+  const faqMode = m.lp.sectionBg.faq;
+  const faqBand = faqMode === prevMode && runIndex % 2 === 0;
   let faqCategory: string | null = null;
   const faqSlot = h("div", null);
   const paintFaq = () => {
@@ -209,12 +247,14 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
         faqSlot.querySelectorAll(".rv").forEach((el) => el.classList.add("in"));
       },
     });
-    if (faq) faqSlot.appendChild(faq);
+    if (faq) {
+      faq.setAttribute("data-bg", faqMode);
+      if (faqBand) faq.setAttribute("data-band", "alt");
+      faqSlot.appendChild(faq);
+    }
   };
   paintFaq();
-  darkZone.appendChild(faqSlot);
-
-  if (darkZone.firstChild) body.appendChild(darkZone);
+  body.appendChild(faqSlot);
 
   // 목차는 body 직계 전용 레이어로 포털한다. 지금 아임웹에는 fixed 를 가로채는 조상이 없지만
   // (실측: transform/filter/contain 조상 0개), 호스트가 섹션 애니메이션을 켜면 조상에 transform 이
@@ -223,7 +263,7 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   const toc = renderToc(m, (fullId) => scrollToSectionIn(root, fullId));
   let tocLayer: HTMLElement | null = null;
   if (toc) {
-    tocLayer = createTocLayer(uid, m.accent, m.onPrimary);
+    tocLayer = createTocLayer(uid, m.accent, m.onPrimary, m.lp.colors.lightBg, m.lp.colors.darkBg);
     tocLayer.appendChild(toc);
     // root.remove() 로는 안 지워진다(루트 밖에 있다) → 명시적으로 정리.
     cleanups.push(() => {
@@ -273,7 +313,8 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   const accentZones = [m.sectionId("lnd-sessions"), m.sectionId("lnd-timetable")];
   // 목차 레이어에도 on-accent 를 미러링한다 — 루트 밖으로 나갔으니 후손 선택자가 안 걸린다.
   cleanups.push(attachAccentZone(root, accentZones, tocLayer ? [tocLayer] : []));
-  cleanups.push(attachTocSpy(root, toc, m.tocItems.map((t) => m.sectionId(t.id))));
+  // 목차 레이어는 루트 밖이라 섹션 모드를 못 받는다 → 스파이가 활성 섹션 모드를 미러링한다.
+  cleanups.push(attachTocSpy(root, toc, m.tocItems.map((t) => m.sectionId(t.id)), tocLayer));
   // 임베드는 랜딩 위아래로 호스트 콘텐츠가 있다 → 랜딩을 벗어나면 고정 목차를 감춘다.
   cleanups.push(attachTocVisibility(body, toc));
 

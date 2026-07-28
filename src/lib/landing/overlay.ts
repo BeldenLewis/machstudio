@@ -47,12 +47,22 @@ export function releaseLayer(uid: string): void {
  *    모달과 공유하면 `.lnd.on-accent{background:var(--primary)}` 가 모달 레이어에 번진다.
  * body 직계라 루트의 인라인 키컬러 변수를 못 받으므로 여기서 다시 심는다.
  */
-export function createTocLayer(uid: string, accent: string, onPrimary: string): HTMLElement {
+export function createTocLayer(
+  uid: string,
+  accent: string,
+  onPrimary: string,
+  bgLight: string,
+  bgDark: string,
+): HTMLElement {
   const layer = document.createElement("div");
   layer.setAttribute("data-ms-landing-toc", uid);
   layer.className = "lnd lnd-toc-layer";
   layer.style.setProperty("--primary", accent);
   layer.style.setProperty("--on-primary", onPrimary);
+  // 배경 키컬러도 심는다 — 이 레이어는 body 직계라 루트의 인라인 변수를 상속받지 못한다.
+  // 목차 글자색은 지금 보이는 섹션의 모드를 따라가는데(attachTocSpy), 그 파생이 이 둘을 쓴다.
+  layer.style.setProperty("--bg-light", bgLight);
+  layer.style.setProperty("--bg-dark", bgDark);
   document.body.appendChild(layer);
   return layer;
 }

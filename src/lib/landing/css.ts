@@ -1,18 +1,41 @@
 /**
  * 랜딩 상세페이지 스타일 — 단독 페이지 / 어드민 미리보기 / 외부 사이트 임베드가 모두 이 한 벌을 쓴다.
- * 다크 에디토리얼 고정 테마(의도된 단일 테마), 키컬러만 theme.accentColor 에서 파생.
+ *
+ * 색 구조 — **섹션마다 자기 배경을 칠한다.**
+ * 예전에는 루트 하나가 배경을 칠하고 `.dark-zone` 래퍼가 그 위를 덮었다. 그래서 존 밖의
+ * 섹션은 자기 배경이 없었고, 키컬러 전환(`.on-accent`)이 켜지면 엉뚱한 섹션까지 키컬러가
+ * 비쳤다(그래서 audience 를 dark-zone 안으로 옮겼다는 주석이 mount 에 남아 있었다).
+ * 섹션마다 `data-bg="light|dark"` 를 받게 하면 그 문제가 사라지고 모드 선택이 가능해진다.
+ *
+ * 운영자가 정하는 값은 **배경 두 개뿐**(--bg-light / --bg-dark). 글자·선·카드는 그 배경과
+ * --paper 사이에서 color-mix 로 파생한다 — 색을 6개 고르게 하면 대비가 깨진 조합이 반드시 나온다.
+ *
+ * 세션·타임테이블(.accent-zone)은 배경을 칠하지 않는다. 화면 중앙에 걸치면 루트 배경이
+ * 키컬러로 바뀌는 구간이라, 자기 배경을 칠하면 그 전환이 가려진다.
  */
 
 import { sessionLogoCss } from "@/lib/webinar-logo";
 
 export const LANDING_CSS = `
 .lnd {
-  --ink: #06080d;
-  --ink-soft: #0d131d;
-  --panel: #171d2a;
+  /* 인라인 style 이 실제 값을 덮는다(mount.ts). 여기 값은 스크립트가 안 도는 경우의 폴백. */
+  --bg-light: #f6f8ff;
+  --bg-dark: #06080d;
+  /* data-bg 가 없는 .lnd 요소를 위한 기본 — 모달·목차 레이어는 body 직계이고
+     className 이 "lnd lnd-layer" 라 모드 속성을 받지 않는다. 이게 없으면 그 레이어에서
+     var(--paper) 가 미정의가 되고, color 는 상속으로 떨어져 **임베드 호스트의 글자색**
+     (실측 k-expo.org: #363636)이 모달 안으로 흘러든다. */
+  --sec-bg: var(--bg-dark);
   --paper: #f6f8ff;
-  --muted: #abb5c7;
-  --line: rgba(255, 255, 255, .12);
+  --card: color-mix(in srgb, var(--bg-dark) 55%, #2d3a54);
+  --card-2: color-mix(in srgb, var(--bg-dark) 20%, #373b44);
+  --card-shadow: 0 18px 48px rgba(2, 8, 24, .25);
+  /* 파생값도 여기 한 벌 둔다. 섹션에서는 [data-bg] 블록이 **다시 선언**해 그 섹션의
+     --paper/--sec-bg 로 재계산한다 — 여기 값만 두면 계산 결과가 상속돼 모드가 안 먹는다. */
+  --body: color-mix(in srgb, var(--paper) 78%, var(--sec-bg));
+  --muted: color-mix(in srgb, var(--paper) 66%, var(--sec-bg));
+  --line: color-mix(in srgb, var(--paper) 20%, transparent);
+  --sec-bg-alt: color-mix(in srgb, var(--sec-bg) 94%, var(--paper));
   --primary-bright: color-mix(in srgb, var(--primary) 76%, #ffffff);
   --primary-soft: color-mix(in srgb, var(--primary) 70%, #05060a);
   --primary-ink: color-mix(in srgb, var(--primary) 52%, #050403);
@@ -20,7 +43,7 @@ export const LANDING_CSS = `
   --shadow: 0 26px 80px rgba(0, 6, 24, .38);
   --sans: "Pretendard Variable", Pretendard, "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   min-height: 100%;
-  background: var(--ink);
+  background: var(--sec-bg);
   color: var(--paper);
   font-family: var(--sans);
   font-size: 16px;
@@ -29,7 +52,64 @@ export const LANDING_CSS = `
   overflow-x: hidden;
   transition: background-color .8s ease;
 }
+/* 키컬러 전환 — 세션·타임테이블이 화면 중앙 밴드에 걸리는 동안만. 루트 배경을 덮으므로
+   그 두 섹션은 배경을 칠하지 않아야 한다. 섹션 배경 모드가 생겨도 이 규칙은 그대로다. */
 .lnd.on-accent { background: var(--primary); }
+
+/* ── 배경 모드 ──────────────────────────────────────────────────────────
+   두 모드가 각각 정하는 것은 배경·본문색·카드면 세 가지뿐이다.
+   루트에도 걸린다(.lnd[data-bg]) — 세션·타임테이블 구간의 바탕이 루트 배경이기 때문. */
+.lnd[data-bg="dark"], .lnd [data-bg="dark"] {
+  --sec-bg: var(--bg-dark);
+  --paper: #f6f8ff;
+  /* 카드면은 배경에서 뽑는다 — 키컬러성 어두운 배경(예: 진한 보라)에 회청색 카드가
+     얹히면 섹션 하나가 남의 것처럼 보인다. 계수는 기존 값 rgb(24,31,45) 에 맞췄다. */
+  --card: color-mix(in srgb, var(--bg-dark) 55%, #2d3a54);
+  --card-2: color-mix(in srgb, var(--bg-dark) 20%, #373b44);
+  --card-shadow: 0 18px 48px rgba(2, 8, 24, .25);
+}
+.lnd[data-bg="light"], .lnd [data-bg="light"] {
+  --sec-bg: var(--bg-light);
+  --paper: #101828;
+  --card: #ffffff;
+  --card-2: color-mix(in srgb, var(--bg-light) 45%, #ffffff);
+  --card-shadow: 0 12px 30px rgba(23, 32, 56, .10);
+}
+/* 두 모드 공통 파생 — 글자와 선은 --paper 와 --sec-bg **사이**에서 뽑는다.
+   그래서 배경 키컬러만 바꿔도 대비가 유지된다. 선택자 특정도가 위 두 블록과 같으므로
+   이 블록이 먼저 와야 한다(같은 프로퍼티를 다투지는 않지만 순서를 명시해 둔다). */
+.lnd[data-bg], .lnd [data-bg] {
+  /* color 를 여기서 **다시 선언**해야 한다. 루트의 color 는 루트의 --paper 로 이미 계산돼
+     자손에게 그 결과값이 상속되므로, 섹션이 --paper 만 바꿔도 글자색은 안 바뀐다
+     (라이트 섹션에 흰 글자가 남아 안 보였다). */
+  color: var(--paper);
+  --body: color-mix(in srgb, var(--paper) 78%, var(--sec-bg));
+  --muted: color-mix(in srgb, var(--paper) 66%, var(--sec-bg));
+  --line: color-mix(in srgb, var(--paper) 20%, transparent);
+  /* 같은 모드가 연달아 오면 이 값으로 한 칸씩 교대한다(지브라) */
+  --sec-bg-alt: color-mix(in srgb, var(--sec-bg) 94%, var(--paper));
+}
+/* 섹션이 자기 배경을 칠한다. 제외 두 곳:
+   · accent-zone(세션·타임테이블) — 루트가 칠해야 키컬러 전환이 보인다
+   · 히어로 — 자기 규칙에서 var(--sec-bg) 위에 원형 장식을 얹는다(여기서 덮으면 장식이 사라진다)
+
+   background 를 섹션에 직접 주면 **가운데 칼럼만 칠해진다** — .section 은
+   width: min(100% - 36px, --max) 로 좁은 박스라 좌우에 루트 색이 그대로 남는다(실측).
+   그래서 화면 폭을 덮는 가짜 요소를 뒤에 깐다(옛 .dark-zone 지브라가 쓰던 기법 그대로).
+   루트에 overflow-x: hidden 이 있어 50vw 트릭이 가로 스크롤을 만들지 않는다. */
+.lnd .section[data-bg]:not(.accent-zone), .lnd .intro[data-bg] { position: relative; }
+.lnd .section[data-bg]:not(.accent-zone)::before,
+.lnd .intro[data-bg]::before {
+  content: ""; position: absolute; z-index: 0; top: 0; bottom: 0;
+  left: calc(50% - 50vw); right: calc(50% - 50vw);
+  background: var(--sec-bg);
+}
+.lnd .section[data-bg] > *, .lnd .intro[data-bg] > * { position: relative; z-index: 1; }
+/* 지브라는 위 규칙보다 **특정도가 같거나 높고 뒤에** 와야 한다 —
+   .lnd [data-band] 만으로는 위 규칙(:not 이 특정도를 올린다)에 져서 조용히 안 칠해진다.
+   (이 블록 안에서는 백틱을 쓰지 않는다 — 이 파일 전체가 템플릿 리터럴이라 문자열이 끊긴다.) */
+.lnd .section[data-band="alt"]:not(.accent-zone)::before,
+.lnd .intro[data-band="alt"]::before { background: var(--sec-bg-alt); }
 .lnd *, .lnd *::before, .lnd *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 /* ── 호스트 전역 CSS 방어 ──
@@ -110,15 +190,19 @@ export const LANDING_CSS = `
   min-height: calc(100svh - var(--lnd-topinset, 0px));
   display: grid; place-items: center;
   overflow: hidden;
+  /* 바탕은 섹션 모드가 정하고, 그 위의 은은한 원형 장식만 유지한다.
+     (모드 규칙으로 background 를 통째로 덮으면 이 장식이 조용히 사라진다 — 실제로 그랬다.) */
   background:
-    radial-gradient(circle at 50% 45%, rgba(7, 12, 26, .15) 0 20%, transparent 21%),
-    linear-gradient(180deg, #05070c 0%, #05070d 100%);
+    radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--paper) 6%, transparent) 0 20%, transparent 21%),
+    var(--sec-bg);
 }
 .lnd[data-legacy-iframe] .hero { min-height: var(--lnd-vh, 720px); }
 /* 히어로 이미지·영상이 있으면 기본 장식(키컬러 링·그라데이션)을 **아예 그리지 않는다**.
    덮어씌우는 방식이면 CSS 는 즉시 그려지고 이미지는 나중에 도착하므로,
    첫 로드에 기본 화면이 보였다가 이미지로 바뀌는 게 그대로 눈에 띈다. */
-.lnd .hero.hero-has-media { background: var(--ink); }
+/* 미디어 히어로는 이미지와 스크림이 어둡다 — 섹션 모드가 라이트여도 글자는 밝아야 읽힌다.
+   (모드를 무시하는 유일한 곳이고, 편집 UI 에 그 사실을 적어 둔다.) */
+.lnd .hero.hero-has-media { background: var(--sec-bg); --paper: #f6f8ff; }
 .lnd .hero.hero-has-media::before,
 .lnd .hero.hero-has-media::after { content: none; }
 .lnd .hero::before,
@@ -173,7 +257,7 @@ export const LANDING_CSS = `
 }
 .lnd .hero-meta {
   position: absolute; left: 0; bottom: 54px;
-  color: #fff; font-size: clamp(16px, 2vw, 21px); font-weight: 700; line-height: 1.5;
+  color: var(--paper); font-size: clamp(16px, 2vw, 21px); font-weight: 700; line-height: 1.5;
   letter-spacing: -.01em; white-space: pre-line; font-variant-numeric: tabular-nums;
 }
 .lnd .hero-cta {
@@ -199,7 +283,7 @@ export const LANDING_CSS = `
 .lnd .intro {
   position: relative; min-height: 560px;
   display: grid; place-items: center;
-  padding: 100px 24px; background: #000; text-align: center;
+  padding: 100px 24px; text-align: center;
 }
 .lnd .intro-copy { max-width: 760px; }
 .lnd .intro h2 {
@@ -207,14 +291,15 @@ export const LANDING_CSS = `
   white-space: pre-line; text-wrap: balance; word-break: keep-all;
 }
 .lnd .intro p {
-  margin: 44px auto 0; color: #c3cad6;
+  margin: 44px auto 0; color: var(--body);
   font-size: clamp(15px, 1.8vw, 21px); line-height: 1.85; letter-spacing: -.02em;
   white-space: pre-line; word-break: keep-all;
 }
 .lnd .scroll-cue {
   position: absolute; left: 50%; bottom: 44px;
   width: 22px; height: 22px;
-  border-right: 2px solid rgba(255, 255, 255, .6); border-bottom: 2px solid rgba(255, 255, 255, .6);
+  border-right: 2px solid color-mix(in srgb, var(--paper) 60%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--paper) 60%, transparent);
   transform: translateX(-50%) rotate(45deg);
 }
 
@@ -243,7 +328,15 @@ export const LANDING_CSS = `
   box-shadow: var(--shadow);
   transform: translateZ(0);
   /* article/button 겸용 — 버튼일 때 기본 스타일 리셋 */
-  display: block; text-align: left; color: inherit; font: inherit; border: 0; padding: 0; appearance: none;
+  display: block; text-align: left; font: inherit; border: 0; padding: 0; appearance: none;
+  /* 카드 면은 **섹션 모드와 무관하게 어둡다**(위 고정 그라디언트 + ::after 하단 스크림).
+     그래서 글자도 항상 밝아야 한다. 예전엔 color: inherit 였는데, 세션 구간을 화이트로
+     두면 상속된 검은 글자가 어두운 카드에 얹혀 대비 1.02 로 사라졌다(실측).
+     이 카드 안에서만 다크 토큰을 못박는다 — 사진 위 텍스트라 판단 기준이 카드 면이다. */
+  --paper: #f6f8ff;
+  --body: #c3cad6;
+  --muted: #abb5c7;
+  color: var(--paper);
 }
 .lnd .session-card.is-clickable { cursor: pointer; transition: transform .22s ease, box-shadow .22s ease; }
 .lnd .session-card.is-clickable:hover { transform: translateY(-4px); box-shadow: 0 26px 54px rgba(0, 0, 0, .5); }
@@ -264,7 +357,8 @@ export const LANDING_CSS = `
 }
 .lnd .session-card h3 {
   margin: 12px 0 20px;
-  font-size: 17px; line-height: 1.35; letter-spacing: -.03em; word-break: keep-all;
+  /* 위와 같은 이유로 명시. 사진 위 17px 이라 800 은 무거워 750 으로 둔다. */
+  font-size: 17px; font-weight: 750; line-height: 1.35; letter-spacing: -.03em; word-break: keep-all;
 }
 /* 이름·회사(왼쪽) 과 '자세히 보기'(오른쪽 하단) 를 한 줄에 — baseline 이 아니라 flex-end 로
    맞춘다. 회사명이 있으면 왼쪽이 두 줄이 되는데, 그때 링크가 첫 줄에 붙어 뜨지 않게. */
@@ -298,7 +392,10 @@ export const LANDING_CSS = `
   background: none; min-height: 0; width: auto; margin: 0; overflow: visible;
   pointer-events: none;
 }
-.lnd.lnd-toc-layer.on-accent { background: none; }
+.lnd.lnd-toc-layer.on-accent,
+/* 모드 미러링(attachTocSpy)이 이 레이어에 data-bg 를 걸므로, 모드 배경 규칙이
+   화면 전체를 덮지 않도록 여기서도 못박는다. */
+.lnd.lnd-toc-layer[data-bg] { background: none; }
 .lnd.lnd-toc-layer > * { pointer-events: auto; }
 
 /* ── 세션 상세 팝업 (글래스모피즘) — 뷰포트 중앙 고정 ── */
@@ -513,15 +610,10 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 /* 반전된 휴식 행에서도 로고가 보이게 흰 판을 깐다(투명 PNG 가 대부분). */
 .lnd .is-break .schedule-logo { background: #fff; border-radius: 4px; padding: 2px 4px; }
 
-/* ── 다크 존(Programs~FAQ) — 지브라 구분 ── */
-.lnd .dark-zone { position: relative; background: var(--ink); }
-.lnd .dark-zone .section { position: relative; }
-.lnd .dark-zone .section > * { position: relative; z-index: 1; }
-.lnd .dark-zone .section:nth-of-type(even)::before {
-  content: ""; position: absolute; top: 0; bottom: 0;
-  left: calc(50% - 50vw); right: calc(50% - 50vw);
-  background: var(--ink-soft);
-}
+/* 섹션은 자기 배경을 칠하므로 래퍼가 필요 없다(옛 .dark-zone 제거).
+   지브라는 nth-of-type 이 아니라 mount 가 계산한 data-band 로 건다 — 라이트/다크가 섞이면
+   순서 기반 교대는 무작위로 보인다. 같은 모드가 연달아 올 때만 한 칸씩 톤을 낮춘다. */
+.lnd .section { position: relative; }
 
 /* ── 이런 분들께 추천합니다 ── (dark-zone 안 · Join 바로 위)
    카드 그리드가 아니라 **체크 목록**이다. 이 섹션의 일은 읽히는 것이 아니라 훑으면서
@@ -532,8 +624,8 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 .lnd .audience-item {
   display: flex; align-items: flex-start; gap: 13px;
   padding: 18px 20px; border-radius: 8px;
-  background: rgba(24, 31, 45, .94);
-  box-shadow: 0 18px 48px rgba(2, 8, 24, .25);
+  background: var(--card);
+  box-shadow: var(--card-shadow);
 }
 /* 체크 표시 — 아이콘을 비웠을 때의 기본. 키컬러 판 위에 놓아 목록의 리듬을 만든다. */
 .lnd .audience-mark {
@@ -548,8 +640,8 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 .lnd .audience-body p { margin: 5px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted); white-space: pre-line; word-break: keep-all; }
 .lnd .program-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .lnd .program-card, .lnd .benefit-card, .lnd .join-step {
-  border-radius: 8px; background: rgba(24, 31, 45, .94);
-  box-shadow: 0 18px 48px rgba(2, 8, 24, .25);
+  border-radius: 8px; background: var(--card);
+  box-shadow: var(--card-shadow);
 }
 .lnd .program-card { min-height: 142px; padding: 24px; }
 .lnd .program-heading { display: flex; align-items: center; gap: 12px; }
@@ -558,9 +650,17 @@ ${sessionLogoCss(".lnd .schedule-logo")}
   background: var(--primary); color: var(--on-primary);
   font-size: 10px; font-weight: 900; letter-spacing: -.02em;
 }
-.lnd .program-card h3, .lnd .benefit-card h3, .lnd .join-step h3 { font-size: 19px; letter-spacing: -.03em; word-break: keep-all; }
+/* font-weight 를 **명시**한다. 이 앱 안에서는 Tailwind preflight 가 h1~h6 을
+   font-weight: inherit 로 두므로 .lnd 의 400 을 물려받아 얇게 나오고, 임베드된 외부
+   사이트(아임웹)에는 preflight 가 없어 UA 기본 bold(700)로 나온다 — 같은 페이지가
+   환경에 따라 다른 굵기로 렌더됐다(실측: 우리 앱 400 / 섹션 제목 900).
+   참여 방법 단계 제목(사전 등록·입장 확인·라이브 시청)이 눈에 걸려야 하는 자리라
+   세 카드 계열을 같은 800 으로 맞춘다 — 한쪽만 굵게 하면 형제 카드가 어긋난다. */
+.lnd .program-card h3, .lnd .benefit-card h3, .lnd .join-step h3 {
+  font-size: 19px; font-weight: 800; letter-spacing: -.03em; word-break: keep-all;
+}
 .lnd .program-card p, .lnd .benefit-card p, .lnd .join-step p {
-  margin: 14px 0 0; color: #b7c0d0;
+  margin: 14px 0 0; color: var(--body);
   font-size: 13px; line-height: 1.7; white-space: pre-line; word-break: keep-all;
 }
 .lnd .benefit-grid, .lnd .join-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
@@ -586,25 +686,25 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 .lnd .faq-tabs { margin: -8px 0 26px; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
 .lnd .faq-tab {
   min-height: 44px; padding: 0 18px;
-  border: 1px solid rgba(255, 255, 255, .2); border-radius: 7px; background: transparent;
+  border: 1px solid var(--line); border-radius: 7px; background: transparent;
   cursor: pointer; font-weight: 750;
   transition: background .2s ease, border-color .2s ease, color .2s ease;
 }
 .lnd .faq-tab[aria-pressed="true"] { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
 .lnd .faq-list { display: grid; gap: 12px; }
-.lnd .faq-item { border-radius: 8px; background: rgba(45, 49, 57, .96); overflow: hidden; }
+.lnd .faq-item { border-radius: 8px; background: var(--card-2); overflow: hidden; }
 .lnd .faq-item summary {
   min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 20px;
   padding: 0 18px; cursor: pointer; list-style: none;
   font-size: 14px; font-weight: 750; word-break: keep-all;
 }
 .lnd .faq-item summary::-webkit-details-marker { display: none; }
-.lnd .faq-item summary::after { content: "+"; color: #b9c1cf; font-size: 21px; font-weight: 400; }
+.lnd .faq-item summary::after { content: "+"; color: var(--muted); font-size: 21px; font-weight: 400; }
 .lnd .faq-item[open] summary::after { content: "\\2212"; }
 /* 답 본문은 래퍼로 감싼다 — 아코디언 모션이 높이를 재는 대상(data-acc-body).
    패딩을 p 가 아니라 여기 두면 height 0 에서 패딩이 남아 닫혀도 틈이 보이는 일이 없다. */
 .lnd .faq-body { overflow: hidden; }
-.lnd .faq-item p { margin: 0; padding: 0 18px 20px; color: #c0c7d2; font-size: 13px; white-space: pre-line; }
+.lnd .faq-item p { margin: 0; padding: 0 18px 20px; color: var(--body); font-size: 13px; white-space: pre-line; }
 
 /* ── 스크롤 리빌(transform 전용 — JS 미실행에서도 콘텐츠 가시) ── */
 .lnd .rv { transform: translateY(12px); transition: transform .5s cubic-bezier(.22, .7, .2, 1); }

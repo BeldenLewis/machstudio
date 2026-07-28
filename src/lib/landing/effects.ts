@@ -139,11 +139,17 @@ function tocIdMatches(attr: string | null, sectionId: string): boolean {
  * 왼쪽 목차 스크롤 스파이 — 지금 보이는 섹션의 링크에 `aria-current="true"`.
  * 임베드처럼 목차가 없는 경우엔 tocEl 로 null 이 들어오고 아무것도 하지 않는다.
  * sectionIds 는 sectionId() 를 통과한 실제 DOM id 목록(목차 순서와 같아야 한다).
+ *
+ * mirrorBgTo: 지금 보이는 섹션의 배경 모드(data-bg)를 함께 걸어 줄 요소. 목차는 body 직계
+ * 레이어로 포털되어 섹션의 후손이 아니므로 모드 토큰을 못 받는다 — 그대로 두면 라이트 섹션
+ * 위에서 밝은 회색 글자가 남아 **목차가 보이지 않는다**(실제로 그랬다).
+ * 세션·타임테이블처럼 data-bg 가 없는 섹션에서는 루트 모드로 떨어진다.
  */
 export function attachTocSpy(
   root: HTMLElement,
   tocEl: HTMLElement | null,
   sectionIds: string[],
+  mirrorBgTo?: HTMLElement | null,
 ): () => void {
   if (!tocEl || !hasIO()) return noop;
   const sections = sectionIds
@@ -152,6 +158,7 @@ export function attachTocSpy(
   if (!sections.length) return noop;
 
   const links = Array.from(tocEl.querySelectorAll<HTMLElement>("[data-toc-id]"));
+  const byId = new Map(sections.map((el) => [el.id, el]));
   let active: string | null = null;
 
   const apply = () => {
@@ -160,7 +167,15 @@ export function attachTocSpy(
       if (on) link.setAttribute("aria-current", "true");
       else link.removeAttribute("aria-current");
     }
+    if (mirrorBgTo) {
+      const el = active ? byId.get(active) : null;
+      mirrorBgTo.setAttribute(
+        "data-bg",
+        el?.getAttribute("data-bg") || root.getAttribute("data-bg") || "dark",
+      );
+    }
   };
+  apply(); // 첫 화면(교차 이벤트 전)에도 목차 색이 맞아야 한다
 
   const io = new IntersectionObserver(
     (entries) => {
