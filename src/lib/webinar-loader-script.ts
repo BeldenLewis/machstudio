@@ -845,6 +845,7 @@ ${ATTRIBUTION_CORE_JS}
   var lockSavedY = 0;
   var scrollLocked = false;
   var modalKeyHandler = null;
+  var doneKeyHandler = null;
   var modalOpener = null;
 
   function lockPageScroll() {
@@ -886,6 +887,20 @@ ${ATTRIBUTION_CORE_JS}
     if (modalOpener && document.contains(modalOpener)) {
       try { modalOpener.focus(); } catch (e) {}
     }
+    modalOpener = null;
+  }
+
+  /* 완료 팝업은 폼 모달의 다음 화면이다. 폼을 숨긴 채 키 리스너를 남기면 Tab/Escape 가
+     보이지 않는 폼으로 새어 나가므로, 완료 팝업이 열리기 전에 DOM과 캡처 리스너를 함께 제거한다.
+     스크롤 잠금은 완료 팝업이 그대로 이어받아 닫을 때 한 번만 해제한다. */
+  function releaseFormModalForCompletion() {
+    var overlay = document.getElementById("mw-form-modal");
+    if (!overlay) return;
+    if (modalKeyHandler) {
+      document.removeEventListener("keydown", modalKeyHandler, true);
+      modalKeyHandler = null;
+    }
+    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
     modalOpener = null;
   }
 
@@ -954,6 +969,8 @@ ${ATTRIBUTION_CORE_JS}
     var successCta = form.successCta || {};
     var successCtaUrl = safeHttpCtaUrl(successCta.url);
     var showCta = successCta.enabled === true && !!String(successCta.label || "").trim() && !!successCtaUrl;
+    releaseFormModalForCompletion();
+    lockPageScroll();
     var overlay = el("div", "mw-modal-overlay mw-reset");
     overlay.style.zIndex = "999955";
     overlay.setAttribute("role", "dialog");
@@ -964,9 +981,12 @@ ${ATTRIBUTION_CORE_JS}
     card.appendChild(el("p", "mw-done-title", "사전등록이 완료됐어요"));
     card.appendChild(el("p", "mw-done-desc", message));
     function close() {
+      if (doneKeyHandler) {
+        document.removeEventListener("keydown", doneKeyHandler, true);
+        doneKeyHandler = null;
+      }
       try { overlay.remove(); } catch (e) {}
-      /* 폼이 모달 안에 있었다면 함께 닫는다 — 비활성화된 폼만 남겨 두면 막힌 화면처럼 보인다. */
-      try { if (document.getElementById("mw-form-modal")) closeFormModal(); } catch (e) {}
+      unlockPageScroll();
     }
     var focusTarget;
     if (showCta) {
@@ -993,6 +1013,26 @@ ${ATTRIBUTION_CORE_JS}
     overlay.addEventListener("click", function(ev) { if (ev.target === overlay) close(); });
     overlay.appendChild(card);
     document.body.appendChild(overlay);
+    doneKeyHandler = function(ev) {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        close();
+        return;
+      }
+      if (ev.key !== "Tab") return;
+      var items = Array.prototype.slice.call(card.querySelectorAll(FOCUSABLE)).filter(function(node) {
+        return !node.disabled;
+      });
+      if (!items.length) { ev.preventDefault(); return; }
+      var first = items[0], last = items[items.length - 1];
+      if (ev.shiftKey && (document.activeElement === first || !card.contains(document.activeElement))) {
+        ev.preventDefault(); last.focus();
+      } else if (!ev.shiftKey && (document.activeElement === last || !card.contains(document.activeElement))) {
+        ev.preventDefault(); first.focus();
+      }
+    };
+    document.addEventListener("keydown", doneKeyHandler, true);
     try { focusTarget.focus(); } catch (e) {}
   }
 
