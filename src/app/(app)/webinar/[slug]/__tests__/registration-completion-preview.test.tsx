@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
-import { RegistrationFormPreview } from "../RegistrationFormTab";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import RegistrationFormTab, { RegistrationFormPreview } from "../RegistrationFormTab";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -32,6 +32,33 @@ function renderPreview(successCta: { enabled: boolean; label: string; url: strin
   return host;
 }
 
+function renderEditor() {
+  host = document.createElement("div");
+  document.body.appendChild(host);
+  root = createRoot(host);
+  act(() => {
+    root?.render(
+      <RegistrationFormTab
+        webinar={{
+          id: "webinar-editor-test",
+          slug: "editor-test",
+          config: {},
+          liveStartAt: "2026-08-01T01:00:00.000Z",
+          signupDeadline: "2026-08-01T00:00:00.000Z",
+        }}
+        onSilentUpdate={vi.fn()}
+      />,
+    );
+  });
+  return host;
+}
+
+function changeInput(input: HTMLInputElement, value: string) {
+  const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  nativeSetter?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 function button(host: HTMLElement, label: string) {
   const target = Array.from(host.querySelectorAll("button")).find((item) => item.textContent === label);
   expect(target, `button “${label}”`).toBeTruthy();
@@ -43,6 +70,7 @@ afterEach(() => {
   host?.remove();
   root = null;
   host = null;
+  vi.unstubAllGlobals();
 });
 
 describe("등록 완료 미리보기", () => {
@@ -75,5 +103,38 @@ describe("등록 완료 미리보기", () => {
     act(() => button(view, "완료").click());
 
     expect(view.querySelector(".rp-submit")).toBeNull();
+  });
+});
+
+describe("등록 완료 CTA 자동저장", () => {
+  it("편집한 CTA를 기존 디바운스 뒤에 다듬은 PATCH payload로 저장한다", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    const editor = renderEditor();
+    const toggle = editor.querySelector<HTMLButtonElement>('[role="switch"][aria-label="등록 완료 CTA 표시"]');
+    const label = editor.querySelector<HTMLInputElement>('[aria-label="완료 CTA 버튼 문구"]');
+    const url = editor.querySelector<HTMLInputElement>('[aria-label="완료 CTA 연결 URL"]');
+
+    expect(toggle).toBeTruthy();
+    expect(label).toBeTruthy();
+    expect(url).toBeTruthy();
+
+    act(() => {
+      toggle?.click();
+      changeInput(label!, "  오픈채팅 입장  ");
+      changeInput(url!, "  https://example.com/chat  ");
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+    });
+
+    const patch = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "PATCH");
+    expect(patch).toBeTruthy();
+    const body = JSON.parse((patch![1] as RequestInit).body as string);
+    expect(body.config.registrationForm.successCta).toEqual({
+      enabled: true,
+      label: "오픈채팅 입장",
+      url: "https://example.com/chat",
+    });
   });
 });
