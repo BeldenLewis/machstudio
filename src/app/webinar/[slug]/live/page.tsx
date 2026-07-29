@@ -190,6 +190,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [entryOpenNow, setEntryOpenNow] = useState(false); // 입장 확인 창이 열렸는가 — signup 고정 상태의 "입장으로 돌아가기" 노출용
   // 함께 기다리는 사람 수 — /status 가 함께 내려준다(별도 폴러를 만들지 않는다).
   const [waitingCount, setWaitingCount] = useState<number | null>(null);
+  // 누적 사전등록자 수 — 사회적 증거 밴드용. 같은 /status 응답에 실려 온다(폴러를 늘리지 않는다).
+  const [registrantCount, setRegistrantCount] = useState<number | null>(null);
   // 채팅 상태
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -330,6 +332,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const fetchStatus = useCallback(async () => {
     const refresh = await readStatusRefresh(() => fetch(`/api/webinar/${slug}/status`));
     setWaitingCount(refresh.waitingCount);
+    setRegistrantCount(refresh.registrantCount);
     const data = refresh.data;
     if (!data) return;
     try {
@@ -640,6 +643,12 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       }).catch(() => {});
     };
     beat();
+    /**
+     * 첫 화면에서 한 번 받아 둔다. 인터벌 안에서만 부르면 사회적 증거 밴드가 **30초 뒤에**
+     * 튀어나온다 — 등록을 망설이는 순간은 그 전에 지나간다. /info 는 정적 콘텐츠만 주므로
+     * 인원 수는 여기서 온다(새 엔드포인트·새 타이머를 만들지 않는다).
+     */
+    void fetchStatus();
     const interval = setInterval(() => {
       if (document.hidden) return;
       beat();
@@ -952,6 +961,23 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     registrationForm.successCta.enabled &&
     registrationForm.successCta.label.trim() !== "" &&
     completionCtaUrl !== "";
+  /**
+   * 확인 버튼이 이동할 주소. 비면 예전처럼 모달만 닫는다.
+   * safeHttpUrl 을 거치는 이유: 어드민이 넣은 값이 그대로 location 에 들어가면 javascript: 로
+   * 스크립트를 실행시킬 수 있다(공개 면이라 입력자와 실행 대상이 다르다).
+   */
+  const completionRedirectUrl = safeHttpUrl(registrationForm.successRedirectUrl);
+  /**
+   * 미리보기에서는 실제로 나가지 않는다 — 소유자가 상태를 훑는 중에 화면이 통째로
+   * 다른 사이트로 넘어가면 돌아올 길이 없다(AGENTS.md: 새 부작용은 isPreviewUrl 가드).
+   */
+  const confirmCompletion = () => {
+    if (completionRedirectUrl && !previewMode) {
+      window.location.href = completionRedirectUrl;
+      return;
+    }
+    setRegisterDone(false);
+  };
   const inputStyle = { border: "1px solid rgba(255,255,255,0.1)", borderRadius: `calc(${radius} * 0.6)`, color: text };
   const calendarUrl = typeof webinar.config?.calendarUrl === "string" ? webinar.config.calendarUrl : "";
 
@@ -1212,6 +1238,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               registered={hasRegistration}
               live={live}
               waitingCount={waitingCount}
+              registrantCount={registrantCount}
               hasCalendar={!!calendarUrl}
               onCalendar={calendarUrl ? () => window.open(calendarUrl, "_blank", "noopener,noreferrer") : undefined}
               onShare={handleShare}
@@ -1507,7 +1534,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             )}
             <button
               type="button"
-              onClick={() => setRegisterDone(false)}
+              onClick={confirmCompletion}
               className={`${showCompletionCta ? "mt-2 bg-transparent" : "mt-6"} inline-flex h-11 w-full items-center justify-center rounded-xl px-6 text-sm font-bold`}
               style={showCompletionCta
                 ? { color: soft(70) }

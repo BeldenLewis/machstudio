@@ -49,7 +49,19 @@ export interface WebinarLinkCtaConfig {
 
 export interface WebinarWaitingFollowUpConfig {
   enabled: boolean;
+  /**
+   * 카드 제목. 형제인 "이 웨비나는" 패널에는 제목이 있는데 이 카드만 없어서 본문 덩어리로 보였다.
+   * 빈 문자열이면 제목 줄을 아예 그리지 않는다 — 기존 웨비나의 화면이 바뀌지 않게(기본값 없음).
+   */
+  title: string;
+  /** 제목 아래 안내 문단. 줄바꿈을 보존해 렌더한다. */
   text: string;
+  /**
+   * 나열할 항목. text 안에 줄바꿈으로 넣던 목록을 행 단위로 분리한 것 —
+   * 한 덩어리 텍스트일 때는 항목이 나열로 안 읽혀 정렬에만 기대야 했다.
+   * 비어 있으면 목록을 그리지 않는다(기존 웨비나는 text 만으로 그대로 렌더된다).
+   */
+  items: string[];
   ctaLabel: string;
   ctaUrl: string;
 }
@@ -66,6 +78,13 @@ export interface WebinarRegistrationFormConfig {
   marketingDefaultChecked: boolean;
   submitLabel: string;
   successCta: WebinarLinkCtaConfig;
+  /**
+   * 완료 모달의 **확인 버튼이 이동할 주소**. 비면 그냥 모달을 닫는다(기존 동작).
+   *
+   * successCta 와 다른 자리다 — 그쪽은 "덤으로 하나 더" 라 새 탭으로 열고 안 눌러도 그만이지만,
+   * 이 값은 등록 다음 걸음을 아예 다른 페이지로 넘기는 것이라 같은 탭에서 이동한다.
+   */
+  successRedirectUrl: string;
 }
 
 const FIELD_TYPES: readonly WebinarFieldType[] = ["text", "email", "tel", "select", "checkbox", "multiple"];
@@ -206,7 +225,12 @@ export function normalizeLivePageConfig(config: unknown): LivePageConfig {
       notify: bool(w.notify, true),
       followUp: {
         enabled: bool(followUp.enabled, false),
+        title: typeof followUp.title === "string" ? followUp.title : "",
         text: typeof followUp.text === "string" ? followUp.text : "",
+        // 빈 줄은 버린다 — 어드민이 행을 추가해 두고 안 채우면 목록에 빈 칸이 생긴다.
+        items: Array.isArray(followUp.items)
+          ? (followUp.items as unknown[]).map((v) => (typeof v === "string" ? v.trim() : "")).filter(Boolean)
+          : [],
         ctaLabel: typeof followUp.ctaLabel === "string" ? followUp.ctaLabel : "",
         ctaUrl: typeof followUp.ctaUrl === "string" ? followUp.ctaUrl : "",
       },
@@ -555,5 +579,6 @@ export function normalizeRegistrationForm(
       label: typeof successCtaRaw.label === "string" ? successCtaRaw.label : "",
       url: typeof successCtaRaw.url === "string" ? successCtaRaw.url : "",
     },
+    successRedirectUrl: typeof raw?.successRedirectUrl === "string" ? raw.successRedirectUrl : "",
   };
 }

@@ -37,6 +37,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         },
       });
 
+  /**
+   * 사회적 증거용 **누적 사전등록자 수**. 위 waitingCount(지금 대기 중인 인원, 5분 프레즌스)와
+   * 다른 값이다 — 대기 화면의 "N명이 함께 기다려요" 는 등록을 망설이는 사람에게 보여 주는
+   * 숫자라, 지금 접속 중인 몇 명이 아니라 **여태 등록한 총원**이어야 설득력이 있다.
+   *
+   * 이 라우트에 얹는 이유: 라이브 전 폴러는 여기 하나뿐이다(30초). 새 엔드포인트를 만들면
+   * 폴러가 하나 더 생긴다 — 뷰어 폴링은 창구를 늘리지 않는다는 규칙(IA §10).
+   */
+  const registrantCount = await prisma.webinarRegistration.count({ where: { webinarId: webinar.id } });
+
   return NextResponse.json(
     {
       status: statusInfo.status,
@@ -44,6 +54,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       canRegister: statusInfo.canRegister,
       serverNow: new Date().toISOString(),
       waitingCount,
+      registrantCount,
     },
     { headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" } },
   );

@@ -20,7 +20,7 @@ const webinar = {
 
 function renderWaiting(
   config: Record<string, unknown>,
-  waitingCount = 2,
+  registrantCount = 2,
   actions: { hasCalendar?: boolean; onCalendar?: () => void } = {},
 ) {
   host = document.createElement("div");
@@ -36,7 +36,7 @@ function renderWaiting(
         targetIso="2026-08-02T01:00:00.000Z"
         serverNowMs={Date.parse("2026-08-01T01:00:00.000Z")}
         live={normalizeLivePageConfig(config)}
-        waitingCount={waitingCount}
+        registrantCount={registrantCount}
         hasCalendar={actions.hasCalendar}
         onCalendar={actions.onCalendar}
       />,
@@ -105,7 +105,9 @@ describe("대기 안내 CTA 편집", () => {
     const body = JSON.parse((patch![1] as RequestInit).body as string);
     expect(body.config.livePage.waiting.followUp).toEqual({
       enabled: true,
+      title: "",
       text: "",
+      items: [],
       ctaLabel: "  행사 안내 보기  ",
       ctaUrl: "https://example.com/guide",
     });
@@ -168,15 +170,32 @@ describe("PreLiveWaiting 안내 CTA", () => {
     expect(css).toContain("background:var(--card)");
     expect(css).toContain("border-radius:var(--radius)");
     expect(css).toContain("box-shadow:var(--card-shadow)");
-    expect(getComputedStyle(card).padding).toBe("24px");
+    // 좌우는 형제 패널과 같은 24px, 위아래만 조금 좁다 — 이 카드는 제목·목록·버튼이 쌓여
+    // 세로가 길어서 같은 값이면 아래가 떠 보인다.
+    expect(getComputedStyle(card).padding).toBe("22px 24px");
   });
 
-  it("인원 밴드가 켜져 있고 현재 대기 인원이 2명이면 실제 밴드를 표시한다", () => {
+  /**
+   * 밴드가 쓰는 값은 **누적 사전등록자 수**다(지금 접속 중인 인원이 아니라) — 등록을 망설이는
+   * 사람에게 보여 주는 숫자라 여태 몇 명이 등록했는지가 설득력이 있다.
+   */
+  it("인원 밴드가 켜져 있고 사전등록자가 2명이면 겹친 프로필과 함께 표시한다", () => {
     const view = renderWaiting({
       livePage: { waiting: { social: true } },
     }, 2);
 
-    expect(view.querySelector(".plw-together")?.textContent).toContain("2명이 함께 기다려요");
+    const band = view.querySelector(".plw-together");
+    expect(band?.textContent).toContain("2명이 사전등록했어요");
+    // 원은 개수를 세는 장식이 아니라 고정 4칸 — 실제 수는 문장이 말한다.
+    expect(band?.querySelectorAll(".plw-avatars span")).toHaveLength(4);
+    // 장식이라 스크린리더에서 감춘다
+    expect(band?.querySelector(".plw-avatars")?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("밴드는 이 웨비나는 카드의 마지막 줄에 놓인다", () => {
+    const view = renderWaiting({ livePage: { waiting: { social: true } } }, 9);
+    const panel = view.querySelector(".plw-panel");
+    expect(panel?.lastElementChild?.classList.contains("plw-together")).toBe(true);
   });
 
   it("인원 밴드를 꺼도 독립 안내문은 표시한다", () => {
@@ -188,10 +207,10 @@ describe("PreLiveWaiting 안내 CTA", () => {
     expect(view.querySelector(".plw-follow-up-card")?.textContent).toContain("자료는 종료 후 보내드려요.");
   });
 
-  it.each([0, 1])("대기 인원이 %i명이면 밴드는 숨기고 안내문은 남긴다", (waitingCount) => {
+  it.each([0, 1])("사전등록자가 %i명이면 밴드는 숨기고 안내문은 남긴다", (registrantCount) => {
     const view = renderWaiting({
       livePage: { waiting: { followUp: { enabled: true, text: "잠시 후 시작합니다." } } },
-    }, waitingCount);
+    }, registrantCount);
 
     expect(view.querySelector(".plw-together")).toBeNull();
     expect(view.querySelector(".plw-follow-up-card")?.textContent).toContain("잠시 후 시작합니다.");

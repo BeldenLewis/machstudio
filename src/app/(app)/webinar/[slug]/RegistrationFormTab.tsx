@@ -541,6 +541,9 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
   const [privacyDefaultChecked, setPrivacyDefaultChecked] = useState(initial.privacyDefaultChecked);
   const [marketingDefaultChecked, setMarketingDefaultChecked] = useState(initial.marketingDefaultChecked);
   const [successCta, setSuccessCta] = useState(initial.successCta);
+  /** 확인 버튼이 이동할 주소 — CTA(새 탭 부가 링크)와 다른 자리다. */
+  const [successRedirectUrl, setSuccessRedirectUrl] = useState(initial.successRedirectUrl);
+  const successRedirectInvalid = successRedirectUrl.trim() !== "" && !safeHttpUrl(successRedirectUrl);
   const successCtaUrl = safeHttpUrl(successCta.url);
   const successCtaUrlInvalid = successCta.url.trim() !== "" && !successCtaUrl;
 
@@ -609,6 +612,7 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
                 label: successCta.label.trim(),
                 url: successCta.url.trim(),
               },
+              successRedirectUrl: successRedirectUrl.trim(),
             },
           },
         }),
@@ -619,7 +623,7 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
     } catch { return false; }
   };
   const { state: saveState, retry } = useAutosave(
-    { fields, privacyText, marketingText, privacyBody, marketingBody, privacyDefaultChecked, marketingDefaultChecked, submitLabel, successCta, deadline, liveReg },
+    { fields, privacyText, marketingText, privacyBody, marketingBody, privacyDefaultChecked, marketingDefaultChecked, submitLabel, successCta, successRedirectUrl, deadline, liveReg },
     save,
   );
   // 표시는 껍데기 한 곳에서 그린다(만들기 화면당 1개) — 저장 경로는 그대로 각자.
@@ -807,6 +811,26 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
               placeholder="https://..."
             />
             {successCtaUrlInvalid && (
+              <p className="text-[11px] text-destructive">http:// 또는 https:// 주소를 입력해 주세요.</p>
+            )}
+          </div>
+
+          {/* 확인 버튼의 목적지 — 위 CTA 와 다른 물건이다. CTA 는 "덤으로 하나 더" 라 새 탭으로
+              열지만, 이건 등록 다음 걸음을 넘기는 것이라 같은 탭에서 이동한다. */}
+          <div className="mt-3 space-y-2 rounded-2xl bg-secondary/20 p-4">
+            <p className="text-sm font-medium">확인 누르면 이동할 주소</p>
+            <p className="text-[11px] leading-relaxed text-muted-foreground/70">
+              비워 두면 확인을 눌렀을 때 모달만 닫혀요. 채우면 같은 탭에서 그 주소로 이동해요.
+            </p>
+            <input
+              aria-label="등록 완료 후 이동할 URL"
+              type="url"
+              value={successRedirectUrl}
+              onChange={(e) => setSuccessRedirectUrl(e.target.value)}
+              className={successRedirectInvalid ? FIELD_CLS_DANGER : inputCls}
+              placeholder="https://..."
+            />
+            {successRedirectInvalid && (
               <p className="text-[11px] text-destructive">http:// 또는 https:// 주소를 입력해 주세요.</p>
             )}
           </div>

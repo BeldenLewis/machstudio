@@ -1,6 +1,9 @@
 export interface StatusRefreshResult {
   data: Record<string, unknown> | null;
+  /** 지금 대기 중인 인원(5분 프레즌스). 라이브 중에는 서버가 null 을 준다. */
   waitingCount: number | null;
+  /** 누적 사전등록자 수 — 사회적 증거 밴드가 쓰는 값. waitingCount 와 다른 수다. */
+  registrantCount: number | null;
 }
 
 const STATUS_VALUES = new Set(["upcoming", "registration", "live", "ended"]);
@@ -25,15 +28,14 @@ export async function readStatusRefresh(
 ): Promise<StatusRefreshResult> {
   try {
     const response = await request();
-    if (!response.ok) return { data: null, waitingCount: null };
+    if (!response.ok) return { data: null, waitingCount: null, registrantCount: null };
     const value: unknown = await response.json();
     const data = readStatusData(value);
-    const waitingCount =
-      data && (typeof data.waitingCount === "number" || data.waitingCount === null)
-        ? data.waitingCount
-        : null;
-    return { data, waitingCount };
+    // 인원 값은 응답 안에서도 number/null 계약을 따로 지킨 경우에만 신뢰한다.
+    const count = (key: "waitingCount" | "registrantCount") =>
+      data && (typeof data[key] === "number" || data[key] === null) ? (data[key] as number | null) : null;
+    return { data, waitingCount: count("waitingCount"), registrantCount: count("registrantCount") };
   } catch {
-    return { data: null, waitingCount: null };
+    return { data: null, waitingCount: null, registrantCount: null };
   }
 }

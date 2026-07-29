@@ -218,6 +218,17 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
   const [nextWeb, setNextWeb] = useState<LiveNextWebinar>(() => normalizeLivePageConfig(webinar.config).nextWebinar ?? { title: "", when: "", url: "" });
   type WaitingToggleKey = "agenda" | "social" | "calendar" | "share" | "notify";
   const setW = (k: WaitingToggleKey, v: boolean) => setScreens((s) => ({ ...s, waiting: { ...s.waiting, [k]: v } }));
+  /** 안내 항목 편집 상태 — EditableList 는 행마다 안정 키가 필요해 문자열 배열을 객체로 감싼다. */
+  const [followUpItems, setFollowUpItems] = useState<WithRowKey<{ value: string }>[]>(
+    () => withRowKeys(screens.waiting.followUp.items.map((value) => ({ value }))),
+  );
+  // 편집값 → 설정. 빈 줄은 정규화가 걸러내므로 여기서는 그대로 넘긴다.
+  useEffect(() => {
+    setFollowUp({ items: stripRowKeys(followUpItems).map((r) => r.value) });
+    // setFollowUp 은 매 렌더 새로 만들어져 의존성에 넣으면 무한 루프가 된다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [followUpItems]);
+
   const setFollowUp = (patch: Partial<LivePageConfig["waiting"]["followUp"]>) =>
     setScreens((s) => ({
       ...s,
@@ -474,6 +485,14 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                 checked={screens.waiting.followUp.enabled}
                 onChange={(enabled) => setFollowUp({ enabled })}
               />
+              {/* 제목은 선택 — 비우면 제목 줄 자체를 안 그린다(기존 웨비나 화면이 바뀌지 않게). */}
+              <input
+                aria-label="추가 카드 제목"
+                value={screens.waiting.followUp.title}
+                onChange={(e) => setFollowUp({ title: e.target.value })}
+                className={FIELD_CLS}
+                placeholder="예: 오픈채팅방에서 미리 만나요 (비우면 제목 없음)"
+              />
               <textarea
                 aria-label="대기 화면 안내 문구"
                 value={screens.waiting.followUp.text}
@@ -481,6 +500,33 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                 className={FIELD_CLS}
                 rows={3}
                 placeholder={"예: 라이브 자료는 종료 후\n등록 이메일로 보내드려요."}
+              />
+              {/* 나열 항목은 한 덩어리 텍스트가 아니라 행으로 받는다 — 문단 안에 줄바꿈으로 넣으면
+                  화면에서 목록으로 안 읽히고 정렬에만 기대야 한다. 순서가 의미 있어 드래그도 켠다. */}
+              <EditableList<WithRowKey<{ value: string }>>
+                listId="waiting-followup-items"
+                itemNoun="항목"
+                items={followUpItems}
+                onChange={setFollowUpItems}
+                rowKey={(r) => r[ROW_KEY]}
+                makeItem={() => ({ value: "", [ROW_KEY]: crypto.randomUUID() })}
+                addLabel="항목 추가"
+                reorderable
+                rowChrome="bare"
+                emptyState={
+                  <p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+                    항목을 추가하면 안내 문구 아래 체크 목록으로 표시돼요.
+                  </p>
+                }
+                renderRow={({ item, patch }) => (
+                  <input
+                    aria-label="안내 항목"
+                    className={inputCls}
+                    placeholder="예: 해외 진출 인사이트 컬럼"
+                    value={item.value}
+                    onChange={(e) => patch({ value: e.target.value })}
+                  />
+                )}
               />
               <input
                 aria-label="대기 CTA 버튼 문구"
