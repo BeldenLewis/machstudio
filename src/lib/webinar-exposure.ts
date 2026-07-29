@@ -321,13 +321,16 @@ export function buildExposureReport(input: ExposureInput): ExposureReport {
    */
   add({ ...W("waiting.notify", "시작 알림 받기", ["waiting", "entry"], "waiting", gate(live.waiting.notify, true, "")),
     ...(live.waiting.notify ? { why: "대기 화면에서는 등록자에게만 보여요(입장 확인 화면에서는 누구나)." } : {}) });
-  add(W(
-    "waiting.social",
-    "함께 기다리는 인원 밴드",
-    ["waiting"],
-    "waiting",
-    gate(live.waiting.social, true, ""),
-  ));
+  add({
+    ...W(
+      "waiting.social",
+      "함께 기다리는 인원 밴드",
+      ["waiting"],
+      "waiting",
+      gate(live.waiting.social, true, ""),
+    ),
+    ...(live.waiting.social ? { why: "현재 대기 인원이 2명 이상일 때만 보여요." } : {}),
+  });
   const followUp = live.waiting.followUp;
   const hasFollowUp =
     !!str(followUp.text) ||
@@ -335,7 +338,7 @@ export function buildExposureReport(input: ExposureInput): ExposureReport {
   add(W(
     "waiting.followUp",
     "대기 안내문 · CTA",
-    ["waiting"],
+    ["waiting", "entry"],
     "waiting",
     gate(followUp.enabled, hasFollowUp, "영역을 켰지만 안내 문구나 완성된 CTA가 없어요."),
   ));

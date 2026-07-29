@@ -120,14 +120,14 @@ export function MultiChoiceField({
         return (
           <label
             key={option}
-            className={`flex min-h-11 items-center gap-2.5 text-sm ${locked ? "opacity-40" : "cursor-pointer"}`}
+            className={`flex min-h-11 items-start gap-2.5 py-3 text-sm leading-5 ${locked ? "opacity-40" : "cursor-pointer"}`}
           >
             <input
               type="checkbox"
               checked={on}
               disabled={locked}
               onChange={() => toggle(option)}
-              className="m-0 size-[18px] shrink-0"
+              className="m-0 mt-px size-[18px] shrink-0"
               style={{ accentColor: accent }}
             />
             <span>{option}</span>
@@ -136,7 +136,7 @@ export function MultiChoiceField({
       })}
 
       {field.allowOther && (
-        <label className={`flex min-h-11 items-center gap-2.5 text-sm ${atMax && !showOther ? "opacity-40" : "cursor-pointer"}`}>
+        <label className={`flex min-h-11 items-start gap-2.5 py-3 text-sm leading-5 ${atMax && !showOther ? "opacity-40" : "cursor-pointer"}`}>
           <input
             type="checkbox"
             checked={showOther}
@@ -146,7 +146,7 @@ export function MultiChoiceField({
               // 끄면 기타로 쓴 답만 빼고 나머지 선택은 유지한다.
               if (!e.target.checked) setPicked(picked.filter((p) => options.includes(p)));
             }}
-            className="m-0 size-[18px] shrink-0"
+            className="m-0 mt-px size-[18px] shrink-0"
             style={{ accentColor: accent }}
           />
           <span>{OTHER_LABEL}</span>

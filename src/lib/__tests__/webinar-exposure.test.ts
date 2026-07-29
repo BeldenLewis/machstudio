@@ -202,7 +202,9 @@ describe("요소 — 약속만 있고 렌더처가 없는 것(broken)", () => {
 
 describe("대기 화면 인원 밴드와 안내 CTA", () => {
   it("인원 밴드는 토글 상태를 반영하고 실제 인원은 런타임 조건으로 설명한다", () => {
-    expect(row(make(), "waiting.social").state).toBe("on");
+    const social = row(make(), "waiting.social");
+    expect(social.state).toBe("on");
+    expect(social.why).toContain("현재 대기 인원이 2명 이상");
     expect(row(make({ config: { livePage: { waiting: { social: false } } } }), "waiting.social").state).toBe("off");
   });
 
@@ -218,7 +220,9 @@ describe("대기 화면 인원 밴드와 안내 CTA", () => {
         },
       },
     });
-    expect(row(on, "waiting.followUp").state).toBe("on");
+    const followUp = row(on, "waiting.followUp");
+    expect(followUp.state).toBe("on");
+    expect(followUp.surfaces).toEqual(["waiting", "entry"]);
   });
 });
 

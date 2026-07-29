@@ -80,7 +80,9 @@ describe("등록 완료 미리보기", () => {
     act(() => button(view, "완료").click());
 
     expect(view.textContent).toContain("사전등록이 완료됐어요");
-    expect(button(view, "오픈채팅 입장").type).toBe("button");
+    expect(button(view, "오픈채팅 입장").className).toContain("rp-submit");
+    expect(button(view, "닫기").className).toContain("rp-close");
+    expect(view.querySelectorAll(".rp-done button")).toHaveLength(2);
 
     act(() => button(view, "닫기").click());
 
@@ -88,21 +90,27 @@ describe("등록 완료 미리보기", () => {
     expect(view.textContent).not.toContain("사전등록이 완료됐어요");
   });
 
-  it("비어 있거나 안전하지 않은 CTA는 완료 화면에서 숨긴다", () => {
+  it("비어 있거나 안전하지 않은 CTA는 하나의 primary 확인으로 폴백하고 폼으로 돌아온다", () => {
     const view = renderPreview({ enabled: true, label: "오픈채팅 입장", url: "javascript:alert(1)" });
 
     act(() => button(view, "완료").click());
 
     expect(view.textContent).not.toContain("오픈채팅 입장");
-    expect(view.textContent).toContain("닫기");
+    expect(button(view, "확인").className).toContain("rp-submit");
+    expect(view.querySelectorAll(".rp-done button")).toHaveLength(1);
+    expect(view.querySelector(".rp-close")).toBeNull();
+
+    act(() => button(view, "확인").click());
+    expect(view.querySelector(".rp-title")?.textContent).toBe("사전 등록");
   });
 
-  it("문구가 비어 있으면 안전한 URL이 있어도 CTA를 숨긴다", () => {
+  it("문구가 비어 있으면 안전한 URL이 있어도 primary 확인으로 폴백한다", () => {
     const view = renderPreview({ enabled: true, label: "", url: "https://example.com/chat" });
 
     act(() => button(view, "완료").click());
 
-    expect(view.querySelector(".rp-submit")).toBeNull();
+    expect(button(view, "확인").className).toContain("rp-submit");
+    expect(view.querySelectorAll(".rp-done button")).toHaveLength(1);
   });
 });
 

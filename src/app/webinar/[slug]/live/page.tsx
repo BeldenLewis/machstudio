@@ -22,6 +22,7 @@ import {
   type WebinarRegistrationField,
 } from "@/lib/webinar-config";
 import { MultiChoiceField, SingleChoiceField } from "@/components/webinar/choice-fields";
+import { readStatusRefresh } from "../status-refresh";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -225,6 +226,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [registered, setRegistered] = useState(false);
   const [canRegister, setCanRegister] = useState(true); // 서버 상태머신 판정 — 마감(upcoming) 시 폼 대신 안내
   const [regModalOpen, setRegModalOpen] = useState(false); // 대기 화면의 사전등록 폼 모달
+  const [registrationOpener, setRegistrationOpener] = useState<HTMLElement | null>(null);
   const [formError, setFormError] = useState("");
   // 실시간 중복 확인 — 연락처/이메일 입력 시 디바운스 후 기존 등록 여부 표시
   const [dupCheck, setDupCheck] = useState<{ phone: boolean; email: boolean }>({ phone: false, email: false });
@@ -315,13 +317,13 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   // 라이브 전 상태 전환 감지용 경량 폴 — /status(상태만) 를 받아 view/serverNow/isTrulyLive 갱신.
   // 세션·테마·config 를 30초마다 다시 받지 않아 대기 시청자 egress 를 줄인다(정적 콘텐츠는 최초 /info 1회).
   const fetchStatus = useCallback(async () => {
+    const refresh = await readStatusRefresh(() => fetch(`/api/webinar/${slug}/status`));
+    setWaitingCount(refresh.waitingCount);
+    const data = refresh.data;
+    if (!data) return;
     try {
-      const res = await fetch(`/api/webinar/${slug}/status`);
-      if (!res.ok) return;
-      const data = await res.json();
-      if (typeof data.waitingCount === "number" || data.waitingCount === null) setWaitingCount(data.waitingCount);
-      const status: string = data.status;
-      const entryOpen: boolean = data.entryOpen;
+      const status = typeof data.status === "string" ? data.status : "";
+      const entryOpen = data.entryOpen === true;
       if (typeof data.canRegister === "boolean") setCanRegister(data.canRegister);
       if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
       setIsTrulyLive(status === "live");
@@ -331,7 +333,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       else if (status === "ended") setView("ended");
       else if (status === "live" || entryOpen) setView("live");
       else setView("signup");
-    } catch { /* 폴링 중 일시적 오류는 다음 주기에 재시도 */ }
+    } catch { /* 상태 필드 계약 오류는 다음 주기에 재시도 — 인원 값은 위에서 이미 숨겼다. */ }
   }, [slug]);
 
   // 채팅 활성 여부 — 초기값은 /info(components.chatEnabled), 라이브 중엔 /live-state 의 chatEnabled 로 동기화
@@ -1194,7 +1196,10 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
                       <p className="mt-1 text-sm opacity-60">사전등록하면 시작 전에 알려드리고, 바로 입장할 수 있어요.</p>
                       <button
                         type="button"
-                        onClick={() => setRegModalOpen(true)}
+                        onClick={(event) => {
+                          setRegistrationOpener(event.currentTarget);
+                          setRegModalOpen(true);
+                        }}
                         className="mt-4 flex w-full items-center justify-center font-bold text-white transition-opacity hover:opacity-90"
                         style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)`, minHeight: 48 }}
                       >
@@ -1394,6 +1399,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           soft={soft}
           label="사전등록 완료"
           onClose={() => setRegisterDone(false)}
+          restoreFocusTo={registrationOpener}
           zIndex={80}
           maxWidthClass="max-w-sm"
         >

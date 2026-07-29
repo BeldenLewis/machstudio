@@ -29,6 +29,19 @@ describe("등록 완료 CTA 설정", () => {
       url: "https://example.com/chat",
     });
   });
+
+  it.each([null, "cta", 42, [], ["unsafe"]])(
+    "successCta가 객체가 아니거나 배열인 %j이면 안전한 비활성 기본값을 쓴다",
+    (successCta) => {
+      expect(normalizeRegistrationForm({
+        registrationForm: { successCta },
+      }).successCta).toEqual({
+        enabled: false,
+        label: "",
+        url: "",
+      });
+    },
+  );
 });
 
 describe("대기 안내문·CTA 설정", () => {
@@ -65,6 +78,20 @@ describe("대기 안내문·CTA 설정", () => {
       ctaUrl: "https://example.com/guide",
     });
   });
+
+  it.each([null, "follow-up", 42, [], ["unsafe"]])(
+    "waiting.followUp이 객체가 아니거나 배열인 %j이면 안전한 빈 기본값을 쓴다",
+    (followUp) => {
+      expect(normalizeLivePageConfig({
+        livePage: { waiting: { followUp } },
+      }).waiting.followUp).toEqual({
+        enabled: false,
+        text: "",
+        ctaLabel: "",
+        ctaUrl: "",
+      });
+    },
+  );
 });
 
 describe("공개 CTA URL", () => {

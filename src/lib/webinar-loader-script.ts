@@ -291,7 +291,8 @@ ${ATTRIBUTION_CORE_JS}
       ".mw-check:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }",
       ".mw-multi { display: flex; flex-direction: column; gap: 2px; }",
       /* 터치 타깃 44px — 20px 행이 연달아 붙으면 모바일에서 옆 항목을 누른다(WCAG AA) */
-      ".mw-multi .mw-check { margin-bottom: 0; min-height: 44px; align-items: center; gap: 10px; }",
+      ".mw-multi .mw-check { margin-bottom:0; min-height:44px; align-items:flex-start; gap:10px; padding:12px 0; line-height:20px; }",
+      ".mw-multi .mw-check input { margin-top:1px; }",
       ".mw-multi .mw-input { margin-top: 4px; }",
       ".mw-hint { font-size: 11px; color: #888; margin-top: 4px; }",
       ".mw-submit { width: 100%; margin-top: 8px; }",
@@ -797,7 +798,7 @@ ${ATTRIBUTION_CORE_JS}
         showMsg("success", doneText);
         formEl.querySelectorAll("input, select, button").forEach(function(node) { node.disabled = true; });
         submitBtn.textContent = "등록 완료";
-        openDonePopup(doneText);
+        openDonePopup(doneText, card);
         if (opts && opts.onSuccess) opts.onSuccess();
       }).catch(function() {
         showMsg("error", "네트워크 오류가 발생했어요. 잠시 후 다시 시도해주세요.");
@@ -962,12 +963,17 @@ ${ATTRIBUTION_CORE_JS}
    * 폼 모달 위에도 뜰 수 있어야 하므로 z-index 를 폼 모달(999950)보다 높게 잡는다.
    * 자동으로 닫지 않는다 — 시간으로 닫으면 봤는지를 보장할 수 없다.
    */
-  function openDonePopup(message) {
+  function openDonePopup(message, inlineRestoreTarget) {
     var accent = theme().accent;
     var form = CFG.registrationForm || {};
     var successCta = form.successCta || {};
     var successCtaUrl = safeHttpCtaUrl(successCta.url);
     var showCta = successCta.enabled === true && !!String(successCta.label || "").trim() && !!successCtaUrl;
+    var restoreTarget = modalOpener;
+    if (!restoreTarget && inlineRestoreTarget && document.contains(inlineRestoreTarget)) {
+      inlineRestoreTarget.setAttribute("tabindex", "-1");
+      restoreTarget = inlineRestoreTarget;
+    }
     releaseFormModalForCompletion();
     lockPageScroll();
     var overlay = el("div", "mw-modal-overlay mw-reset");
@@ -980,7 +986,6 @@ ${ATTRIBUTION_CORE_JS}
     card.appendChild(el("p", "mw-done-title", "사전등록이 완료됐어요"));
     card.appendChild(el("p", "mw-done-desc", message));
     function close() {
-      var opener = modalOpener;
       modalOpener = null;
       if (doneKeyHandler) {
         document.removeEventListener("keydown", doneKeyHandler, true);
@@ -988,8 +993,8 @@ ${ATTRIBUTION_CORE_JS}
       }
       try { overlay.remove(); } catch (e) {}
       unlockPageScroll();
-      if (opener && document.contains(opener)) {
-        try { opener.focus(); } catch (e) {}
+      if (restoreTarget && document.contains(restoreTarget)) {
+        try { restoreTarget.focus(); } catch (e) {}
       }
     }
     var focusTarget;

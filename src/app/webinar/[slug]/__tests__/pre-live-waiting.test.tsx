@@ -111,6 +111,14 @@ describe("대기 안내 CTA 편집", () => {
 });
 
 describe("PreLiveWaiting 안내 CTA", () => {
+  it("인원 밴드가 켜져 있고 현재 대기 인원이 2명이면 실제 밴드를 표시한다", () => {
+    const view = renderWaiting({
+      livePage: { waiting: { social: true } },
+    }, 2);
+
+    expect(view.querySelector(".plw-together")?.textContent).toContain("2명이 함께 기다려요");
+  });
+
   it("인원 밴드를 꺼도 독립 안내문은 표시한다", () => {
     const view = renderWaiting({
       livePage: { waiting: { social: false, followUp: { enabled: true, text: "자료는 종료 후 보내드려요." } } },

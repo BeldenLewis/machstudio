@@ -31,6 +31,16 @@ function config(successCta: SuccessCta) {
         enabled: true,
         options: [],
         system: true,
+      }, {
+        id: "interests",
+        key: "interests",
+        label: "관심 분야",
+        type: "multiple",
+        placeholder: "",
+        required: false,
+        enabled: true,
+        options: ["여러 줄로 감싸지는 아주 긴 복수 선택 문구입니다"],
+        system: false,
       }],
       privacyText: "개인정보 동의",
       marketingText: "마케팅 동의",
@@ -101,6 +111,16 @@ afterEach(() => {
 });
 
 describe("임베드 등록 완료 CTA", () => {
+  it("wrapped multiple-choice rows keep a 44px target and first-line checkbox alignment", async () => {
+    await boot({ enabled: false, label: "", url: "" });
+    const row = document.querySelector<HTMLElement>(".mw-multi .mw-check");
+    const css = document.getElementById("mw-styles")?.textContent ?? "";
+
+    expect(row?.textContent).toContain("여러 줄로 감싸지는");
+    expect(css).toContain(".mw-multi .mw-check { margin-bottom:0; min-height:44px; align-items:flex-start; gap:10px; padding:12px 0; line-height:20px; }");
+    expect(css).toContain(".mw-multi .mw-check input { margin-top:1px; }");
+  });
+
   it("완전한 CTA는 보안 속성과 독립 닫기 동작을 갖는다", async () => {
     await boot({ enabled: true, label: "오픈채팅 입장", url: "https://example.com/chat" });
     const dialog = await submitRegistration();
@@ -159,4 +179,32 @@ describe("임베드 등록 완료 CTA", () => {
     expect(document.body.contains(dialog)).toBe(false);
     expect(document.activeElement).toBe(opener);
   });
+
+  it.each(["button", "overlay", "escape"] as const)(
+    "inline completion restores focus to its connected form card after %s close",
+    async (closeBy) => {
+      await boot({ enabled: true, label: "오픈채팅 입장", url: "https://example.com/chat" });
+      const restoreTarget = document.querySelector<HTMLElement>(".mw-form-card")!;
+      const dialog = await submitRegistration();
+      const overlay = dialog.parentElement!;
+
+      expect(restoreTarget.isConnected).toBe(true);
+      expect(restoreTarget.tabIndex).toBe(-1);
+
+      if (closeBy === "button") {
+        dialog.querySelector<HTMLButtonElement>(".mw-done-close")!.click();
+      } else if (closeBy === "overlay") {
+        overlay.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      } else {
+        document.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "Escape",
+          bubbles: true,
+          cancelable: true,
+        }));
+      }
+
+      expect(document.body.contains(dialog)).toBe(false);
+      expect(document.activeElement).toBe(restoreTarget);
+    },
+  );
 });

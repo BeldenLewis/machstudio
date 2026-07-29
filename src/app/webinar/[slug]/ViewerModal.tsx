@@ -1,6 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
+
+const FOCUSABLE =
+  'button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 /**
  * 시청자용 모달 껍데기 — 배경·카드·닫기 버튼·스크롤 컨테이너.
@@ -21,6 +24,7 @@ export default function ViewerModal({
   soft,
   label,
   onClose,
+  restoreFocusTo,
   zIndex = 65,
   maxWidthClass = "max-w-lg",
   children,
@@ -33,10 +37,73 @@ export default function ViewerModal({
   label: string;
   /** 닫기(× · 배경 클릭). 닫을 수 없는 모달은 이 값을 주지 않는다. */
   onClose?: () => void;
+  /** 호출부가 보존한 열기 버튼. 없으면 모달이 열릴 때의 포커스 요소를 사용한다. */
+  restoreFocusTo?: HTMLElement | null;
   zIndex?: number;
   maxWidthClass?: string;
   children: ReactNode;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const activeBeforeOpen =
+      document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+        ? document.activeElement
+        : null;
+    const restoreTarget = restoreFocusTo ?? activeBeforeOpen;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const focusable = () =>
+      Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE))
+        .filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && onCloseRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (items.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown, true);
+    (dialog.querySelector<HTMLElement>("[autofocus]") ?? focusable()[0] ?? dialog).focus();
+
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      document.body.style.overflow = previousOverflow;
+      // Strict Mode의 이펙트 재실행 cleanup에서는 DOM이 그대로 연결돼 있다. 실제 언마운트 뒤에만
+      // 한 번 복원해 열기 버튼 ↔ 모달 사이 포커스가 왕복하지 않게 한다.
+      queueMicrotask(() => {
+        if (dialog.isConnected) return;
+        if (restoreTarget?.isConnected) restoreTarget.focus();
+      });
+    };
+  }, [restoreFocusTo]);
+
   return (
     <div
       className="stk-live fixed inset-0 flex items-center justify-center p-4"
@@ -45,11 +112,13 @@ export default function ViewerModal({
       onClick={(e) => { if (onClose && e.target === e.currentTarget) onClose(); }}
     >
       <div
+        ref={dialogRef}
         className={`relative flex max-h-[85vh] w-full ${maxWidthClass} flex-col overflow-hidden rounded-2xl shadow-2xl`}
         style={{ background: surface, color: text }}
         role="dialog"
         aria-modal="true"
         aria-label={label}
+        tabIndex={-1}
       >
         {onClose && (
           <button
