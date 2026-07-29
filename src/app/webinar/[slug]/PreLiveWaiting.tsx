@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { CalendarPlus, Share2, Bell } from "lucide-react";
+import { Share2, Bell } from "lucide-react";
 import { buildStkCss } from "./LiveContentStk";
 import { formatKst } from "@/lib/datetime";
 import { safeHttpUrl, type LivePageConfig } from "@/lib/webinar-config";
@@ -37,6 +37,8 @@ const EXTRA_CSS = `
 .stk-live .plw-btn.on { background:var(--key); color:#fff; box-shadow:var(--btn-shadow-key); }
 .stk-live .plw-err { margin-top:10px; text-align:center; font-size:12.5px; color:#ef4444; }
 .stk-live .plw-band { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin:56px 0 40px; align-items:start; }
+.stk-live .plw-info-stack { display:flex; flex-direction:column; gap:20px; }
+.stk-live .plw-band.single { grid-template-columns:minmax(0, 1fr); max-width:680px; margin-inline:auto; }
 @media (max-width:820px){ .stk-live .plw-band { grid-template-columns:1fr; } }
 .stk-live .plw-panel { background:var(--card); border-radius:var(--radius); box-shadow:var(--card-shadow); padding:24px; }
 .stk-live .plw-panel h3 { font-size:13px; font-weight:750; color:var(--muted); margin:0 0 4px; }
@@ -85,16 +87,16 @@ const EXTRA_CSS = `
 @media (prefers-reduced-motion: reduce) {
   .stk-live .plw-together .dot { animation:none; opacity:1; }
 }
-.stk-live .plw-follow-up {
+.stk-live .plw-follow-up-card {
   width:min(100%, 560px);
-  margin:14px auto 0;
+  margin:0 auto;
   display:flex;
   flex-direction:column;
   align-items:center;
   gap:12px;
   text-align:center;
 }
-.stk-live .plw-follow-up p {
+.stk-live .plw-follow-up-card p {
   margin:0;
   color:var(--muted);
   font-size:14px;
@@ -102,7 +104,7 @@ const EXTRA_CSS = `
   white-space:pre-line;
   word-break:keep-all;
 }
-.stk-live .plw-follow-up a {
+.stk-live .plw-follow-up-card a {
   min-height:44px;
   display:inline-flex;
   align-items:center;
@@ -114,6 +116,41 @@ const EXTRA_CSS = `
   font-size:13px;
   font-weight:800;
   box-shadow:var(--btn-shadow-key);
+}
+.stk-live .plw-calendar-banner {
+  position:fixed;
+  left:12px;
+  right:12px;
+  bottom:max(12px, env(safe-area-inset-bottom));
+  z-index:40;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:12px 14px;
+  border-radius:var(--radius-sm);
+  background:color-mix(in srgb, var(--text) 88%, transparent);
+  color:var(--card);
+  box-shadow:0 16px 48px color-mix(in srgb, var(--text) 28%, transparent);
+  backdrop-filter:blur(20px);
+}
+.stk-live .plw-calendar-banner span { font-size:13px; font-weight:700; }
+.stk-live .plw-calendar-banner button {
+  flex:none;
+  min-height:36px;
+  padding:0 12px;
+  border:0;
+  border-radius:var(--radius-sm);
+  background:var(--card);
+  color:var(--text);
+  font:inherit;
+  font-size:12px;
+  font-weight:800;
+  box-shadow:var(--btn-shadow);
+  cursor:pointer;
+}
+@media (min-width:601px) {
+  .stk-live .plw-calendar-banner { display:none; }
 }
 .stk-live .plw-who small { font-size:14px; color:var(--text); font-weight:650; }
 .stk-live .plw-who .who { display:flex; align-items:baseline; flex-wrap:wrap; gap:0 6px; }
@@ -199,6 +236,8 @@ export default function PreLiveWaiting({
   const followUpUrl = safeHttpUrl(followUp.ctaUrl);
   const showFollowUpCta = followUp.ctaLabel.trim() !== "" && followUpUrl !== "";
   const showFollowUp = followUp.enabled && (followUpText !== "" || showFollowUpCta);
+  const showUtilityCtas = showShare || showNotify;
+  const showInfoBand = showAgenda || showFollowUp;
   const showCenterAction = Boolean(centerAction) && (started || replaceCountdown);
 
   return (
@@ -249,26 +288,10 @@ export default function PreLiveWaiting({
           </div>
         )}
 
-        {showFollowUp && (
-          <div className="plw-follow-up">
-            {followUpText && <p>{followUp.text}</p>}
-            {showFollowUpCta && (
-              <a href={followUpUrl} target="_blank" rel="noopener noreferrer">
-                {followUp.ctaLabel}
-              </a>
-            )}
-          </div>
-        )}
-
         {mounted && centerAction && !showCenterAction && <div className="plw-entry-panel">{centerAction}</div>}
 
-        {(showCalendar || showShare || showNotify) && (
+        {showUtilityCtas && (
           <div className="plw-ctas">
-            {showCalendar && (
-              <motion.button whileTap={{ scale: 0.97 }} transition={spring} onClick={onCalendar} className="plw-btn primary">
-                <CalendarPlus /> 캘린더에 추가
-              </motion.button>
-            )}
             {showShare && (
               <motion.button whileTap={{ scale: 0.97 }} transition={spring} onClick={onShare} className="plw-btn">
                 <Share2 /> {shareCopied ? "링크 복사됨 ✓" : "초대 공유"}
@@ -283,17 +306,28 @@ export default function PreLiveWaiting({
         )}
         {notify?.error && <p className="plw-err">{notify.error}</p>}
 
-        {showAgenda && (
-          <div className="plw-band">
-            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        {showInfoBand && (
+          <div className={`plw-band${showAgenda ? "" : " single"}`}>
+            <div className="plw-info-stack">
               <div className="plw-panel">
                 <h3>이 웨비나는</h3>
                 <div className="big">{webinar.name}</div>
                 {webinar.description && <div className="desc">{webinar.description}</div>}
               </div>
+              {showFollowUp && (
+                <div className="plw-follow-up-card">
+                  {followUpText && <p>{followUp.text}</p>}
+                  {showFollowUpCta && (
+                    <a href={followUpUrl} target="_blank" rel="noopener noreferrer">
+                      {followUp.ctaLabel}
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className="plw-ag">
+            {showAgenda && (
+              <div className="plw-ag">
                 {/* 개수는 실제 세션만 — 휴식·Q&A 를 세면 "3개 세션"이 "5개 세션"으로 부풀었다 */}
                 <div className="h"><h3>세션 순서</h3><span>{agendaNumbering.realCount}개 세션</span></div>
                 {webinar.sessions.map((sn) => {
@@ -344,7 +378,15 @@ export default function PreLiveWaiting({
                     </div>
                   );
                 })}
-            </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {showCalendar && (
+          <div className="plw-calendar-banner">
+            <span>웨비나 일정을 미리 저장해두세요.</span>
+            <button type="button" onClick={onCalendar}>캘린더 추가</button>
           </div>
         )}
       </div>

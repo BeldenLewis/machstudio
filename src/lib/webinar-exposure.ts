@@ -337,7 +337,7 @@ export function buildExposureReport(input: ExposureInput): ExposureReport {
     (!!str(followUp.ctaLabel) && !!safeHttpUrl(followUp.ctaUrl));
   add(W(
     "waiting.followUp",
-    "대기 안내문 · CTA",
+    "이 웨비나는 추가 카드",
     ["waiting", "entry"],
     "waiting",
     gate(followUp.enabled, hasFollowUp, "영역을 켰지만 안내 문구나 완성된 CTA가 없어요."),

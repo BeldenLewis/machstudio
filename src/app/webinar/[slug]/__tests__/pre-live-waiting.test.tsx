@@ -18,7 +18,11 @@ const webinar = {
   sessions: [],
 };
 
-function renderWaiting(config: Record<string, unknown>, waitingCount = 2) {
+function renderWaiting(
+  config: Record<string, unknown>,
+  waitingCount = 2,
+  actions: { hasCalendar?: boolean; onCalendar?: () => void } = {},
+) {
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
@@ -33,6 +37,8 @@ function renderWaiting(config: Record<string, unknown>, waitingCount = 2) {
         serverNowMs={Date.parse("2026-08-01T01:00:00.000Z")}
         live={normalizeLivePageConfig(config)}
         waitingCount={waitingCount}
+        hasCalendar={actions.hasCalendar}
+        onCalendar={actions.onCalendar}
       />,
     );
   });
@@ -111,6 +117,39 @@ describe("대기 안내 CTA 편집", () => {
 });
 
 describe("PreLiveWaiting 안내 CTA", () => {
+  it("캘린더는 모바일 전용 하단 배너 마크업으로 표시한다", () => {
+    const view = renderWaiting(
+      { livePage: { waiting: { calendar: true } } },
+      2,
+      { hasCalendar: true, onCalendar: vi.fn() },
+    );
+
+    expect(view.querySelector(".plw-calendar-banner")).toBeTruthy();
+    expect(view.querySelector(".plw-ctas .calendar")).toBeNull();
+    expect(view.querySelector("style")?.textContent).toContain("@media (min-width:601px)");
+  });
+
+  it("추가 카드는 이 웨비나는 소개 카드 다음에 놓이고 아젠다 없이도 보인다", () => {
+    const view = renderWaiting({
+      livePage: {
+        waiting: {
+          agenda: false,
+          followUp: {
+            enabled: true,
+            text: "자료는 종료 후 보내드려요.",
+            ctaLabel: "행사 안내",
+            ctaUrl: "https://example.com",
+          },
+        },
+      },
+    });
+
+    const stack = view.querySelector(".plw-info-stack")!;
+    expect(stack.children[0]?.classList.contains("plw-panel")).toBe(true);
+    expect(stack.children[1]?.classList.contains("plw-follow-up-card")).toBe(true);
+    expect(view.querySelector(".plw-ag")).toBeNull();
+  });
+
   it("인원 밴드가 켜져 있고 현재 대기 인원이 2명이면 실제 밴드를 표시한다", () => {
     const view = renderWaiting({
       livePage: { waiting: { social: true } },
@@ -125,7 +164,7 @@ describe("PreLiveWaiting 안내 CTA", () => {
     });
 
     expect(view.querySelector(".plw-together")).toBeNull();
-    expect(view.querySelector(".plw-follow-up")?.textContent).toContain("자료는 종료 후 보내드려요.");
+    expect(view.querySelector(".plw-follow-up-card")?.textContent).toContain("자료는 종료 후 보내드려요.");
   });
 
   it.each([0, 1])("대기 인원이 %i명이면 밴드는 숨기고 안내문은 남긴다", (waitingCount) => {
@@ -134,7 +173,7 @@ describe("PreLiveWaiting 안내 CTA", () => {
     }, waitingCount);
 
     expect(view.querySelector(".plw-together")).toBeNull();
-    expect(view.querySelector(".plw-follow-up")?.textContent).toContain("잠시 후 시작합니다.");
+    expect(view.querySelector(".plw-follow-up-card")?.textContent).toContain("잠시 후 시작합니다.");
   });
 
   it("안내 영역을 끄면 채운 내용도 숨긴다", () => {
@@ -142,7 +181,7 @@ describe("PreLiveWaiting 안내 CTA", () => {
       livePage: { waiting: { followUp: { enabled: false, text: "숨겨야 하는 안내" } } },
     });
 
-    expect(view.querySelector(".plw-follow-up")).toBeNull();
+    expect(view.querySelector(".plw-follow-up-card")).toBeNull();
   });
 
   it.each([
@@ -153,7 +192,7 @@ describe("PreLiveWaiting 안내 CTA", () => {
       livePage: { waiting: { followUp: { enabled: true, text: "", ...followUp } } },
     });
 
-    expect(view.querySelector(".plw-follow-up")).toBeNull();
+    expect(view.querySelector(".plw-follow-up-card")).toBeNull();
   });
 
   it("완성된 CTA는 새 탭 보안 속성과 함께 표시한다", () => {
@@ -165,7 +204,7 @@ describe("PreLiveWaiting 안내 CTA", () => {
       },
     });
 
-    const cta = view.querySelector<HTMLAnchorElement>(".plw-follow-up a");
+    const cta = view.querySelector<HTMLAnchorElement>(".plw-follow-up-card a");
     expect(cta?.textContent).toBe("행사 안내 보기");
     expect(cta?.href).toBe("https://example.com/guide");
     expect(cta?.target).toBe("_blank");

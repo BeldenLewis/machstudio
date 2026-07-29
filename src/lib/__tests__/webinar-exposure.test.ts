@@ -222,6 +222,7 @@ describe("대기 화면 인원 밴드와 안내 CTA", () => {
     });
     const followUp = row(on, "waiting.followUp");
     expect(followUp.state).toBe("on");
+    expect(followUp.label).toBe("이 웨비나는 추가 카드");
     expect(followUp.surfaces).toEqual(["waiting", "entry"]);
   });
 });

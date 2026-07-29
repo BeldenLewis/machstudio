@@ -467,7 +467,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
             </div>
           </Blk>
 
-          <Blk title="안내문 · CTA" goes={goesFor("waiting", "entry")} hint="인원 밴드와 별개로 표시되는 안내 영역이에요.">
+          <Blk title="이 웨비나는 추가 카드" goes={goesFor("waiting", "entry")} hint="인원 밴드와 아젠다 설정과 별개로 소개 카드 아래에 표시돼요.">
             <div className="space-y-3">
               <Toggle
                 label="안내 영역 표시"
