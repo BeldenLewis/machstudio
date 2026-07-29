@@ -9,7 +9,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
-import { normalizeRegistrationForm } from "@/lib/webinar-config";
+import { normalizeRegistrationForm, safeHttpUrl } from "@/lib/webinar-config";
 import { endedSurveyLinks } from "@/lib/webinar-ended-surveys";
 
 const CORS_HEADERS = {
@@ -19,6 +19,26 @@ const CORS_HEADERS = {
 
 const CACHE_OK = "public, s-maxage=60, stale-while-revalidate=300";
 const CACHE_MISS = "public, s-maxage=60";
+
+/** 외부 로더에 필요한 등록 폼 계약만 내보낸다 — 완료 CTA URL은 공개 전 서버에서 한 번 더 정제한다. */
+export function buildPublicRegistrationFormPayload(config: unknown) {
+  const registrationForm = normalizeRegistrationForm(config);
+  return {
+    fields: registrationForm.fields,
+    privacyText: registrationForm.privacyText,
+    marketingText: registrationForm.marketingText,
+    privacyBody: registrationForm.privacyBody,
+    marketingBody: registrationForm.marketingBody,
+    privacyDefaultChecked: registrationForm.privacyDefaultChecked,
+    marketingDefaultChecked: registrationForm.marketingDefaultChecked,
+    submitLabel: registrationForm.submitLabel,
+    successCta: {
+      enabled: registrationForm.successCta.enabled,
+      label: registrationForm.successCta.label,
+      url: safeHttpUrl(registrationForm.successCta.url),
+    },
+  };
+}
 
 export async function OPTIONS() {
   return new NextResponse(null, {
@@ -179,7 +199,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ siteId: 
 
   const webinar = site.activeWebinar;
   const statusInfo = resolveWebinarStatus(webinar);
-  const registrationForm = normalizeRegistrationForm(webinar.config);
   const config = (webinar.config ?? {}) as Record<string, unknown>;
 
   // 절대 URL 기준 — 스니펫/로더가 파트너 사이트에서 실행되므로 배포 오리진이어야 한다(w/l 라우트와 동일 방식).
@@ -235,16 +254,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ siteId: 
     })(),
     theme: webinar.theme ?? {},
     components: webinar.components ?? {},
-    registrationForm: {
-      fields: registrationForm.fields,
-      privacyText: registrationForm.privacyText,
-      marketingText: registrationForm.marketingText,
-      privacyBody: registrationForm.privacyBody,
-      marketingBody: registrationForm.marketingBody,
-      privacyDefaultChecked: registrationForm.privacyDefaultChecked,
-      marketingDefaultChecked: registrationForm.marketingDefaultChecked,
-      submitLabel: registrationForm.submitLabel,
-    },
+    registrationForm: buildPublicRegistrationFormPayload(webinar.config),
     links: {
       livePageUrl: site.livePageUrl ?? null,
       surveyUrl: endedSurveyUrl,

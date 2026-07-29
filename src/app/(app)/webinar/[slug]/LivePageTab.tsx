@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useAutosave, useExternalSync, diffPatch } from "@/components/ui/use-autosave";
 import { EditableList, ROW_KEY, withRowKeys, stripRowKeys, type WithRowKey } from "@/components/ui/editable-list";
 import {
-  normalizeLivePageConfig, DEFAULT_ENDED_TITLE, DEFAULT_ENDED_DESCRIPTION,
+  normalizeLivePageConfig, safeHttpUrl, DEFAULT_ENDED_TITLE, DEFAULT_ENDED_DESCRIPTION,
   type LivePageConfig, type LiveResource, type LiveNextWebinar,
 } from "@/lib/webinar-config";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
@@ -209,13 +209,34 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
 
   // 라이브 페이지 화면(대기·입장·종료) 섹션 on/off + 자료·다음웨비나 데이터
   const [screens, setScreens] = useState(() => normalizeLivePageConfig(webinar.config));
+  const waitingFollowUpUrlInvalid = screens.waiting.followUp.ctaUrl.trim() !== "" && safeHttpUrl(screens.waiting.followUp.ctaUrl) === "";
   // 자료는 스키마에 id 가 없다 → 편집 중에만 클라이언트 키를 붙여 안정 키를 확보하고,
   // 저장 직전 stripRowKeys 로 떼어낸다(저장 형태는 그대로).
   const [resources, setResources] = useState<WithRowKey<LiveResource>[]>(
     () => withRowKeys(normalizeLivePageConfig(webinar.config).resources),
   );
   const [nextWeb, setNextWeb] = useState<LiveNextWebinar>(() => normalizeLivePageConfig(webinar.config).nextWebinar ?? { title: "", when: "", url: "" });
-  const setW = (k: keyof LivePageConfig["waiting"], v: boolean) => setScreens((s) => ({ ...s, waiting: { ...s.waiting, [k]: v } }));
+  type WaitingToggleKey = "agenda" | "social" | "calendar" | "share" | "notify";
+  const setW = (k: WaitingToggleKey, v: boolean) => setScreens((s) => ({ ...s, waiting: { ...s.waiting, [k]: v } }));
+  /** 안내 항목 편집 상태 — EditableList 는 행마다 안정 키가 필요해 문자열 배열을 객체로 감싼다. */
+  const [followUpItems, setFollowUpItems] = useState<WithRowKey<{ value: string }>[]>(
+    () => withRowKeys(screens.waiting.followUp.items.map((value) => ({ value }))),
+  );
+  // 편집값 → 설정. 빈 줄은 정규화가 걸러내므로 여기서는 그대로 넘긴다.
+  useEffect(() => {
+    setFollowUp({ items: stripRowKeys(followUpItems).map((r) => r.value) });
+    // setFollowUp 은 매 렌더 새로 만들어져 의존성에 넣으면 무한 루프가 된다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [followUpItems]);
+
+  const setFollowUp = (patch: Partial<LivePageConfig["waiting"]["followUp"]>) =>
+    setScreens((s) => ({
+      ...s,
+      waiting: {
+        ...s.waiting,
+        followUp: { ...s.waiting.followUp, ...patch },
+      },
+    }));
   // ended 는 토글(boolean)과 문구(string)가 섞여 있어 세터를 나눈다 — 한 세터로 두면 타입이 풀린다.
   const setEn = (k: "replay" | "survey" | "resources" | "nextWebinar" | "share", v: boolean) =>
     setScreens((s) => ({ ...s, ended: { ...s.ended, [k]: v } }));
@@ -450,10 +471,81 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
           <Blk title="화면 구성" tag="read" goes={goesFor("waiting", "entry")} hint="대기 화면에 보여줄 요소예요. 데이터가 없으면 켜져 있어도 자동으로 숨겨져요.">
             <div className="space-y-2.5">
               <Toggle label="세션 순서(아젠다)" checked={screens.waiting.agenda} onChange={(v) => setW("agenda", v)} desc="세션 탭에 등록한 시간표가 타임라인으로 표시돼요" />
-              <Toggle label="등록자 수(사회적 증거)" checked={screens.waiting.social} onChange={(v) => setW("social", v)} />
+              <Toggle label="함께 기다리는 인원 밴드" checked={screens.waiting.social} onChange={(v) => setW("social", v)} desc="현재 대기 중인 사람이 2명 이상일 때만 표시돼요" />
               <Toggle label="캘린더에 추가" checked={screens.waiting.calendar} onChange={(v) => setW("calendar", v)} desc="아래 캘린더 URL이 있을 때만 표시" />
               <Toggle label="초대 공유" checked={screens.waiting.share} onChange={(v) => setW("share", v)} />
               <Toggle label="시작 알림 받기" checked={screens.waiting.notify} onChange={(v) => setW("notify", v)} desc="이메일 등록자에게 시작 리마인더를 보낼 수 있어요" />
+            </div>
+          </Blk>
+
+          <Blk title="이 웨비나는 추가 카드" goes={goesFor("waiting", "entry")} hint="인원 밴드와 아젠다 설정과 별개로 소개 카드 아래에 표시돼요.">
+            <div className="space-y-3">
+              <Toggle
+                label="안내 영역 표시"
+                checked={screens.waiting.followUp.enabled}
+                onChange={(enabled) => setFollowUp({ enabled })}
+              />
+              {/* 제목은 선택 — 비우면 제목 줄 자체를 안 그린다(기존 웨비나 화면이 바뀌지 않게). */}
+              <input
+                aria-label="추가 카드 제목"
+                value={screens.waiting.followUp.title}
+                onChange={(e) => setFollowUp({ title: e.target.value })}
+                className={FIELD_CLS}
+                placeholder="예: 오픈채팅방에서 미리 만나요 (비우면 제목 없음)"
+              />
+              <textarea
+                aria-label="대기 화면 안내 문구"
+                value={screens.waiting.followUp.text}
+                onChange={(e) => setFollowUp({ text: e.target.value })}
+                className={FIELD_CLS}
+                rows={3}
+                placeholder={"예: 라이브 자료는 종료 후\n등록 이메일로 보내드려요."}
+              />
+              {/* 나열 항목은 한 덩어리 텍스트가 아니라 행으로 받는다 — 문단 안에 줄바꿈으로 넣으면
+                  화면에서 목록으로 안 읽히고 정렬에만 기대야 한다. 순서가 의미 있어 드래그도 켠다. */}
+              <EditableList<WithRowKey<{ value: string }>>
+                listId="waiting-followup-items"
+                itemNoun="항목"
+                items={followUpItems}
+                onChange={setFollowUpItems}
+                rowKey={(r) => r[ROW_KEY]}
+                makeItem={() => ({ value: "", [ROW_KEY]: crypto.randomUUID() })}
+                addLabel="항목 추가"
+                reorderable
+                rowChrome="bare"
+                emptyState={
+                  <p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+                    항목을 추가하면 안내 문구 아래 체크 목록으로 표시돼요.
+                  </p>
+                }
+                renderRow={({ item, patch }) => (
+                  <input
+                    aria-label="안내 항목"
+                    className={inputCls}
+                    placeholder="예: 해외 진출 인사이트 컬럼"
+                    value={item.value}
+                    onChange={(e) => patch({ value: e.target.value })}
+                  />
+                )}
+              />
+              <input
+                aria-label="대기 CTA 버튼 문구"
+                value={screens.waiting.followUp.ctaLabel}
+                onChange={(e) => setFollowUp({ ctaLabel: e.target.value })}
+                className={FIELD_CLS}
+                placeholder="예: 행사 안내 보기"
+              />
+              <input
+                aria-label="대기 CTA 연결 URL"
+                type="url"
+                value={screens.waiting.followUp.ctaUrl}
+                onChange={(e) => setFollowUp({ ctaUrl: e.target.value })}
+                className={waitingFollowUpUrlInvalid ? FIELD_CLS_DANGER : FIELD_CLS}
+                placeholder="https://..."
+              />
+              {waitingFollowUpUrlInvalid && (
+                <p className="text-[11px] text-destructive">http:// 또는 https:// 주소를 입력해 주세요.</p>
+              )}
             </div>
           </Blk>
 

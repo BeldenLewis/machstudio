@@ -5,7 +5,7 @@ import { use } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, CheckCircle2 } from "lucide-react";
 import LivePushLayer, { type LivePopup, type LiveTallyPush, type LivePoll, type LiveSurveyPush } from "../LivePushLayer";
-import LiveContentStk from "../LiveContentStk";
+import LiveContentStk, { onAccentColor } from "../LiveContentStk";
 import PreLiveWaiting from "../PreLiveWaiting";
 import EntryVerify from "../EntryVerify";
 import EndedScreen from "../EndedScreen";
@@ -18,11 +18,16 @@ import {
   isValidPhone,
   normalizeLivePageConfig,
   normalizeRegistrationForm,
+  safeHttpUrl,
   type WebinarRegistrationField,
 } from "@/lib/webinar-config";
 import { MultiChoiceField, SingleChoiceField } from "@/components/webinar/choice-fields";
+import { readStatusRefresh } from "../status-refresh";
+import { PUBLIC_REGISTRATION_FORM_CSS } from "@/lib/webinar-public-form-css";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
+const REGISTRATION_FOCUSABLE =
+  'button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 // 소유자 미리보기 진입 여부 — ?preview 파라미터. 이 tab 에선 폴링·ping·제출 등 모든 부작용을 정지시킨다.
 const isPreviewUrl = () => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("preview");
@@ -185,6 +190,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [entryOpenNow, setEntryOpenNow] = useState(false); // 입장 확인 창이 열렸는가 — signup 고정 상태의 "입장으로 돌아가기" 노출용
   // 함께 기다리는 사람 수 — /status 가 함께 내려준다(별도 폴러를 만들지 않는다).
   const [waitingCount, setWaitingCount] = useState<number | null>(null);
+  // 누적 사전등록자 수 — 사회적 증거 밴드용. 같은 /status 응답에 실려 온다(폴러를 늘리지 않는다).
+  const [registrantCount, setRegistrantCount] = useState<number | null>(null);
   // 채팅 상태
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -224,6 +231,9 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [registered, setRegistered] = useState(false);
   const [canRegister, setCanRegister] = useState(true); // 서버 상태머신 판정 — 마감(upcoming) 시 폼 대신 안내
   const [regModalOpen, setRegModalOpen] = useState(false); // 대기 화면의 사전등록 폼 모달
+  const [registrationOpener, setRegistrationOpener] = useState<HTMLElement | null>(null);
+  const registrationDialogRef = useRef<HTMLDivElement>(null);
+  const [viewerFocusRoot, setViewerFocusRoot] = useState<HTMLDivElement | null>(null);
   const [formError, setFormError] = useState("");
   // 실시간 중복 확인 — 연락처/이메일 입력 시 디바운스 후 기존 등록 여부 표시
   const [dupCheck, setDupCheck] = useState<{ phone: boolean; email: boolean }>({ phone: false, email: false });
@@ -243,7 +253,13 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
    */
   const [registerDone, setRegisterDone] = useState(false);
   // 동의 약관 전문 팝업 — 동의 문구 텍스트 클릭 시 (본문이 설정된 경우에만)
-  const [termsModal, setTermsModal] = useState<{ kind: "privacy" | "marketing"; title: string; body: string } | null>(null);
+  const [termsModal, setTermsModal] = useState<{
+    kind: "privacy" | "marketing";
+    title: string;
+    body: string;
+    opener: HTMLElement;
+  } | null>(null);
+  const termsModalOpenRef = useRef(false);
 
   // Q&A 상태
   const [question, setQuestion] = useState("");
@@ -314,13 +330,14 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   // 라이브 전 상태 전환 감지용 경량 폴 — /status(상태만) 를 받아 view/serverNow/isTrulyLive 갱신.
   // 세션·테마·config 를 30초마다 다시 받지 않아 대기 시청자 egress 를 줄인다(정적 콘텐츠는 최초 /info 1회).
   const fetchStatus = useCallback(async () => {
+    const refresh = await readStatusRefresh(() => fetch(`/api/webinar/${slug}/status`));
+    setWaitingCount(refresh.waitingCount);
+    setRegistrantCount(refresh.registrantCount);
+    const data = refresh.data;
+    if (!data) return;
     try {
-      const res = await fetch(`/api/webinar/${slug}/status`);
-      if (!res.ok) return;
-      const data = await res.json();
-      if (typeof data.waitingCount === "number" || data.waitingCount === null) setWaitingCount(data.waitingCount);
-      const status: string = data.status;
-      const entryOpen: boolean = data.entryOpen;
+      const status = typeof data.status === "string" ? data.status : "";
+      const entryOpen = data.entryOpen === true;
       if (typeof data.canRegister === "boolean") setCanRegister(data.canRegister);
       if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
       setIsTrulyLive(status === "live");
@@ -330,7 +347,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       else if (status === "ended") setView("ended");
       else if (status === "live" || entryOpen) setView("live");
       else setView("signup");
-    } catch { /* 폴링 중 일시적 오류는 다음 주기에 재시도 */ }
+    } catch { /* 상태 필드 계약 오류는 다음 주기에 재시도 — 인원 값은 위에서 이미 숨겼다. */ }
   }, [slug]);
 
   // 채팅 활성 여부 — 초기값은 /info(components.chatEnabled), 라이브 중엔 /live-state 의 chatEnabled 로 동기화
@@ -544,18 +561,58 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     if (regModalOpen && (view !== "signup" || registered || registrationId)) setRegModalOpen(false);
   }, [regModalOpen, view, registered, registrationId]);
 
-  // 등록 모달 — Esc 로 닫고, 열려 있는 동안 뒤 배경이 스크롤되지 않게 잠근다.
+  useEffect(() => {
+    termsModalOpenRef.current = termsModal !== null;
+  }, [termsModal]);
+
+  // 등록 모달 — 랜딩 모달과 같은 수명주기: 내부 초기 포커스·Tab 트랩·Esc·스크롤 잠금·opener 복원.
   useEffect(() => {
     if (!regModalOpen) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setRegModalOpen(false); };
-    document.addEventListener("keydown", onKey);
+    const dialog = registrationDialogRef.current;
+    if (!dialog) return;
+    const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>(REGISTRATION_FOCUSABLE));
+    const onKey = (e: KeyboardEvent) => {
+      // 약관 ViewerModal이 최상위인 동안에는 Escape/Tab 소유권을 넘긴다.
+      if (termsModalOpenRef.current) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setRegModalOpen(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = focusable();
+      if (items.length === 0) {
+        e.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    (dialog.querySelector<HTMLElement>("input:not([disabled]),select:not([disabled]),textarea:not([disabled])")
+      ?? focusable()[0]
+      ?? dialog).focus();
     return () => {
-      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("keydown", onKey, true);
       document.body.style.overflow = prevOverflow;
+      queueMicrotask(() => {
+        // Strict Mode effect 재실행 중에는 dialog가 그대로 연결돼 있다. 실제 일반 종료 뒤에만 복원한다.
+        if (dialog.isConnected) return;
+        if (registrationOpener?.isConnected) registrationOpener.focus();
+      });
     };
-  }, [regModalOpen]);
+  }, [regModalOpen, registrationOpener]);
 
   // 라이브 전(사전등록·입장 대기) 상태 폴링 — 서버 status 가 live 로 바뀌면 fetchStatus 가
   // view/isTrulyLive/serverNowMs 를 갱신해 대기 중이던 시청자가 자동 전환된다. (30초, 탭 비활성 시 스킵)
@@ -586,6 +643,12 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       }).catch(() => {});
     };
     beat();
+    /**
+     * 첫 화면에서 한 번 받아 둔다. 인터벌 안에서만 부르면 사회적 증거 밴드가 **30초 뒤에**
+     * 튀어나온다 — 등록을 망설이는 순간은 그 전에 지나간다. /info 는 정적 콘텐츠만 주므로
+     * 인원 수는 여기서 온다(새 엔드포인트·새 타이머를 만들지 않는다).
+     */
+    void fetchStatus();
     const interval = setInterval(() => {
       if (document.hidden) return;
       beat();
@@ -893,6 +956,28 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const radius = theme.borderRadius ?? "16px";
   const registrationForm = normalizeRegistrationForm(webinar.config ?? {});
   const visibleFields = registrationForm.fields;
+  const completionCtaUrl = safeHttpUrl(registrationForm.successCta.url);
+  const showCompletionCta =
+    registrationForm.successCta.enabled &&
+    registrationForm.successCta.label.trim() !== "" &&
+    completionCtaUrl !== "";
+  /**
+   * 확인 버튼이 이동할 주소. 비면 예전처럼 모달만 닫는다.
+   * safeHttpUrl 을 거치는 이유: 어드민이 넣은 값이 그대로 location 에 들어가면 javascript: 로
+   * 스크립트를 실행시킬 수 있다(공개 면이라 입력자와 실행 대상이 다르다).
+   */
+  const completionRedirectUrl = safeHttpUrl(registrationForm.successRedirectUrl);
+  /**
+   * 미리보기에서는 실제로 나가지 않는다 — 소유자가 상태를 훑는 중에 화면이 통째로
+   * 다른 사이트로 넘어가면 돌아올 길이 없다(AGENTS.md: 새 부작용은 isPreviewUrl 가드).
+   */
+  const confirmCompletion = () => {
+    if (completionRedirectUrl && !previewMode) {
+      window.location.href = completionRedirectUrl;
+      return;
+    }
+    setRegisterDone(false);
+  };
   const inputStyle = { border: "1px solid rgba(255,255,255,0.1)", borderRadius: `calc(${radius} * 0.6)`, color: text };
   const calendarUrl = typeof webinar.config?.calendarUrl === "string" ? webinar.config.calendarUrl : "";
 
@@ -933,22 +1018,20 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
     if (field.type === "checkbox") {
       return (
-        <label key={field.key} className="flex items-start gap-2.5 cursor-pointer">
+        <label key={field.key} className="mw-field mw-check">
           <input
             type="checkbox"
             checked={Boolean(value)}
             onChange={(e) => setValue(e.target.checked)}
-            className="mt-0.5"
-            style={{ accentColor: accent }}
           />
-          <span className="text-xs opacity-60">{commonLabel}</span>
+          <span>{commonLabel}</span>
         </label>
       );
     }
 
     return (
-      <div key={field.key}>
-        <label className="text-xs opacity-50 mb-1 block">{commonLabel}</label>
+      <div key={field.key} className="mw-field">
+        <label className="mw-label">{commonLabel}</label>
         {field.type === "multiple" ? (
           <MultiChoiceField
             field={field}
@@ -956,6 +1039,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             onChange={setValue}
             accent={accent}
             inputStyle={inputStyle}
+            publicForm
           />
         ) : field.type === "select" ? (
           <SingleChoiceField
@@ -963,6 +1047,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             value={String(value)}
             onChange={setValue}
             inputStyle={inputStyle}
+            publicForm
           />
         ) : (
           <>
@@ -972,8 +1057,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               value={String(value)}
               onChange={(e) => setValue(field.type === "tel" ? e.target.value.replace(/[^0-9]/g, "") : e.target.value)}
               placeholder={field.placeholder}
-              className="w-full px-3 py-2.5 text-sm bg-transparent focus:outline-none"
-              style={inputStyle}
+              className="mw-input"
             />
             {field.system && ((field.key === "phone" && dupCheck.phone) || (field.key === "email" && dupCheck.email)) && (
               <p className="text-[11px] mt-1.5" style={{ color: "#f59e0b" }}>
@@ -999,9 +1083,13 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
   return (
     <div
+      ref={setViewerFocusRoot}
+      data-viewer-focus-root
+      tabIndex={-1}
       className="min-h-screen"
       style={{ backgroundColor: bg, color: text, fontFamily: `${font}, sans-serif` }}
     >
+      <style dangerouslySetInnerHTML={{ __html: PUBLIC_REGISTRATION_FORM_CSS }} />
       {/* 소유자 미리보기 — 상태 전환 바(대기·입장확인·라이브·종료). 실제 부작용은 모두 정지. */}
       {previewMode && !embedded && (
         <div
@@ -1150,6 +1238,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               registered={hasRegistration}
               live={live}
               waitingCount={waitingCount}
+              registrantCount={registrantCount}
               hasCalendar={!!calendarUrl}
               onCalendar={calendarUrl ? () => window.open(calendarUrl, "_blank", "noopener,noreferrer") : undefined}
               onShare={handleShare}
@@ -1188,7 +1277,10 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
                       <p className="mt-1 text-sm opacity-60">사전등록하면 시작 전에 알려드리고, 바로 입장할 수 있어요.</p>
                       <button
                         type="button"
-                        onClick={() => setRegModalOpen(true)}
+                        onClick={(event) => {
+                          setRegistrationOpener(event.currentTarget);
+                          setRegModalOpen(true);
+                        }}
                         className="mt-4 flex w-full items-center justify-center font-bold text-white transition-opacity hover:opacity-90"
                         style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)`, minHeight: 48 }}
                       >
@@ -1224,92 +1316,112 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             사라지면 입력이 증발하고, regModalOpen 이 남아 배경 스크롤이 영영 잠긴다. */}
         {view === "signup" && !hasRegistration && regModalOpen && (
           <div
-            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-            style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}
+            ref={registrationDialogRef}
+            className="mw-modal-overlay mw-reset"
+            style={{
+              "--mw-accent": accent,
+              "--mw-on-accent": onAccentColor(accent),
+              "--mw-radius": radius,
+              "--mw-text": text,
+              "--mw-surface": surface,
+              zIndex: 60,
+            } as React.CSSProperties}
             onClick={(e) => { if (e.target === e.currentTarget) setRegModalOpen(false); }}
             role="dialog"
             aria-modal="true"
             aria-label="사전 등록"
+            tabIndex={-1}
           >
             <motion.div
-              style={{ backgroundColor: surface, borderRadius: radius }}
-              // 내용만 스크롤 — 긴 폼에서도 닫기(×)와 제출 버튼이 잘리지 않게(모바일).
-              className="relative max-h-[88vh] w-full max-w-[480px] overflow-y-auto p-6 md:p-7"
+              className="mw-modal-card"
               initial={{ opacity: 0, y: 8, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.18 }}
             >
-              <button
-                type="button"
-                onClick={() => setRegModalOpen(false)}
-                aria-label="닫기"
-                className="absolute right-4 top-4 z-10 grid h-11 w-11 place-items-center rounded-lg text-xl leading-none opacity-50 transition-opacity hover:opacity-100"
-              >
-                ×
-              </button>
-              {!canRegister ? (
-                <div className="py-8 text-center">
-                  <h2 className="text-lg font-semibold mb-1">등록이 마감되었어요</h2>
-                  <p className="text-sm opacity-60">작성 중에 등록 기간이 종료됐어요.<br />시작 시각에 맞춰 다시 방문해 주세요.</p>
-                </div>
-              ) : (
-              <>
-                <h2 className="text-lg font-semibold mb-1">{webinar.name} 사전등록</h2>
-                <p className="text-xs opacity-50 mb-5">
-                  등록 마감 {formatKst(webinar.signupDeadline, { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                </p>
-                <div className="space-y-3">
-                  <div className="grid grid-cols-1 gap-3">
-                    {visibleFields.map(renderRegistrationField)}
-                  </div>
+              <div className="mw-modal-head">
+                <h2 className="mw-form-title">
+                  {canRegister ? `${webinar.name} 사전등록` : "등록이 마감되었어요"}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setRegModalOpen(false)}
+                  aria-label="닫기"
+                  className="mw-modal-close"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="mw-modal-body">
+                <div className="mw-form-card">
+                  {!canRegister ? (
+                    <div className="py-8 text-center">
+                      <p className="text-sm opacity-60">작성 중에 등록 기간이 종료됐어요.<br />시작 시각에 맞춰 다시 방문해 주세요.</p>
+                    </div>
+                  ) : (
+                  <>
+                    <p className="mw-hint mb-5">
+                      등록 마감 {formatKst(webinar.signupDeadline, { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 gap-3">
+                        {visibleFields.map(renderRegistrationField)}
+                      </div>
 
-                  <div className="space-y-2 pt-1">
-                    {([
-                      { kind: "privacy" as const, text: registrationForm.privacyText, body: registrationForm.privacyBody, checked: form.agreePrivacy, set: (v: boolean) => setForm((f) => ({ ...f, agreePrivacy: v })) },
-                      { kind: "marketing" as const, text: registrationForm.marketingText, body: registrationForm.marketingBody, checked: form.agreeMarketing, set: (v: boolean) => setForm((f) => ({ ...f, agreeMarketing: v })) },
-                    ]).map((consent) => (
-                      <label key={consent.kind} className="flex items-start gap-2.5 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={consent.checked}
-                          onChange={(e) => consent.set(e.target.checked)}
-                          className="mt-0.5"
-                          style={{ accentColor: accent }}
-                        />
-                        {consent.body ? (
-                          // 본문이 설정돼 있으면 텍스트 클릭 = 약관 팝업 (체크 토글은 체크박스에서만)
-                          <button
-                            type="button"
-                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setTermsModal({ kind: consent.kind, title: consent.text, body: consent.body }); }}
-                            className="text-xs opacity-60 text-left underline underline-offset-2 decoration-from-font hover:opacity-90 transition-opacity"
-                          >
-                            {consent.text}
-                          </button>
-                        ) : (
-                          <span className="text-xs opacity-60">{consent.text}</span>
-                        )}
-                      </label>
-                    ))}
-                  </div>
+                      <div className="space-y-2 pt-1">
+                        {([
+                          { kind: "privacy" as const, text: registrationForm.privacyText, body: registrationForm.privacyBody, checked: form.agreePrivacy, set: (v: boolean) => setForm((f) => ({ ...f, agreePrivacy: v })) },
+                          { kind: "marketing" as const, text: registrationForm.marketingText, body: registrationForm.marketingBody, checked: form.agreeMarketing, set: (v: boolean) => setForm((f) => ({ ...f, agreeMarketing: v })) },
+                        ]).map((consent) => (
+                          <label key={consent.kind} className="mw-check">
+                            <input
+                              type="checkbox"
+                              checked={consent.checked}
+                              onChange={(e) => consent.set(e.target.checked)}
+                            />
+                            {consent.body ? (
+                              // 본문이 설정돼 있으면 텍스트 클릭 = 약관 팝업 (체크 토글은 체크박스에서만)
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setTermsModal({
+                                    kind: consent.kind,
+                                    title: consent.text,
+                                    body: consent.body,
+                                    opener: e.currentTarget,
+                                  });
+                                }}
+                                className="text-left underline decoration-from-font underline-offset-2 transition-opacity hover:opacity-90"
+                              >
+                                {consent.text}
+                              </button>
+                            ) : (
+                              <span>{consent.text}</span>
+                            )}
+                          </label>
+                        ))}
+                      </div>
 
-                  {formError && (
-                    <p className="text-xs text-red-400 pt-1" role="alert">{formError}</p>
+                      {formError && (
+                        <p className="mw-msg mw-msg-error" role="alert">{formError}</p>
+                      )}
+
+                      <motion.button
+                        onClick={handleRegister}
+                        disabled={isRegistering || dupCheck.phone || dupCheck.email}
+                        className="mw-submit"
+                        whileHover={{ y: -1 }}
+                        whileTap={{ scale: 0.96 }}
+                        transition={spring}
+                      >
+                        {isRegistering ? "등록 중..." : registrationForm.submitLabel}
+                      </motion.button>
+                    </div>
+                  </>
                   )}
-
-                  <motion.button
-                    onClick={handleRegister}
-                    disabled={isRegistering || dupCheck.phone || dupCheck.email}
-                    className="w-full py-3 font-semibold text-white transition-opacity disabled:opacity-40"
-                    style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)` }}
-                    whileHover={{ y: -1 }}
-                    whileTap={{ scale: 0.96 }}
-                    transition={spring}
-                  >
-                    {isRegistering ? "등록 중..." : registrationForm.submitLabel}
-                  </motion.button>
                 </div>
-              </>
-              )}
+              </div>
             </motion.div>
           </div>
         )}
@@ -1384,13 +1496,23 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           soft={soft}
           label="사전등록 완료"
           onClose={() => setRegisterDone(false)}
+          restoreFocusTo={
+            hasRegistration
+              ? viewerFocusRoot
+              : registrationOpener?.isConnected
+                ? registrationOpener
+                : viewerFocusRoot
+          }
           zIndex={80}
           maxWidthClass="max-w-sm"
         >
           <div className="py-4 text-center">
             <div
-              className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full text-2xl"
-              style={{ background: "color-mix(in srgb,#12B76A 14%,transparent)", color: "#12B76A" }}
+              className="mw-done-mark mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full text-2xl"
+              style={{
+                background: `color-mix(in srgb, ${accent} 14%, ${surface})`,
+                color: accent,
+              }}
               aria-hidden
             >
               ✓
@@ -1399,13 +1521,26 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             <p className="mt-2 text-sm leading-relaxed" style={{ color: soft(65) }}>
               웨비나 당일 등록하신 연락처·이메일로 바로 입장할 수 있어요.
             </p>
+            {showCompletionCta && (
+              <a
+                href={completionCtaUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl px-6 text-sm font-bold"
+                style={{ background: accent, color: onAccentColor(accent) }}
+              >
+                {registrationForm.successCta.label}
+              </a>
+            )}
             <button
               type="button"
-              onClick={() => setRegisterDone(false)}
-              className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl px-6 text-sm font-bold text-white"
-              style={{ background: accent }}
+              onClick={confirmCompletion}
+              className={`${showCompletionCta ? "mt-2 bg-transparent" : "mt-6"} inline-flex h-11 w-full items-center justify-center rounded-xl px-6 text-sm font-bold`}
+              style={showCompletionCta
+                ? { color: soft(70) }
+                : { background: accent, color: onAccentColor(accent) }}
             >
-              확인
+              {showCompletionCta ? "닫기" : "확인"}
             </button>
           </div>
         </ViewerModal>
@@ -1427,51 +1562,47 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         />
       )}
 
-      {/* 동의 약관 전문 팝업 — 닫힘은 즉시 언마운트(느려진 exit 애니메이션이 투명 오버레이로 남아 클릭을 막는 것 방지) */}
+      {/* 동의 약관 전문 팝업 — 등록 모달보다 위에서 키보드/포커스를 단독 소유한다. */}
       {termsModal && (
-          <motion.div
-            className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-          >
-            <div className="absolute inset-0 bg-black/60" onClick={() => setTermsModal(null)} />
-            <motion.div
-              initial={{ opacity: 0, y: 16, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={spring}
-              role="dialog"
-              aria-modal="true"
-              aria-label={termsModal.title}
-              className="relative w-full max-w-lg p-6 shadow-2xl"
-              style={{ backgroundColor: surface, color: text, borderRadius: radius }}
+        <ViewerModal
+          surface={surface}
+          text={text}
+          soft={soft}
+          label={termsModal.title}
+          onClose={() => setTermsModal(null)}
+          restoreFocusTo={termsModal.opener}
+          zIndex={90}
+        >
+          <h3 className="text-base font-semibold">{termsModal.title}</h3>
+          <div className="mt-3 max-h-[55vh] overflow-y-auto text-sm leading-relaxed opacity-75 whitespace-pre-wrap">
+            {termsModal.body}
+          </div>
+          <div className="mt-5 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setTermsModal(null)}
+              className="flex-1 py-2.5 text-sm font-medium opacity-70 hover:opacity-100 transition-opacity"
+              style={{ borderRadius: `calc(${radius} * 0.6)`, boxShadow: "inset 0 0 0 1px rgba(128,128,128,0.35)" }}
             >
-              <h3 className="text-base font-semibold">{termsModal.title}</h3>
-              <div className="mt-3 max-h-[55vh] overflow-y-auto text-sm leading-relaxed opacity-75 whitespace-pre-wrap">
-                {termsModal.body}
-              </div>
-              <div className="mt-5 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setTermsModal(null)}
-                  className="flex-1 py-2.5 text-sm font-medium opacity-70 hover:opacity-100 transition-opacity"
-                  style={{ borderRadius: `calc(${radius} * 0.6)`, boxShadow: "inset 0 0 0 1px rgba(128,128,128,0.35)" }}
-                >
-                  닫기
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForm((f) => (termsModal.kind === "privacy" ? { ...f, agreePrivacy: true } : { ...f, agreeMarketing: true }));
-                    setTermsModal(null);
-                  }}
-                  className="flex-1 py-2.5 text-sm font-semibold text-white"
-                  style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)` }}
-                >
-                  동의합니다
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
+              닫기
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setForm((f) => (termsModal.kind === "privacy" ? { ...f, agreePrivacy: true } : { ...f, agreeMarketing: true }));
+                setTermsModal(null);
+              }}
+              className="flex-1 py-2.5 text-sm font-semibold"
+              style={{
+                backgroundColor: accent,
+                color: onAccentColor(accent),
+                borderRadius: `calc(${radius} * 0.6)`,
+              }}
+            >
+              동의합니다
+            </button>
+          </div>
+        </ViewerModal>
       )}
     </div>
   );
