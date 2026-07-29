@@ -299,7 +299,7 @@ const REG_PREVIEW_CSS = `
 .stk-live.regprev .rp-empty { text-align:center; font-size:12px; color:var(--muted); padding:8px 0; }
 `;
 
-function RegistrationFormPreview({
+export function RegistrationFormPreview({
   fields,
   privacyText,
   marketingText,
@@ -429,7 +429,7 @@ function RegistrationFormPreview({
                 <p className="rp-done-title">사전등록이 완료됐어요</p>
                 <p className="rp-done-desc">웨비나 당일 등록하신 연락처·이메일로 바로 입장할 수 있어요.</p>
                 {showPreviewCta && <button type="button" className="rp-submit">{successCta.label}</button>}
-                <button type="button" className="rp-close">닫기</button>
+                <button type="button" className="rp-close" onClick={() => setPreviewMode("form")}>닫기</button>
               </div>
             )}
           </div>
