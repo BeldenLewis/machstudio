@@ -27,7 +27,7 @@
 
 import { buildLandingModel } from "./landing/build-model";
 import type { LandingSession } from "./landing/types";
-import { CHOICE_FIELD_TYPES, normalizeLandingPageConfig, normalizeLivePageConfig, normalizeRegistrationForm } from "./webinar-config";
+import { CHOICE_FIELD_TYPES, normalizeLandingPageConfig, normalizeLivePageConfig, normalizeRegistrationForm, safeHttpUrl } from "./webinar-config";
 import { getYouTubeVideoId } from "./youtube";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -152,10 +152,9 @@ const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
  *
  * 손으로 유지하는 목록이다 — config 로는 계산할 수 없는 **코드 사실**이라서. 그래서
  * 렌더처가 나중에 생기면 이 목록이 조용히 거짓이 되고, 그걸 막는 장치는
- * "broken 개수가 정확히 2" 를 고정한 vitest 하나뿐이다. 목록을 고칠 때 그 테스트도 고쳐라.
+ * "broken 개수가 정확히 1" 을 고정한 vitest 하나뿐이다. 목록을 고칠 때 그 테스트도 고쳐라.
  */
 const BROKEN: Record<string, string> = {
-  "waiting.social": "‘N명이 함께 기다려요’ 밴드는 등록자 수를 넘기는 코드가 없어 어떤 면에서도 렌더되지 않아요.",
   "live.infoContact": "문의처는 저장되지만 시청 화면에 그리는 코드가 없어요.",
 };
 
@@ -322,7 +321,24 @@ export function buildExposureReport(input: ExposureInput): ExposureReport {
    */
   add({ ...W("waiting.notify", "시작 알림 받기", ["waiting", "entry"], "waiting", gate(live.waiting.notify, true, "")),
     ...(live.waiting.notify ? { why: "대기 화면에서는 등록자에게만 보여요(입장 확인 화면에서는 누구나)." } : {}) });
-  add({ ...W("waiting.social", "함께 기다리는 사람 수", ["waiting"], "waiting", { state: "broken", why: BROKEN["waiting.social"] }) });
+  add(W(
+    "waiting.social",
+    "함께 기다리는 인원 밴드",
+    ["waiting"],
+    "waiting",
+    gate(live.waiting.social, true, ""),
+  ));
+  const followUp = live.waiting.followUp;
+  const hasFollowUp =
+    !!str(followUp.text) ||
+    (!!str(followUp.ctaLabel) && !!safeHttpUrl(followUp.ctaUrl));
+  add(W(
+    "waiting.followUp",
+    "대기 안내문 · CTA",
+    ["waiting"],
+    "waiting",
+    gate(followUp.enabled, hasFollowUp, "영역을 켰지만 안내 문구나 완성된 CTA가 없어요."),
+  ));
 
   /**
    * 영상은 "값이 있나" 가 아니라 **뷰어가 파싱할 수 있나** 로 판정한다.

@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { CalendarPlus, Share2, Bell } from "lucide-react";
 import { buildStkCss } from "./LiveContentStk";
 import { formatKst } from "@/lib/datetime";
-import type { LivePageConfig } from "@/lib/webinar-config";
+import { safeHttpUrl, type LivePageConfig } from "@/lib/webinar-config";
 import { buildSessionNumbering, cleanSessionText, isPauseSession, parseSpeaker, sessionHasSpeaker, sessionKicker } from "@/lib/webinar-sessions";
 
 /**
@@ -45,12 +45,6 @@ const EXTRA_CSS = `
    흘러서, 어드민이 넣은 줄바꿈이 화면 두 곳에서 다르게 보였다.
    (AGENTS 공통: "사용자 텍스트(설명 등)는 줄바꿈을 보존해 표시") */
 .stk-live .plw-panel .desc { margin-top:18px; padding-top:18px; border-top:1px solid var(--line); font-size:13.5px; line-height:1.7; color:var(--muted); word-break:keep-all; white-space:pre-line; }
-.stk-live .plw-proof { display:flex; align-items:center; gap:14px; margin-top:18px; }
-.stk-live .plw-avatars { display:flex; }
-.stk-live .plw-avatars span { width:34px; height:34px; border-radius:50%; border:2.5px solid var(--card); margin-left:-11px; display:grid; place-items:center; font-size:12px; font-weight:750; color:#fff; }
-.stk-live .plw-avatars span:first-child { margin-left:0; }
-.stk-live .plw-proof p { font-size:13.5px; color:var(--muted); margin:0; }
-.stk-live .plw-proof b { color:var(--text); font-variant-numeric:tabular-nums; }
 .stk-live .plw-ag { background:var(--card); border-radius:var(--radius); box-shadow:var(--card-shadow); padding:8px 4px 12px; }
 .stk-live .plw-ag .h { display:flex; align-items:baseline; justify-content:space-between; padding:18px 22px 10px; }
 .stk-live .plw-ag .h h3 { font-size:15px; font-weight:800; letter-spacing:-.02em; color:var(--text); margin:0; }
@@ -91,6 +85,36 @@ const EXTRA_CSS = `
 @media (prefers-reduced-motion: reduce) {
   .stk-live .plw-together .dot { animation:none; opacity:1; }
 }
+.stk-live .plw-follow-up {
+  width:min(100%, 560px);
+  margin:14px auto 0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:12px;
+  text-align:center;
+}
+.stk-live .plw-follow-up p {
+  margin:0;
+  color:var(--muted);
+  font-size:14px;
+  line-height:1.65;
+  white-space:pre-line;
+  word-break:keep-all;
+}
+.stk-live .plw-follow-up a {
+  min-height:44px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:0 18px;
+  border-radius:12px;
+  background:var(--key);
+  color:var(--on-key);
+  font-size:13px;
+  font-weight:800;
+  box-shadow:var(--btn-shadow-key);
+}
 .stk-live .plw-who small { font-size:14px; color:var(--text); font-weight:650; }
 .stk-live .plw-who .who { display:flex; align-items:baseline; flex-wrap:wrap; gap:0 6px; }
 .stk-live .plw-who .who b { font-weight:750; }
@@ -123,7 +147,6 @@ interface PreLiveWaitingProps {
   live: LivePageConfig;
   /** 지금 대기 화면에 함께 있는 등록자 수. null = 서버가 세지 않는 구간(라이브 중). */
   waitingCount?: number | null;
-  registrantCount?: number;
   hasCalendar?: boolean;
   onCalendar?: () => void;
   onShare?: () => void;
@@ -141,11 +164,9 @@ function diffParts(ms: number) {
   return { d: Math.floor(s / 86400), h: Math.floor((s % 86400) / 3600), m: Math.floor((s % 3600) / 60), s: s % 60 };
 }
 
-const AV_COLORS = ["#6D28D9", "#0EA5E9", "#F97316", "#10B981", "#E11D48"];
-
 export default function PreLiveWaiting({
   webinar, accent, text, surface, targetIso, serverNowMs, registered = true,
-  live, waitingCount, registrantCount, hasCalendar, onCalendar, onShare, shareCopied, onNotify, notify, centerAction, replaceCountdown = false,
+  live, waitingCount, hasCalendar, onCalendar, onShare, shareCopied, onNotify, notify, centerAction, replaceCountdown = false,
 }: PreLiveWaitingProps) {
   const css = useMemo(() => buildStkCss(accent || "#6D28D9", text || "#141320", surface || "#FFFFFF") + EXTRA_CSS, [accent, text, surface]);
   const targetMs = useMemo(() => new Date(targetIso).getTime(), [targetIso]);
@@ -153,6 +174,7 @@ export default function PreLiveWaiting({
   const [mounted, setMounted] = useState(false);
   const [now, setNow] = useState(() => serverNowMs ?? 0);
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 클라이언트 전용 대기 인원은 hydration 뒤에만 열어야 한다.
     setMounted(true);
     const base = serverNowMs ?? Date.now();
     const startedAt = Date.now();
@@ -171,7 +193,12 @@ export default function PreLiveWaiting({
   const showNotify = live.waiting.notify && !!onNotify;
   const agendaNumbering = useMemo(() => buildSessionNumbering(webinar.sessions), [webinar.sessions]);
   const showAgenda = live.waiting.agenda && webinar.sessions.length > 0;
-  const showSocial = live.waiting.social && (registrantCount ?? 0) > 0;
+  const showTogether = live.waiting.social && mounted && typeof waitingCount === "number" && waitingCount >= 2;
+  const followUp = live.waiting.followUp;
+  const followUpText = followUp.text.trim();
+  const followUpUrl = safeHttpUrl(followUp.ctaUrl);
+  const showFollowUpCta = followUp.ctaLabel.trim() !== "" && followUpUrl !== "";
+  const showFollowUp = followUp.enabled && (followUpText !== "" || showFollowUpCta);
   const showCenterAction = Boolean(centerAction) && (started || replaceCountdown);
 
   return (
@@ -215,10 +242,21 @@ export default function PreLiveWaiting({
           * null(서버가 세지 않는 구간 = 라이브 중)에도 그리지 않는다 — 그때는 시청자 수가
           * 같은 자리를 맡는다. 마운트 전에는 숨긴다(SSR 과 값이 달라 깜빡이지 않게).
           */}
-        {mounted && typeof waitingCount === "number" && waitingCount >= 2 && (
+        {showTogether && (
           <div className="plw-together" role="status" aria-live="polite">
             <span className="dot" aria-hidden="true" />
             <span><b>{waitingCount.toLocaleString()}</b>명이 함께 기다려요</span>
+          </div>
+        )}
+
+        {showFollowUp && (
+          <div className="plw-follow-up">
+            {followUpText && <p>{followUp.text}</p>}
+            {showFollowUpCta && (
+              <a href={followUpUrl} target="_blank" rel="noopener noreferrer">
+                {followUp.ctaLabel}
+              </a>
+            )}
           </div>
         )}
 
@@ -245,27 +283,17 @@ export default function PreLiveWaiting({
         )}
         {notify?.error && <p className="plw-err">{notify.error}</p>}
 
-        {(showSocial || showAgenda) && (
+        {showAgenda && (
           <div className="plw-band">
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <div className="plw-panel">
                 <h3>이 웨비나는</h3>
                 <div className="big">{webinar.name}</div>
                 {webinar.description && <div className="desc">{webinar.description}</div>}
-                {showSocial && (
-                  <div className="plw-proof">
-                    <div className="plw-avatars">
-                      {[0, 1, 2, 3].map((i) => <span key={i} style={{ background: AV_COLORS[i] }}>{"김박이최"[i]}</span>)}
-                      <span style={{ background: "color-mix(in srgb, var(--text) 8%, var(--card))", color: "var(--muted)" }}>+</span>
-                    </div>
-                    <p><b>{(registrantCount ?? 0).toLocaleString()}명</b>이 함께 기다리고 있어요</p>
-                  </div>
-                )}
               </div>
             </div>
 
-            {showAgenda ? (
-              <div className="plw-ag">
+            <div className="plw-ag">
                 {/* 개수는 실제 세션만 — 휴식·Q&A 를 세면 "3개 세션"이 "5개 세션"으로 부풀었다 */}
                 <div className="h"><h3>세션 순서</h3><span>{agendaNumbering.realCount}개 세션</span></div>
                 {webinar.sessions.map((sn) => {
@@ -316,8 +344,7 @@ export default function PreLiveWaiting({
                     </div>
                   );
                 })}
-              </div>
-            ) : <div />}
+            </div>
           </div>
         )}
       </div>

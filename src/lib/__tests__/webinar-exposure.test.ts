@@ -186,17 +186,39 @@ describe("등록 폼 — 필드당 한 행", () => {
 });
 
 describe("요소 — 약속만 있고 렌더처가 없는 것(broken)", () => {
-  it("정확히 2건이다 — 세 번째가 조용히 늘거나 렌더처가 생겨 목록이 거짓이 되는 것을 막는다", () => {
+  it("렌더 약속이 없는 항목은 문의처 1건뿐이다", () => {
     const r = make();
     const broken = r.elements.filter((e) => e.state === "broken").map((e) => e.id);
-    expect(broken).toEqual(["waiting.social", "live.infoContact"]);
-    expect(r.brokenCount).toBe(2);
+    expect(broken).toEqual(["live.infoContact"]);
+    expect(r.brokenCount).toBe(1);
   });
 
   it("broken 은 운영자 카운트(emptyCount)에 섞이지 않는다 — 코드 결함이라 '확인할 것' 이 아니다", () => {
     const r = make();
     expect(r.emptyCount).toBe(r.elements.filter((e) => e.state === "empty").length);
     expect(r.elements.filter((e) => e.state === "broken").every((e) => e.why)).toBe(true);
+  });
+});
+
+describe("대기 화면 인원 밴드와 안내 CTA", () => {
+  it("인원 밴드는 토글 상태를 반영하고 실제 인원은 런타임 조건으로 설명한다", () => {
+    expect(row(make(), "waiting.social").state).toBe("on");
+    expect(row(make({ config: { livePage: { waiting: { social: false } } } }), "waiting.social").state).toBe("off");
+  });
+
+  it("안내 영역은 ON이어도 문구와 완성 CTA가 모두 없으면 empty다", () => {
+    const empty = make({ config: { livePage: { waiting: { followUp: { enabled: true } } } } });
+    expect(row(empty, "waiting.followUp").state).toBe("empty");
+    const on = make({
+      config: {
+        livePage: {
+          waiting: {
+            followUp: { enabled: true, text: "안내", ctaLabel: "", ctaUrl: "" },
+          },
+        },
+      },
+    });
+    expect(row(on, "waiting.followUp").state).toBe("on");
   });
 });
 
