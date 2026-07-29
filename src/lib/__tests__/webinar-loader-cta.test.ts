@@ -18,7 +18,12 @@ function config(successCta: SuccessCta) {
     signupDeadline: "2099-01-01T00:30:00.000Z",
     allowLiveRegistration: null,
     updatedKey: "test-key",
-    theme: { accentColor: "#6d28d9" },
+    theme: {
+      accentColor: "#6d28d9",
+      textColor: "#21182b",
+      surfaceColor: "#fbf7ef",
+      borderRadius: "14px",
+    },
     components: { formWidget: { successMessage: "기존 완료 안내문" } },
     registrationForm: {
       fields: [{
@@ -111,6 +116,18 @@ afterEach(() => {
 });
 
 describe("임베드 등록 완료 CTA", () => {
+  it("공개 폼 클래스와 저장된 테마 토큰을 런타임에 적용한다", async () => {
+    await boot({ enabled: false, label: "", url: "" });
+    const css = document.getElementById("mw-styles")?.textContent ?? "";
+
+    expect(document.querySelector(".mw-form-card")).toBeTruthy();
+    expect(document.querySelector(".mw-input")).toBeTruthy();
+    expect(document.querySelector(".mw-check")).toBeTruthy();
+    expect(css).toContain("--mw-accent:#6d28d9");
+    expect(css).toContain("--mw-text:#21182b");
+    expect(css).toContain("--mw-surface:#fbf7ef");
+  });
+
   it("wrapped multiple-choice rows keep a 44px target and first-line checkbox alignment", async () => {
     await boot({ enabled: false, label: "", url: "" });
     const row = document.querySelector<HTMLElement>(".mw-multi .mw-check");

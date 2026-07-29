@@ -23,6 +23,7 @@ import {
 } from "@/lib/webinar-config";
 import { MultiChoiceField, SingleChoiceField } from "@/components/webinar/choice-fields";
 import { readStatusRefresh } from "../status-refresh";
+import { PUBLIC_REGISTRATION_FORM_CSS } from "@/lib/webinar-public-form-css";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -227,6 +228,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [canRegister, setCanRegister] = useState(true); // 서버 상태머신 판정 — 마감(upcoming) 시 폼 대신 안내
   const [regModalOpen, setRegModalOpen] = useState(false); // 대기 화면의 사전등록 폼 모달
   const [registrationOpener, setRegistrationOpener] = useState<HTMLElement | null>(null);
+  const [viewerFocusRoot, setViewerFocusRoot] = useState<HTMLDivElement | null>(null);
   const [formError, setFormError] = useState("");
   // 실시간 중복 확인 — 연락처/이메일 입력 시 디바운스 후 기존 등록 여부 표시
   const [dupCheck, setDupCheck] = useState<{ phone: boolean; email: boolean }>({ phone: false, email: false });
@@ -941,22 +943,20 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
     if (field.type === "checkbox") {
       return (
-        <label key={field.key} className="flex min-h-[18px] cursor-pointer items-start gap-2.5">
+        <label key={field.key} className="mw-field mw-check">
           <input
             type="checkbox"
             checked={Boolean(value)}
             onChange={(e) => setValue(e.target.checked)}
-            className="m-0 h-[18px] w-[18px] shrink-0"
-            style={{ accentColor: accent }}
           />
-          <span className="text-xs leading-[18px] opacity-60">{commonLabel}</span>
+          <span>{commonLabel}</span>
         </label>
       );
     }
 
     return (
-      <div key={field.key}>
-        <label className="text-xs opacity-50 mb-1 block">{commonLabel}</label>
+      <div key={field.key} className="mw-field">
+        <label className="mw-label">{commonLabel}</label>
         {field.type === "multiple" ? (
           <MultiChoiceField
             field={field}
@@ -964,6 +964,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             onChange={setValue}
             accent={accent}
             inputStyle={inputStyle}
+            publicForm
           />
         ) : field.type === "select" ? (
           <SingleChoiceField
@@ -971,6 +972,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             value={String(value)}
             onChange={setValue}
             inputStyle={inputStyle}
+            publicForm
           />
         ) : (
           <>
@@ -980,8 +982,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               value={String(value)}
               onChange={(e) => setValue(field.type === "tel" ? e.target.value.replace(/[^0-9]/g, "") : e.target.value)}
               placeholder={field.placeholder}
-              className="w-full px-3 py-2.5 text-sm bg-transparent focus:outline-none"
-              style={inputStyle}
+              className="mw-input"
             />
             {field.system && ((field.key === "phone" && dupCheck.phone) || (field.key === "email" && dupCheck.email)) && (
               <p className="text-[11px] mt-1.5" style={{ color: "#f59e0b" }}>
@@ -1007,9 +1008,13 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
   return (
     <div
+      ref={setViewerFocusRoot}
+      data-viewer-focus-root
+      tabIndex={-1}
       className="min-h-screen"
       style={{ backgroundColor: bg, color: text, fontFamily: `${font}, sans-serif` }}
     >
+      <style dangerouslySetInnerHTML={{ __html: PUBLIC_REGISTRATION_FORM_CSS }} />
       {/* 소유자 미리보기 — 상태 전환 바(대기·입장확인·라이브·종료). 실제 부작용은 모두 정지. */}
       {previewMode && !embedded && (
         <div
@@ -1235,17 +1240,24 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             사라지면 입력이 증발하고, regModalOpen 이 남아 배경 스크롤이 영영 잠긴다. */}
         {view === "signup" && !hasRegistration && regModalOpen && (
           <div
-            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-            style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}
+            className="mw-modal-overlay mw-reset fixed inset-0 z-[60] flex items-center justify-center p-4"
+            style={{
+              "--mw-accent": accent,
+              "--mw-radius": radius,
+              "--mw-text": text,
+              "--mw-surface": surface,
+              background: "rgba(0,0,0,0.55)",
+              backdropFilter: "blur(4px)",
+              WebkitBackdropFilter: "blur(4px)",
+            } as React.CSSProperties}
             onClick={(e) => { if (e.target === e.currentTarget) setRegModalOpen(false); }}
             role="dialog"
             aria-modal="true"
             aria-label="사전 등록"
           >
             <motion.div
-              style={{ backgroundColor: surface, borderRadius: radius }}
               // 내용만 스크롤 — 긴 폼에서도 닫기(×)와 제출 버튼이 잘리지 않게(모바일).
-              className="relative max-h-[88vh] w-full max-w-[480px] overflow-y-auto p-6 md:p-7"
+              className="mw-modal-card mw-form-card relative max-h-[88vh] w-full overflow-y-auto"
               initial={{ opacity: 0, y: 8, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.18 }}
@@ -1265,8 +1277,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
                 </div>
               ) : (
               <>
-                <h2 className="text-lg font-semibold mb-1">{webinar.name} 사전등록</h2>
-                <p className="text-xs opacity-50 mb-5">
+                <h2 className="mw-form-title">{webinar.name} 사전등록</h2>
+                <p className="mw-hint mb-5">
                   등록 마감 {formatKst(webinar.signupDeadline, { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                 </p>
                 <div className="space-y-3">
@@ -1279,13 +1291,11 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
                       { kind: "privacy" as const, text: registrationForm.privacyText, body: registrationForm.privacyBody, checked: form.agreePrivacy, set: (v: boolean) => setForm((f) => ({ ...f, agreePrivacy: v })) },
                       { kind: "marketing" as const, text: registrationForm.marketingText, body: registrationForm.marketingBody, checked: form.agreeMarketing, set: (v: boolean) => setForm((f) => ({ ...f, agreeMarketing: v })) },
                     ]).map((consent) => (
-                      <label key={consent.kind} className="flex min-h-[18px] cursor-pointer items-start gap-2.5">
+                      <label key={consent.kind} className="mw-check">
                         <input
                           type="checkbox"
                           checked={consent.checked}
                           onChange={(e) => consent.set(e.target.checked)}
-                          className="m-0 h-[18px] w-[18px] shrink-0"
-                          style={{ accentColor: accent }}
                         />
                         {consent.body ? (
                           // 본문이 설정돼 있으면 텍스트 클릭 = 약관 팝업 (체크 토글은 체크박스에서만)
@@ -1296,26 +1306,25 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
                               e.stopPropagation();
                               setTermsModal({ kind: consent.kind, title: consent.text, body: consent.body });
                             }}
-                            className="text-left text-xs leading-[18px] opacity-60 underline decoration-from-font underline-offset-2 transition-opacity hover:opacity-90"
+                            className="text-left underline decoration-from-font underline-offset-2 transition-opacity hover:opacity-90"
                           >
                             {consent.text}
                           </button>
                         ) : (
-                          <span className="text-xs leading-[18px] opacity-60">{consent.text}</span>
+                          <span>{consent.text}</span>
                         )}
                       </label>
                     ))}
                   </div>
 
                   {formError && (
-                    <p className="text-xs text-red-400 pt-1" role="alert">{formError}</p>
+                    <p className="mw-msg mw-msg-error" role="alert">{formError}</p>
                   )}
 
                   <motion.button
                     onClick={handleRegister}
                     disabled={isRegistering || dupCheck.phone || dupCheck.email}
-                    className="w-full py-3 font-semibold text-white transition-opacity disabled:opacity-40"
-                    style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)` }}
+                    className="mw-submit"
                     whileHover={{ y: -1 }}
                     whileTap={{ scale: 0.96 }}
                     transition={spring}
@@ -1399,7 +1408,13 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           soft={soft}
           label="사전등록 완료"
           onClose={() => setRegisterDone(false)}
-          restoreFocusTo={registrationOpener}
+          restoreFocusTo={
+            hasRegistration
+              ? viewerFocusRoot
+              : registrationOpener?.isConnected
+                ? registrationOpener
+                : viewerFocusRoot
+          }
           zIndex={80}
           maxWidthClass="max-w-sm"
         >

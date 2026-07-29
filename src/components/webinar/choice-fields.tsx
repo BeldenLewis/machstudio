@@ -33,12 +33,13 @@ function looksLikeOther(options: readonly string[], value: string): boolean {
 
 /** 드롭다운 + 기타 직접입력. */
 export function SingleChoiceField({
-  field, value, onChange, inputStyle,
+  field, value, onChange, inputStyle, publicForm = false,
 }: {
   field: { key: string; label: string; options?: string[]; allowOther?: boolean };
   value: string;
   onChange: (next: string) => void;
   inputStyle: React.CSSProperties;
+  publicForm?: boolean;
 }) {
   const options = field.options ?? [];
   // 기타를 고른 직후에는 값이 아직 비어 있어 "미선택" 과 구분되지 않는다 → 로컬 플래그가 필요하다.
@@ -54,8 +55,8 @@ export function SingleChoiceField({
           setOtherOn(false);
           onChange(e.target.value);
         }}
-        className="w-full px-3 py-2.5 text-sm bg-transparent focus:outline-none"
-        style={inputStyle}
+        className={publicForm ? "mw-select" : "w-full px-3 py-2.5 text-sm bg-transparent focus:outline-none"}
+        style={publicForm ? undefined : inputStyle}
       >
         <option value="">선택해주세요</option>
         {options.map((option) => <option key={option} value={option}>{option}</option>)}
@@ -68,8 +69,8 @@ export function SingleChoiceField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="직접 입력해주세요"
-          className="mt-1.5 w-full px-3 py-2.5 text-sm bg-transparent focus:outline-none"
-          style={inputStyle}
+          className={publicForm ? "mw-input" : "mt-1.5 w-full px-3 py-2.5 text-sm bg-transparent focus:outline-none"}
+          style={publicForm ? undefined : inputStyle}
         />
       )}
     </>
@@ -84,13 +85,14 @@ export function SingleChoiceField({
  * 이유를 옆 문구가 말해 주지 않으면 고장으로 읽힌다.
  */
 export function MultiChoiceField({
-  field, value, onChange, accent, inputStyle,
+  field, value, onChange, accent, inputStyle, publicForm = false,
 }: {
   field: { key: string; label: string; options?: string[]; allowOther?: boolean; maxSelect?: number; type: string };
   value: string;
   onChange: (next: string) => void;
   accent: string;
   inputStyle: React.CSSProperties;
+  publicForm?: boolean;
 }) {
   const options = field.options ?? [];
   const max = maxSelectFor({ type: "multiple", maxSelect: field.maxSelect, options });
@@ -112,7 +114,7 @@ export function MultiChoiceField({
    * 체크박스 자체는 브라우저 기본 13px 이지만 **라벨 전체가 타깃**이라 실제 타깃은 44px 행이다.
    */
   return (
-    <div className="space-y-2">
+    <div className={publicForm ? "mw-multi" : "space-y-2"}>
       {options.map((option) => {
         const on = picked.includes(option);
         // 상한에 닿으면 안 고른 칸만 잠근다 — 고른 칸은 항상 해제할 수 있어야 빠져나올 수 있다.
@@ -120,15 +122,17 @@ export function MultiChoiceField({
         return (
           <label
             key={option}
-            className={`flex min-h-11 items-start gap-2.5 py-3 text-sm leading-5 ${locked ? "opacity-40" : "cursor-pointer"}`}
+            className={publicForm
+              ? "mw-check"
+              : `flex min-h-11 items-start gap-2.5 py-3 text-sm leading-5 ${locked ? "opacity-40" : "cursor-pointer"}`}
           >
             <input
               type="checkbox"
               checked={on}
               disabled={locked}
               onChange={() => toggle(option)}
-              className="m-0 mt-px size-[18px] shrink-0"
-              style={{ accentColor: accent }}
+              className={publicForm ? undefined : "m-0 mt-px size-[18px] shrink-0"}
+              style={publicForm ? undefined : { accentColor: accent }}
             />
             <span>{option}</span>
           </label>
@@ -136,7 +140,9 @@ export function MultiChoiceField({
       })}
 
       {field.allowOther && (
-        <label className={`flex min-h-11 items-start gap-2.5 py-3 text-sm leading-5 ${atMax && !showOther ? "opacity-40" : "cursor-pointer"}`}>
+        <label className={publicForm
+          ? "mw-check"
+          : `flex min-h-11 items-start gap-2.5 py-3 text-sm leading-5 ${atMax && !showOther ? "opacity-40" : "cursor-pointer"}`}>
           <input
             type="checkbox"
             checked={showOther}
@@ -146,8 +152,8 @@ export function MultiChoiceField({
               // 끄면 기타로 쓴 답만 빼고 나머지 선택은 유지한다.
               if (!e.target.checked) setPicked(picked.filter((p) => options.includes(p)));
             }}
-            className="m-0 mt-px size-[18px] shrink-0"
-            style={{ accentColor: accent }}
+            className={publicForm ? undefined : "m-0 mt-px size-[18px] shrink-0"}
+            style={publicForm ? undefined : { accentColor: accent }}
           />
           <span>{OTHER_LABEL}</span>
         </label>
@@ -167,13 +173,13 @@ export function MultiChoiceField({
             setPicked(clean.trim() ? [...kept, clean] : kept);
           }}
           placeholder="직접 입력해주세요"
-          className="w-full px-3 py-2.5 text-sm bg-transparent focus:outline-none"
-          style={inputStyle}
+          className={publicForm ? "mw-input" : "w-full px-3 py-2.5 text-sm bg-transparent focus:outline-none"}
+          style={publicForm ? undefined : inputStyle}
         />
       )}
 
       {max !== null && (
-        <p className="text-[11px] opacity-50">
+        <p className={publicForm ? "mw-hint" : "text-[11px] opacity-50"}>
           최대 {max}개까지 선택할 수 있어요{atMax ? " — 다른 항목을 고르려면 먼저 하나를 해제해주세요" : ""}
         </p>
       )}

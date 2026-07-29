@@ -1,0 +1,219 @@
+// @vitest-environment jsdom
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import LivePage from "../live/page";
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+vi.mock("../LivePushLayer", () => ({ default: () => null }));
+vi.mock("../PreLiveWaiting", () => ({
+  default: ({ centerAction }: { centerAction?: React.ReactNode }) => <>{centerAction}</>,
+}));
+vi.mock("../EntryVerify", () => ({ default: () => null }));
+vi.mock("../EndedScreen", () => ({ default: () => null }));
+
+const webinar = {
+  id: "webinar-entry-form",
+  name: "공개 폼 패리티 웨비나",
+  slug: "entry-form",
+  description: "등록 폼 테스트",
+  liveStartAt: "2099-01-01T01:00:00.000Z",
+  liveEndAt: "2099-01-01T02:00:00.000Z",
+  signupDeadline: "2099-01-01T00:30:00.000Z",
+  theme: {
+    bgColor: "#08111f",
+    surfaceColor: "#f7f3ec",
+    accentColor: "#a23b72",
+    textColor: "#221923",
+    borderRadius: "15px",
+  },
+  config: {
+    registrationForm: {
+      fields: [
+        {
+          id: "name",
+          key: "name",
+          label: "이름",
+          type: "text",
+          placeholder: "홍길동",
+          required: true,
+          enabled: true,
+          options: [],
+          system: true,
+        },
+        {
+          id: "role",
+          key: "role",
+          label: "역할",
+          type: "select",
+          placeholder: "",
+          required: false,
+          enabled: true,
+          options: ["기획", "개발"],
+          system: false,
+        },
+        {
+          id: "topics",
+          key: "topics",
+          label: "관심 주제",
+          type: "multiple",
+          placeholder: "",
+          required: false,
+          enabled: true,
+          options: ["제품", "마케팅"],
+          system: false,
+        },
+        {
+          id: "updates",
+          key: "updates",
+          label: "업데이트 수신",
+          type: "checkbox",
+          placeholder: "",
+          required: false,
+          enabled: true,
+          options: [],
+          system: false,
+        },
+      ],
+      privacyText: "[필수] 개인정보 동의",
+      marketingText: "[선택] 마케팅 동의",
+      privacyBody: "",
+      marketingBody: "",
+      privacyDefaultChecked: false,
+      marketingDefaultChecked: false,
+      submitLabel: "사전등록 완료하기",
+      successCta: { enabled: false, label: "", url: "" },
+    },
+  },
+  components: {},
+  sessions: [],
+};
+
+let host: HTMLDivElement | null = null;
+let root: Root | null = null;
+
+class ResizeObserverStub {
+  observe() {}
+  disconnect() {}
+}
+
+function jsonResponse(body: unknown) {
+  return { ok: true, json: async () => body } as Response;
+}
+
+async function flush() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+async function renderLivePageInEntryState() {
+  vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith("/register")) {
+      return jsonResponse({ registration: { id: "registration-success" }, youtubeId: null });
+    }
+    if (url.endsWith("/info")) {
+      return jsonResponse({
+        webinar,
+        status: "registration",
+        entryOpen: false,
+        canRegister: true,
+        serverNow: "2026-07-29T00:00:00.000Z",
+      });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  }));
+
+  host = document.createElement("div");
+  document.body.appendChild(host);
+  root = createRoot(host);
+  await act(async () => {
+    root?.render(<LivePage params={Promise.resolve({ slug: "entry-form" })} />);
+  });
+  await flush();
+  return host;
+}
+
+function setTextInput(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+afterEach(() => {
+  act(() => root?.unmount());
+  host?.remove();
+  document.body.removeAttribute("style");
+  localStorage.clear();
+  sessionStorage.clear();
+  vi.unstubAllGlobals();
+  root = null;
+  host = null;
+});
+
+describe("입장 화면 사전등록 폼", () => {
+  it("랜딩 공개 등록 폼의 클래스 계약과 저장된 테마 토큰을 사용한다", async () => {
+    const view = await renderLivePageInEntryState();
+    const opener = Array.from(view.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("사전등록하기"));
+
+    act(() => opener?.click());
+
+    const overlay = view.querySelector<HTMLElement>(".mw-modal-overlay");
+    expect(overlay).toBeTruthy();
+    expect(view.querySelector(".mw-form-card")).toBeTruthy();
+    expect(view.querySelectorAll(".mw-field").length).toBeGreaterThan(0);
+    expect(view.querySelector(".mw-input")).toBeTruthy();
+    expect(view.querySelector(".mw-select")).toBeTruthy();
+    expect(view.querySelector(".mw-multi")).toBeTruthy();
+    expect(view.querySelector(".mw-check")).toBeTruthy();
+    expect(view.querySelector(".mw-submit")).toBeTruthy();
+    expect(overlay?.style.getPropertyValue("--mw-accent")).toBe("#a23b72");
+    expect(overlay?.style.getPropertyValue("--mw-text")).toBe("#221923");
+    expect(overlay?.style.getPropertyValue("--mw-surface")).toBe("#f7f3ec");
+  });
+
+  it("등록 성공 뒤 완료 모달을 닫으면 연결된 시청 화면 루트로 포커스를 복원한다", async () => {
+    const view = await renderLivePageInEntryState();
+    const viewerRoot = view.querySelector<HTMLElement>("[data-viewer-focus-root]");
+    const opener = Array.from(view.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.includes("사전등록하기"));
+    expect(viewerRoot).toBeTruthy();
+    expect(opener).toBeTruthy();
+
+    act(() => opener!.click());
+    const name = view.querySelector<HTMLInputElement>('.mw-input[type="text"]');
+    const privacy = Array.from(view.querySelectorAll<HTMLInputElement>(".mw-check input"))
+      .find((input) => input.nextElementSibling?.textContent?.includes("개인정보"));
+    expect(name).toBeTruthy();
+    expect(privacy).toBeTruthy();
+
+    act(() => {
+      setTextInput(name!, "테스트 사용자");
+      privacy!.click();
+    });
+    await act(async () => {
+      view.querySelector<HTMLButtonElement>(".mw-submit")?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(opener!.isConnected).toBe(false);
+    expect(view.querySelector('[aria-label="사전등록 완료"]')).toBeTruthy();
+    await act(async () => {
+      Array.from(view.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent === "확인")
+        ?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(document.activeElement).toBe(viewerRoot);
+  });
+});

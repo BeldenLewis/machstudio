@@ -23,6 +23,7 @@
  */
 import { ATTRIBUTION_CORE_JS } from "./attribution-core";
 import { PHONE_MIN_DIGITS, PHONE_MAX_DIGITS, EMAIL_REGEX } from "./webinar-config";
+import { PUBLIC_REGISTRATION_FORM_CSS } from "./webinar-public-form-css";
 
 export function buildWebinarLoaderScript({ siteId, baseUrl }: { siteId: string; baseUrl: string }): string {
   return `(function() {
@@ -251,7 +252,9 @@ ${ATTRIBUTION_CORE_JS}
     var t = (CFG && CFG.theme) || {};
     return {
       accent: t.accentColor || "#6d28d9",
-      radius: t.borderRadius || "12px"
+      radius: t.borderRadius || "12px",
+      text: t.textColor || "#111",
+      surface: t.surfaceColor || "#ffffff"
     };
   }
   function injectStyles() {
@@ -267,6 +270,7 @@ ${ATTRIBUTION_CORE_JS}
   function buildCss() {
     var t = theme();
     return [
+      ".mw-reset { --mw-accent:" + t.accent + "; --mw-radius:" + t.radius + "; --mw-text:" + t.text + "; --mw-surface:" + t.surface + "; }",
       ".mw-reset, .mw-reset * { box-sizing: border-box; margin: 0; }",
       ".mw-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 28px; border: 0; border-radius: " + t.radius + "; font-size: 15px; font-weight: 700; line-height: 1.2; cursor: pointer; text-decoration: none !important; white-space: nowrap; transition: transform .18s ease, opacity .18s ease, box-shadow .18s ease; }",
       ".mw-btn:hover { transform: translateY(-1px); }",
@@ -276,29 +280,7 @@ ${ATTRIBUTION_CORE_JS}
       ".mw-btn-disabled { background: rgba(120,120,128,0.16) !important; color: #999 !important; -webkit-text-fill-color: #999 !important; cursor: not-allowed; }",
       ".mw-btn-disabled:hover { transform: none; }",
       ".mw-hero { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }",
-      ".mw-form-card { max-width: 520px; padding: 28px 24px; border: 1px solid rgba(120,120,128,0.22); border-radius: 16px; background: #ffffff; color: #111 !important; font-size: 14px; }",
-      ".mw-form-card, .mw-form-card * { -webkit-text-fill-color: initial; }",
-      ".mw-form-title { font-size: 18px; font-weight: 800; color: #111; margin-bottom: 18px; }",
-      ".mw-field { margin-bottom: 14px; }",
-      ".mw-label { display: block; font-size: 13px; font-weight: 600; color: #444; margin-bottom: 6px; }",
-      ".mw-req { color: " + t.accent + "; margin-left: 2px; }",
-      ".mw-input, .mw-select { width: 100%; padding: 11px 13px; border: 1px solid rgba(120,120,128,0.35); border-radius: 9px; background: #fff; color: #111; font-size: 14px; outline: none; }",
-      ".mw-input:focus, .mw-select:focus { border-color: " + t.accent + "; }",
-      ".mw-check { display:flex; align-items:flex-start; gap:9px; min-height:20px; font-size:13px; line-height:20px; color:#555; margin-bottom:10px; cursor:pointer; }",
-      ".mw-check input { width:18px; height:18px; flex:none; margin:1px 0 0; accent-color:" + t.accent + "; }",
-      ".mw-check input:disabled { cursor: not-allowed; }",
-      /* 상한에 닿아 잠긴 칸은 흐리게 — 잠금이 보이지 않으면 클릭이 씹히는 것처럼 느껴진다 */
-      ".mw-check:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }",
-      ".mw-multi { display: flex; flex-direction: column; gap: 2px; }",
-      /* 터치 타깃 44px — 20px 행이 연달아 붙으면 모바일에서 옆 항목을 누른다(WCAG AA) */
-      ".mw-multi .mw-check { margin-bottom:0; min-height:44px; align-items:flex-start; gap:10px; padding:12px 0; line-height:20px; }",
-      ".mw-multi .mw-check input { margin-top:1px; }",
-      ".mw-multi .mw-input { margin-top: 4px; }",
-      ".mw-hint { font-size: 11px; color: #888; margin-top: 4px; }",
-      ".mw-submit { width: 100%; margin-top: 8px; }",
-      ".mw-msg { display: none; margin-top: 14px; padding: 12px 14px; border-radius: 9px; font-size: 13px; line-height: 1.55; }",
-      ".mw-msg-error { display: block; background: rgba(220,38,38,0.08); border: 1px solid rgba(220,38,38,0.25); color: #b91c1c; }",
-      ".mw-msg-success { display: block; background: rgba(22,163,74,0.08); border: 1px solid rgba(22,163,74,0.25); color: #15803d; }",
+      ${JSON.stringify(PUBLIC_REGISTRATION_FORM_CSS)},
       ".mw-live-frame { width: 100%; border: 0; display: block; min-height: 520px; }",
       ".mw-banner { position: fixed !important; left: 50% !important; bottom: 24px !important; transform: translateX(-50%) !important; width: 680px; max-width: calc(100vw - 32px); z-index: 999900 !important; border-radius: 16px; background: linear-gradient(180deg, rgba(24,24,28,0.92), rgba(14,14,18,0.88)); border: 1px solid rgba(255,255,255,0.14); color: #fff !important; box-shadow: 0 16px 48px rgba(0,0,0,0.4); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); overflow: hidden; }",
       // 랜딩(호스트 DOM 마운트)이 히어로를 보여주는 동안에는 배너를 비운다 — 랜딩 자체 CTA 와 겹치기 때문.
