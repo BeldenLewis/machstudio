@@ -263,14 +263,14 @@ export const PUBLIC_REGISTRATION_FORM_CSS = `
   padding:28px 24px;
   border:0;
   border-radius:calc(var(--mw-radius, 12px) * 1.34);
-  background:#fff;
-  color:#111;
+  background:var(--mw-surface);
+  color:var(--mw-text);
   box-shadow:0 24px 64px rgba(0,0,0,.24);
 }
-.mw-label { display:block; margin-bottom:6px; font-size:13px; font-weight:600; color:#444; }
-.mw-input,.mw-select { width:100%; min-height:44px; padding:11px 13px; border:1px solid rgba(120,120,128,.35); border-radius:9px; background:#fff; color:#111; }
+.mw-label { display:block; margin-bottom:6px; font-size:13px; font-weight:600; color:var(--mw-text); }
+.mw-input,.mw-select { width:100%; min-height:44px; padding:11px 13px; border:1px solid color-mix(in srgb,var(--mw-text) 24%,transparent); border-radius:9px; background:var(--mw-surface); color:var(--mw-text); }
 .mw-input:focus,.mw-select:focus { border-color:var(--mw-accent); box-shadow:0 0 0 3px color-mix(in srgb,var(--mw-accent) 16%,transparent); outline:0; }
-.mw-check { display:flex; align-items:flex-start; gap:9px; min-height:20px; font-size:13px; line-height:20px; color:#555; }
+.mw-check { display:flex; align-items:flex-start; gap:9px; min-height:20px; font-size:13px; line-height:20px; color:color-mix(in srgb,var(--mw-text) 68%,transparent); }
 .mw-submit { width:100%; min-height:46px; background:var(--mw-accent); color:#fff; }
 `;
 ```
@@ -291,9 +291,11 @@ const checkClass = publicForm ? "mw-check" : DEFAULT_CHECK_CLASS;
 import { PUBLIC_REGISTRATION_FORM_CSS } from "./webinar-public-form-css";
 
 // generated loader buildCss()
-".mw-reset { --mw-accent:" + t.accent + "; --mw-radius:" + t.radius + "; }",
+".mw-reset { --mw-accent:" + t.accent + "; --mw-radius:" + t.radius + "; --mw-text:" + t.text + "; --mw-surface:" + t.surface + "; }",
 ${JSON.stringify(PUBLIC_REGISTRATION_FORM_CSS)},
 ```
+
+로더의 `theme()`은 저장된 `textColor`와 `surfaceColor`를 읽어 `text`, `surface`로 반환한다. 값이 없는 레거시 설정에만 기존 공개 폼의 기본 글자색·표면색을 폴백으로 사용한다.
 
 `live/page.tsx`:
 
