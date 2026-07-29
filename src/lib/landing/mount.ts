@@ -337,7 +337,10 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   // 목차 레이어에도 on-accent 를 미러링한다 — 루트 밖으로 나갔으니 후손 선택자가 안 걸린다.
   cleanups.push(attachAccentZone(root, accentZones, tocLayer ? [tocLayer] : []));
   // 목차 레이어는 루트 밖이라 섹션 모드를 못 받는다 → 스파이가 활성 섹션 모드를 미러링한다.
-  cleanups.push(attachTocSpy(root, toc, m.tocItems.map((t) => m.sectionId(t.id)), tocLayer));
+  // 첫 화면(히어로)에는 활성 섹션이 없으므로 히어로 모드를 따로 넘긴다. 미디어 히어로는
+  // 설정이 라이트여도 스크림이 어둡다 → 항상 다크로 본다(css .hero-has-media 와 같은 규칙).
+  const heroBg = m.lp.heroMedia ? "dark" : m.lp.sectionBg.hero;
+  cleanups.push(attachTocSpy(root, toc, m.tocItems.map((t) => m.sectionId(t.id)), tocLayer, heroBg));
   // 임베드는 랜딩 위아래로 호스트 콘텐츠가 있다 → 랜딩을 벗어나면 고정 목차를 감춘다.
   cleanups.push(attachTocVisibility(body, toc));
 
