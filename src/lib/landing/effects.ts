@@ -150,6 +150,7 @@ export function attachTocSpy(
   tocEl: HTMLElement | null,
   sectionIds: string[],
   mirrorBgTo?: HTMLElement | null,
+  topBg?: string,
 ): () => void {
   if (!tocEl || !hasIO()) return noop;
   const sections = sectionIds
@@ -169,9 +170,13 @@ export function attachTocSpy(
     }
     if (mirrorBgTo) {
       const el = active ? byId.get(active) : null;
+      // 아직 아무 섹션도 밴드에 안 걸렸다 = 히어로를 보는 중. 루트 모드로 떨어지면 안 된다 —
+      // 루트는 세션 구간 바탕이라 히어로와 모드가 반대일 수 있고, 그때 목차가 통째로 사라진다
+      // (실측: 히어로 다크 이미지 + 루트 라이트 → 진회색 글자가 이미지에 묻혔다).
+      const fallback = root.getAttribute("data-bg") || "dark";
       mirrorBgTo.setAttribute(
         "data-bg",
-        el?.getAttribute("data-bg") || root.getAttribute("data-bg") || "dark",
+        active ? el?.getAttribute("data-bg") || fallback : topBg || fallback,
       );
     }
   };

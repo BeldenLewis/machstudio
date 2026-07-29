@@ -73,6 +73,29 @@ describe("라이트 모드 토큰이 배경보다 어두운 쪽으로 파생된�
   });
 });
 
+describe("미디어 히어로는 모드와 무관하게 어두운 바탕 기준으로 파생된다", () => {
+  /**
+   * 예전엔 --paper 만 덮었다. 그래서 라이트 히어로 + 어두운 이미지에서 eyebrow 가 쓰는
+   * --primary-bright 가 라이트 공식(키컬러를 검정 쪽으로)으로 남아 스크림 위에서 사라졌다
+   * (실측 #ff8500: rgb(125,67,5)).
+   */
+  const mediaBlock = () => {
+    const m = LANDING_CSS.match(/\.hero\.hero-has-media\s*\{([\s\S]*?)\}/);
+    expect(m).not.toBeNull();
+    return m![1];
+  };
+
+  it("--primary-bright 를 흰색 쪽으로 재선언한다", () => {
+    expect(mediaBlock()).toMatch(/--primary-bright:[^;]*#ffffff/);
+  });
+
+  it("--sec-bg 를 어둡게 덮는다 — 파생 토큰이 라이트 배경과 섞이지 않게", () => {
+    const decl = mediaBlock().match(/--sec-bg:([^;]*);/);
+    expect(decl).not.toBeNull();
+    expect(decl![1]).not.toContain("--bg-light");
+  });
+});
+
 describe("판이 배경과 가까워도 형태가 남는다", () => {
   /** .faq-item 만 형제 카드와 달리 그림자가 없어 라이트에서 판이 통째로 사라졌다. */
   it("FAQ 카드에 카드 그림자가 있다", () => {

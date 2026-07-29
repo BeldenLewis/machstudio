@@ -216,8 +216,17 @@ export const LANDING_CSS = `
    덮어씌우는 방식이면 CSS 는 즉시 그려지고 이미지는 나중에 도착하므로,
    첫 로드에 기본 화면이 보였다가 이미지로 바뀌는 게 그대로 눈에 띈다. */
 /* 미디어 히어로는 이미지와 스크림이 어둡다 — 섹션 모드가 라이트여도 글자는 밝아야 읽힌다.
-   (모드를 무시하는 유일한 곳이고, 편집 UI 에 그 사실을 적어 둔다.) */
-.lnd .hero.hero-has-media { background: var(--sec-bg); --paper: #f6f8ff; }
+   (모드를 무시하는 유일한 곳이고, 편집 UI 에 그 사실을 적어 둔다.)
+   --paper 만 덮으면 부족했다. 파생 토큰은 --sec-bg 와도 섞이고, --primary-bright 는 라이트
+   모드에서 키컬러를 **어둡게** 섞은 값이라 어두운 스크림 위에서 사라진다 — eyebrow 가
+   그 토큰을 쓴다(실측 #ff8500 라이트: rgb(125,67,5), 스크림 위 대비 1.6:1). 다크 공식으로 되돌린다.
+   바탕은 설정 darkBg 가 아니라 스크림 색(rgba(4,6,11,…))에 맞춘다 — 글자 뒤에 실제로 있는 면이다. */
+.lnd .hero.hero-has-media {
+  --sec-bg: #04060b;
+  --paper: #f6f8ff;
+  --primary-bright: color-mix(in srgb, var(--primary) 76%, #ffffff);
+  background: var(--sec-bg);
+}
 .lnd .hero.hero-has-media::before,
 .lnd .hero.hero-has-media::after { content: none; }
 .lnd .hero::before,
