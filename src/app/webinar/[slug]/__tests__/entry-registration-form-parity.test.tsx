@@ -67,7 +67,7 @@ const webinar = {
         {
           id: "updates",
           key: "updates",
-          label: "업데이트 수신",
+          label: "업데이트\n수신",
           type: "checkbox",
           placeholder: "",
           required: false,
@@ -76,7 +76,7 @@ const webinar = {
           system: false,
         },
       ],
-      privacyText: "[필수] 개인정보 동의",
+      privacyText: "[필수] 개인정보\n동의",
       marketingText: "[선택] 마케팅 동의",
       privacyBody: "",
       marketingBody: "",
@@ -176,7 +176,84 @@ describe("입장 화면 사전등록 폼", () => {
     expect(overlay?.style.getPropertyValue("--mw-accent")).toBe("#a23b72");
     expect(overlay?.style.getPropertyValue("--mw-text")).toBe("#221923");
     expect(overlay?.style.getPropertyValue("--mw-surface")).toBe("#f7f3ec");
+    expect(overlay?.style.getPropertyValue("--mw-on-accent")).toBe("#ffffff");
+    const css = view.querySelector("style")?.textContent ?? "";
+    expect(css).toContain("color:var(--mw-on-accent)");
+    expect(css).not.toContain("color:#fff");
+    expect(css).not.toContain("#dc2626");
+    expect(css).not.toContain("#16a34a");
+
+    const customCheckboxText = Array.from(view.querySelectorAll<HTMLElement>(".mw-field.mw-check span"))
+      .find((span) => span.textContent?.includes("업데이트"))!;
+    const privacyText = Array.from(view.querySelectorAll<HTMLElement>(".mw-check span"))
+      .find((span) => span.textContent?.includes("개인정보"))!;
+    expect(customCheckboxText.textContent).toContain("\n");
+    expect(privacyText.textContent).toContain("\n");
+    expect(getComputedStyle(customCheckboxText).whiteSpace).toBe("pre-wrap");
+    expect(getComputedStyle(privacyText).whiteSpace).toBe("pre-wrap");
   });
+
+  it("moves focus inside, traps Tab, and restores the opener after ordinary close", async () => {
+    const view = await renderLivePageInEntryState();
+    const opener = Array.from(view.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.includes("사전등록하기"))!;
+    opener.focus();
+
+    act(() => opener.click());
+    const overlay = view.querySelector<HTMLElement>(".mw-modal-overlay")!;
+    const focusable = Array.from(overlay.querySelectorAll<HTMLElement>(
+      'button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
+    ));
+    const first = focusable[0];
+    const last = focusable.at(-1)!;
+
+    expect(overlay.contains(document.activeElement)).toBe(true);
+    last.focus();
+    last.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(first);
+    first.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Tab",
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    }));
+    expect(document.activeElement).toBe(last);
+
+    act(() => view.querySelector<HTMLButtonElement>('[aria-label="닫기"]')?.click());
+    await flush();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it.each(["overlay", "escape"] as const)(
+    "restores the opener and body scroll after %s close",
+    async (closeBy) => {
+      const view = await renderLivePageInEntryState();
+      const opener = Array.from(view.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent?.includes("사전등록하기"))!;
+      document.body.style.overflow = "clip";
+      opener.focus();
+      act(() => opener.click());
+      expect(document.body.style.overflow).toBe("hidden");
+
+      const overlay = view.querySelector<HTMLElement>(".mw-modal-overlay")!;
+      act(() => {
+        if (closeBy === "overlay") {
+          overlay.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+        } else {
+          document.dispatchEvent(new KeyboardEvent("keydown", {
+            key: "Escape",
+            bubbles: true,
+            cancelable: true,
+          }));
+        }
+      });
+      await flush();
+
+      expect(view.querySelector(".mw-modal-overlay")).toBeNull();
+      expect(document.body.style.overflow).toBe("clip");
+      expect(document.activeElement).toBe(opener);
+    },
+  );
 
   it("등록 성공 뒤 완료 모달을 닫으면 연결된 시청 화면 루트로 포커스를 복원한다", async () => {
     const view = await renderLivePageInEntryState();

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MultiChoiceField } from "../choice-fields";
@@ -48,5 +48,46 @@ describe("native multiple-choice row layout", () => {
     expect(row.className).toContain("py-3");
     expect(row.className).toContain("leading-5");
     expect(checkbox.className).toContain("mt-px");
+  });
+
+  it("counts an empty checked other option toward maxSelect immediately", () => {
+    host = document.createElement("div");
+    document.body.appendChild(host);
+    root = createRoot(host);
+
+    function Harness() {
+      const [value, setValue] = useState("");
+      return (
+        <MultiChoiceField
+          field={{
+            key: "max-one",
+            label: "관심 분야",
+            type: "multiple",
+            options: ["제품", "마케팅"],
+            allowOther: true,
+            maxSelect: 1,
+          }}
+          value={value}
+          onChange={setValue}
+          accent="#6D28D9"
+          inputStyle={{}}
+          publicForm
+        />
+      );
+    }
+
+    act(() => root?.render(<Harness />));
+    const boxes = Array.from(host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
+    const [product, marketing, other] = boxes;
+
+    act(() => other.click());
+
+    expect(other.checked).toBe(true);
+    expect(product.disabled).toBe(true);
+    expect(marketing.disabled).toBe(true);
+
+    act(() => other.click());
+    expect(product.disabled).toBe(false);
+    expect(marketing.disabled).toBe(false);
   });
 });

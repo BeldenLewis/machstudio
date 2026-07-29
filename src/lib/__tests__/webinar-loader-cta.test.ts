@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildWebinarLoaderScript } from "@/lib/webinar-loader-script";
+import { PUBLIC_REGISTRATION_FORM_CSS } from "@/lib/webinar-public-form-css";
 
 type SuccessCta = { enabled: boolean; label: string; url: string };
 type LoaderWindow = Window & typeof globalThis & { MachWebinar: { openRegister: () => void } };
@@ -39,15 +40,17 @@ function config(successCta: SuccessCta) {
       }, {
         id: "interests",
         key: "interests",
-        label: "관심 분야",
+        label: "관심\n분야",
         type: "multiple",
         placeholder: "",
         required: false,
         enabled: true,
-        options: ["여러 줄로 감싸지는 아주 긴 복수 선택 문구입니다"],
+        options: ["여러 줄로 감싸지는 아주 긴 복수 선택 문구입니다", "마케팅"],
+        allowOther: true,
+        maxSelect: 1,
         system: false,
       }],
-      privacyText: "개인정보 동의",
+      privacyText: "개인정보\n동의",
       marketingText: "마케팅 동의",
       privacyBody: "",
       marketingBody: "",
@@ -126,6 +129,11 @@ describe("임베드 등록 완료 CTA", () => {
     expect(css).toContain("--mw-accent:#6d28d9");
     expect(css).toContain("--mw-text:#21182b");
     expect(css).toContain("--mw-surface:#fbf7ef");
+    expect(css).toContain("--mw-on-accent:#ffffff");
+    expect(PUBLIC_REGISTRATION_FORM_CSS).toContain("color:var(--mw-on-accent)");
+    expect(PUBLIC_REGISTRATION_FORM_CSS).not.toContain("color:#fff");
+    expect(PUBLIC_REGISTRATION_FORM_CSS).not.toContain("#dc2626");
+    expect(PUBLIC_REGISTRATION_FORM_CSS).not.toContain("#16a34a");
   });
 
   it("wrapped multiple-choice rows keep a 44px target and first-line checkbox alignment", async () => {
@@ -136,6 +144,32 @@ describe("임베드 등록 완료 CTA", () => {
     expect(row?.textContent).toContain("여러 줄로 감싸지는");
     expect(css).toContain(".mw-multi .mw-check { margin-bottom:0; min-height:44px; align-items:flex-start; gap:10px; padding:12px 0; line-height:20px; }");
     expect(css).toContain(".mw-multi .mw-check input { margin-top:1px; }");
+  });
+
+  it("empty checked other immediately locks normal choices at maxSelect", async () => {
+    await boot({ enabled: false, label: "", url: "" });
+    const multi = document.querySelector<HTMLElement>('[data-mw-key="interests"]')!;
+    const boxes = Array.from(multi.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
+    const [longOption, marketing, other] = boxes;
+
+    other.click();
+
+    expect(other.checked).toBe(true);
+    expect(longOption.disabled).toBe(true);
+    expect(marketing.disabled).toBe(true);
+  });
+
+  it("preserves configured line breaks in field and consent labels", async () => {
+    await boot({ enabled: false, label: "", url: "" });
+    const fieldLabel = Array.from(document.querySelectorAll<HTMLElement>(".mw-label"))
+      .find((label) => label.textContent?.includes("관심"))!;
+    const privacyText = Array.from(document.querySelectorAll<HTMLElement>(".mw-check span"))
+      .find((span) => span.textContent?.includes("개인정보"))!;
+
+    expect(fieldLabel.textContent).toContain("\n");
+    expect(privacyText.textContent).toContain("\n");
+    expect(getComputedStyle(fieldLabel).whiteSpace).toBe("pre-wrap");
+    expect(getComputedStyle(privacyText).whiteSpace).toBe("pre-wrap");
   });
 
   it("완전한 CTA는 보안 속성과 독립 닫기 동작을 갖는다", async () => {

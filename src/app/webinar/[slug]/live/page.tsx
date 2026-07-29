@@ -26,6 +26,8 @@ import { readStatusRefresh } from "../status-refresh";
 import { PUBLIC_REGISTRATION_FORM_CSS } from "@/lib/webinar-public-form-css";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
+const REGISTRATION_FOCUSABLE =
+  'button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 // 소유자 미리보기 진입 여부 — ?preview 파라미터. 이 tab 에선 폴링·ping·제출 등 모든 부작용을 정지시킨다.
 const isPreviewUrl = () => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("preview");
@@ -228,6 +230,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [canRegister, setCanRegister] = useState(true); // 서버 상태머신 판정 — 마감(upcoming) 시 폼 대신 안내
   const [regModalOpen, setRegModalOpen] = useState(false); // 대기 화면의 사전등록 폼 모달
   const [registrationOpener, setRegistrationOpener] = useState<HTMLElement | null>(null);
+  const registrationDialogRef = useRef<HTMLDivElement>(null);
   const [viewerFocusRoot, setViewerFocusRoot] = useState<HTMLDivElement | null>(null);
   const [formError, setFormError] = useState("");
   // 실시간 중복 확인 — 연락처/이메일 입력 시 디바운스 후 기존 등록 여부 표시
@@ -549,18 +552,52 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     if (regModalOpen && (view !== "signup" || registered || registrationId)) setRegModalOpen(false);
   }, [regModalOpen, view, registered, registrationId]);
 
-  // 등록 모달 — Esc 로 닫고, 열려 있는 동안 뒤 배경이 스크롤되지 않게 잠근다.
+  // 등록 모달 — 랜딩 모달과 같은 수명주기: 내부 초기 포커스·Tab 트랩·Esc·스크롤 잠금·opener 복원.
   useEffect(() => {
     if (!regModalOpen) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setRegModalOpen(false); };
-    document.addEventListener("keydown", onKey);
+    const dialog = registrationDialogRef.current;
+    if (!dialog) return;
+    const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>(REGISTRATION_FOCUSABLE));
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setRegModalOpen(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = focusable();
+      if (items.length === 0) {
+        e.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    (dialog.querySelector<HTMLElement>("input:not([disabled]),select:not([disabled]),textarea:not([disabled])")
+      ?? focusable()[0]
+      ?? dialog).focus();
     return () => {
-      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("keydown", onKey, true);
       document.body.style.overflow = prevOverflow;
+      queueMicrotask(() => {
+        // Strict Mode effect 재실행 중에는 dialog가 그대로 연결돼 있다. 실제 일반 종료 뒤에만 복원한다.
+        if (dialog.isConnected) return;
+        if (registrationOpener?.isConnected) registrationOpener.focus();
+      });
     };
-  }, [regModalOpen]);
+  }, [regModalOpen, registrationOpener]);
 
   // 라이브 전(사전등록·입장 대기) 상태 폴링 — 서버 status 가 live 로 바뀌면 fetchStatus 가
   // view/isTrulyLive/serverNowMs 를 갱신해 대기 중이던 시청자가 자동 전환된다. (30초, 탭 비활성 시 스킵)
@@ -1240,9 +1277,11 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             사라지면 입력이 증발하고, regModalOpen 이 남아 배경 스크롤이 영영 잠긴다. */}
         {view === "signup" && !hasRegistration && regModalOpen && (
           <div
+            ref={registrationDialogRef}
             className="mw-modal-overlay mw-reset fixed inset-0 z-[60] flex items-center justify-center p-4"
             style={{
               "--mw-accent": accent,
+              "--mw-on-accent": onAccentColor(accent),
               "--mw-radius": radius,
               "--mw-text": text,
               "--mw-surface": surface,
@@ -1254,6 +1293,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             role="dialog"
             aria-modal="true"
             aria-label="사전 등록"
+            tabIndex={-1}
           >
             <motion.div
               // 내용만 스크롤 — 긴 폼에서도 닫기(×)와 제출 버튼이 잘리지 않게(모바일).

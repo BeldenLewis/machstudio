@@ -11,11 +11,12 @@ export const PUBLIC_REGISTRATION_FORM_CSS = `
 .mw-form-title { margin-bottom:18px; font-size:18px; font-weight:800; color:var(--mw-text); }
 .mw-modal-card .mw-form-title { padding-right:44px; }
 .mw-field { margin-bottom:14px; }
-.mw-label { display:block; margin-bottom:6px; font-size:13px; font-weight:600; color:var(--mw-text); }
+.mw-label { display:block; margin-bottom:6px; font-size:13px; font-weight:600; color:var(--mw-text); white-space:pre-wrap; overflow-wrap:anywhere; }
 .mw-req { margin-left:2px; color:var(--mw-accent); }
 .mw-input,.mw-select { width:100%; min-height:44px; padding:11px 13px; border:1px solid color-mix(in srgb,var(--mw-text) 24%,transparent); border-radius:9px; background:var(--mw-surface); color:var(--mw-text); font:inherit; font-size:14px; outline:0; }
 .mw-input:focus,.mw-select:focus { border-color:var(--mw-accent); box-shadow:0 0 0 3px color-mix(in srgb,var(--mw-accent) 16%,transparent); outline:0; }
 .mw-check { display:flex; align-items:flex-start; gap:9px; min-height:20px; margin-bottom:10px; color:color-mix(in srgb,var(--mw-text) 68%,transparent); font-size:13px; line-height:20px; cursor:pointer; }
+.mw-check span,.mw-check button { white-space:pre-wrap; overflow-wrap:anywhere; }
 .mw-check input { width:18px; height:18px; flex:none; margin:1px 0 0; accent-color:var(--mw-accent); }
 .mw-check input:disabled { cursor:not-allowed; }
 .mw-check:has(input:disabled) { opacity:.45; cursor:not-allowed; }
@@ -24,13 +25,13 @@ export const PUBLIC_REGISTRATION_FORM_CSS = `
 .mw-multi .mw-check input { margin-top:1px; }
 .mw-multi .mw-input { margin-top:4px; }
 .mw-hint { margin-top:4px; color:color-mix(in srgb,var(--mw-text) 52%,transparent); font-size:11px; }
-.mw-submit { display:inline-flex; width:100%; min-height:46px; align-items:center; justify-content:center; margin-top:8px; padding:12px 18px; border:0; border-radius:9px; background:var(--mw-accent); color:#fff; font:inherit; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 4px 16px color-mix(in srgb,var(--mw-accent) 28%,transparent); transition:transform .18s ease,opacity .18s ease,box-shadow .18s ease; }
+.mw-submit { display:inline-flex; width:100%; min-height:46px; align-items:center; justify-content:center; margin-top:8px; padding:12px 18px; border:0; border-radius:9px; background:var(--mw-accent); color:var(--mw-on-accent); font:inherit; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 4px 16px color-mix(in srgb,var(--mw-accent) 28%,transparent); transition:transform .18s ease,opacity .18s ease,box-shadow .18s ease; }
 .mw-submit:hover { transform:translateY(-1px); opacity:.92; }
 .mw-submit:active { transform:translateY(0) scale(.98); }
 .mw-submit:focus-visible { outline:0; box-shadow:0 0 0 3px color-mix(in srgb,var(--mw-accent) 20%,transparent),0 4px 16px color-mix(in srgb,var(--mw-accent) 28%,transparent); }
 .mw-submit:disabled { cursor:not-allowed; opacity:.45; transform:none; }
 .mw-msg { display:none; margin-top:14px; padding:12px 14px; border-radius:9px; font-size:13px; line-height:1.55; }
-.mw-msg-error { display:block; background:color-mix(in srgb,#dc2626 8%,var(--mw-surface)); color:color-mix(in srgb,#dc2626 76%,var(--mw-text)); box-shadow:inset 0 0 0 1px color-mix(in srgb,#dc2626 24%,transparent); }
-.mw-msg-success { display:block; background:color-mix(in srgb,#16a34a 8%,var(--mw-surface)); color:color-mix(in srgb,#16a34a 76%,var(--mw-text)); box-shadow:inset 0 0 0 1px color-mix(in srgb,#16a34a 24%,transparent); }
+.mw-msg-error { display:block; background:color-mix(in srgb,var(--mw-accent) 12%,var(--mw-surface)); color:color-mix(in srgb,var(--mw-text) 76%,var(--mw-accent)); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mw-accent) 28%,transparent); }
+.mw-msg-success { display:block; background:color-mix(in srgb,var(--mw-accent) 7%,var(--mw-surface)); color:color-mix(in srgb,var(--mw-text) 88%,var(--mw-accent)); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mw-accent) 18%,transparent); }
 @media (prefers-reduced-motion:reduce) { .mw-submit { transition:none; } }
 `;

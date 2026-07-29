@@ -101,7 +101,10 @@ export function MultiChoiceField({
   const otherAnswer = picked.find((p) => !options.includes(p)) ?? "";
   const [otherOn, setOtherOn] = useState(() => otherAnswer !== "");
   const showOther = field.allowOther === true && (otherOn || otherAnswer !== "");
-  const atMax = max !== null && picked.length >= max;
+  // 기타를 체크한 직후에는 직접입력 값이 아직 비어 picked에 들어가지 않는다. 체크 자체를 한 자리로
+  // 세지 않으면 max=1에서도 일반 옵션을 하나 더 고를 수 있고 제출 때 서버 상한 검증에 걸린다.
+  const selectedCount = picked.length + (showOther && otherAnswer === "" ? 1 : 0);
+  const atMax = max !== null && selectedCount >= max;
 
   const setPicked = (next: string[]) => onChange(joinMultiValue(next));
   const toggle = (option: string) => {
