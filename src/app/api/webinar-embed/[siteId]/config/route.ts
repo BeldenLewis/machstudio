@@ -9,7 +9,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
-import { normalizeRegistrationForm } from "@/lib/webinar-config";
+import { normalizeRegistrationForm, safeHttpUrl } from "@/lib/webinar-config";
 import { endedSurveyLinks } from "@/lib/webinar-ended-surveys";
 
 const CORS_HEADERS = {
@@ -244,6 +244,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ siteId: 
       privacyDefaultChecked: registrationForm.privacyDefaultChecked,
       marketingDefaultChecked: registrationForm.marketingDefaultChecked,
       submitLabel: registrationForm.submitLabel,
+      successCta: {
+        enabled: registrationForm.successCta.enabled,
+        label: registrationForm.successCta.label,
+        url: safeHttpUrl(registrationForm.successCta.url),
+      },
     },
     links: {
       livePageUrl: site.livePageUrl ?? null,

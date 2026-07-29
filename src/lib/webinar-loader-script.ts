@@ -284,15 +284,14 @@ ${ATTRIBUTION_CORE_JS}
       ".mw-req { color: " + t.accent + "; margin-left: 2px; }",
       ".mw-input, .mw-select { width: 100%; padding: 11px 13px; border: 1px solid rgba(120,120,128,0.35); border-radius: 9px; background: #fff; color: #111; font-size: 14px; outline: none; }",
       ".mw-input:focus, .mw-select:focus { border-color: " + t.accent + "; }",
-      ".mw-check { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: #555; margin-bottom: 10px; cursor: pointer; }",
-      ".mw-check input { margin-top: 2px; accent-color: " + t.accent + "; }",
+      ".mw-check { display:flex; align-items:flex-start; gap:9px; min-height:20px; font-size:13px; line-height:20px; color:#555; margin-bottom:10px; cursor:pointer; }",
+      ".mw-check input { width:18px; height:18px; flex:none; margin:1px 0 0; accent-color:" + t.accent + "; }",
       ".mw-check input:disabled { cursor: not-allowed; }",
       /* 상한에 닿아 잠긴 칸은 흐리게 — 잠금이 보이지 않으면 클릭이 씹히는 것처럼 느껴진다 */
       ".mw-check:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }",
       ".mw-multi { display: flex; flex-direction: column; gap: 2px; }",
       /* 터치 타깃 44px — 20px 행이 연달아 붙으면 모바일에서 옆 항목을 누른다(WCAG AA) */
       ".mw-multi .mw-check { margin-bottom: 0; min-height: 44px; align-items: center; gap: 10px; }",
-      ".mw-multi .mw-check input { margin-top: 0; width: 16px; height: 16px; flex: none; }",
       ".mw-multi .mw-input { margin-top: 4px; }",
       ".mw-hint { font-size: 11px; color: #888; margin-top: 4px; }",
       ".mw-submit { width: 100%; margin-top: 8px; }",
@@ -335,6 +334,9 @@ ${ATTRIBUTION_CORE_JS}
       ".mw-done-title { flex: none; margin: 0 0 8px; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }",
       ".mw-done-desc { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; margin: 0; font-size: 13.5px; line-height: 1.65; color: #555; white-space: pre-line; word-break: keep-all; }",
       ".mw-done-btn { flex: none; margin-top: 22px; width: 100%; height: 46px; border: 0; border-radius: 11px; font: inherit; font-size: 14.5px; font-weight: 700; color: #fff; cursor: pointer; }",
+      ".mw-done-cta { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }",
+      ".mw-done-close { flex: none; width: 100%; min-height: 44px; margin-top: 8px; border: 0; border-radius: 11px; background: transparent; color: #555; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }",
+      ".mw-done-close:focus-visible { outline: 2px solid " + t.accent + "; outline-offset: 2px; }",
       /* 터치 최소 44px */
       "@media (max-width: 600px) { .mw-modal-close { width: 44px; height: 44px; } .mw-modal-card .mw-form-title { padding-right: 48px; } }",
       // 캘린더 추가는 모바일에서만 — PC 는 네이티브 캘린더 연동이 없어 실효가 낮고 배너만 붐빈다.
@@ -351,6 +353,14 @@ ${ATTRIBUTION_CORE_JS}
     return node;
   }
   function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+  function safeHttpCtaUrl(value) {
+    try {
+      var parsed = new URL(String(value || ""));
+      return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : "";
+    } catch (e) {
+      return "";
+    }
+  }
   function mounts(kind) {
     return Array.prototype.slice.call(document.querySelectorAll('[data-mach-webinar-mount="' + kind + '"]'));
   }
@@ -940,6 +950,10 @@ ${ATTRIBUTION_CORE_JS}
    */
   function openDonePopup(message) {
     var accent = theme().accent;
+    var form = CFG.registrationForm || {};
+    var successCta = form.successCta || {};
+    var successCtaUrl = safeHttpCtaUrl(successCta.url);
+    var showCta = successCta.enabled === true && !!String(successCta.label || "").trim() && !!successCtaUrl;
     var overlay = el("div", "mw-modal-overlay mw-reset");
     overlay.style.zIndex = "999955";
     overlay.setAttribute("role", "dialog");
@@ -949,20 +963,37 @@ ${ATTRIBUTION_CORE_JS}
     card.appendChild(el("div", "mw-done-mark", "\u2713"));
     card.appendChild(el("p", "mw-done-title", "사전등록이 완료됐어요"));
     card.appendChild(el("p", "mw-done-desc", message));
-    var ok = el("button", "mw-done-btn", "확인");
-    ok.type = "button";
-    ok.style.background = accent;
     function close() {
       try { overlay.remove(); } catch (e) {}
       /* 폼이 모달 안에 있었다면 함께 닫는다 — 비활성화된 폼만 남겨 두면 막힌 화면처럼 보인다. */
       try { if (document.getElementById("mw-form-modal")) closeFormModal(); } catch (e) {}
     }
-    ok.addEventListener("click", close);
+    var focusTarget;
+    if (showCta) {
+      var cta = el("a", "mw-done-btn mw-done-cta", String(successCta.label).trim());
+      cta.href = successCtaUrl;
+      cta.target = "_blank";
+      cta.rel = "noopener noreferrer";
+      cta.style.background = accent;
+      card.appendChild(cta);
+
+      var closeBtn = el("button", "mw-done-close", "닫기");
+      closeBtn.type = "button";
+      closeBtn.addEventListener("click", close);
+      card.appendChild(closeBtn);
+      focusTarget = cta;
+    } else {
+      var ok = el("button", "mw-done-btn", "확인");
+      ok.type = "button";
+      ok.style.background = accent;
+      ok.addEventListener("click", close);
+      card.appendChild(ok);
+      focusTarget = ok;
+    }
     overlay.addEventListener("click", function(ev) { if (ev.target === overlay) close(); });
-    card.appendChild(ok);
     overlay.appendChild(card);
     document.body.appendChild(overlay);
-    try { ok.focus(); } catch (e) {}
+    try { focusTarget.focus(); } catch (e) {}
   }
 
   /* 랜딩 런타임(/w/l/{slug})은 별도 번들이라 함수를 직접 못 부른다 → 문서 이벤트로 연결한다.
