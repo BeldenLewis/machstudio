@@ -901,7 +901,6 @@ ${ATTRIBUTION_CORE_JS}
       modalKeyHandler = null;
     }
     if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-    modalOpener = null;
   }
 
   function activateFormModal(overlay) {
@@ -981,12 +980,17 @@ ${ATTRIBUTION_CORE_JS}
     card.appendChild(el("p", "mw-done-title", "사전등록이 완료됐어요"));
     card.appendChild(el("p", "mw-done-desc", message));
     function close() {
+      var opener = modalOpener;
+      modalOpener = null;
       if (doneKeyHandler) {
         document.removeEventListener("keydown", doneKeyHandler, true);
         doneKeyHandler = null;
       }
       try { overlay.remove(); } catch (e) {}
       unlockPageScroll();
+      if (opener && document.contains(opener)) {
+        try { opener.focus(); } catch (e) {}
+      }
     }
     var focusTarget;
     if (showCta) {

@@ -136,6 +136,11 @@ describe("임베드 등록 완료 CTA", () => {
 
   it("done dialog takes keyboard ownership from a form modal", async () => {
     await boot({ enabled: true, label: "오픈채팅 입장", url: "https://example.com/chat" });
+    const opener = document.createElement("button");
+    opener.type = "button";
+    opener.textContent = "사전등록 열기";
+    document.body.appendChild(opener);
+    opener.focus();
     (window as LoaderWindow).MachWebinar.openRegister();
     expect(document.getElementById("mw-form-modal")).toBeTruthy();
 
@@ -152,5 +157,6 @@ describe("임베드 등록 완료 CTA", () => {
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     expect(document.body.contains(dialog)).toBe(false);
+    expect(document.activeElement).toBe(opener);
   });
 });
