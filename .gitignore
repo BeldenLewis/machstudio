@@ -45,6 +45,7 @@ scripts/seed-test-reg.mjs
 
 # codex artifacts (tool scratch)
 .codex-artifacts/
+.worktrees/
 
 # typescript
 *.tsbuildinfo
