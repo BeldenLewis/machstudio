@@ -41,6 +41,19 @@ export interface WebinarRegistrationField {
   allowOther?: boolean;
 }
 
+export interface WebinarLinkCtaConfig {
+  enabled: boolean;
+  label: string;
+  url: string;
+}
+
+export interface WebinarWaitingFollowUpConfig {
+  enabled: boolean;
+  text: string;
+  ctaLabel: string;
+  ctaUrl: string;
+}
+
 export interface WebinarRegistrationFormConfig {
   fields: WebinarRegistrationField[];
   privacyText: string;
@@ -52,6 +65,7 @@ export interface WebinarRegistrationFormConfig {
   privacyDefaultChecked: boolean;
   marketingDefaultChecked: boolean;
   submitLabel: string;
+  successCta: WebinarLinkCtaConfig;
 }
 
 const FIELD_TYPES: readonly WebinarFieldType[] = ["text", "email", "tel", "select", "checkbox", "multiple"];
@@ -142,7 +156,14 @@ export const DEFAULT_ENDED_DESCRIPTION =
   "오늘 라이브는 마무리됐어요. 다시보기와 자료를 준비해 등록하신 이메일로 보내드릴게요.";
 
 export interface LivePageConfig {
-  waiting: { agenda: boolean; social: boolean; calendar: boolean; share: boolean; notify: boolean };
+  waiting: {
+    agenda: boolean;
+    social: boolean;
+    calendar: boolean;
+    share: boolean;
+    notify: boolean;
+    followUp: WebinarWaitingFollowUpConfig;
+  };
   entry: { viewerCount: boolean };
   ended: {
     replay: boolean; survey: boolean; resources: boolean; nextWebinar: boolean; share: boolean;
@@ -161,6 +182,7 @@ export function normalizeLivePageConfig(config: unknown): LivePageConfig {
   const obj = (v: unknown) => (v && typeof v === "object" ? (v as Record<string, unknown>) : {});
   const bool = (v: unknown, def: boolean) => (typeof v === "boolean" ? v : def);
   const w = obj(lp.waiting), e = obj(lp.entry), en = obj(lp.ended);
+  const followUp = obj(w.followUp);
 
   const resources: LiveResource[] = Array.isArray(lp.resources)
     ? (lp.resources as unknown[])
@@ -182,6 +204,12 @@ export function normalizeLivePageConfig(config: unknown): LivePageConfig {
       calendar: bool(w.calendar, true),
       share: bool(w.share, true),
       notify: bool(w.notify, true),
+      followUp: {
+        enabled: bool(followUp.enabled, false),
+        text: typeof followUp.text === "string" ? followUp.text : "",
+        ctaLabel: typeof followUp.ctaLabel === "string" ? followUp.ctaLabel : "",
+        ctaUrl: typeof followUp.ctaUrl === "string" ? followUp.ctaUrl : "",
+      },
     },
     entry: { viewerCount: bool(e.viewerCount, true) },
     ended: {
@@ -450,6 +478,10 @@ export function normalizeRegistrationForm(
       ? (config as Record<string, unknown>)
       : {};
   const raw = configRaw.registrationForm as Partial<WebinarRegistrationFormConfig> | undefined;
+  const successCtaRaw =
+    raw?.successCta && typeof raw.successCta === "object" && !Array.isArray(raw.successCta)
+      ? raw.successCta as Partial<WebinarLinkCtaConfig>
+      : {};
   const savedFields = Array.isArray(raw?.fields) ? (raw.fields as Array<Partial<WebinarRegistrationField> & { key?: unknown }>) : [];
 
   const merged = DEFAULT_REGISTRATION_FIELDS.map((field) => {
@@ -518,5 +550,10 @@ export function normalizeRegistrationForm(
     privacyDefaultChecked: raw?.privacyDefaultChecked === true,
     marketingDefaultChecked: raw?.marketingDefaultChecked === true,
     submitLabel: typeof raw?.submitLabel === "string" ? raw.submitLabel : "사전 등록하기",
+    successCta: {
+      enabled: successCtaRaw.enabled === true,
+      label: typeof successCtaRaw.label === "string" ? successCtaRaw.label : "",
+      url: typeof successCtaRaw.url === "string" ? successCtaRaw.url : "",
+    },
   };
 }
