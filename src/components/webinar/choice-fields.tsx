@@ -127,7 +127,7 @@ export function MultiChoiceField({
               checked={on}
               disabled={locked}
               onChange={() => toggle(option)}
-              className="size-4 shrink-0"
+              className="m-0 size-[18px] shrink-0"
               style={{ accentColor: accent }}
             />
             <span>{option}</span>
@@ -146,7 +146,7 @@ export function MultiChoiceField({
               // 끄면 기타로 쓴 답만 빼고 나머지 선택은 유지한다.
               if (!e.target.checked) setPicked(picked.filter((p) => options.includes(p)));
             }}
-            className="size-4 shrink-0"
+            className="m-0 size-[18px] shrink-0"
             style={{ accentColor: accent }}
           />
           <span>{OTHER_LABEL}</span>

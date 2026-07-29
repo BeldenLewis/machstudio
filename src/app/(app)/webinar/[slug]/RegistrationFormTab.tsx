@@ -10,11 +10,11 @@ import { SignupDeadlineField } from "@/components/webinar/WebinarSchedulePicker"
 import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
 import { resolveConsentBody, consentSourceLabel } from "@/lib/consent-template";
 import { Switch } from "@/components/ui/switch";
-import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
+import { FIELD_CLS, FIELD_CLS_DANGER, FINISH, R } from "@/components/ui/primitives";
 import { OptionRows } from "@/components/ui/option-rows";
 import { maxSelectFor } from "@/lib/webinar-config";
 import { EditableList } from "@/components/ui/editable-list";
-import { normalizeRegistrationForm, type WebinarRegistrationField } from "@/lib/webinar-config";
+import { normalizeRegistrationForm, safeHttpUrl, type WebinarLinkCtaConfig, type WebinarRegistrationField } from "@/lib/webinar-config";
 import { buildStkCss } from "@/app/webinar/[slug]/LiveContentStk";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
@@ -286,11 +286,16 @@ const REG_PREVIEW_CSS = `
 .stk-live.regprev .rp-label .rq { color:var(--key); margin-left:2px; }
 .stk-live.regprev .rp-input { width:100%; padding:10px 12px; border-radius:10px; border:1.5px solid var(--line-md); background:var(--card-2); color:var(--text); font:inherit; font-size:13px; }
 .stk-live.regprev .rp-input.ph { color:var(--sub); }
-.stk-live.regprev .rp-consent { display:flex; align-items:flex-start; gap:8px; font-size:11.5px; line-height:1.5; color:var(--muted); }
-.stk-live.regprev .rp-check { width:16px; height:16px; border-radius:5px; box-shadow:inset 0 0 0 1.5px var(--line-md); flex-shrink:0; margin-top:1px; display:grid; place-items:center; color:transparent; font-size:11px; font-weight:900; }
+.stk-live.regprev .rp-consent { display:flex; align-items:flex-start; gap:9px; min-height:18px; font-size:11.5px; line-height:18px; color:var(--muted); }
+.stk-live.regprev .rp-check { width:18px; height:18px; border-radius:5px; box-shadow:inset 0 0 0 1.5px var(--line-md); margin:0; flex:none; display:grid; place-items:center; color:transparent; font-size:11px; font-weight:900; }
 .stk-live.regprev .rp-check.on { background:var(--key); box-shadow:none; color:var(--on-key); }
 .stk-live.regprev .rp-link { text-decoration:underline; text-underline-offset:2px; }
 .stk-live.regprev .rp-submit { width:100%; height:46px; border-radius:12px; background:var(--key); color:var(--on-key); font:inherit; font-size:14px; font-weight:800; border:0; margin-top:3px; box-shadow:var(--btn-shadow-key); }
+.stk-live.regprev .rp-done { text-align:center; gap:12px; padding:24px 18px; }
+.stk-live.regprev .rp-done-mark { display:grid; place-items:center; width:56px; height:56px; margin:0 auto 2px; border-radius:999px; background:color-mix(in srgb,#12B76A 14%,transparent); color:#12B76A; font-size:24px; }
+.stk-live.regprev .rp-done-title { margin:0; color:var(--text); font-size:18px; font-weight:820; letter-spacing:-.02em; }
+.stk-live.regprev .rp-done-desc { margin:0; color:var(--muted); font-size:12px; line-height:1.6; }
+.stk-live.regprev .rp-close { width:100%; height:42px; border:0; border-radius:12px; background:transparent; color:var(--muted); font:inherit; font-size:13px; font-weight:750; }
 .stk-live.regprev .rp-empty { text-align:center; font-size:12px; color:var(--muted); padding:8px 0; }
 `;
 
@@ -303,6 +308,7 @@ function RegistrationFormPreview({
   privacyDefaultChecked,
   marketingDefaultChecked,
   submitLabel,
+  successCta,
   theme,
   slug,
 }: {
@@ -314,6 +320,7 @@ function RegistrationFormPreview({
   privacyDefaultChecked: boolean;
   marketingDefaultChecked: boolean;
   submitLabel: string;
+  successCta: WebinarLinkCtaConfig;
   theme: { accent: string; text: string; surface: string };
   slug?: string;
 }) {
@@ -322,12 +329,32 @@ function RegistrationFormPreview({
     (field) => field.enabled && !(CHOICE_TYPES.includes(field.type) && (field.options ?? []).filter((o) => o.trim()).length === 0),
   );
   const css = useMemo(() => buildStkCss(theme.accent, theme.text, theme.surface) + REG_PREVIEW_CSS, [theme.accent, theme.text, theme.surface]);
+  const [previewMode, setPreviewMode] = useState<"form" | "done">("form");
+  const previewCtaUrl = safeHttpUrl(successCta.url);
+  const showPreviewCta =
+    successCta.enabled && successCta.label.trim() !== "" && previewCtaUrl !== "";
 
   return (
     <div className="mx-auto w-full max-w-[440px] 2xl:sticky 2xl:top-4">
       <div className="mb-2 flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
         <Smartphone className="h-3 w-3" />등록 화면 미리보기
-        <span className="ml-auto inline-flex items-center gap-1.5 text-emerald-500">
+        <div className="ml-auto flex items-center gap-1 rounded-lg bg-secondary/70 p-0.5 normal-case tracking-normal">
+          {([
+            ["form", "폼"],
+            ["done", "완료"],
+          ] as const).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={previewMode === mode}
+              onClick={() => setPreviewMode(mode)}
+              className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${previewMode === mode ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="inline-flex items-center gap-1.5 text-emerald-500">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 motion-safe:animate-pulse" />실시간
         </span>
       </div>
@@ -338,61 +365,73 @@ function RegistrationFormPreview({
         <div className="relative max-h-[min(760px,calc(100vh-230px))] overflow-y-auto overscroll-contain">
           <style dangerouslySetInnerHTML={{ __html: css }} />
           <div className="stk-live regprev">
-            <div className="rp-head">
-              <p className="rp-kick">WEBINAR</p>
-              <h4 className="rp-title">사전 등록</h4>
-              <p className="rp-desc">웨비나 참여 정보를 입력해주세요.</p>
-            </div>
-            <div className="rp-card">
-              {visibleFields.length === 0 && <p className="rp-empty">표시할 항목이 없어요.</p>}
-              {visibleFields.map((field) => {
-                if (field.type === "checkbox") {
-                  return (
-                    <label key={field.id} className="rp-consent">
-                      <span className="rp-check" />
-                      <span>{field.label}{field.required ? " *" : ""}</span>
+            {previewMode === "form" ? (
+              <>
+                <div className="rp-head">
+                  <p className="rp-kick">WEBINAR</p>
+                  <h4 className="rp-title">사전 등록</h4>
+                  <p className="rp-desc">웨비나 참여 정보를 입력해주세요.</p>
+                </div>
+                <div className="rp-card">
+                  {visibleFields.length === 0 && <p className="rp-empty">표시할 항목이 없어요.</p>}
+                  {visibleFields.map((field) => {
+                    if (field.type === "checkbox") {
+                      return (
+                        <label key={field.id} className="rp-consent">
+                          <span className="rp-check" />
+                          <span>{field.label}{field.required ? " *" : ""}</span>
+                        </label>
+                      );
+                    }
+                    return (
+                      <div key={field.id}>
+                        <label className="rp-label">{field.label}{field.required && <span className="rq">*</span>}</label>
+                        {field.type === "multiple" ? (
+                          /* 복수 선택은 미리보기에서도 체크 목록으로 — 드롭다운과 같은 모양이면
+                             어드민이 어느 유형을 골랐는지 미리보기로 확인할 수 없다. */
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                            {(field.options ?? []).filter((o) => o.trim()).slice(0, 3).map((o, i) => (
+                              <span key={i} className="rp-consent"><span className="rp-check">✓</span>{o}</span>
+                            ))}
+                            {field.allowOther && <span className="rp-consent"><span className="rp-check">✓</span>기타(직접입력)</span>}
+                            {(() => {
+                              const m = maxSelectFor({ type: field.type, maxSelect: field.maxSelect, options: (field.options ?? []).filter((o) => o.trim()) });
+                              return m !== null ? <span className="rp-label" style={{ opacity: 0.7 }}>최대 {m}개</span> : null;
+                            })()}
+                          </div>
+                        ) : field.type === "select" ? (
+                          <div className="rp-input ph">
+                            {(field.options ?? []).find((o) => o.trim()) ?? "선택해주세요"}
+                            {field.allowOther ? " · 기타 입력 가능" : ""}
+                          </div>
+                        ) : (
+                          <div className="rp-input ph">{field.placeholder || (field.type === "email" ? "you@example.com" : field.type === "tel" ? "01012345678" : "입력해주세요")}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <label className="rp-consent">
+                      <span className={`rp-check ${privacyDefaultChecked ? "on" : ""}`}>✓</span>
+                      <span className={privacyBody ? "rp-link" : ""}>{privacyText}</span>
                     </label>
-                  );
-                }
-                return (
-                  <div key={field.id}>
-                    <label className="rp-label">{field.label}{field.required && <span className="rq">*</span>}</label>
-                    {field.type === "multiple" ? (
-                      /* 복수 선택은 미리보기에서도 체크 목록으로 — 드롭다운과 같은 모양이면
-                         어드민이 어느 유형을 골랐는지 미리보기로 확인할 수 없다. */
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        {(field.options ?? []).filter((o) => o.trim()).slice(0, 3).map((o, i) => (
-                          <span key={i} className="rp-consent"><span className="rp-check">✓</span>{o}</span>
-                        ))}
-                        {field.allowOther && <span className="rp-consent"><span className="rp-check">✓</span>기타(직접입력)</span>}
-                        {(() => {
-                          const m = maxSelectFor({ type: field.type, maxSelect: field.maxSelect, options: (field.options ?? []).filter((o) => o.trim()) });
-                          return m !== null ? <span className="rp-label" style={{ opacity: 0.7 }}>최대 {m}개</span> : null;
-                        })()}
-                      </div>
-                    ) : field.type === "select" ? (
-                      <div className="rp-input ph">
-                        {(field.options ?? []).find((o) => o.trim()) ?? "선택해주세요"}
-                        {field.allowOther ? " · 기타 입력 가능" : ""}
-                      </div>
-                    ) : (
-                      <div className="rp-input ph">{field.placeholder || (field.type === "email" ? "you@example.com" : field.type === "tel" ? "01012345678" : "입력해주세요")}</div>
-                    )}
+                    <label className="rp-consent">
+                      <span className={`rp-check ${marketingDefaultChecked ? "on" : ""}`}>✓</span>
+                      <span className={marketingBody ? "rp-link" : ""}>{marketingText}</span>
+                    </label>
                   </div>
-                );
-              })}
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <label className="rp-consent">
-                  <span className={`rp-check ${privacyDefaultChecked ? "on" : ""}`}>✓</span>
-                  <span className={privacyBody ? "rp-link" : ""}>{privacyText}</span>
-                </label>
-                <label className="rp-consent">
-                  <span className={`rp-check ${marketingDefaultChecked ? "on" : ""}`}>✓</span>
-                  <span className={marketingBody ? "rp-link" : ""}>{marketingText}</span>
-                </label>
+                  <button type="button" className="rp-submit">{submitLabel}</button>
+                </div>
+              </>
+            ) : (
+              <div className="rp-card rp-done">
+                <span className="rp-done-mark" aria-hidden>✓</span>
+                <p className="rp-done-title">사전등록이 완료됐어요</p>
+                <p className="rp-done-desc">웨비나 당일 등록하신 연락처·이메일로 바로 입장할 수 있어요.</p>
+                {showPreviewCta && <button type="button" className="rp-submit">{successCta.label}</button>}
+                <button type="button" className="rp-close">닫기</button>
               </div>
-              <button type="button" className="rp-submit">{submitLabel}</button>
-            </div>
+            )}
           </div>
         </div>
       </div>
@@ -495,6 +534,9 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
   const [marketingBody, setMarketingBody] = useState(initial.marketingBody);
   const [privacyDefaultChecked, setPrivacyDefaultChecked] = useState(initial.privacyDefaultChecked);
   const [marketingDefaultChecked, setMarketingDefaultChecked] = useState(initial.marketingDefaultChecked);
+  const [successCta, setSuccessCta] = useState(initial.successCta);
+  const successCtaUrl = safeHttpUrl(successCta.url);
+  const successCtaUrlInvalid = successCta.url.trim() !== "" && !successCtaUrl;
 
   /**
    * 접수 창 — 언제까지, 그리고 라이브 중에도 받는가. IA 3단계에서 '기본 정보' 에서 옮겨 왔다.
@@ -556,6 +598,11 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
               privacyDefaultChecked,
               marketingDefaultChecked,
               submitLabel: submitLabel.trim() || initial.submitLabel,
+              successCta: {
+                enabled: successCta.enabled,
+                label: successCta.label.trim(),
+                url: successCta.url.trim(),
+              },
             },
           },
         }),
@@ -566,7 +613,7 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
     } catch { return false; }
   };
   const { state: saveState, retry } = useAutosave(
-    { fields, privacyText, marketingText, privacyBody, marketingBody, privacyDefaultChecked, marketingDefaultChecked, submitLabel, deadline, liveReg },
+    { fields, privacyText, marketingText, privacyBody, marketingBody, privacyDefaultChecked, marketingDefaultChecked, submitLabel, successCta, deadline, liveReg },
     save,
   );
   // 표시는 껍데기 한 곳에서 그린다(만들기 화면당 1개) — 저장 경로는 그대로 각자.
@@ -723,6 +770,41 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
             </div>
           </div>
         </section>
+
+        <section className="space-y-3 pt-4 border-t border-border">
+          <div>
+            <h3 className="text-sm font-semibold">등록 완료 화면</h3>
+            <p className="mt-1 text-xs text-muted-foreground">등록 직후 보여줄 선택 행동이에요.</p>
+          </div>
+          <div className="space-y-3 rounded-2xl bg-secondary/20 p-4">
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium">CTA 표시</span>
+              <Switch
+                checked={successCta.enabled}
+                onChange={(enabled) => setSuccessCta((v) => ({ ...v, enabled }))}
+                label="등록 완료 CTA 표시"
+              />
+            </label>
+            <input
+              aria-label="완료 CTA 버튼 문구"
+              value={successCta.label}
+              onChange={(e) => setSuccessCta((v) => ({ ...v, label: e.target.value }))}
+              className={inputCls}
+              placeholder="예: 오픈채팅 입장하기"
+            />
+            <input
+              aria-label="완료 CTA 연결 URL"
+              type="url"
+              value={successCta.url}
+              onChange={(e) => setSuccessCta((v) => ({ ...v, url: e.target.value }))}
+              className={successCtaUrlInvalid ? FIELD_CLS_DANGER : inputCls}
+              placeholder="https://..."
+            />
+            {successCtaUrlInvalid && (
+              <p className="text-[11px] text-destructive">http:// 또는 https:// 주소를 입력해 주세요.</p>
+            )}
+          </div>
+        </section>
       </div>
 
       <RegistrationFormPreview
@@ -734,6 +816,7 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
         privacyDefaultChecked={privacyDefaultChecked}
         marketingDefaultChecked={marketingDefaultChecked}
         submitLabel={submitLabel}
+        successCta={successCta}
         theme={previewTheme}
         slug={webinar.slug}
       />

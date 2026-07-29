@@ -5,7 +5,7 @@ import { use } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, CheckCircle2 } from "lucide-react";
 import LivePushLayer, { type LivePopup, type LiveTallyPush, type LivePoll, type LiveSurveyPush } from "../LivePushLayer";
-import LiveContentStk from "../LiveContentStk";
+import LiveContentStk, { onAccentColor } from "../LiveContentStk";
 import PreLiveWaiting from "../PreLiveWaiting";
 import EntryVerify from "../EntryVerify";
 import EndedScreen from "../EndedScreen";
@@ -18,6 +18,7 @@ import {
   isValidPhone,
   normalizeLivePageConfig,
   normalizeRegistrationForm,
+  safeHttpUrl,
   type WebinarRegistrationField,
 } from "@/lib/webinar-config";
 import { MultiChoiceField, SingleChoiceField } from "@/components/webinar/choice-fields";
@@ -893,6 +894,11 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const radius = theme.borderRadius ?? "16px";
   const registrationForm = normalizeRegistrationForm(webinar.config ?? {});
   const visibleFields = registrationForm.fields;
+  const completionCtaUrl = safeHttpUrl(registrationForm.successCta.url);
+  const showCompletionCta =
+    registrationForm.successCta.enabled &&
+    registrationForm.successCta.label.trim() !== "" &&
+    completionCtaUrl !== "";
   const inputStyle = { border: "1px solid rgba(255,255,255,0.1)", borderRadius: `calc(${radius} * 0.6)`, color: text };
   const calendarUrl = typeof webinar.config?.calendarUrl === "string" ? webinar.config.calendarUrl : "";
 
@@ -933,15 +939,15 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
     if (field.type === "checkbox") {
       return (
-        <label key={field.key} className="flex items-start gap-2.5 cursor-pointer">
+        <label key={field.key} className="flex min-h-[18px] cursor-pointer items-start gap-2.5">
           <input
             type="checkbox"
             checked={Boolean(value)}
             onChange={(e) => setValue(e.target.checked)}
-            className="mt-0.5"
+            className="m-0 h-[18px] w-[18px] shrink-0"
             style={{ accentColor: accent }}
           />
-          <span className="text-xs opacity-60">{commonLabel}</span>
+          <span className="text-xs leading-[18px] opacity-60">{commonLabel}</span>
         </label>
       );
     }
@@ -1268,25 +1274,29 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
                       { kind: "privacy" as const, text: registrationForm.privacyText, body: registrationForm.privacyBody, checked: form.agreePrivacy, set: (v: boolean) => setForm((f) => ({ ...f, agreePrivacy: v })) },
                       { kind: "marketing" as const, text: registrationForm.marketingText, body: registrationForm.marketingBody, checked: form.agreeMarketing, set: (v: boolean) => setForm((f) => ({ ...f, agreeMarketing: v })) },
                     ]).map((consent) => (
-                      <label key={consent.kind} className="flex items-start gap-2.5 cursor-pointer">
+                      <label key={consent.kind} className="flex min-h-[18px] cursor-pointer items-start gap-2.5">
                         <input
                           type="checkbox"
                           checked={consent.checked}
                           onChange={(e) => consent.set(e.target.checked)}
-                          className="mt-0.5"
+                          className="m-0 h-[18px] w-[18px] shrink-0"
                           style={{ accentColor: accent }}
                         />
                         {consent.body ? (
                           // 본문이 설정돼 있으면 텍스트 클릭 = 약관 팝업 (체크 토글은 체크박스에서만)
                           <button
                             type="button"
-                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setTermsModal({ kind: consent.kind, title: consent.text, body: consent.body }); }}
-                            className="text-xs opacity-60 text-left underline underline-offset-2 decoration-from-font hover:opacity-90 transition-opacity"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setTermsModal({ kind: consent.kind, title: consent.text, body: consent.body });
+                            }}
+                            className="text-left text-xs leading-[18px] opacity-60 underline decoration-from-font underline-offset-2 transition-opacity hover:opacity-90"
                           >
                             {consent.text}
                           </button>
                         ) : (
-                          <span className="text-xs opacity-60">{consent.text}</span>
+                          <span className="text-xs leading-[18px] opacity-60">{consent.text}</span>
                         )}
                       </label>
                     ))}
@@ -1399,13 +1409,24 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             <p className="mt-2 text-sm leading-relaxed" style={{ color: soft(65) }}>
               웨비나 당일 등록하신 연락처·이메일로 바로 입장할 수 있어요.
             </p>
+            {showCompletionCta && (
+              <a
+                href={completionCtaUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl px-6 text-sm font-bold"
+                style={{ background: accent, color: onAccentColor(accent) }}
+              >
+                {registrationForm.successCta.label}
+              </a>
+            )}
             <button
               type="button"
               onClick={() => setRegisterDone(false)}
-              className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl px-6 text-sm font-bold text-white"
-              style={{ background: accent }}
+              className={`${showCompletionCta ? "mt-2 bg-transparent" : "mt-6 text-white"} inline-flex h-11 w-full items-center justify-center rounded-xl px-6 text-sm font-bold`}
+              style={showCompletionCta ? { color: soft(70) } : { background: accent }}
             >
-              확인
+              {showCompletionCta ? "닫기" : "확인"}
             </button>
           </div>
         </ViewerModal>
