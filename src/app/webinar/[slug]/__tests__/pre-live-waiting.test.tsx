@@ -118,15 +118,30 @@ describe("대기 안내 CTA 편집", () => {
 
 describe("PreLiveWaiting 안내 CTA", () => {
   it("캘린더는 모바일 전용 하단 배너 마크업으로 표시한다", () => {
+    const onCalendar = vi.fn();
     const view = renderWaiting(
       { livePage: { waiting: { calendar: true } } },
       2,
-      { hasCalendar: true, onCalendar: vi.fn() },
+      { hasCalendar: true, onCalendar },
     );
 
-    expect(view.querySelector(".plw-calendar-banner")).toBeTruthy();
+    const banner = view.querySelector<HTMLElement>(".plw-calendar-banner")!;
+    const button = banner.querySelector<HTMLButtonElement>("button")!;
+    const css = view.querySelector("style")?.textContent ?? "";
+    expect(banner).toBeTruthy();
+    expect(view.querySelector(".live-inner")?.classList.contains("has-calendar-banner")).toBe(true);
     expect(view.querySelector(".plw-ctas .calendar")).toBeNull();
-    expect(view.querySelector("style")?.textContent).toContain("@media (min-width:601px)");
+    expect(css).toContain("@media (min-width:601px)");
+    expect(css).toContain(".stk-live .live-inner.has-calendar-banner");
+    expect(css).toContain("env(safe-area-inset-bottom)");
+    expect(css).toContain(".stk-live .plw-calendar-banner button:hover");
+    expect(css).toContain(".stk-live .plw-calendar-banner button:active");
+    expect(css).toContain(".stk-live .plw-calendar-banner button:focus-visible");
+    expect(css).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(getComputedStyle(button).minHeight).toBe("44px");
+
+    act(() => button.click());
+    expect(onCalendar).toHaveBeenCalledTimes(1);
   });
 
   it("추가 카드는 이 웨비나는 소개 카드 다음에 놓이고 아젠다 없이도 보인다", () => {
@@ -145,9 +160,15 @@ describe("PreLiveWaiting 안내 CTA", () => {
     });
 
     const stack = view.querySelector(".plw-info-stack")!;
+    const card = stack.querySelector<HTMLElement>(".plw-follow-up-card")!;
+    const css = view.querySelector("style")?.textContent ?? "";
     expect(stack.children[0]?.classList.contains("plw-panel")).toBe(true);
     expect(stack.children[1]?.classList.contains("plw-follow-up-card")).toBe(true);
     expect(view.querySelector(".plw-ag")).toBeNull();
+    expect(css).toContain("background:var(--card)");
+    expect(css).toContain("border-radius:var(--radius)");
+    expect(css).toContain("box-shadow:var(--card-shadow)");
+    expect(getComputedStyle(card).padding).toBe("24px");
   });
 
   it("인원 밴드가 켜져 있고 현재 대기 인원이 2명이면 실제 밴드를 표시한다", () => {

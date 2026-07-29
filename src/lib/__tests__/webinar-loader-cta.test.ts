@@ -6,7 +6,7 @@ import { PUBLIC_REGISTRATION_FORM_CSS } from "@/lib/webinar-public-form-css";
 type SuccessCta = { enabled: boolean; label: string; url: string };
 type LoaderWindow = Window & typeof globalThis & { MachWebinar: { openRegister: () => void } };
 
-function config(successCta: SuccessCta) {
+function config(successCta: SuccessCta, accentColor = "#6d28d9") {
   return {
     slug: "embed-test",
     name: "임베드 테스트",
@@ -20,7 +20,7 @@ function config(successCta: SuccessCta) {
     allowLiveRegistration: null,
     updatedKey: "test-key",
     theme: {
-      accentColor: "#6d28d9",
+      accentColor,
       textColor: "#21182b",
       surfaceColor: "#fbf7ef",
       borderRadius: "14px",
@@ -80,9 +80,9 @@ async function settle() {
   await Promise.resolve();
 }
 
-async function boot(successCta: SuccessCta) {
+async function boot(successCta: SuccessCta, accentColor = "#6d28d9") {
   const fetchMock = vi.fn(async (url: string) => {
-    if (url.includes("/config")) return response(config(successCta));
+    if (url.includes("/config")) return response(config(successCta, accentColor));
     if (url.endsWith("/register")) return response({ id: "registration-test" });
     throw new Error(`Unexpected request: ${url}`);
   });
@@ -134,6 +134,33 @@ describe("임베드 등록 완료 CTA", () => {
     expect(PUBLIC_REGISTRATION_FORM_CSS).not.toContain("color:#fff");
     expect(PUBLIC_REGISTRATION_FORM_CSS).not.toContain("#dc2626");
     expect(PUBLIC_REGISTRATION_FORM_CSS).not.toContain("#16a34a");
+  });
+
+  it("모달은 native와 같은 공용 shell 폭·dvh·본문 스크롤 계약을 사용한다", async () => {
+    await boot({ enabled: false, label: "", url: "" });
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    (window as LoaderWindow).MachWebinar.openRegister();
+
+    const overlay = document.getElementById("mw-form-modal")!;
+    const shell = overlay.querySelector<HTMLElement>(".mw-modal-card")!;
+    const head = shell.querySelector<HTMLElement>(".mw-modal-head")!;
+    const body = shell.querySelector<HTMLElement>(".mw-modal-body")!;
+    const close = shell.querySelector<HTMLButtonElement>(".mw-modal-close")!;
+    const css = document.getElementById("mw-styles")?.textContent ?? "";
+
+    expect(getComputedStyle(overlay).padding).toBe("16px");
+    expect(getComputedStyle(shell).maxWidth).toBe("520px");
+    expect(getComputedStyle(shell).maxHeight).toContain("100dvh");
+    expect(getComputedStyle(shell).overflow).toBe("hidden");
+    expect(getComputedStyle(body).overflowY).toBe("auto");
+    expect(head.contains(close)).toBe(true);
+    expect(head.textContent).toContain("임베드 테스트 사전등록");
+    expect(body.querySelector(".mw-submit")).toBeTruthy();
+    expect(body.contains(close)).toBe(false);
+    expect(css).not.toContain("max-width:480px");
+    expect(css).not.toContain("max-height:86vh");
   });
 
   it("wrapped multiple-choice rows keep a 44px target and first-line checkbox alignment", async () => {
@@ -188,6 +215,25 @@ describe("임베드 등록 완료 CTA", () => {
     expect(document.body.contains(dialog)).toBe(true);
     close!.click();
     expect(document.body.contains(dialog)).toBe(false);
+  });
+
+  it("밝은 accent에서도 완료 CTA·확인과 성공 상태는 on-accent 테마 대비값을 쓴다", async () => {
+    await boot(
+      { enabled: true, label: "밝은 CTA", url: "https://example.com/bright" },
+      "#ffe066",
+    );
+    const dialog = await submitRegistration();
+    const cta = dialog.querySelector<HTMLAnchorElement>(".mw-done-cta")!;
+    const mark = dialog.querySelector<HTMLElement>(".mw-done-mark")!;
+    const css = document.getElementById("mw-styles")?.textContent ?? "";
+
+    expect(css).toContain("--mw-on-accent:#1a1a1f");
+    expect(cta.style.background).toBe("rgb(255, 224, 102)");
+    expect(cta.style.color).toBe("rgb(26, 26, 31)");
+    // jsdom은 custom property를 최종 RGB로 해석하지 않지만 적용된 값이 accent 토큰인지 확인할 수 있다.
+    expect(getComputedStyle(mark).color).toBe("var(--mw-accent)");
+    expect(css).toContain("color: var(--mw-on-accent)");
+    expect(css).not.toContain("#12B76A");
   });
 
   it.each([

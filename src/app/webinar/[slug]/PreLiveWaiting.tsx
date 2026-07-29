@@ -90,10 +90,14 @@ const EXTRA_CSS = `
 .stk-live .plw-follow-up-card {
   width:min(100%, 560px);
   margin:0 auto;
+  padding:24px;
   display:flex;
   flex-direction:column;
   align-items:center;
   gap:12px;
+  background:var(--card);
+  border-radius:var(--radius);
+  box-shadow:var(--card-shadow);
   text-align:center;
 }
 .stk-live .plw-follow-up-card p {
@@ -137,7 +141,7 @@ const EXTRA_CSS = `
 .stk-live .plw-calendar-banner span { font-size:13px; font-weight:700; }
 .stk-live .plw-calendar-banner button {
   flex:none;
-  min-height:36px;
+  min-height:44px;
   padding:0 12px;
   border:0;
   border-radius:var(--radius-sm);
@@ -148,9 +152,29 @@ const EXTRA_CSS = `
   font-weight:800;
   box-shadow:var(--btn-shadow);
   cursor:pointer;
+  transition:transform .16s ease, box-shadow .16s ease, opacity .16s ease;
+}
+.stk-live .plw-calendar-banner button:hover {
+  transform:translateY(-1px);
+  box-shadow:var(--btn-shadow-hover);
+}
+.stk-live .plw-calendar-banner button:active {
+  transform:translateY(0) scale(.97);
+}
+.stk-live .plw-calendar-banner button:focus-visible {
+  outline:0;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--key) 24%,transparent),var(--btn-shadow-hover);
 }
 @media (min-width:601px) {
   .stk-live .plw-calendar-banner { display:none; }
+}
+@media (max-width:600px) {
+  .stk-live .live-inner.has-calendar-banner {
+    padding-bottom:calc(144px + env(safe-area-inset-bottom));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stk-live .plw-calendar-banner button { transition:none; }
 }
 .stk-live .plw-who small { font-size:14px; color:var(--text); font-weight:650; }
 .stk-live .plw-who .who { display:flex; align-items:baseline; flex-wrap:wrap; gap:0 6px; }
@@ -243,7 +267,7 @@ export default function PreLiveWaiting({
   return (
     <div className="stk-live">
       <style dangerouslySetInnerHTML={{ __html: css }} />
-      <div className="live-inner">
+      <div className={`live-inner${showCalendar ? " has-calendar-banner" : ""}`}>
         <div className="live-hero">
           <div className="plw-eyebrow">Live Webinar</div>
           <h1 className="live-title" style={{ marginTop: 12 }}>{webinar.name}</h1>

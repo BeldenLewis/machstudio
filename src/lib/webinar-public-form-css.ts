@@ -9,7 +9,16 @@ export const PUBLIC_REGISTRATION_FORM_CSS = `
 .mw-form-card { width:100%; max-width:520px; padding:28px 24px; border:0; border-radius:calc(var(--mw-radius, 12px) * 1.34); background:var(--mw-surface); color:var(--mw-text); box-shadow:0 24px 64px rgba(0,0,0,.24); font-size:14px; }
 .mw-form-card, .mw-form-card * { -webkit-text-fill-color:initial; }
 .mw-form-title { margin-bottom:18px; font-size:18px; font-weight:800; color:var(--mw-text); }
-.mw-modal-card .mw-form-title { padding-right:44px; }
+.mw-modal-overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(0,0,0,.62); backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px); }
+.mw-modal-card { position:relative; display:flex; flex-direction:column; width:100%; max-width:520px; max-height:calc(100dvh - 32px); overflow:hidden; border:0; border-radius:calc(var(--mw-radius, 12px) * 1.34); background:var(--mw-surface); color:var(--mw-text); box-shadow:0 24px 64px rgba(0,0,0,.28); }
+.mw-modal-head { position:relative; flex:none; min-height:64px; padding:22px 72px 16px 24px; background:var(--mw-surface); }
+.mw-modal-head .mw-form-title { margin:0; }
+.mw-modal-close { position:absolute; top:12px; right:12px; z-index:2; display:flex; width:40px; height:40px; align-items:center; justify-content:center; padding:0; border:0; border-radius:10px; background:color-mix(in srgb,var(--mw-text) 7%,var(--mw-surface)); color:color-mix(in srgb,var(--mw-text) 72%,transparent); box-shadow:0 1px 2px color-mix(in srgb,var(--mw-text) 12%,transparent); font:inherit; font-size:19px; line-height:1; cursor:pointer; transition:transform .16s ease,opacity .16s ease,box-shadow .16s ease; }
+.mw-modal-close:hover { opacity:.86; box-shadow:0 4px 12px color-mix(in srgb,var(--mw-text) 15%,transparent); }
+.mw-modal-close:active { transform:scale(.96); }
+.mw-modal-close:focus-visible { outline:0; box-shadow:0 0 0 3px color-mix(in srgb,var(--mw-accent) 20%,transparent),0 4px 12px color-mix(in srgb,var(--mw-text) 15%,transparent); }
+.mw-modal-body { min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
+.mw-modal-body > .mw-form-card { max-width:none; padding:4px 24px 28px; border-radius:0; box-shadow:none; }
 .mw-field { margin-bottom:14px; }
 .mw-label { display:block; margin-bottom:6px; font-size:13px; font-weight:600; color:var(--mw-text); white-space:pre-wrap; overflow-wrap:anywhere; }
 .mw-req { margin-left:2px; color:var(--mw-accent); }
@@ -33,5 +42,6 @@ export const PUBLIC_REGISTRATION_FORM_CSS = `
 .mw-msg { display:none; margin-top:14px; padding:12px 14px; border-radius:9px; font-size:13px; line-height:1.55; }
 .mw-msg-error { display:block; background:color-mix(in srgb,var(--mw-accent) 12%,var(--mw-surface)); color:color-mix(in srgb,var(--mw-text) 76%,var(--mw-accent)); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mw-accent) 28%,transparent); }
 .mw-msg-success { display:block; background:color-mix(in srgb,var(--mw-accent) 7%,var(--mw-surface)); color:color-mix(in srgb,var(--mw-text) 88%,var(--mw-accent)); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mw-accent) 18%,transparent); }
-@media (prefers-reduced-motion:reduce) { .mw-submit { transition:none; } }
+@media (max-width:600px) { .mw-modal-close { width:44px; height:44px; } .mw-modal-head { min-height:68px; padding-right:76px; } }
+@media (prefers-reduced-motion:reduce) { .mw-submit,.mw-modal-close { transition:none; } }
 `;

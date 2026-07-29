@@ -251,7 +251,13 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
    */
   const [registerDone, setRegisterDone] = useState(false);
   // 동의 약관 전문 팝업 — 동의 문구 텍스트 클릭 시 (본문이 설정된 경우에만)
-  const [termsModal, setTermsModal] = useState<{ kind: "privacy" | "marketing"; title: string; body: string } | null>(null);
+  const [termsModal, setTermsModal] = useState<{
+    kind: "privacy" | "marketing";
+    title: string;
+    body: string;
+    opener: HTMLElement;
+  } | null>(null);
+  const termsModalOpenRef = useRef(false);
 
   // Q&A 상태
   const [question, setQuestion] = useState("");
@@ -552,6 +558,10 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     if (regModalOpen && (view !== "signup" || registered || registrationId)) setRegModalOpen(false);
   }, [regModalOpen, view, registered, registrationId]);
 
+  useEffect(() => {
+    termsModalOpenRef.current = termsModal !== null;
+  }, [termsModal]);
+
   // 등록 모달 — 랜딩 모달과 같은 수명주기: 내부 초기 포커스·Tab 트랩·Esc·스크롤 잠금·opener 복원.
   useEffect(() => {
     if (!regModalOpen) return;
@@ -559,6 +569,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     if (!dialog) return;
     const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>(REGISTRATION_FOCUSABLE));
     const onKey = (e: KeyboardEvent) => {
+      // 약관 ViewerModal이 최상위인 동안에는 Escape/Tab 소유권을 넘긴다.
+      if (termsModalOpenRef.current) return;
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
@@ -1278,16 +1290,14 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         {view === "signup" && !hasRegistration && regModalOpen && (
           <div
             ref={registrationDialogRef}
-            className="mw-modal-overlay mw-reset fixed inset-0 z-[60] flex items-center justify-center p-4"
+            className="mw-modal-overlay mw-reset"
             style={{
               "--mw-accent": accent,
               "--mw-on-accent": onAccentColor(accent),
               "--mw-radius": radius,
               "--mw-text": text,
               "--mw-surface": surface,
-              background: "rgba(0,0,0,0.55)",
-              backdropFilter: "blur(4px)",
-              WebkitBackdropFilter: "blur(4px)",
+              zIndex: 60,
             } as React.CSSProperties}
             onClick={(e) => { if (e.target === e.currentTarget) setRegModalOpen(false); }}
             role="dialog"
@@ -1296,84 +1306,95 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             tabIndex={-1}
           >
             <motion.div
-              // 내용만 스크롤 — 긴 폼에서도 닫기(×)와 제출 버튼이 잘리지 않게(모바일).
-              className="mw-modal-card mw-form-card relative max-h-[88vh] w-full overflow-y-auto"
+              className="mw-modal-card"
               initial={{ opacity: 0, y: 8, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.18 }}
             >
-              <button
-                type="button"
-                onClick={() => setRegModalOpen(false)}
-                aria-label="닫기"
-                className="absolute right-4 top-4 z-10 grid h-11 w-11 place-items-center rounded-lg text-xl leading-none opacity-50 transition-opacity hover:opacity-100"
-              >
-                ×
-              </button>
-              {!canRegister ? (
-                <div className="py-8 text-center">
-                  <h2 className="text-lg font-semibold mb-1">등록이 마감되었어요</h2>
-                  <p className="text-sm opacity-60">작성 중에 등록 기간이 종료됐어요.<br />시작 시각에 맞춰 다시 방문해 주세요.</p>
-                </div>
-              ) : (
-              <>
-                <h2 className="mw-form-title">{webinar.name} 사전등록</h2>
-                <p className="mw-hint mb-5">
-                  등록 마감 {formatKst(webinar.signupDeadline, { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                </p>
-                <div className="space-y-3">
-                  <div className="grid grid-cols-1 gap-3">
-                    {visibleFields.map(renderRegistrationField)}
-                  </div>
+              <div className="mw-modal-head">
+                <h2 className="mw-form-title">
+                  {canRegister ? `${webinar.name} 사전등록` : "등록이 마감되었어요"}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setRegModalOpen(false)}
+                  aria-label="닫기"
+                  className="mw-modal-close"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="mw-modal-body">
+                <div className="mw-form-card">
+                  {!canRegister ? (
+                    <div className="py-8 text-center">
+                      <p className="text-sm opacity-60">작성 중에 등록 기간이 종료됐어요.<br />시작 시각에 맞춰 다시 방문해 주세요.</p>
+                    </div>
+                  ) : (
+                  <>
+                    <p className="mw-hint mb-5">
+                      등록 마감 {formatKst(webinar.signupDeadline, { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 gap-3">
+                        {visibleFields.map(renderRegistrationField)}
+                      </div>
 
-                  <div className="space-y-2 pt-1">
-                    {([
-                      { kind: "privacy" as const, text: registrationForm.privacyText, body: registrationForm.privacyBody, checked: form.agreePrivacy, set: (v: boolean) => setForm((f) => ({ ...f, agreePrivacy: v })) },
-                      { kind: "marketing" as const, text: registrationForm.marketingText, body: registrationForm.marketingBody, checked: form.agreeMarketing, set: (v: boolean) => setForm((f) => ({ ...f, agreeMarketing: v })) },
-                    ]).map((consent) => (
-                      <label key={consent.kind} className="mw-check">
-                        <input
-                          type="checkbox"
-                          checked={consent.checked}
-                          onChange={(e) => consent.set(e.target.checked)}
-                        />
-                        {consent.body ? (
-                          // 본문이 설정돼 있으면 텍스트 클릭 = 약관 팝업 (체크 토글은 체크박스에서만)
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setTermsModal({ kind: consent.kind, title: consent.text, body: consent.body });
-                            }}
-                            className="text-left underline decoration-from-font underline-offset-2 transition-opacity hover:opacity-90"
-                          >
-                            {consent.text}
-                          </button>
-                        ) : (
-                          <span>{consent.text}</span>
-                        )}
-                      </label>
-                    ))}
-                  </div>
+                      <div className="space-y-2 pt-1">
+                        {([
+                          { kind: "privacy" as const, text: registrationForm.privacyText, body: registrationForm.privacyBody, checked: form.agreePrivacy, set: (v: boolean) => setForm((f) => ({ ...f, agreePrivacy: v })) },
+                          { kind: "marketing" as const, text: registrationForm.marketingText, body: registrationForm.marketingBody, checked: form.agreeMarketing, set: (v: boolean) => setForm((f) => ({ ...f, agreeMarketing: v })) },
+                        ]).map((consent) => (
+                          <label key={consent.kind} className="mw-check">
+                            <input
+                              type="checkbox"
+                              checked={consent.checked}
+                              onChange={(e) => consent.set(e.target.checked)}
+                            />
+                            {consent.body ? (
+                              // 본문이 설정돼 있으면 텍스트 클릭 = 약관 팝업 (체크 토글은 체크박스에서만)
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setTermsModal({
+                                    kind: consent.kind,
+                                    title: consent.text,
+                                    body: consent.body,
+                                    opener: e.currentTarget,
+                                  });
+                                }}
+                                className="text-left underline decoration-from-font underline-offset-2 transition-opacity hover:opacity-90"
+                              >
+                                {consent.text}
+                              </button>
+                            ) : (
+                              <span>{consent.text}</span>
+                            )}
+                          </label>
+                        ))}
+                      </div>
 
-                  {formError && (
-                    <p className="mw-msg mw-msg-error" role="alert">{formError}</p>
+                      {formError && (
+                        <p className="mw-msg mw-msg-error" role="alert">{formError}</p>
+                      )}
+
+                      <motion.button
+                        onClick={handleRegister}
+                        disabled={isRegistering || dupCheck.phone || dupCheck.email}
+                        className="mw-submit"
+                        whileHover={{ y: -1 }}
+                        whileTap={{ scale: 0.96 }}
+                        transition={spring}
+                      >
+                        {isRegistering ? "등록 중..." : registrationForm.submitLabel}
+                      </motion.button>
+                    </div>
+                  </>
                   )}
-
-                  <motion.button
-                    onClick={handleRegister}
-                    disabled={isRegistering || dupCheck.phone || dupCheck.email}
-                    className="mw-submit"
-                    whileHover={{ y: -1 }}
-                    whileTap={{ scale: 0.96 }}
-                    transition={spring}
-                  >
-                    {isRegistering ? "등록 중..." : registrationForm.submitLabel}
-                  </motion.button>
                 </div>
-              </>
-              )}
+              </div>
             </motion.div>
           </div>
         )}
@@ -1460,8 +1481,11 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         >
           <div className="py-4 text-center">
             <div
-              className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full text-2xl"
-              style={{ background: "color-mix(in srgb,#12B76A 14%,transparent)", color: "#12B76A" }}
+              className="mw-done-mark mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full text-2xl"
+              style={{
+                background: `color-mix(in srgb, ${accent} 14%, ${surface})`,
+                color: accent,
+              }}
               aria-hidden
             >
               ✓
@@ -1484,8 +1508,10 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             <button
               type="button"
               onClick={() => setRegisterDone(false)}
-              className={`${showCompletionCta ? "mt-2 bg-transparent" : "mt-6 text-white"} inline-flex h-11 w-full items-center justify-center rounded-xl px-6 text-sm font-bold`}
-              style={showCompletionCta ? { color: soft(70) } : { background: accent }}
+              className={`${showCompletionCta ? "mt-2 bg-transparent" : "mt-6"} inline-flex h-11 w-full items-center justify-center rounded-xl px-6 text-sm font-bold`}
+              style={showCompletionCta
+                ? { color: soft(70) }
+                : { background: accent, color: onAccentColor(accent) }}
             >
               {showCompletionCta ? "닫기" : "확인"}
             </button>
@@ -1509,51 +1535,47 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         />
       )}
 
-      {/* 동의 약관 전문 팝업 — 닫힘은 즉시 언마운트(느려진 exit 애니메이션이 투명 오버레이로 남아 클릭을 막는 것 방지) */}
+      {/* 동의 약관 전문 팝업 — 등록 모달보다 위에서 키보드/포커스를 단독 소유한다. */}
       {termsModal && (
-          <motion.div
-            className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-          >
-            <div className="absolute inset-0 bg-black/60" onClick={() => setTermsModal(null)} />
-            <motion.div
-              initial={{ opacity: 0, y: 16, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={spring}
-              role="dialog"
-              aria-modal="true"
-              aria-label={termsModal.title}
-              className="relative w-full max-w-lg p-6 shadow-2xl"
-              style={{ backgroundColor: surface, color: text, borderRadius: radius }}
+        <ViewerModal
+          surface={surface}
+          text={text}
+          soft={soft}
+          label={termsModal.title}
+          onClose={() => setTermsModal(null)}
+          restoreFocusTo={termsModal.opener}
+          zIndex={90}
+        >
+          <h3 className="text-base font-semibold">{termsModal.title}</h3>
+          <div className="mt-3 max-h-[55vh] overflow-y-auto text-sm leading-relaxed opacity-75 whitespace-pre-wrap">
+            {termsModal.body}
+          </div>
+          <div className="mt-5 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setTermsModal(null)}
+              className="flex-1 py-2.5 text-sm font-medium opacity-70 hover:opacity-100 transition-opacity"
+              style={{ borderRadius: `calc(${radius} * 0.6)`, boxShadow: "inset 0 0 0 1px rgba(128,128,128,0.35)" }}
             >
-              <h3 className="text-base font-semibold">{termsModal.title}</h3>
-              <div className="mt-3 max-h-[55vh] overflow-y-auto text-sm leading-relaxed opacity-75 whitespace-pre-wrap">
-                {termsModal.body}
-              </div>
-              <div className="mt-5 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setTermsModal(null)}
-                  className="flex-1 py-2.5 text-sm font-medium opacity-70 hover:opacity-100 transition-opacity"
-                  style={{ borderRadius: `calc(${radius} * 0.6)`, boxShadow: "inset 0 0 0 1px rgba(128,128,128,0.35)" }}
-                >
-                  닫기
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForm((f) => (termsModal.kind === "privacy" ? { ...f, agreePrivacy: true } : { ...f, agreeMarketing: true }));
-                    setTermsModal(null);
-                  }}
-                  className="flex-1 py-2.5 text-sm font-semibold text-white"
-                  style={{ backgroundColor: accent, borderRadius: `calc(${radius} * 0.6)` }}
-                >
-                  동의합니다
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
+              닫기
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setForm((f) => (termsModal.kind === "privacy" ? { ...f, agreePrivacy: true } : { ...f, agreeMarketing: true }));
+                setTermsModal(null);
+              }}
+              className="flex-1 py-2.5 text-sm font-semibold"
+              style={{
+                backgroundColor: accent,
+                color: onAccentColor(accent),
+                borderRadius: `calc(${radius} * 0.6)`,
+              }}
+            >
+              동의합니다
+            </button>
+          </div>
+        </ViewerModal>
       )}
     </div>
   );

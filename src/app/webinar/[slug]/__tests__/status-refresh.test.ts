@@ -9,6 +9,17 @@ function response(body: unknown, ok = true) {
 }
 
 describe("live status waiting count refresh", () => {
+  it.each([
+    {},
+    { status: "registration" },
+    { status: "unknown", entryOpen: false },
+    { status: "live", entryOpen: "yes" },
+  ])("isolates malformed 200 state payload %j from the public screen", async (body) => {
+    const refresh = await readStatusRefresh(() => Promise.resolve(response(body)));
+
+    expect(refresh).toEqual({ data: null, waitingCount: null });
+  });
+
   it("clears a previously successful band input after every unsuccessful refresh path", async () => {
     let bandInput: number | null = null;
 

@@ -310,12 +310,9 @@ ${ATTRIBUTION_CORE_JS}
       "@keyframes mw-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }",
       ".mw-reg-dot { width: 7px; height: 7px; border-radius: 50%; background: #fbbf24; animation: mw-pulse 1.5s ease-in-out infinite; }",
       ".mw-reg-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; margin-right: 6px; border-radius: 6px; background: rgba(251,191,36,0.16); border: 1px solid rgba(251,191,36,0.32); color: #fbbf24 !important; -webkit-text-fill-color: #fbbf24 !important; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; }",
-      ".mw-modal-overlay { position: fixed; inset: 0; z-index: 999950; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.62); }",
-      ".mw-modal-card { position: relative; width: 100%; max-width: 480px; max-height: 86vh; overflow-y: auto; border-radius: 16px; }",
-      ".mw-modal-close { position: absolute; top: 12px; right: 12px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(120,120,128,0.3); border-radius: 10px; background: #fff; color: #666; font-size: 19px; line-height: 1; cursor: pointer; z-index: 2; }",
-      /* 제목이 닫기 버튼 아래로 파고들지 않게 자리를 비운다 — 웨비나 이름이 길면 두 줄이 되면서
-         절대배치된 X 와 겹쳤다(모바일에서 특히). 모달로 열릴 때만 필요한 여백이라 여기서 건다. */
-      ".mw-modal-card .mw-form-title { padding-right: 44px; }",
+      /* overlay/shell/body 구조는 PUBLIC_REGISTRATION_FORM_CSS 단일 계약을 쓴다.
+         로더는 호스트 페이지 위에 올라가는 z-index 만 소비처 값으로 덮는다. */
+      ".mw-modal-overlay { z-index: 999950; }",
       /* 등록 완료 팝업 — 인라인 성공 문구는 폼 아래에 붙어서, 스크롤하지 않으면
          아무 반응이 없는 것처럼 보였다(제출 버튼이 화면 하단이면 문구가 접힌 곳에 생긴다). */
       /* 문구 길이를 가정하지 않는다: successMessage 는 주최측이 쓰는 값이라 길어질 수 있다.
@@ -323,16 +320,14 @@ ${ATTRIBUTION_CORE_JS}
          잘리고 확인 버튼이 Y=1125 에 놓여 누를 수 없었다. 그래서 **본문만** 스크롤하고
          체크·제목·확인은 고정한다(시청자 모달 ViewerModal 과 같은 규칙).
          dvh: 모바일 주소창이 접히면 vh 는 실제보다 커서 아래가 잘린다. */
-      ".mw-done-card { position: relative; display: flex; flex-direction: column; width: 100%; max-width: 380px; max-height: calc(100dvh - 40px); padding: 32px 26px 26px; border-radius: 16px; background: #fff; color: #111; box-shadow: 0 24px 64px rgba(0,0,0,0.28); text-align: center; }",
-      ".mw-done-mark { flex: none; width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: rgba(18,183,106,0.14); color: #12B76A; font-size: 26px; line-height: 1; }",
+      ".mw-done-card { position: relative; display: flex; flex-direction: column; width: 100%; max-width: 380px; max-height: calc(100dvh - 32px); padding: 32px 26px 26px; border-radius: 16px; background: var(--mw-surface); color: var(--mw-text); box-shadow: 0 24px 64px rgba(0,0,0,0.28); text-align: center; }",
+      ".mw-done-mark { flex: none; width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb,var(--mw-accent) 14%,var(--mw-surface)); color: var(--mw-accent); font-size: 26px; line-height: 1; }",
       ".mw-done-title { flex: none; margin: 0 0 8px; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }",
-      ".mw-done-desc { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; margin: 0; font-size: 13.5px; line-height: 1.65; color: #555; white-space: pre-line; word-break: keep-all; }",
-      ".mw-done-btn { flex: none; margin-top: 22px; width: 100%; height: 46px; border: 0; border-radius: 11px; font: inherit; font-size: 14.5px; font-weight: 700; color: #fff; cursor: pointer; }",
+      ".mw-done-desc { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; margin: 0; font-size: 13.5px; line-height: 1.65; color: color-mix(in srgb,var(--mw-text) 68%,transparent); white-space: pre-line; word-break: keep-all; }",
+      ".mw-done-btn { flex: none; margin-top: 22px; width: 100%; height: 46px; border: 0; border-radius: 11px; font: inherit; font-size: 14.5px; font-weight: 700; color: var(--mw-on-accent); cursor: pointer; }",
       ".mw-done-cta { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }",
-      ".mw-done-close { flex: none; width: 100%; min-height: 44px; margin-top: 8px; border: 0; border-radius: 11px; background: transparent; color: #555; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }",
+      ".mw-done-close { flex: none; width: 100%; min-height: 44px; margin-top: 8px; border: 0; border-radius: 11px; background: transparent; color: color-mix(in srgb,var(--mw-text) 68%,transparent); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }",
       ".mw-done-close:focus-visible { outline: 2px solid " + t.accent + "; outline-offset: 2px; }",
-      /* 터치 최소 44px */
-      "@media (max-width: 600px) { .mw-modal-close { width: 44px; height: 44px; } .mw-modal-card .mw-form-title { padding-right: 48px; } }",
       // 캘린더 추가는 모바일에서만 — PC 는 네이티브 캘린더 연동이 없어 실효가 낮고 배너만 붐빈다.
       "@media (min-width: 601px) { .mw-banner .mw-btn-cal { display: none !important; } }",
       "@media (max-width: 600px) { .mw-banner { left: 12px !important; right: 12px !important; bottom: 12px !important; width: auto; transform: none !important; } .mw-banner-inner { flex-direction: column; align-items: stretch; gap: 10px; } .mw-banner-ctas { width: 100%; } .mw-banner .mw-btn { flex: 1; } }"
@@ -421,9 +416,15 @@ ${ATTRIBUTION_CORE_JS}
     container.classList.add("mw-reset");
     var status = computeStatus();
     var card = el("div", "mw-form-card");
+    var titleTarget = opts && opts.titleTarget;
+    if (titleTarget) clear(titleTarget);
+    function appendTitle(text) {
+      var title = el("div", "mw-form-title", text);
+      (titleTarget || card).appendChild(title);
+    }
 
     if (status === "ended") {
-      card.appendChild(el("div", "mw-form-title", (CFG.name || "웨비나") + "가 종료되었습니다"));
+      appendTitle((CFG.name || "웨비나") + "가 종료되었습니다");
       if (endedMode() === "survey" && surveyUrl()) {
         var sBtn = el("a", "mw-btn mw-btn-primary mw-submit", "만족도 조사 참여하기");
         sBtn.href = surveyUrl();
@@ -436,7 +437,7 @@ ${ATTRIBUTION_CORE_JS}
     }
 
     if (!canRegisterNow(status)) {
-      card.appendChild(el("div", "mw-form-title", "사전등록이 마감되었습니다"));
+      appendTitle("사전등록이 마감되었습니다");
       if (isEntryOpen(status)) {
         var eBtn = el("a", "mw-btn mw-btn-primary mw-submit", labels().live || "웨비나 입장하기");
         eBtn.href = livePageUrl();
@@ -448,7 +449,7 @@ ${ATTRIBUTION_CORE_JS}
 
     var form = (CFG.registrationForm || {});
     var fields = form.fields || [];
-    card.appendChild(el("div", "mw-form-title", (CFG.name || "웨비나") + " 사전등록"));
+    appendTitle((CFG.name || "웨비나") + " 사전등록");
 
     var formEl = document.createElement("form");
     formEl.noValidate = true;
@@ -932,17 +933,21 @@ ${ATTRIBUTION_CORE_JS}
     overlay.setAttribute("aria-modal", "true");
     overlay.setAttribute("aria-label", (CFG && CFG.name ? CFG.name + " " : "") + "사전등록");
     var cardWrap = el("div", "mw-modal-card");
+    var modalHead = el("div", "mw-modal-head");
+    var titleTarget = el("div", "");
     var closeBtn = el("button", "mw-modal-close", "\\u00d7");
     closeBtn.type = "button";
     closeBtn.setAttribute("aria-label", "닫기");
     closeBtn.addEventListener("click", closeFormModal);
     overlay.addEventListener("click", function(ev) { if (ev.target === overlay) closeFormModal(); });
-    cardWrap.appendChild(closeBtn);
-    var formHost = el("div", "");
+    modalHead.appendChild(titleTarget);
+    modalHead.appendChild(closeBtn);
+    cardWrap.appendChild(modalHead);
+    var formHost = el("div", "mw-modal-body");
     cardWrap.appendChild(formHost);
     overlay.appendChild(cardWrap);
     document.body.appendChild(overlay);
-    buildFormInto(formHost, null);
+    buildFormInto(formHost, { titleTarget: titleTarget });
     activateFormModal(overlay);
   }
 
@@ -997,6 +1002,7 @@ ${ATTRIBUTION_CORE_JS}
       cta.target = "_blank";
       cta.rel = "noopener noreferrer";
       cta.style.background = accent;
+      cta.style.color = theme().onAccent;
       card.appendChild(cta);
 
       var closeBtn = el("button", "mw-done-close", "닫기");
@@ -1008,6 +1014,7 @@ ${ATTRIBUTION_CORE_JS}
       var ok = el("button", "mw-done-btn", "확인");
       ok.type = "button";
       ok.style.background = accent;
+      ok.style.color = theme().onAccent;
       ok.addEventListener("click", close);
       card.appendChild(ok);
       focusTarget = ok;
