@@ -255,7 +255,12 @@ ${ATTRIBUTION_CORE_JS}
     var r = parseInt(hex.slice(0, 2), 16);
     var g = parseInt(hex.slice(2, 4), 16);
     var b = parseInt(hex.slice(4, 6), 16);
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 >= 0.6 ? "#1a1a1f" : "#ffffff";
+    /* 키컬러 위 글자는 **흰색이 기본**이다(브랜드 결정). 진한 글자는 흰 글자가 형태조차 안 보이는
+       아주 밝은 키컬러(노랑·연회색)에서만 쓰는 안전장치다.
+       임계값이 0.6 이었을 때 주황(#ff8500)이 0.605 로 **간신히 넘어** 검은 글자를 받았다 —
+       하단 배너 CTA·등록 모달 CTA·완료 팝업 버튼이 전부 그랬다. LiveContentStk 의
+       onAccentColor 와 **같은 값(0.78)** 을 쓴다. 두 함수를 합칠 때 이 값도 함께 옮겨야 한다. */
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 >= 0.78 ? "#1a1a1f" : "#ffffff";
   }
   function theme() {
     var t = (CFG && CFG.theme) || {};
