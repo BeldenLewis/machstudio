@@ -230,3 +230,31 @@ describe("자료 다운로드 조건 설문", () => {
     expect(list).toEqual([]);
   });
 });
+
+describe("자료 저장 왕복 — 필드가 흘러내리지 않는다", () => {
+  /**
+   * 어드민 저장 코드가 자료를 `{title, meta, url}` 로 **명시 매핑**해서 새로 넣은 surveyId 가
+   * 조용히 버려졌다. 조건을 골라도 저장이 안 되고, 뷰어는 조건 없는 자료로 보고 그대로 열어 줬다.
+   *
+   * 이 테스트는 정규화 왕복만 지킨다 — 어드민의 매핑까지 잡지는 못하지만, 정규화가 필드를
+   * 흘리면 여기서 걸린다. 어드민 매핑은 필드를 늘릴 때 같이 고쳐야 한다는 표시로 남긴다.
+   */
+  it("정규화를 통과한 자료가 조건 설문을 잃지 않는다", () => {
+    const saved = { title: "발표자료", meta: "PDF · 4MB", url: "https://x.example/a.pdf", surveyId: "sv_1" };
+    const out = normalizeLivePageConfig({ livePage: { resources: [saved] } }).resources[0];
+    expect(out).toEqual(saved);
+  });
+
+  it("여러 자료가 각자 다른 조건을 갖는다 — 자료별 대가가 이 기능의 요점이다", () => {
+    const out = normalizeLivePageConfig({
+      livePage: {
+        resources: [
+          { title: "발표자료", url: "https://x.example/a.pdf", surveyId: "sv_만족도" },
+          { title: "다음 행사 안내", url: "https://x.example/b.pdf", surveyId: "sv_사전조사" },
+          { title: "공개 자료", url: "https://x.example/c.pdf" },
+        ],
+      },
+    }).resources;
+    expect(out.map((r) => r.surveyId)).toEqual(["sv_만족도", "sv_사전조사", ""]);
+  });
+});
