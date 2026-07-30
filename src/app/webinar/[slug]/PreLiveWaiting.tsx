@@ -417,7 +417,7 @@ export default function PreLiveWaiting({
                       ))}
                       <span className="more">+</span>
                     </div>
-                    <span><b>{registrantCount.toLocaleString()}명</b>이 사전등록했어요</span>
+                    <span><b>{registrantCount.toLocaleString()}명</b>이 이 웨비나를 기다려요</span>
                   </div>
                 )}
               </div>
