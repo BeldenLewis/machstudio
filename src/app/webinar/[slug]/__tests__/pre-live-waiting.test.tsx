@@ -119,30 +119,34 @@ describe("대기 안내 CTA 편집", () => {
 });
 
 describe("PreLiveWaiting 안내 CTA", () => {
-  it("캘린더는 모바일 전용 하단 배너 마크업으로 표시한다", () => {
+  /**
+   * 캘린더는 **초대 공유와 같은 줄의 형제 버튼**이다. 예전에는 화면 하단 고정 배너였는데,
+   * 늘 떠 있어 콘텐츠를 가리면서도 다른 CTA 들과 위계가 끊겨 있었다.
+   * 모바일 전용이지만 렌더가 아니라 CSS 로 가린다 — 조건부 렌더면 리사이즈마다 노드가
+   * 붙었다 떨어지며 옆 버튼들이 튄다.
+   */
+  it("캘린더는 초대 공유와 같은 줄의 버튼으로, 모바일에서만 보인다", () => {
     const onCalendar = vi.fn();
     const view = renderWaiting(
-      { livePage: { waiting: { calendar: true } } },
+      { livePage: { waiting: { calendar: true, share: true } } },
       2,
       { hasCalendar: true, onCalendar },
     );
 
-    const banner = view.querySelector<HTMLElement>(".plw-calendar-banner")!;
-    const button = banner.querySelector<HTMLButtonElement>("button")!;
+    const row = view.querySelector<HTMLElement>(".plw-ctas")!;
+    const cal = row.querySelector<HTMLButtonElement>(".plw-btn.cal")!;
     const css = view.querySelector("style")?.textContent ?? "";
-    expect(banner).toBeTruthy();
-    expect(view.querySelector(".live-inner")?.classList.contains("has-calendar-banner")).toBe(true);
-    expect(view.querySelector(".plw-ctas .calendar")).toBeNull();
-    expect(css).toContain("@media (min-width:601px)");
-    expect(css).toContain(".stk-live .live-inner.has-calendar-banner");
-    expect(css).toContain("env(safe-area-inset-bottom)");
-    expect(css).toContain(".stk-live .plw-calendar-banner button:hover");
-    expect(css).toContain(".stk-live .plw-calendar-banner button:active");
-    expect(css).toContain(".stk-live .plw-calendar-banner button:focus-visible");
-    expect(css).toContain("@media (prefers-reduced-motion: reduce)");
-    expect(getComputedStyle(button).minHeight).toBe("44px");
+    expect(cal).toBeTruthy();
+    // 하단 고정 배너는 더 이상 없다 — 본문 패딩 보정도 함께 사라졌다
+    expect(view.querySelector(".plw-calendar-banner")).toBeNull();
+    expect(view.querySelector(".live-inner")?.classList.contains("has-calendar-banner")).toBe(false);
+    // 초대 공유와 같은 줄 안에 있다(이 하네스는 onShare 를 넘기지 않아 공유 버튼 자체는 안 그려진다)
+    expect(cal.parentElement).toBe(row);
+    expect(css).toContain("@media (min-width:768px) { .stk-live .plw-btn.cal { display:none; } }");
+    // .plw-btn 규격을 그대로 물려받는다(터치 타깃 46px)
+    expect(getComputedStyle(cal).height).toBe("46px");
 
-    act(() => button.click());
+    act(() => cal.click());
     expect(onCalendar).toHaveBeenCalledTimes(1);
   });
 
