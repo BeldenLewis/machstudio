@@ -39,7 +39,13 @@ const EXTRA_CSS = `
 .stk-live .plw-band { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin:56px 0 40px; align-items:start; }
 .stk-live .plw-info-stack { display:flex; flex-direction:column; gap:20px; }
 .stk-live .plw-band.single { grid-template-columns:minmax(0, 1fr); max-width:680px; margin-inline:auto; }
-@media (max-width:820px){ .stk-live .plw-band { grid-template-columns:1fr; } }
+/* 한 열로 접히면 DOM 순서(CTA → 소개·아젠다)가 그대로 나온다. 그건 뒤집혀 있다 —
+   "무슨 웨비나였나" 가 먼저고 CTA 는 그 뒤의 제안이다. order 로 바로잡는다. */
+@media (max-width:820px){
+  .stk-live .plw-band { grid-template-columns:1fr; }
+  .stk-live .plw-info-stack.main { order:1; }
+  .stk-live .plw-info-stack.side { order:2; }
+}
 .stk-live .plw-panel { background:var(--card); border-radius:var(--radius); box-shadow:var(--card-shadow); padding:24px; }
 .stk-live .plw-panel h3 { font-size:13px; font-weight:750; color:var(--muted); margin:0 0 4px; }
 .stk-live .plw-panel .big { font-size:25px; font-weight:800; letter-spacing:-.03em; color:var(--text); }
@@ -299,6 +305,9 @@ export default function PreLiveWaiting({
   const showUtilityCtas = showCalendar || showShare || showNotify;
   /* "이 웨비나는" 패널은 아젠다·팔로업이 없어도 그린다 — 함께 기다리는 인원 밴드가 그 안에 들어가서다. */
   const showInfoBand = showAgenda || showFollowUp || showTogether;
+  /* 2단은 **왼쪽 열에 CTA 가 있을 때만**. 예전에는 아젠다 유무로 갈랐는데, 소개 카드가
+     오른쪽으로 옮겨온 뒤로는 왼쪽이 빌 수 있어 빈 칸이 남았다. */
+  const twoColumn = showFollowUp;
   const showCenterAction = Boolean(centerAction) && (started || replaceCountdown);
 
   return (
@@ -366,8 +375,30 @@ export default function PreLiveWaiting({
         {notify?.error && <p className="plw-err">{notify.error}</p>}
 
         {showInfoBand && (
-          <div className={`plw-band${showAgenda ? "" : " single"}`}>
-            <div className="plw-info-stack">
+          <div className={`plw-band${twoColumn ? "" : " single"}`}>
+            {/* 왼쪽 — 추가 CTA 카드만. 소개 카드는 오른쪽 위로 옮겼다: 세션 순서를 볼 때
+                "무슨 웨비나였나" 가 바로 위에 있어야 읽히고, CTA 는 그 흐름 밖의 제안이다. */}
+            {showFollowUp && (
+              <div className="plw-info-stack side">
+                  <div className="plw-follow-up-card">
+                    {followUpTitle && <h3>{followUp.title}</h3>}
+                    {followUpText && <p>{followUp.text}</p>}
+                    {followUpItems.length > 0 && (
+                      <ul className="plw-follow-up-items">
+                        {followUpItems.map((it) => <li key={it}>{it}</li>)}
+                      </ul>
+                    )}
+                    {showFollowUpCta && (
+                      <a href={followUpUrl} target="_blank" rel="noopener noreferrer">
+                        {followUp.ctaLabel}
+                      </a>
+                    )}
+                  </div>
+              </div>
+            )}
+
+            {/* 오른쪽 — 소개 카드가 위, 세션 순서가 그 아래 */}
+            <div className="plw-info-stack main">
               <div className="plw-panel">
                 <h3>{aboutEyebrow}</h3>
                 <div className="big">{aboutTitle}</div>
@@ -393,24 +424,6 @@ export default function PreLiveWaiting({
                   </div>
                 )}
               </div>
-              {showFollowUp && (
-                <div className="plw-follow-up-card">
-                  {followUpTitle && <h3>{followUp.title}</h3>}
-                  {followUpText && <p>{followUp.text}</p>}
-                  {followUpItems.length > 0 && (
-                    <ul className="plw-follow-up-items">
-                      {followUpItems.map((it) => <li key={it}>{it}</li>)}
-                    </ul>
-                  )}
-                  {showFollowUpCta && (
-                    <a href={followUpUrl} target="_blank" rel="noopener noreferrer">
-                      {followUp.ctaLabel}
-                    </a>
-                  )}
-                </div>
-              )}
-            </div>
-
             {showAgenda && (
               <div className="plw-ag">
                 {/* 개수는 실제 세션만 — 휴식·Q&A 를 세면 "3개 세션"이 "5개 세션"으로 부풀었다 */}
@@ -471,6 +484,7 @@ export default function PreLiveWaiting({
                 })}
               </div>
             )}
+            </div>
           </div>
         )}
 
