@@ -693,24 +693,33 @@ ${sessionLogoCss(".lnd .schedule-logo")}
    판 색·그림자는 이웃(program-card·join-step)과 같은 값을 쓴다 —
      (혜택은 카드 평면을 쓰지 않는다 — accent-zone 목록형이다) —
    같은 존 안에서 카드 마감이 갈리면 섹션 하나가 얹혀 있는 것처럼 보인다. */
-.lnd .audience-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; list-style: none; padding: 0; margin: 0; }
-.lnd .audience-item {
-  display: flex; align-items: flex-start; gap: 13px;
-  padding: 18px 20px; border-radius: 8px;
-  background: var(--card);
-  box-shadow: var(--card-shadow);
+/* ── 이런 분들께 추천합니다 ────────────────────────────────────────────
+   이 섹션의 일은 "읽는 것" 이 아니라 **훑으면서 나에 해당하는 줄을 찾는 것** 이다.
+   예전에는 흰 판 6개가 각자 그림자를 지고 있어서 눈이 6개의 개별 주장을 하나씩 처리해야
+   했다 — 목록으로 읽히지 않았다. 판을 없애고 체크 열을 세로로 세운다: 눈이 그 열을 따라
+   내려가고 각 줄은 "나인가?" 만 판정한다.
+
+   2열은 유지한다 — 한 열로 가면 960px 에서 한 줄이 너무 길어져 읽기 폭이 무너진다.
+   행 구분은 선이 아니라 여백으로 한다(선을 6개 그으면 판을 없앤 이득이 사라진다). */
+.lnd .audience-list {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  column-gap: 40px; row-gap: 20px;
+  list-style: none; padding: 0; margin: 0;
 }
-/* 체크 표시 — 아이콘을 비웠을 때의 기본. 키컬러 판 위에 놓아 목록의 리듬을 만든다. */
+.lnd .audience-item { display: flex; align-items: flex-start; gap: 12px; }
+/* 마크는 주인이 아니다 — 문장이 주인이다. 지금보다 작고 조용하게 두되 열은 또렷하게 선다. */
 .lnd .audience-mark {
-  flex-shrink: 0; width: 26px; height: 26px; border-radius: 8px;
+  flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%;
   display: grid; place-items: center;
-  background: color-mix(in srgb, var(--primary) 22%, transparent);
+  margin-top: 2px;
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
   color: var(--primary-bright);
-  font-size: 14px; font-weight: 900; line-height: 1;
+  font-size: 11px; font-weight: 900; line-height: 1;
 }
 .lnd .audience-body { min-width: 0; }
-.lnd .audience-body b { display: block; font-size: 16px; font-weight: 750; letter-spacing: -.02em; color: var(--paper); word-break: keep-all; }
-.lnd .audience-body p { margin: 5px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted); white-space: pre-line; word-break: keep-all; }
+/* 판이 사라졌으니 글자가 그 무게를 받는다 — 굵기를 낮추고 크기를 살짝 올려 문장으로 읽히게. */
+.lnd .audience-body b { display: block; font-size: 16px; font-weight: 650; line-height: 1.6; letter-spacing: -.01em; color: var(--paper); word-break: keep-all; }
+.lnd .audience-body p { margin: 4px 0 0; font-size: 14px; line-height: 1.65; color: var(--muted); white-space: pre-line; word-break: keep-all; }
 .lnd .program-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .lnd .program-card, .lnd .join-step {
   border-radius: 8px; background: var(--card);
@@ -845,6 +854,8 @@ ${sessionLogoCss(".lnd .schedule-logo")}
   .lnd .schedule-content { padding: 10px 12px; }
   .lnd .schedule-name { font-size: 13px; }
   .lnd .program-grid, .lnd .join-grid, .lnd .audience-list { grid-template-columns: 1fr; }
+  /* 한 열로 접히면 좌우 간격은 의미가 없고 위아래만 남는다 — 줄 사이를 조금 벌린다. */
+  .lnd .audience-list { row-gap: 16px; }
   /* 모바일에서는 번호 열을 좁히고 간격을 줄인다 — 52px 를 유지하면 본문이 두 글자씩 접힌다. */
   .lnd .benefit-row { gap: 14px; padding: 18px 0; }
   .lnd .benefit-number { font-size: 26px; min-width: 38px; }
