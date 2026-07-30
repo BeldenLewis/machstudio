@@ -13,6 +13,7 @@ import { endedSurveyLinks, readEndedSurveys, type EndedSurveyLink, type EndedSur
 import ViewerModal from "../ViewerModal";
 import EndedSurveyDialog from "../EndedSurveyDialog";
 import { formatKst } from "@/lib/datetime";
+import { buildIcs, icsFileName } from "@/lib/webinar-calendar";
 import {
   isValidEmail,
   isValidPhone,
@@ -979,7 +980,33 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     setRegisterDone(false);
   };
   const inputStyle = { border: "1px solid rgba(255,255,255,0.1)", borderRadius: `calc(${radius} * 0.6)`, color: text };
-  const calendarUrl = typeof webinar.config?.calendarUrl === "string" ? webinar.config.calendarUrl : "";
+  /**
+   * 캘린더 담기 — 운영자가 붙여 넣은 URL 이 아니라 **웨비나 일정에서 직접** 만든다.
+   * 예전에는 config.calendarUrl 을 안 채우면 게이트가 막혀 모바일 배너가 아예 안 떴고,
+   * 시각을 고쳐도 링크는 옛날 시각을 가리켰다. 일정은 웨비나가 이미 들고 있는 값이다.
+   * 임베드 배너와 같은 빌더를 쓴다(webinar-calendar.ts) — 경로에 따라 다른 일정이 담기면 안 된다.
+   *
+   * 미리보기에서는 파일을 만들지 않는다 — 소유자가 상태를 훑는 중에 다운로드가 뜨면 안 된다.
+   */
+  const downloadCalendar = () => {
+    if (!webinar || previewMode) return;
+    const ics = buildIcs({
+      name: webinar.name,
+      description: webinar.description ?? null,
+      liveStartAt: new Date(webinar.liveStartAt),
+      liveEndAt: new Date(webinar.liveEndAt),
+      slug,
+    });
+    const href = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = href;
+    a.download = icsFileName(webinar.name);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // 즉시 해제하면 사파리가 파일을 받기 전에 사라진다 — 한 틱 뒤에 반납한다.
+    setTimeout(() => URL.revokeObjectURL(href), 0);
+  };
 
   const handleShare = async () => {
     const url = typeof window !== "undefined" ? `${window.location.origin}/webinar/${slug}/live` : "";
@@ -1239,8 +1266,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               live={live}
               waitingCount={waitingCount}
               registrantCount={registrantCount}
-              hasCalendar={!!calendarUrl}
-              onCalendar={calendarUrl ? () => window.open(calendarUrl, "_blank", "noopener,noreferrer") : undefined}
+              hasCalendar
+              onCalendar={downloadCalendar}
               onShare={handleShare}
               shareCopied={shareCopied}
               // 알림 구독은 등록 이메일이 필요하다 — 미등록자에겐 버튼을 숨기고(누르면 항상 실패) 등록 CTA 로 유도
@@ -1453,8 +1480,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             }}
             live={live}
             viewerCount={viewerCount ?? undefined}
-            hasCalendar={!!calendarUrl}
-            onCalendar={calendarUrl ? () => window.open(calendarUrl, "_blank", "noopener,noreferrer") : undefined}
+            hasCalendar
+            onCalendar={downloadCalendar}
             onShare={handleShare}
             shareCopied={shareCopied}
             onNotify={handleNotifyToggle}

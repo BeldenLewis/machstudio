@@ -6,6 +6,7 @@
  * - 캐시: s-maxage=60 + swr=300 → 수동 오버라이드도 방문자에게 최대 ~1분 내 전파,
  *   오리진(Supabase) 조회는 CDN이 흡수한다. CORS 는 * (Origin echo 는 캐시 파편화 유발).
  */
+import { buildIcs } from "@/lib/webinar-calendar";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
@@ -37,6 +38,12 @@ export function buildPublicRegistrationFormPayload(config: unknown) {
       label: registrationForm.successCta.label,
       url: safeHttpUrl(registrationForm.successCta.url),
     },
+    /**
+     * 완료 팝업의 확인 버튼이 이동할 주소. 여기서 안 내려주면 로더는 이 값을 알 수 없고
+     * 확인은 그냥 모달만 닫는다 — 자체 대기 화면에서는 이동하는데 임베드에서만 안 되는
+     * 상태가 됐다(실제로 그랬다). 안전성은 서버에서 걸러 로더가 그대로 쓰게 한다.
+     */
+    successRedirectUrl: safeHttpUrl(registrationForm.successRedirectUrl),
   };
 }
 
@@ -47,93 +54,6 @@ export async function OPTIONS() {
   });
 }
 
-/** DTSTAMP 등 UTC 고정 필드용. */
-function toICSDateUtc(date: Date) {
-  return date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-}
-
-/**
- * 한국시간(Asia/Seoul) 벽시계 표기 — TZID 와 함께 쓴다.
- * KST 는 1988년 이후 서머타임이 없어 UTC+9 고정이라 오프셋 가산으로 충분하다.
- */
-function toICSDateKst(date: Date) {
-  return new Date(date.getTime() + 9 * 60 * 60 * 1000)
-    .toISOString()
-    .replace(/[-:]/g, "")
-    .split(".")[0];
-}
-
-/** RFC 5545 TEXT 이스케이프 — 안 하면 설명의 쉼표·세미콜론에서 파싱이 깨진다. */
-function icsText(value: string) {
-  return value
-    .replace(/\\/g, "\\\\")
-    .replace(/;/g, "\\;")
-    .replace(/,/g, "\\,")
-    .replace(/[\r\n]+/g, "\\n");
-}
-
-/** RFC 5545 줄 접기(75 옥텟). 한국어 설명은 쉽게 넘어가고, 안 접으면 가져오기에 실패하는 앱이 있다. */
-function foldIcsLine(line: string) {
-  const bytes = Buffer.from(line, "utf8");
-  if (bytes.length <= 75) return line;
-  const out: string[] = [];
-  let start = 0;
-  let limit = 75;
-  while (start < bytes.length) {
-    let take = Math.min(limit, bytes.length - start);
-    // 멀티바이트 문자를 자르지 않도록 경계까지 뒤로 물린다
-    while (take > 0 && (bytes[start + take] & 0xc0) === 0x80) take--;
-    out.push(bytes.subarray(start, start + take).toString("utf8"));
-    start += take;
-    limit = 74; // 이어지는 줄은 선행 공백 1옥텟을 쓴다
-  }
-  return out.join("\r\n ");
-}
-
-function buildIcs(webinar: { name: string; description: string | null; liveStartAt: Date; liveEndAt: Date; slug: string }) {
-  const name = icsText(webinar.name);
-  return [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//mach studio//Webinar//KR",
-    "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
-    // 한국시간 기준을 명시한다. TZID 없이 UTC 로만 주면 절대시각은 맞지만
-    // 캘린더 앱이 기기 시간대로만 보여줘 "한국시간 몇 시인지"가 드러나지 않는다.
-    "BEGIN:VTIMEZONE",
-    "TZID:Asia/Seoul",
-    "BEGIN:STANDARD",
-    "DTSTART:19881009T030000",
-    "TZOFFSETFROM:+1000",
-    "TZOFFSETTO:+0900",
-    "TZNAME:KST",
-    "END:STANDARD",
-    "END:VTIMEZONE",
-    "BEGIN:VEVENT",
-    `UID:mach-webinar-${webinar.slug}@machstudio`,
-    `DTSTAMP:${toICSDateUtc(new Date())}`,
-    `DTSTART;TZID=Asia/Seoul:${toICSDateKst(webinar.liveStartAt)}`,
-    `DTEND;TZID=Asia/Seoul:${toICSDateKst(webinar.liveEndAt)}`,
-    `SUMMARY:${name}`,
-    `DESCRIPTION:${icsText(webinar.description ?? "")}`,
-    "LOCATION:Online",
-    // 알림 2회 — 1시간 전, 10분 전
-    "BEGIN:VALARM",
-    "TRIGGER:-PT1H",
-    "ACTION:DISPLAY",
-    `DESCRIPTION:${name} 1시간 전입니다!`,
-    "END:VALARM",
-    "BEGIN:VALARM",
-    "TRIGGER:-PT10M",
-    "ACTION:DISPLAY",
-    `DESCRIPTION:${name} 10분 뒤 시작합니다!`,
-    "END:VALARM",
-    "END:VEVENT",
-    "END:VCALENDAR",
-  ]
-    .map(foldIcsLine)
-    .join("\r\n");
-}
 
 // 허용 오리진 비교 — 스킴+호스트+포트만 본다(경로·서브도메인 부분일치는 인정하지 않는다).
 function originAllowed(reqOrigin: string | null, allowed: string[]) {

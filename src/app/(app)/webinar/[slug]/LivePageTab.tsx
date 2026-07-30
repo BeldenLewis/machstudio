@@ -192,7 +192,6 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
   const uid = useId();
   const [form, setForm] = useState({
     youtubeId: (webinar.config?.youtubeId as string) ?? "",
-    calendarUrl: (webinar.config?.calendarUrl as string) ?? "",
     surveyUrl: (webinar.config?.surveyUrl as string) ?? "",
     lpContact: (livePage.infoContact as string) ?? "",
     lpNotice: (livePage.notice as string) ?? "",
@@ -374,7 +373,6 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
         body: JSON.stringify({
           config: {
             ...(youtubeTouched ? { youtubeId: youtubeVideoId } : {}),
-            calendarUrl: form.calendarUrl.trim() || null,
             surveyUrl: form.surveyUrl.trim() || null,
             livePage: buildLivePage(),
           },
@@ -396,7 +394,6 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
   const incomingForm = useMemo(
     () => ({
       youtubeId: (webinar.config?.youtubeId as string) ?? "",
-      calendarUrl: (webinar.config?.calendarUrl as string) ?? "",
       surveyUrl: (webinar.config?.surveyUrl as string) ?? "",
       lpContact: (livePage.infoContact as string) ?? "",
       lpNotice: (livePage.notice as string) ?? "",
@@ -472,7 +469,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
             <div className="space-y-2.5">
               <Toggle label="세션 순서(아젠다)" checked={screens.waiting.agenda} onChange={(v) => setW("agenda", v)} desc="세션 탭에 등록한 시간표가 타임라인으로 표시돼요" />
               <Toggle label="함께 기다리는 인원 밴드" checked={screens.waiting.social} onChange={(v) => setW("social", v)} desc="현재 대기 중인 사람이 2명 이상일 때만 표시돼요" />
-              <Toggle label="캘린더에 추가" checked={screens.waiting.calendar} onChange={(v) => setW("calendar", v)} desc="아래 캘린더 URL이 있을 때만 표시" />
+              <Toggle label="캘린더에 추가" checked={screens.waiting.calendar} onChange={(v) => setW("calendar", v)} desc="웨비나 일정으로 만들어 담아요 · 모바일에서만 보여요" />
               <Toggle label="초대 공유" checked={screens.waiting.share} onChange={(v) => setW("share", v)} />
               <Toggle label="시작 알림 받기" checked={screens.waiting.notify} onChange={(v) => setW("notify", v)} desc="이메일 등록자에게 시작 리마인더를 보낼 수 있어요" />
             </div>
@@ -547,11 +544,6 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                 <p className="text-[11px] text-destructive">http:// 또는 https:// 주소를 입력해 주세요.</p>
               )}
             </div>
-          </Blk>
-
-          <Blk title="캘린더" goes={goesFor("waiting", "entry")} hint="&ldquo;캘린더에 추가&rdquo; 버튼이 여는 링크예요.">
-            <input aria-label="캘린더 URL" type="url" placeholder="https://calendar.google.com/..." value={form.calendarUrl}
-              onChange={(e) => setForm((f) => ({ ...f, calendarUrl: e.target.value }))} className={inputCls} />
           </Blk>
         </>
       )}
