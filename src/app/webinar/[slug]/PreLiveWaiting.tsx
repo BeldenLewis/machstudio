@@ -281,6 +281,12 @@ export default function PreLiveWaiting({
    * 이탈을 부른다 — 사회적 증거는 있을 때만 말한다. 마운트 전에도 숨긴다(SSR 과 값이 달라 깜빡이지 않게).
    */
   const showTogether = live.waiting.social && mounted && typeof registrantCount === "number" && registrantCount >= 2;
+  /* 소개 카드 — 설정이 비면 웨비나 기본정보로 떨어진다(기존 화면 불변). */
+  const about = live.waiting.about;
+  const aboutEyebrow = about.eyebrow.trim() || "이 웨비나는";
+  const aboutTitle = about.title.trim() || webinar.name;
+  const aboutBody = about.body.trim() || (webinar.description ?? "");
+
   const followUp = live.waiting.followUp;
   const followUpTitle = followUp.title.trim();
   const followUpText = followUp.text.trim();
@@ -363,9 +369,9 @@ export default function PreLiveWaiting({
           <div className={`plw-band${showAgenda ? "" : " single"}`}>
             <div className="plw-info-stack">
               <div className="plw-panel">
-                <h3>이 웨비나는</h3>
-                <div className="big">{webinar.name}</div>
-                {webinar.description && <div className="desc">{webinar.description}</div>}
+                <h3>{aboutEyebrow}</h3>
+                <div className="big">{aboutTitle}</div>
+                {aboutBody && <div className="desc">{aboutBody}</div>}
                 {/* 함께 기다리는 인원 — 카드 맨 아래. 예전에는 카운트다운 아래 떠 있는 알약이라
                     어느 것에 대한 숫자인지 걸리는 데가 없었다. 웨비나를 설명하는 카드의 마지막 줄에
                     두면 "이 웨비나를 몇 명이 기다린다"로 읽힌다. */}

@@ -150,6 +150,31 @@ describe("PreLiveWaiting 안내 CTA", () => {
     expect(onCalendar).toHaveBeenCalledTimes(1);
   });
 
+  /** 설정이 비면 웨비나 기본정보가 나가고, 채우면 이 화면에서만 그 값을 쓴다. */
+  it("소개 카드는 비면 웨비나 이름·설명으로 떨어진다", () => {
+    const view = renderWaiting({ livePage: { waiting: { social: true } } }, 9);
+    const panel = view.querySelector<HTMLElement>(".plw-panel")!;
+    expect(panel.querySelector("h3")?.textContent).toBe("이 웨비나는");
+    expect(panel.querySelector(".big")?.textContent).toBe(webinar.name);
+  });
+
+  it("소개 카드 설정을 채우면 그 값이 이긴다", () => {
+    const view = renderWaiting({
+      livePage: {
+        waiting: {
+          social: true,
+          about: { eyebrow: "이번 세션은", title: "LA 진출 실전", body: "첫 줄\n둘째 줄" },
+        },
+      },
+    }, 9);
+    const panel = view.querySelector<HTMLElement>(".plw-panel")!;
+    expect(panel.querySelector("h3")?.textContent).toBe("이번 세션은");
+    expect(panel.querySelector(".big")?.textContent).toBe("LA 진출 실전");
+    // 줄바꿈은 pre-line 으로 보존한다(AGENTS 공통 규칙)
+    expect(panel.querySelector(".desc")?.textContent).toContain("둘째 줄");
+    expect(getComputedStyle(panel.querySelector(".desc")!).whiteSpace).toBe("pre-line");
+  });
+
   it("추가 카드는 이 웨비나는 소개 카드 다음에 놓이고 아젠다 없이도 보인다", () => {
     const view = renderWaiting({
       livePage: {
