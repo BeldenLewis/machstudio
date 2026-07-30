@@ -64,8 +64,21 @@ describe("섹션 모드", () => {
 
   it("편집 UI 목록 순서가 랜딩 렌더 순서와 같다", () => {
     expect(LANDING_BG_SECTIONS.map((s) => s.key)).toEqual([
-      "hero", "intro", "sessions", "programs", "highlights", "audience", "join", "faq",
+      "hero", "intro", "sessions", "programs", "audience", "join", "faq",
     ]);
+  });
+
+  /**
+   * 혜택은 키컬러 구간(accent-zone)이라 **자기 배경을 칠하지 않는다** — 세션·타임테이블과 같다.
+   * 그래서 편집 UI 에 자기 칸이 없다: 골라도 아무 일이 안 일어나는 칸이면 "설정했는데 안 먹는다"
+   * 가 된다. 값은 sectionBg.sessions 하나를 공유하고, 라벨이 세 섹션을 함께 말한다.
+   */
+  it("혜택은 자기 배경 칸이 없다 — 키컬러 구간이라 루트가 칠한다", () => {
+    // 키를 문자열로 훑는다 — 타입에서 이미 빠져 있어 리터럴 비교는 컴파일이 거부한다.
+    const keys: string[] = LANDING_BG_SECTIONS.map((s) => s.key);
+    expect(keys).not.toContain("highlights");
+    // 라벨이 세 섹션을 함께 말해야 운영자가 "혜택 칸은 어디" 를 묻지 않는다.
+    expect(LANDING_BG_SECTIONS.find((s) => s.key === "sessions")!.label).toContain("혜택");
   });
 });
 

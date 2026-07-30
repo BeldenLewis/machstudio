@@ -83,6 +83,8 @@ export interface LandingModel {
   showAudience: boolean;
   /** 편집된 머리글 또는 기본 문구 — 폴백은 모델에서 끝난다. */
   audienceTitle: string;
+  /** 혜택 섹션 머리글 — 비면 기본 문구가 들어간 값. */
+  highlightsTitle: string;
   showPrograms: boolean;
   showHighlights: boolean;
   showJoin: boolean;
