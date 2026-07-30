@@ -11,10 +11,11 @@ export const TOC_DEF = [
   { id: "lnd-sessions", label: "Sessions" },
   { id: "lnd-timetable", label: "Time Table" },
   { id: "lnd-programs", label: "Programs" },
-  { id: "lnd-highlights", label: "Benefits" },
-  // "이런 분들께 추천합니다" — Join 바로 위. 참여 방법을 읽기 직전에 "내 얘기인가" 를
-  // 한 번 더 확인시키고 등록으로 넘긴다. dark-zone 안이라 키컬러가 비치지 않는다(mount 주석).
+  /* Audience(조건) → Benefits(보상) → Join 순서. 조건으로 걸러낸 다음 보상을 제시하고,
+     보상 직후에 참여 방법이 온다. 혜택은 accent-zone 이라 Join 바로 앞이어야 색 전환의
+     기세가 살아 있다(mount 주석 참고). */
   { id: "lnd-audience", label: "Audience" },
+  { id: "lnd-highlights", label: "Benefits" },
   { id: "lnd-join", label: "Join" },
   { id: "lnd-faq", label: "FAQ" },
 ] as const;
