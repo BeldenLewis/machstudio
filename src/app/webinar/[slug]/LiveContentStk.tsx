@@ -135,9 +135,19 @@ export function onAccentColor(accent: string): string {
   let hex = m[1];
   if (hex.length === 3) hex = hex.split("").map((c) => c + c).join("");
   const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
-  // 상대 명도(sRGB 근사) — 0.6 이상이면 밝은 배경이므로 진한 글자.
+  /**
+   * 키컬러 위 글자는 **흰색이 기본**이다(브랜드 결정). 진한 글자는 흰 글자가 형태조차 안 보이는
+   * 아주 밝은 키컬러(노랑·연회색)에서만 쓰는 안전장치다.
+   *
+   * 임계값이 0.6 이었을 때 주황(#ff8500)이 0.605 로 **간신히 넘어** 검은 글자를 받았다 —
+   * 오픈채팅·등록·입장 버튼이 전부 그랬다. 0.78 로 올려 주황·중간 초록·시안이 흰 글자를 받는다.
+   *
+   * 이 값은 대비비가 아니라 YIQ 체감밝기다. 흰 글자의 실제 대비는 주황에서 2.44:1 로 AA(4.5:1)에
+   * 못 미친다 — 흰색을 쓰기로 한 브랜드 판단을 따르되, 대비를 올리려면 글자색이 아니라
+   * **버튼 배경을 키컬러의 66% 쯤으로 낮추는** 쪽이 맞다(그때 흰 글자가 4.58:1 이 된다).
+   */
   const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return lum >= 0.6 ? "#1a1a1f" : "#ffffff";
+  return lum >= 0.78 ? "#1a1a1f" : "#ffffff";
 }
 
 export function buildStkCss(accent: string, text: string, surface: string) {

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { Share2, Bell } from "lucide-react";
+import { Share2, Bell, CalendarPlus } from "lucide-react";
 import { buildStkCss } from "./LiveContentStk";
 import { formatKst } from "@/lib/datetime";
 import { safeHttpUrl, type LivePageConfig } from "@/lib/webinar-config";
@@ -189,61 +189,10 @@ const EXTRA_CSS = `
   .stk-live .plw-follow-up-card a { transition:none; }
   .stk-live .plw-follow-up-card a:hover { transform:none; }
 }
-.stk-live .plw-calendar-banner {
-  position:fixed;
-  left:12px;
-  right:12px;
-  bottom:max(12px, env(safe-area-inset-bottom));
-  z-index:40;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  padding:12px 14px;
-  border-radius:var(--radius-sm);
-  background:color-mix(in srgb, var(--text) 88%, transparent);
-  color:var(--card);
-  box-shadow:0 16px 48px color-mix(in srgb, var(--text) 28%, transparent);
-  backdrop-filter:blur(20px);
-}
-.stk-live .plw-calendar-banner span { font-size:13px; font-weight:700; }
-.stk-live .plw-calendar-banner button {
-  flex:none;
-  min-height:44px;
-  padding:0 12px;
-  border:0;
-  border-radius:var(--radius-sm);
-  background:var(--card);
-  color:var(--text);
-  font:inherit;
-  font-size:12px;
-  font-weight:800;
-  box-shadow:var(--btn-shadow);
-  cursor:pointer;
-  transition:transform .16s ease, box-shadow .16s ease, opacity .16s ease;
-}
-.stk-live .plw-calendar-banner button:hover {
-  transform:translateY(-1px);
-  box-shadow:var(--btn-shadow-hover);
-}
-.stk-live .plw-calendar-banner button:active {
-  transform:translateY(0) scale(.97);
-}
-.stk-live .plw-calendar-banner button:focus-visible {
-  outline:0;
-  box-shadow:0 0 0 3px color-mix(in srgb,var(--key) 24%,transparent),var(--btn-shadow-hover);
-}
-@media (min-width:601px) {
-  .stk-live .plw-calendar-banner { display:none; }
-}
-@media (max-width:600px) {
-  .stk-live .live-inner.has-calendar-banner {
-    padding-bottom:calc(144px + env(safe-area-inset-bottom));
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .stk-live .plw-calendar-banner button { transition:none; }
-}
+/* 캘린더 버튼 — 초대 공유와 같은 줄의 형제다. 예전에는 화면 하단 고정 배너였는데, 늘 떠 있어
+   콘텐츠를 가리면서도 다른 CTA 들과 위계가 끊겨 있었다. .plw-btn 규격을 그대로 쓰므로
+   여기서는 노출 폭만 정한다 — 모바일 전용(PC 는 일정을 옮겨 담을 곳이 손에 없다). */
+@media (min-width:768px) { .stk-live .plw-btn.cal { display:none; } }
 .stk-live .plw-who small { font-size:14px; color:var(--text); font-weight:650; }
 .stk-live .plw-who .who { display:flex; align-items:baseline; flex-wrap:wrap; gap:0 6px; }
 .stk-live .plw-who .who b { font-weight:750; }
@@ -340,7 +289,8 @@ export default function PreLiveWaiting({
   const followUpItems = followUp.items;
   const showFollowUp =
     followUp.enabled && (followUpTitle !== "" || followUpText !== "" || followUpItems.length > 0 || showFollowUpCta);
-  const showUtilityCtas = showShare || showNotify;
+  /* 캘린더가 이 줄로 들어왔으니 게이트에도 넣는다 — 빼면 캘린더만 켰을 때 줄 자체가 안 그려진다. */
+  const showUtilityCtas = showCalendar || showShare || showNotify;
   /* "이 웨비나는" 패널은 아젠다·팔로업이 없어도 그린다 — 함께 기다리는 인원 밴드가 그 안에 들어가서다. */
   const showInfoBand = showAgenda || showFollowUp || showTogether;
   const showCenterAction = Boolean(centerAction) && (started || replaceCountdown);
@@ -348,7 +298,7 @@ export default function PreLiveWaiting({
   return (
     <div className="stk-live">
       <style dangerouslySetInnerHTML={{ __html: css }} />
-      <div className={`live-inner${showCalendar ? " has-calendar-banner" : ""}`}>
+      <div className="live-inner">
         <div className="live-hero">
           <div className="plw-eyebrow">Live Webinar</div>
           <h1 className="live-title" style={{ marginTop: 12 }}>{webinar.name}</h1>
@@ -390,6 +340,11 @@ export default function PreLiveWaiting({
 
         {showUtilityCtas && (
           <div className="plw-ctas">
+            {showCalendar && (
+              <motion.button whileTap={{ scale: 0.97 }} transition={spring} onClick={onCalendar} className="plw-btn cal">
+                <CalendarPlus /> 캘린더 추가
+              </motion.button>
+            )}
             {showShare && (
               <motion.button whileTap={{ scale: 0.97 }} transition={spring} onClick={onShare} className="plw-btn">
                 <Share2 /> {shareCopied ? "링크 복사됨 ✓" : "초대 공유"}
@@ -513,12 +468,6 @@ export default function PreLiveWaiting({
           </div>
         )}
 
-        {showCalendar && (
-          <div className="plw-calendar-banner">
-            <span>웨비나 일정을 미리 저장해두세요.</span>
-            <button type="button" onClick={onCalendar}>캘린더 추가</button>
-          </div>
-        )}
       </div>
     </div>
   );
