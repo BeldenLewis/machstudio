@@ -464,7 +464,16 @@ export function normalizeLandingPageConfig(
       darkBg: hex(colors.darkBg, DEFAULT_LANDING_COLORS.darkBg),
     },
     sectionBg: LANDING_BG_SECTIONS.reduce((acc, s) => {
-      acc[s.key] = sectionBg[s.key] === "light" ? "light" : DEFAULT_LANDING_SECTION_BG[s.key];
+      /**
+       * 혜택은 배경 칸이 **나중에 생겼다.** 그래서 기존 웨비나에는 저장값이 없고, 전역 기본값
+       * ("전부 다크")으로 떨어지면 나머지가 화이트인 페이지에서 **이 섹션만 검은 띠**가 된다.
+       * 저장값이 없을 때는 FAQ 를 따른다 — 바로 아래 이웃이라 색 경계가 자연스럽고,
+       * 운영자가 이 칸을 직접 고르면 그 값이 이긴다.
+       */
+      const fallback = s.key === "highlights" && sectionBg.highlights === undefined
+        ? (sectionBg.faq === "light" ? "light" : DEFAULT_LANDING_SECTION_BG.faq)
+        : DEFAULT_LANDING_SECTION_BG[s.key];
+      acc[s.key] = sectionBg[s.key] === "light" ? "light" : fallback;
       return acc;
     }, {} as LandingSectionBgMap),
     intro: { enabled: bool(intro.enabled, true), title: str(intro.title), body: str(intro.body) },

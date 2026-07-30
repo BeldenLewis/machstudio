@@ -131,3 +131,23 @@ describe("기존 필드를 건드리지 않는다", () => {
     expect(out.ctaLabel).toBe("사전 등록하기");
   });
 });
+
+describe("혜택 배경 — 나중에 생긴 칸의 기본값", () => {
+  /**
+   * 이 칸이 없던 웨비나에 전역 기본값("전부 다크")을 주면 나머지가 화이트인 페이지에서
+   * 혜택만 검은 띠가 된다. 바로 아래 이웃인 FAQ 를 따르게 해서 색 경계를 자연스럽게 만든다.
+   */
+  it("저장값이 없으면 FAQ 를 따른다", () => {
+    expect(lp({ sectionBg: { faq: "light" } }).sectionBg.highlights).toBe("light");
+    expect(lp({ sectionBg: { faq: "dark" } }).sectionBg.highlights).toBe("dark");
+  });
+
+  it("직접 고른 값이 FAQ 를 이긴다", () => {
+    expect(lp({ sectionBg: { faq: "light", highlights: "dark" } }).sectionBg.highlights).toBe("dark");
+    expect(lp({ sectionBg: { faq: "dark", highlights: "light" } }).sectionBg.highlights).toBe("light");
+  });
+
+  it("둘 다 없으면 전역 기본(다크)", () => {
+    expect(lp({}).sectionBg.highlights).toBe("dark");
+  });
+});
