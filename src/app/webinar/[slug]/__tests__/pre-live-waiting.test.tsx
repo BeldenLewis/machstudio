@@ -190,12 +190,19 @@ describe("PreLiveWaiting 안내 CTA", () => {
       },
     });
 
-    const stack = view.querySelector(".plw-info-stack")!;
-    const card = stack.querySelector<HTMLElement>(".plw-follow-up-card")!;
+    /* 배치가 바뀌었다 — 왼쪽 열은 CTA 카드만, 오른쪽 열은 소개 카드 위 · 세션 순서 아래.
+       세션 순서를 볼 때 "무슨 웨비나였나" 가 바로 위에 있어야 읽히고, CTA 는 그 흐름 밖의 제안이다. */
+    const side = view.querySelector(".plw-info-stack.side")!;
+    const main = view.querySelector(".plw-info-stack.main")!;
+    const card = side.querySelector<HTMLElement>(".plw-follow-up-card")!;
     const css = view.querySelector("style")?.textContent ?? "";
-    expect(stack.children[0]?.classList.contains("plw-panel")).toBe(true);
-    expect(stack.children[1]?.classList.contains("plw-follow-up-card")).toBe(true);
+    expect(side.children[0]?.classList.contains("plw-follow-up-card")).toBe(true);
+    expect(side.querySelector(".plw-panel")).toBeNull();
+    expect(main.children[0]?.classList.contains("plw-panel")).toBe(true);
     expect(view.querySelector(".plw-ag")).toBeNull();
+    // 한 열로 접히면 소개·아젠다가 먼저 오도록 order 를 뒤집는다(DOM 순서는 CTA 가 먼저다)
+    expect(css).toContain(".stk-live .plw-info-stack.main { order:1; }");
+    expect(css).toContain(".stk-live .plw-info-stack.side { order:2; }");
     expect(css).toContain("background:var(--card)");
     expect(css).toContain("border-radius:var(--radius)");
     expect(css).toContain("box-shadow:var(--card-shadow)");
