@@ -11,7 +11,7 @@ export const TOC_DEF = [
   { id: "lnd-sessions", label: "Sessions" },
   { id: "lnd-timetable", label: "Time Table" },
   { id: "lnd-programs", label: "Programs" },
-  { id: "lnd-highlights", label: "Highlights" },
+  { id: "lnd-highlights", label: "Benefits" },
   // "이런 분들께 추천합니다" — Join 바로 위. 참여 방법을 읽기 직전에 "내 얘기인가" 를
   // 한 번 더 확인시키고 등록으로 넘긴다. dark-zone 안이라 키컬러가 비치지 않는다(mount 주석).
   { id: "lnd-audience", label: "Audience" },

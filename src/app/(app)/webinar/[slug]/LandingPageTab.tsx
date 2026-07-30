@@ -61,7 +61,7 @@ interface EditorState {
   /** 이런 분들께 추천합니다 — 머리글 문구까지 편집한다(이 섹션의 머리글이 곧 카피다). */
   audience: { enabled: boolean; title: string; items: WithRowKey<LandingAudienceItem>[] };
   programs: { enabled: boolean; items: WithRowKey<LandingProgramItem>[] };
-  highlights: { enabled: boolean; items: WithRowKey<LandingHighlightItem>[] };
+  highlights: { enabled: boolean; title: string; items: WithRowKey<LandingHighlightItem>[] };
   join: { enabled: boolean; steps: WithRowKey<LandingJoinStep>[] };
   faq: { enabled: boolean; items: WithRowKey<LandingFaqItem>[] };
 }
@@ -622,19 +622,31 @@ export default function LandingPageTab({
             />
           </SectionCard>
 
-          {/* 하이라이트 */}
+          {/* 혜택 */}
           <SectionCard
-            title="하이라이트"
-            hint="참여 이유 3~4가지 — 번호(01·02·…)는 자동으로 붙어요."
+            title="혜택"
+            hint="참여하면 얻어가는 것 3~4가지 — 번호(01·02·…)는 자동으로 붙어요. 참여 방법 바로 위, 키컬러 구간에 표시돼요."
             enabled={state.highlights.enabled}
             onToggle={(v) => patch({ highlights: { ...state.highlights, enabled: v } })}
           >
+            {/* 머리글 — audience 와 같은 이유로 편집 가능하다: 머리글 자체가 카피다
+                ("참여하면 얻어가는 것" / "이 30분으로 가져갈 것"). */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground" htmlFor="lp-highlights-title">머리글</label>
+              <input
+                id="lp-highlights-title"
+                className={inputCls}
+                value={state.highlights.title}
+                onChange={(e) => patch({ highlights: { ...state.highlights, title: e.target.value } })}
+                placeholder="참여하면 얻어가는 것 (비우면 이 문구가 나가요)"
+              />
+            </div>
             <EditableList
-              listId="lp-highlights" itemNoun="하이라이트" reorderable
+              listId="lp-highlights" itemNoun="혜택" reorderable
               items={state.highlights.items} onChange={(next) => setRows("highlights", next)}
               rowKey={(r) => r[ROW_KEY]}
               makeItem={() => ({ title: "", description: "", [ROW_KEY]: crypto.randomUUID() })}
-              addLabel="하이라이트 추가" emptyState={<p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">아직 하이라이트이 없어요. 아래에서 추가하면 랜딩 페이지에 표시돼요.</p>}
+              addLabel="혜택 추가" emptyState={<p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">아직 혜택이 없어요. 아래에서 추가하면 랜딩 페이지에 표시돼요.</p>}
               renderRow={({ item, index, patch: p }) => (
                 <>
                   {/* 번호(01·02)는 입력값이 아니라 렌더 순서에서 파생 — 드래그로 순서를 바꾸면 즉시 재계산된다 */}

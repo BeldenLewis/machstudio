@@ -690,7 +690,8 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 /* ── 이런 분들께 추천합니다 ── (dark-zone 안 · Join 바로 위)
    카드 그리드가 아니라 **체크 목록**이다. 이 섹션의 일은 읽히는 것이 아니라 훑으면서
    나에 해당하는 줄을 찾는 것이라, 줄 단위로 눈이 내려가는 형태가 맞다.
-   판 색·그림자는 이웃(program-card·benefit-card·join-step)과 같은 값을 쓴다 —
+   판 색·그림자는 이웃(program-card·join-step)과 같은 값을 쓴다 —
+     (혜택은 카드 평면을 쓰지 않는다 — accent-zone 목록형이다) —
    같은 존 안에서 카드 마감이 갈리면 섹션 하나가 얹혀 있는 것처럼 보인다. */
 .lnd .audience-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; list-style: none; padding: 0; margin: 0; }
 .lnd .audience-item {
@@ -711,7 +712,7 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 .lnd .audience-body b { display: block; font-size: 16px; font-weight: 750; letter-spacing: -.02em; color: var(--paper); word-break: keep-all; }
 .lnd .audience-body p { margin: 5px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted); white-space: pre-line; word-break: keep-all; }
 .lnd .program-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-.lnd .program-card, .lnd .benefit-card, .lnd .join-step {
+.lnd .program-card, .lnd .join-step {
   border-radius: 8px; background: var(--card);
   box-shadow: var(--card-shadow);
 }
@@ -728,19 +729,59 @@ ${sessionLogoCss(".lnd .schedule-logo")}
    환경에 따라 다른 굵기로 렌더됐다(실측: 우리 앱 400 / 섹션 제목 900).
    참여 방법 단계 제목(사전 등록·입장 확인·라이브 시청)이 눈에 걸려야 하는 자리라
    세 카드 계열을 같은 800 으로 맞춘다 — 한쪽만 굵게 하면 형제 카드가 어긋난다. */
-.lnd .program-card h3, .lnd .benefit-card h3, .lnd .join-step h3 {
+.lnd .program-card h3, .lnd .join-step h3 {
   font-size: 19px; font-weight: 800; letter-spacing: -.03em; word-break: keep-all;
 }
-.lnd .program-card p, .lnd .benefit-card p, .lnd .join-step p {
+.lnd .program-card p, .lnd .join-step p {
   margin: 14px 0 0; color: var(--body);
   font-size: 13px; line-height: 1.7; white-space: pre-line; word-break: keep-all;
 }
-.lnd .benefit-grid, .lnd .join-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-.lnd .benefit-card { min-height: 170px; padding: 22px; }
-.lnd .benefit-number {
-  display: block; margin-bottom: 6px;
-  font-size: 21px; font-weight: 900; font-variant-numeric: tabular-nums; color: var(--primary-bright);
+.lnd .join-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+
+/* ── 혜택 ──────────────────────────────────────────────────────────────
+   accent-zone 이라 배경을 칠하지 않는다 — 화면 중앙에 걸리면 루트가 키컬러로 바뀌고,
+   그 전환이 참여 방법(How to Join) **직전**에 와서 "여기서 결정하라" 는 신호가 된다.
+
+   Programs 와 형태를 나눈 이유: 둘 다 3열 카드였을 때 스크롤에서 구분되지 않았다
+   (Audience 를 체크 목록으로 만든 것과 같은 판단). 카드 평면을 없애고 번호 + 한 줄로 눕힌다 —
+   훑을 때 필요한 건 "몇 가지이고 무엇인가" 뿐이고, 판이 늘어나면 그게 묻힌다.
+
+   키컬러가 켜지면 글자·구분선이 on-primary 로 반전된다(아래 .on-accent 블록). */
+.lnd .benefit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.lnd .benefit-row {
+  display: grid; grid-template-columns: auto 1fr; gap: 22px; align-items: baseline;
+  padding: 22px 0;
+  border-top: 1px solid var(--line);
+  transition: border-color .8s ease;
 }
+/* 첫 줄 위에는 선을 안 둔다 — 제목과 목록 사이에 이미 여백이 있어 선이 겹쳐 보인다. */
+.lnd .benefit-row:first-child { border-top: 0; padding-top: 4px; }
+.lnd .benefit-number {
+  /* 카드 안의 작은 번호가 아니라 **줄의 기준점**이라 크게 쓴다. tabular-nums 로 자릿수를 고정해
+     두 자리가 되어도 본문 시작선이 흔들리지 않는다. */
+  font-size: 34px; font-weight: 900; line-height: 1; letter-spacing: -.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--primary-bright);
+  transition: color .8s ease;
+  min-width: 52px;
+}
+.lnd .benefit-body { min-width: 0; }
+.lnd .benefit-body h3 {
+  font-size: 20px; font-weight: 800; letter-spacing: -.03em; line-height: 1.35;
+  color: var(--paper); word-break: keep-all;
+  transition: color .8s ease;
+}
+.lnd .benefit-body p {
+  margin: 8px 0 0; font-size: 14px; line-height: 1.7; color: var(--muted);
+  white-space: pre-line; word-break: keep-all;
+  transition: color .8s ease;
+}
+/* 키컬러가 켜진 동안 — 번호는 배경과 같은 계열로 눕히고(on-primary 를 옅게) 제목만 또렷하게.
+   번호까지 100% 로 두면 세 요소가 같은 무게로 소리쳐 훑기가 어려워진다. */
+.lnd.on-accent .benefit-row { border-color: color-mix(in srgb, var(--on-primary) 22%, transparent); }
+.lnd.on-accent .benefit-number { color: color-mix(in srgb, var(--on-primary) 55%, transparent); }
+.lnd.on-accent .benefit-body h3 { color: var(--on-primary); }
+.lnd.on-accent .benefit-body p { color: color-mix(in srgb, var(--on-primary) 78%, transparent); }
 .lnd .join-step { padding: 26px; }
 .lnd .join-k {
   display: block; font-size: 12px; font-weight: 900; letter-spacing: .18em; text-transform: uppercase;
@@ -803,8 +844,11 @@ ${sessionLogoCss(".lnd .schedule-logo")}
   .lnd .schedule-time { padding: 0 12px; font-size: 14px; }
   .lnd .schedule-content { padding: 10px 12px; }
   .lnd .schedule-name { font-size: 13px; }
-  .lnd .program-grid, .lnd .benefit-grid, .lnd .join-grid, .lnd .audience-list { grid-template-columns: 1fr; }
-  .lnd .benefit-card { min-height: 130px; }
+  .lnd .program-grid, .lnd .join-grid, .lnd .audience-list { grid-template-columns: 1fr; }
+  /* 모바일에서는 번호 열을 좁히고 간격을 줄인다 — 52px 를 유지하면 본문이 두 글자씩 접힌다. */
+  .lnd .benefit-row { gap: 14px; padding: 18px 0; }
+  .lnd .benefit-number { font-size: 26px; min-width: 38px; }
+  .lnd .benefit-body h3 { font-size: 17px; }
   .lnd .faq-tabs { overflow-x: auto; justify-content: flex-start; padding-bottom: 4px; }
   .lnd .faq-tab { flex: 0 0 auto; }
 }

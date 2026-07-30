@@ -8,7 +8,8 @@
  */
 
 import { formatKst } from "@/lib/datetime";
-import { DEFAULT_LANDING_AUDIENCE_TITLE, normalizeLandingPageConfig, safeHttpUrl } from "@/lib/webinar-config";
+import { DEFAULT_LANDING_AUDIENCE_TITLE,
+  DEFAULT_LANDING_HIGHLIGHTS_TITLE, normalizeLandingPageConfig, safeHttpUrl } from "@/lib/webinar-config";
 import { isRealSession } from "@/lib/webinar-sessions";
 import { SAFE_HEX, TOC_DEF, onPrimaryFor } from "./model";
 import type { LandingModel, LandingSession, LandingStatusInfo, LandingTocItem, LandingWebinar } from "./types";
@@ -99,6 +100,7 @@ export function buildLandingModel(webinar: LandingWebinar, opts: BuildLandingMod
   const showAudience = lp.audience.enabled && lp.audience.items.length > 0;
   // 기본 문구 폴백은 **모델에서 한 번** — 뷰가 또 판정하면 두 곳이 갈린다(종료 인사말과 같은 규칙).
   const audienceTitle = lp.audience.title.trim() || DEFAULT_LANDING_AUDIENCE_TITLE;
+  const highlightsTitle = lp.highlights.title.trim() || DEFAULT_LANDING_HIGHLIGHTS_TITLE;
   const showPrograms = lp.programs.enabled && lp.programs.items.length > 0;
   const showHighlights = lp.highlights.enabled && lp.highlights.items.length > 0;
   const showJoin = lp.join.enabled && lp.join.steps.length > 0;
@@ -150,6 +152,7 @@ export function buildLandingModel(webinar: LandingWebinar, opts: BuildLandingMod
     showIntro,
     showAudience,
     audienceTitle,
+    highlightsTitle,
     showPrograms,
     showHighlights,
     showJoin,

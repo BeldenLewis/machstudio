@@ -108,22 +108,39 @@ export function renderPrograms(m: LandingModel): HTMLElement | null {
 }
 
 /** HIGHLIGHTS — 번호가 붙은 베네핏 카드 */
+/**
+ * 혜택 — "여기서 내가 얻는 것".
+ *
+ * accent-zone 을 쓰는 세 번째 섹션이다(세션·타임테이블에 이어). 자기 배경을 칠하지 않고
+ * 화면 중앙에 걸릴 때 루트가 키컬러로 바뀌는 구간에 들어간다 — 참여 방법(How to Join)을
+ * 읽기 **직전**에 화면 색이 통째로 뒤집혀 "여기서 결정하라" 는 신호를 준다.
+ *
+ * Programs·Highlights 가 예전에는 둘 다 3열 카드라 스크롤에서 구분되지 않았다(Audience 를
+ * 체크 목록으로 만든 것과 같은 이유). 혜택은 카드 평면을 없애고 **번호 + 한 줄**로 눕힌다 —
+ * 훑을 때 필요한 건 "몇 가지이고 무엇인가" 뿐이고, 판이 늘어나면 그게 묻힌다.
+ */
 export function renderHighlights(m: LandingModel): HTMLElement | null {
   if (!m.showHighlights) return null;
   return h(
     "section",
-    { class: "section", id: m.sectionId("lnd-highlights"), "aria-labelledby": m.sectionId("lnd-highlights-title") },
-    h("h2", { class: "section-title rv", id: m.sectionId("lnd-highlights-title") }, "Highlights"),
+    // accent-zone: 배경을 칠하지 않는다(mount 의 paintBg 가 건너뛴다). css.ts 머리말 참고.
+    { class: "section accent-zone benefit-zone", id: m.sectionId("lnd-highlights"), "aria-labelledby": m.sectionId("lnd-highlights-title") },
+    h("h2", { class: "section-title rv", id: m.sectionId("lnd-highlights-title") }, m.highlightsTitle),
     h(
-      "div",
-      { class: "benefit-grid rv" },
+      "ol",
+      { class: "benefit-list rv" },
       m.lp.highlights.items.map((item, index) =>
         h(
-          "article",
-          { class: "benefit-card" },
-          h("span", { class: "benefit-number" }, String(index + 1).padStart(2, "0")),
-          h("h3", null, item.title),
-          item.description && h("p", null, item.description),
+          "li",
+          { class: "benefit-row" },
+          // 번호는 장식이라 스크린리더에서 감춘다 — ol 이 이미 순서를 읽어 준다.
+          h("span", { class: "benefit-number", "aria-hidden": "true" }, String(index + 1).padStart(2, "0")),
+          h(
+            "div",
+            { class: "benefit-body" },
+            h("h3", null, item.title),
+            item.description && h("p", null, item.description),
+          ),
         ),
       ),
     ),

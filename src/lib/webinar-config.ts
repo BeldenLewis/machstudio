@@ -326,9 +326,11 @@ export type LandingSectionBg = "light" | "dark";
 export const LANDING_BG_SECTIONS = [
   { key: "hero", label: "히어로", note: "미디어를 넣으면 글자는 항상 밝게 나갑니다" },
   { key: "intro", label: "About (소개)", note: "" },
-  { key: "sessions", label: "세션 · 타임테이블", note: "스크롤이 이 구간에 걸리면 키컬러로 바뀝니다 — 그 전후에 보이는 바탕색" },
+  /* 세션·타임테이블·혜택은 키컬러 구간이라 자기 배경을 칠하지 않는다 — 이 값은 그 **전후**에
+     보이는 루트 바탕색이다. 셋을 한 줄로 묶은 이유: 값이 sectionBg.sessions 하나로 공유된다
+     (혜택에 따로 칸을 두면 골라도 아무 일도 안 일어나는 칸이 된다). */
+  { key: "sessions", label: "세션 · 타임테이블 · 혜택", note: "스크롤이 이 구간에 걸리면 키컬러로 바뀝니다 — 그 전후에 보이는 바탕색" },
   { key: "programs", label: "Programs", note: "" },
-  { key: "highlights", label: "Highlights", note: "" },
   { key: "audience", label: "이런 분들께 추천합니다", note: "" },
   { key: "join", label: "How to Join", note: "" },
   { key: "faq", label: "FAQ", note: "" },
@@ -349,7 +351,7 @@ export const DEFAULT_LANDING_COLORS: LandingColors = { lightBg: "#f6f8ff", darkB
 /** 기본은 전부 다크 — 이 기능이 들어오기 전과 같은 외관이어야 한다. */
 export const DEFAULT_LANDING_SECTION_BG: LandingSectionBgMap = {
   hero: "dark", intro: "dark", sessions: "dark", programs: "dark",
-  highlights: "dark", audience: "dark", join: "dark", faq: "dark",
+  audience: "dark", join: "dark", faq: "dark",
 };
 
 /** 6자리 hex 만 통과 — 공개 페이지 CSS 에 그대로 들어가는 값이라 문자열을 믿지 않는다. */
@@ -383,13 +385,16 @@ export interface LandingPageConfig {
    */
   audience: { enabled: boolean; title: string; items: LandingAudienceItem[] };
   programs: { enabled: boolean; items: LandingProgramItem[] };
-  highlights: { enabled: boolean; items: LandingHighlightItem[] };
+  /** 혜택 — 머리글이 곧 카피라 편집 가능하다(audience 와 같은 이유). 비우면 기본 문구. */
+  highlights: { enabled: boolean; title: string; items: LandingHighlightItem[] };
   join: { enabled: boolean; steps: LandingJoinStep[] };
   faq: { enabled: boolean; items: LandingFaqItem[] };
 }
 
 /** 이런 분들께 추천합니다 — 머리글 기본 문구. 어드민이 비우면 이 값이 나간다. */
 export const DEFAULT_LANDING_AUDIENCE_TITLE = "이런 분들께 추천합니다";
+/** 혜택 섹션 기본 머리글. 비우면 이 값이 나간다(저장 시점 값이 굳지 않게). */
+export const DEFAULT_LANDING_HIGHLIGHTS_TITLE = "참여하면 얻어가는 것";
 
 /** 온라인 웨비나 공통 참여 절차 — 사실 기반 기본값(어드민이 자유 수정) */
 export const DEFAULT_LANDING_JOIN_STEPS: LandingJoinStep[] = [
@@ -484,6 +489,7 @@ export function normalizeLandingPageConfig(
     },
     highlights: {
       enabled: bool(highlights.enabled, true),
+      title: str(highlights.title),
       items: rows(
         highlights.items,
         (r) => ({ title: str(r.title), description: str(r.description) }),
