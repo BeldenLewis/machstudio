@@ -610,7 +610,7 @@ ${sessionLogoCss(".lnd .lnd-modal-logo", { plate: true })}
 .lnd .schedule-time {
   padding: 0 23px; border-right: 1px solid rgba(21, 32, 51, .3);
   color: var(--primary-ink);
-  font-size: 19px; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap;
+  font-size: 21px; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .lnd .is-break .schedule-time { border-color: rgba(255, 255, 255, .25); color: #fff; }
 /* 접힌 줄은 클릭 대상 전체가 summary 다 — 시각은 그대로 두고 마커만 없앤다.
@@ -667,11 +667,11 @@ ${sessionLogoCss(".lnd .lnd-modal-logo", { plate: true })}
 }
 .lnd .is-break .schedule-desc { color: #d6dae6; }
 .lnd .schedule-content { padding: 10px 20px; }
-.lnd .schedule-name { display: block; font-size: 15px; font-weight: 850; letter-spacing: -.02em; word-break: keep-all; }
+.lnd .schedule-name { display: block; font-size: 16.5px; font-weight: 850; letter-spacing: -.02em; word-break: keep-all; }
 .lnd .schedule-name .tag {
   display: inline-block; margin-left: 10px; padding: 2px 9px; border-radius: 999px;
   border: 1px solid var(--primary-ink); color: var(--primary-ink);
-  font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; vertical-align: 2px;
+  font-size: 11px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; vertical-align: 2px;
 }
 /* 연사 줄 — "이름 | 소속·직책" 한 줄. 접힌 상태에서 훑는 데 필요한 건 시각·무엇·누구뿐이라
    로고는 여기서 빼고 펼침 영역으로 옮겼다(줄마다 로고 폭이 달라 눈이 걸렸다).
@@ -724,12 +724,12 @@ ${sessionLogoCss(".lnd .schedule-logo")}
   margin-top: 2px;
   background: color-mix(in srgb, var(--primary) 18%, transparent);
   color: var(--primary-bright);
-  font-size: 11px; font-weight: 900; line-height: 1;
+  font-size: 12px; font-weight: 900; line-height: 1;
 }
 .lnd .audience-body { min-width: 0; }
 /* 판이 사라졌으니 글자가 그 무게를 받는다 — 굵기를 낮추고 크기를 살짝 올려 문장으로 읽히게. */
-.lnd .audience-body b { display: block; font-size: 16px; font-weight: 650; line-height: 1.6; letter-spacing: -.01em; color: var(--paper); word-break: keep-all; }
-.lnd .audience-body p { margin: 4px 0 0; font-size: 14px; line-height: 1.65; color: var(--muted); white-space: pre-line; word-break: keep-all; }
+.lnd .audience-body b { display: block; font-size: 17.5px; font-weight: 650; line-height: 1.6; letter-spacing: -.01em; color: var(--paper); word-break: keep-all; }
+.lnd .audience-body p { margin: 4px 0 0; font-size: 15.5px; line-height: 1.65; color: var(--muted); white-space: pre-line; word-break: keep-all; }
 .lnd .program-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .lnd .program-card, .lnd .join-step {
   border-radius: 8px; background: var(--card);
@@ -749,12 +749,15 @@ ${sessionLogoCss(".lnd .schedule-logo")}
    참여 방법 단계 제목(사전 등록·입장 확인·라이브 시청)이 눈에 걸려야 하는 자리라
    세 카드 계열을 같은 800 으로 맞춘다 — 한쪽만 굵게 하면 형제 카드가 어긋난다. */
 .lnd .program-card h3, .lnd .join-step h3 {
-  font-size: 19px; font-weight: 800; letter-spacing: -.03em; word-break: keep-all;
+  font-size: 21px; font-weight: 800; letter-spacing: -.03em; word-break: keep-all;
 }
 .lnd .program-card p, .lnd .join-step p {
   margin: 14px 0 0; color: var(--body);
   font-size: 13px; line-height: 1.7; white-space: pre-line; word-break: keep-all;
 }
+/* How to Join 만 10% 크게 — Programs 는 요청 범위가 아니라 공용 규칙을 그대로 두고 덮는다.
+   (두 섹션이 한 선택자를 공유하고 있어서, 값을 바꾸면 Programs 까지 따라간다) */
+.lnd .join-step p { font-size: 14.5px; }
 .lnd .join-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 
 /* ── 혜택 ──────────────────────────────────────────────────────────────
@@ -777,7 +780,7 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 .lnd .benefit-number {
   /* 카드 안의 작은 번호가 아니라 **줄의 기준점**이라 크게 쓴다. tabular-nums 로 자릿수를 고정해
      두 자리가 되어도 본문 시작선이 흔들리지 않는다. */
-  font-size: 34px; font-weight: 900; line-height: 1; letter-spacing: -.04em;
+  font-size: 37px; font-weight: 900; line-height: 1; letter-spacing: -.04em;
   font-variant-numeric: tabular-nums;
   color: var(--primary-bright);
   transition: color .8s ease;
@@ -785,26 +788,26 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 }
 .lnd .benefit-body { min-width: 0; }
 .lnd .benefit-body h3 {
-  font-size: 20px; font-weight: 800; letter-spacing: -.03em; line-height: 1.35;
+  font-size: 22px; font-weight: 800; letter-spacing: -.03em; line-height: 1.35;
   color: var(--paper); word-break: keep-all;
   transition: color .8s ease;
 }
 .lnd .benefit-body p {
-  margin: 8px 0 0; font-size: 14px; line-height: 1.7; color: var(--muted);
+  margin: 8px 0 0; font-size: 15.5px; line-height: 1.7; color: var(--muted);
   white-space: pre-line; word-break: keep-all;
   transition: color .8s ease;
 }
 
 .lnd .join-step { padding: 26px; }
 .lnd .join-k {
-  display: block; font-size: 12px; font-weight: 900; letter-spacing: .18em; text-transform: uppercase;
+  display: block; font-size: 13px; font-weight: 900; letter-spacing: .18em; text-transform: uppercase;
   color: var(--primary-bright);
 }
 .lnd .join-step h3 { margin-top: 12px; }
 .lnd .deadline {
   margin-top: clamp(40px, 7vh, 64px);
   text-align: center; color: var(--muted);
-  font-size: clamp(13px, 1.7vw, 15px); font-variant-numeric: tabular-nums;
+  font-size: clamp(14.5px, 1.9vw, 16.5px); font-variant-numeric: tabular-nums;
 }
 .lnd .deadline b { color: var(--paper); font-weight: 800; }
 
@@ -824,15 +827,15 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 .lnd .faq-item summary {
   min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 20px;
   padding: 0 18px; cursor: pointer; list-style: none;
-  font-size: 14px; font-weight: 750; word-break: keep-all;
+  font-size: 15.5px; font-weight: 750; word-break: keep-all;
 }
 .lnd .faq-item summary::-webkit-details-marker { display: none; }
-.lnd .faq-item summary::after { content: "+"; color: var(--muted); font-size: 21px; font-weight: 400; }
+.lnd .faq-item summary::after { content: "+"; color: var(--muted); font-size: 23px; font-weight: 400; }
 .lnd .faq-item[open] summary::after { content: "\\2212"; }
 /* 답 본문은 래퍼로 감싼다 — 아코디언 모션이 높이를 재는 대상(data-acc-body).
    패딩을 p 가 아니라 여기 두면 height 0 에서 패딩이 남아 닫혀도 틈이 보이는 일이 없다. */
 .lnd .faq-body { overflow: hidden; }
-.lnd .faq-item p { margin: 0; padding: 0 18px 20px; color: var(--body); font-size: 13px; white-space: pre-line; }
+.lnd .faq-item p { margin: 0; padding: 0 18px 20px; color: var(--body); font-size: 14.5px; white-space: pre-line; }
 
 /* ── 스크롤 리빌(transform 전용 — JS 미실행에서도 콘텐츠 가시) ── */
 .lnd .rv { transform: translateY(12px); transition: transform .5s cubic-bezier(.22, .7, .2, 1); }
@@ -854,16 +857,16 @@ ${sessionLogoCss(".lnd .schedule-logo")}
   .lnd .session-card h3 { margin: 9px 0 14px; font-size: 14px; }
   .lnd .session-time { min-height: 25px; font-size: 10px; }
   .lnd .schedule-summary { min-height: 72px; grid-template-columns: 112px minmax(0, 1fr) auto; }
-  .lnd .schedule-time { padding: 0 12px; font-size: 14px; }
+  .lnd .schedule-time { padding: 0 12px; font-size: 15px; }
   .lnd .schedule-content { padding: 10px 12px; }
-  .lnd .schedule-name { font-size: 13px; }
+  .lnd .schedule-name { font-size: 14px; }
   .lnd .program-grid, .lnd .join-grid, .lnd .audience-list { grid-template-columns: 1fr; }
   /* 한 열로 접히면 좌우 간격은 의미가 없고 위아래만 남는다 — 줄 사이를 조금 벌린다. */
   .lnd .audience-list { row-gap: 16px; }
   /* 모바일에서는 번호 열을 좁히고 간격을 줄인다 — 52px 를 유지하면 본문이 두 글자씩 접힌다. */
   .lnd .benefit-row { gap: 14px; padding: 18px 0; }
-  .lnd .benefit-number { font-size: 26px; min-width: 38px; }
-  .lnd .benefit-body h3 { font-size: 17px; }
+  .lnd .benefit-number { font-size: 29px; min-width: 38px; }
+  .lnd .benefit-body h3 { font-size: 19px; }
   .lnd .faq-tabs { overflow-x: auto; justify-content: flex-start; padding-bottom: 4px; }
   .lnd .faq-tab { flex: 0 0 auto; }
 }
