@@ -96,10 +96,62 @@ describe("미디어 히어로는 모드와 무관하게 어두운 바탕 기준�
   });
 });
 
+describe("고정 목차는 배경 모드별로 읽을 수 있는 색을 쓴다", () => {
+  /**
+   * 미디어 히어로 위에서 기본 --muted 는 11px 목차의 일부 픽셀에서 4.17:1까지 내려갔다.
+   * 어두운 면에서는 본문색에서 직접 뽑아 이미지 명암 변화에도 여유를 둔다.
+   */
+  it("어두운 목차 레이어의 비활성 글자는 --paper 에서 파생한다", () => {
+    const block = LANDING_CSS.match(
+      /\.lnd\.lnd-toc-layer:not\(\.on-accent\)\s+\.toc-link\[data-bg="dark"\]\s*\{([^}]*)\}/,
+    );
+    expect(block).not.toBeNull();
+    expect(block![1]).toMatch(/color:\s*color-mix\([^;]*var\(--paper\)/);
+  });
+
+  it("어두운 목차 레이어의 활성 글자는 --paper 를 그대로 쓴다", () => {
+    expect(LANDING_CSS).toMatch(
+      /\.lnd\.lnd-toc-layer:not\(\.on-accent\)[^{]*\.toc-link\[data-bg="dark"\]\[aria-current="true"\]\s*\{[^}]*color:\s*var\(--paper\)/,
+    );
+  });
+});
+
+describe("항상 어두운 세션 카드는 자체 강조색을 쓴다", () => {
+  const sessionCardBlock = () => {
+    const m = LANDING_CSS.match(/\.session-card\s*\{([\s\S]*?)\}/);
+    expect(m).not.toBeNull();
+    return m![1];
+  };
+
+  it("브랜드색과 카드의 밝은 글자색에서 --session-accent 를 파생한다", () => {
+    const decl = sessionCardBlock().match(/--session-accent:([^;]*);/);
+    expect(decl).not.toBeNull();
+    expect(decl![1]).toContain("var(--primary)");
+    expect(decl![1]).toContain("var(--paper)");
+  });
+
+  it("자세히 보기와 포커스 링이 세션 강조색을 공유한다", () => {
+    expect(LANDING_CSS).toMatch(/\.session-card\.is-clickable:focus-visible\s*\{[^}]*var\(--session-accent\)/);
+    expect(LANDING_CSS).toMatch(/\.session-more\s*\{[^}]*color:\s*var\(--session-accent\)/);
+  });
+});
+
 describe("판이 배경과 가까워도 형태가 남는다", () => {
-  /** .faq-item 만 형제 카드와 달리 그림자가 없어 라이트에서 판이 통째로 사라졌다. */
-  it("FAQ 카드에 카드 그림자가 있다", () => {
-    expect(LANDING_CSS).toMatch(/\.faq-item\s*\{[^}]*box-shadow:\s*var\(--card-shadow\)/);
+  /**
+   * 라이트 FAQ 의 예전 면 대비는 1.17:1 이고 그림자는 0 12px 30px / 10%여서,
+   * 카드 경계보다 넓은 회색 덩어리가 먼저 보였다.
+   */
+  it("라이트 모드 FAQ는 흰 카드와 전용 그림자를 쓴다", () => {
+    const lightBlock = LANDING_CSS.match(/\[data-bg="light"\]\s*\{([\s\S]*?)\}/);
+    expect(lightBlock).not.toBeNull();
+    expect(lightBlock![1]).toMatch(/--faq-card:\s*var\(--card\)/);
+    expect(lightBlock![1]).toMatch(/--faq-shadow:[^;]*,[^;]*;/);
+  });
+
+  it("FAQ 항목은 공용 카드 그림자 대신 FAQ 전용 토큰을 쓴다", () => {
+    expect(LANDING_CSS).toMatch(
+      /\.faq-item\s*\{[^}]*background:\s*var\(--faq-card\)[^}]*box-shadow:\s*var\(--faq-shadow\)/,
+    );
   });
 });
 
