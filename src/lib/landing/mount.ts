@@ -243,13 +243,24 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
 
   const programs = renderPrograms(m);
   if (programs) body.appendChild(paintBg(programs, "programs"));
-  /* 혜택은 data-bg 를 받지 않는다 — 세션·타임테이블과 같은 accent-zone 이라 루트가 칠한다.
-     여기서 칠하면 키컬러 전환이 그 섹션에서 가려진다. */
-  const highlights = renderHighlights(m);
-  if (highlights) body.appendChild(highlights);
-  // "이런 분들께 추천합니다" — Join 바로 위. 참여 방법을 읽기 직전에 "내 얘기인가" 를 한 번 더 확인시킨다.
+  /**
+   * "이런 분들께 추천합니다" 가 혜택보다 **앞**이다.
+   *
+   * 두 섹션의 역할이 다르다 — Audience 는 조건("~하고 싶은 기업")이고 혜택은 보상("얻어가는 것")이다.
+   * 조건으로 걸러낸 다음 보상을 제시하는 게 순서다: 자기 얘기가 아니라고 판단한 사람에게 혜택을
+   * 읽히는 건 낭비고, 자기 얘기라고 확인한 사람에게는 그 직후 보상이 가장 세게 박힌다.
+   *
+   * (예전에는 Audience 가 Join 바로 위였다 — "참여 방법을 읽기 직전에 내 얘기인가를 한 번 더
+   * 확인시킨다" 는 근거였다. 그것도 일리가 있었지만, 마지막 자리는 더 강한 설득인 혜택에 준다.)
+   */
   const audience = renderAudience(m);
   if (audience) body.appendChild(paintBg(audience, "audience"));
+  /* 혜택은 data-bg 를 받지 않는다 — 세션·타임테이블과 같은 accent-zone 이라 루트가 칠한다.
+     여기서 칠하면 키컬러 전환이 그 섹션에서 가려진다.
+     Join **바로 앞**에 두는 게 이 accent-zone 의 요점이다: 화면 색이 통째로 뒤집힌 직후
+     참여 방법이 와서 "여기서 결정하라" 가 된다. 사이에 중립 섹션이 끼면 그 기세가 죽는다. */
+  const highlights = renderHighlights(m);
+  if (highlights) body.appendChild(highlights);
   const join = renderJoin(m);
   if (join) body.appendChild(paintBg(join, "join"));
 
