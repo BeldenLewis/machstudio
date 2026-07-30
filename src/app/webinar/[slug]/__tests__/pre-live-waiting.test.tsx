@@ -200,9 +200,10 @@ describe("PreLiveWaiting 안내 CTA", () => {
     expect(side.querySelector(".plw-panel")).toBeNull();
     expect(main.children[0]?.classList.contains("plw-panel")).toBe(true);
     expect(view.querySelector(".plw-ag")).toBeNull();
-    // 한 열로 접히면 소개·아젠다가 먼저 오도록 order 를 뒤집는다(DOM 순서는 CTA 가 먼저다)
-    expect(css).toContain(".stk-live .plw-info-stack.main { order:1; }");
-    expect(css).toContain(".stk-live .plw-info-stack.side { order:2; }");
+    /* 모바일(한 열)에서는 CTA 가 먼저 온다 — 좁은 화면은 아래로 갈수록 이탈하므로 행동을
+       요구하는 카드가 위에 있어야 한다. DOM 순서가 이미 그러하므로 order 로 뒤집지 않는다. */
+    expect(side.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(css).not.toContain("plw-info-stack.main { order:");
     expect(css).toContain("background:var(--card)");
     expect(css).toContain("border-radius:var(--radius)");
     expect(css).toContain("box-shadow:var(--card-shadow)");

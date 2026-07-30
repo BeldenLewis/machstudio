@@ -39,13 +39,10 @@ const EXTRA_CSS = `
 .stk-live .plw-band { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin:56px 0 40px; align-items:start; }
 .stk-live .plw-info-stack { display:flex; flex-direction:column; gap:20px; }
 .stk-live .plw-band.single { grid-template-columns:minmax(0, 1fr); max-width:680px; margin-inline:auto; }
-/* 한 열로 접히면 DOM 순서(CTA → 소개·아젠다)가 그대로 나온다. 그건 뒤집혀 있다 —
-   "무슨 웨비나였나" 가 먼저고 CTA 는 그 뒤의 제안이다. order 로 바로잡는다. */
-@media (max-width:820px){
-  .stk-live .plw-band { grid-template-columns:1fr; }
-  .stk-live .plw-info-stack.main { order:1; }
-  .stk-live .plw-info-stack.side { order:2; }
-}
+/* 한 열로 접히면 DOM 순서(CTA → 소개·아젠다)가 그대로 나온다 — 모바일에서는 **CTA 가 먼저**다.
+   좁은 화면은 스크롤이 길어 아래로 갈수록 이탈하므로, 행동을 요구하는 카드가 위에 있어야 한다.
+   PC 는 두 열이 나란히라 순서 문제가 없다(왼쪽 CTA / 오른쪽 소개·세션). */
+@media (max-width:820px){ .stk-live .plw-band { grid-template-columns:1fr; } }
 .stk-live .plw-panel { background:var(--card); border-radius:var(--radius); box-shadow:var(--card-shadow); padding:24px; }
 .stk-live .plw-panel h3 { font-size:13px; font-weight:750; color:var(--muted); margin:0 0 4px; }
 .stk-live .plw-panel .big { font-size:25px; font-weight:800; letter-spacing:-.03em; color:var(--text); }
