@@ -204,3 +204,29 @@ describe("이 웨비나는 소개 카드", () => {
     }
   });
 });
+
+describe("자료 다운로드 조건 설문", () => {
+  const res = (r: Record<string, unknown>) =>
+    normalizeLivePageConfig({ livePage: { resources: [{ title: "발표자료", url: "https://x.example/a.pdf", ...r }] } }).resources[0];
+
+  /** 조건이 없는 자료는 지금처럼 누구나 받는다 — 기존 웨비나 동작 불변. */
+  it("surveyId 를 안 넣으면 빈 문자열", () => {
+    expect(res({}).surveyId).toBe("");
+  });
+
+  it("설문 id 를 보존한다", () => {
+    expect(res({ surveyId: "sv_1" }).surveyId).toBe("sv_1");
+  });
+
+  it.each([null, 42, [], {}])("문자열이 아니면(%j) 조건 없음으로 떨어진다", (bad) => {
+    expect(res({ surveyId: bad }).surveyId).toBe("");
+  });
+
+  /** url 이 없는 행은 예전부터 걸러진다 — 조건만 걸고 파일을 안 넣은 행이 화면에 남지 않게. */
+  it("url 없는 자료는 조건이 걸려 있어도 버려진다", () => {
+    const list = normalizeLivePageConfig({
+      livePage: { resources: [{ title: "빈 행", surveyId: "sv_1" }] },
+    }).resources;
+    expect(list).toEqual([]);
+  });
+});

@@ -87,11 +87,37 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   // workspaceId 는 위 멤버십 검사에만 쓰는 내부 식별자다 — 공개 응답에서 뺀다.
   const { workspaceId: _workspaceId, ...publicWebinar } = webinar;
 
+  /* 등록자별 설문 완료 목록 — registrationId 가 이 웨비나 등록 건일 때만 센다(타 웨비나·위조 id 차단). */
+  const reqRegistrationId = new URL(request.url).searchParams.get("registrationId");
+  let completedSurveyIds: string[] = [];
+  if (reqRegistrationId) {
+    const owned = await prisma.webinarRegistration.findFirst({
+      where: { id: reqRegistrationId, webinarId: webinar.id },
+      select: { id: true },
+    });
+    if (owned) {
+      const done = await prisma.webinarSurveyResponse.findMany({
+        where: { webinarId: webinar.id, registrationId: owned.id },
+        select: { surveyId: true },
+      });
+      completedSurveyIds = done.map((d) => d.surveyId);
+    }
+  }
+
   return NextResponse.json(
     {
       webinar: { ...publicWebinar, config },
       landingPreviewAllowed,
       endedSurveys,
+      /**
+       * 이 등록자가 이미 낸 설문 id 들. ?registrationId= 를 준 요청에만 실린다.
+       * 자료 게이팅(LiveResource.surveyId)이 이 목록을 보고 자물쇠를 푼다.
+       *
+       * 남의 registrationId 를 넣어 남이 낸 설문을 알아내는 건 막을 수 없지만, 알아낼 수 있는
+       * 것은 **불리언 하나**(냈는지)뿐이고 응답 내용은 실리지 않는다. 자료 URL 은 어차피 공개
+       * config 에 있으므로 이 값으로 새는 정보가 늘지 않는다.
+       */
+      completedSurveyIds,
       /* 한 배포 동안 남기는 단일 키 — 이 응답은 캐시될 수 있어서, 새 클라이언트가 옛 payload 를
          받는 창이 있다. 그 창에서 설문 카드가 사라지지 않게 첫 번째를 그대로 실어 보낸다.
          다음 배포에서 제거. */

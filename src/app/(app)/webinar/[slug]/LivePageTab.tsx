@@ -933,7 +933,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                 items={resources}
                 onChange={setResources}
                 rowKey={(r) => r[ROW_KEY]}
-                makeItem={() => ({ title: "", meta: "", url: "", [ROW_KEY]: crypto.randomUUID() })}
+                makeItem={() => ({ title: "", meta: "", url: "", surveyId: "", [ROW_KEY]: crypto.randomUUID() })}
                 addLabel="자료 추가"
                 reorderable
                 emptyState={
@@ -949,6 +949,30 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                       <input aria-label="자료 설명" className={inputCls} placeholder="설명 (예: PDF · 4.2MB)" value={item.meta} onChange={(e) => patch({ meta: e.target.value })} />
                       <input aria-label="자료 다운로드 URL" className={inputCls} type="url" placeholder="다운로드 URL" value={item.url} onChange={(e) => patch({ url: e.target.value })} />
                     </div>
+                    {/* 자료별 대가 — 만족도 설문을 낸 사람에게 발표자료를, 사전조사를 낸 사람에게
+                        다음 행사 자료를 주는 식으로 자료마다 조건이 다른 게 실제 운영이다.
+                        선택지는 **종료 화면에 걸린 설문**뿐이다 — 시청자가 그 화면에서 바로 낼 수
+                        있어야 자물쇠를 풀 길이 있다. */}
+                    {linkedSurveys.length > 0 ? (
+                      <label className="block">
+                        <span className="mb-1 block text-[11px] text-muted-foreground">받기 조건</span>
+                        <select
+                          aria-label="자료 다운로드 조건 설문"
+                          className={inputCls}
+                          value={item.surveyId}
+                          onChange={(e) => patch({ surveyId: e.target.value })}
+                        >
+                          <option value="">조건 없음 — 누구나 받기</option>
+                          {linkedSurveys.map((sv) => (
+                            <option key={sv.id} value={sv.id}>{sv.title} 완료해야 받기</option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : item.surveyId ? (
+                      <p className="text-[11px] text-destructive">
+                        조건으로 걸린 설문이 종료 화면에서 빠졌어요 — 지금은 아무도 이 자료를 받을 수 없어요.
+                      </p>
+                    ) : null}
                   </>
                 )}
               />

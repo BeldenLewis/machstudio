@@ -242,6 +242,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const consentDefaultsAppliedRef = useRef(false);
   // 종료 화면에 연결된 자체 설문 (/info 가 내려줌) — 있으면 외부 surveyUrl 보다 우선
   const [endedSurveys, setEndedSurveys] = useState<EndedSurveyRef[]>([]);
+  /* 이 등록자가 이미 낸 설문 — 자료 게이팅이 본다. /info 가 registrationId 를 받으면 함께 준다. */
+  const [completedSurveyIds, setCompletedSurveyIds] = useState<string[]>([]);
   /** 종료 화면 설문 팝업 — 새 창 대신 이 자리에서 답한다(EndedSurveyDialog). */
   const [openedSurvey, setOpenedSurvey] = useState<EndedSurveyLink | null>(null);
   /**
@@ -305,11 +307,14 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
   const fetchWebinar = useCallback(async () => {
     try {
-      const res = await fetch(`/api/webinar/${slug}/info`);
+      /* registrationId 를 붙이면 설문 완료 목록이 함께 온다(자료 게이팅용). 없으면 공개 응답. */
+      const q = registrationId ? `?registrationId=${encodeURIComponent(registrationId)}` : "";
+      const res = await fetch(`/api/webinar/${slug}/info${q}`);
       if (!res.ok) return;
       const data = await res.json();
       setWebinar(data.webinar);
       setEndedSurveys(readEndedSurveys(data));
+      setCompletedSurveyIds(Array.isArray(data.completedSurveyIds) ? data.completedSurveyIds.filter((v: unknown) => typeof v === "string") : []);
       if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
 
       // 서버 상태머신 판정 사용 — statusOverride(운영 콘솔 수동 전환)·입장오픈 윈도 반영
@@ -326,7 +331,9 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     } finally {
       setIsLoading(false);
     }
-  }, [slug]);
+    /* registrationId 가 의존성에 있어야 등록 직후 설문 완료 목록을 다시 받는다 —
+       빼면 자료 자물쇠가 이전 상태(미등록)로 남는다. */
+  }, [slug, registrationId]);
 
   // 라이브 전 상태 전환 감지용 경량 폴 — /status(상태만) 를 받아 view/serverNow/isTrulyLive 갱신.
   // 세션·테마·config 를 30초마다 다시 받지 않아 대기 시청자 egress 를 줄인다(정적 콘텐츠는 최초 /info 1회).
@@ -1499,6 +1506,10 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             live={live}
             surveys={surveyLinks}
             onOpenSurvey={(s) => setOpenedSurvey(s)}
+            hasRegistration={hasRegistration}
+            completedSurveyIds={completedSurveyIds}
+            /* 미등록자가 잠긴 자료를 누르면 등록 모달로 — 안내만 띄우면 등록 경로를 다시 찾아야 한다. */
+            onRequireRegister={() => { setViewParam("signup"); setView("signup"); setRegModalOpen(true); }}
             // 다시보기 신청은 등록 이메일이 있어야 발송된다 — 미등록자에겐 버튼을 숨긴다(누르면 항상 400).
             onReplay={hasRegistration ? handleNotifyToggle : undefined}
             replayRequested={notifySubscribed}

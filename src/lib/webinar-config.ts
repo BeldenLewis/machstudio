@@ -183,7 +183,23 @@ export function normalizeQaMode(components: unknown): QaMode {
 
 // ── 라이브 페이지 화면(대기·입장·종료) 구성 — 섹션별 on/off + 자료·넥스트 데이터 ──
 // config.livePage 에 저장(JSON blob, 마이그레이션 불필요). 데이터가 없으면 토글이 켜져 있어도 뷰어에서 자동 숨김.
-export interface LiveResource { title: string; meta: string; url: string }
+export interface LiveResource {
+  title: string;
+  meta: string;
+  url: string;
+  /**
+   * 이 자료를 받기 전에 **끝내야 하는 설문**. 빈 문자열이면 조건 없이 받는다.
+   *
+   * 자료마다 따로 두는 이유: 만족도 설문을 낸 사람에게 발표자료를, 사전조사를 낸 사람에게
+   * 다음 행사 자료를 주는 식으로 자료별 대가가 다른 게 실제 운영이다. 종료 화면에 걸린
+   * 설문 중 하나를 고른다.
+   *
+   * 주의 — 이건 **화면에서만 가리는 장치**다. url 은 공개 config 에 그대로 실려 나가므로
+   * 개발자도구로 config 를 보면 설문 없이도 주소를 알 수 있다. 진짜로 막아야 하는 파일이면
+   * 자료 URL 자체를 서명 링크로 바꾸는 별도 작업이 필요하다.
+   */
+  surveyId: string;
+}
 export interface LiveNextWebinar { title: string; when: string; url: string }
 
 /** 종료 화면 기본 문구 — 어드민이 비워 두면 이 값이 쓰인다(뷰어·미리보기 공통). */
@@ -227,7 +243,12 @@ export function normalizeLivePageConfig(config: unknown): LivePageConfig {
     ? (lp.resources as unknown[])
         .map((r) => obj(r))
         .filter((r) => typeof r.url === "string" && (r.url as string).trim())
-        .map((r) => ({ title: String(r.title ?? "자료"), meta: String(r.meta ?? ""), url: String(r.url) }))
+        .map((r) => ({
+          title: String(r.title ?? "자료"),
+          meta: String(r.meta ?? ""),
+          url: String(r.url),
+          surveyId: typeof r.surveyId === "string" ? r.surveyId : "",
+        }))
     : [];
 
   const nwRaw = obj(lp.nextWebinar);

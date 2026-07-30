@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { motion } from "framer-motion";
-import { Check, Play, ClipboardCheck, FileText, Download, Share2, Link2 } from "lucide-react";
+import { Check, Play, ClipboardCheck, FileText, Download, Share2, Link2, Lock } from "lucide-react";
 import { buildStkCss } from "./LiveContentStk";
 import { DEFAULT_ENDED_DESCRIPTION, DEFAULT_ENDED_TITLE, type LivePageConfig } from "@/lib/webinar-config";
 import type { EndedSurveyLink } from "@/lib/webinar-ended-surveys";
@@ -43,6 +43,12 @@ const EXTRA_CSS = `
 .stk-live .en-res a { display:flex; align-items:center; gap:13px; padding:13px 20px; text-decoration:none; color:var(--text); transition:background .15s ease; }
 .stk-live .en-res a+a { border-top:1px solid var(--line); }
 .stk-live .en-res a:hover { background:color-mix(in srgb,var(--text) 3%,transparent); }
+/* 잠긴 자료 — 클릭을 막지 않는다. disabled 는 포커스를 못 받아 스크린리더가 존재를 못 알리고,
+   "왜 안 되는지" 를 말할 기회도 잃는다. 눌렀을 때 다음 행동(설문 열기·등록)을 준다. */
+.stk-live .en-res .locked { cursor:pointer; }
+.stk-live .en-res .locked .nm { color:var(--muted); }
+.stk-live .en-res .locked .fi { background:color-mix(in srgb,var(--text) 6%,transparent); color:var(--sub); }
+.stk-live .en-res .why { display:block; margin-top:2px; font-size:11.5px; color:var(--key); font-weight:650; }
 .stk-live .en-res .fi { width:34px; height:34px; border-radius:9px; background:var(--key-dim); color:var(--key); display:grid; place-items:center; flex-shrink:0; }
 .stk-live .en-res .fi svg { width:17px; height:17px; }
 .stk-live .en-res .nm { font-size:14px; font-weight:650; flex:1; }
@@ -77,6 +83,12 @@ interface EndedScreenProps {
    * 주지 않으면(미리보기 하니스 등) 링크 그대로 동작한다 — 팝업 로직 없이도 화면이 성립하게.
    */
   onOpenSurvey?: (survey: EndedSurveyLink) => void;
+  /** 이 방문자가 사전등록을 마쳤는가. 자료 게이팅의 첫 관문. */
+  hasRegistration?: boolean;
+  /** 이미 낸 설문 id 들 — 자료의 surveyId 가 여기 있으면 자물쇠가 풀린다. */
+  completedSurveyIds?: readonly string[];
+  /** 미등록자가 잠긴 자료를 눌렀을 때. 없으면 안내 문구만 보이고 아무 일도 안 한다. */
+  onRequireRegister?: () => void;
   onReplay?: () => void;
   replayRequested?: boolean;
   replayPending?: boolean;
@@ -86,6 +98,7 @@ interface EndedScreenProps {
 
 export default function EndedScreen({
   webinar, accent, text, surface, live, surveys, onOpenSurvey,
+  hasRegistration = true, completedSurveyIds = [], onRequireRegister,
   onReplay, replayRequested, replayPending, onShare, shareCopied,
 }: EndedScreenProps) {
   const css = useMemo(() => buildStkCss(accent || "#6D28D9", text || "#141320", surface || "#FFFFFF") + EXTRA_CSS, [accent, text, surface]);
@@ -155,16 +168,60 @@ export default function EndedScreen({
         {showResources && (
           <div className="en-res">
             <div className="rh">받아가세요</div>
-            {live.resources.map((r, i) => (
-              <a key={i} href={r.url} target="_blank" rel="noopener noreferrer">
-                <span className="fi"><FileText /></span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span className="nm" style={{ display: "block" }}>{r.title}</span>
-                  {r.meta && <span className="mt">{r.meta}</span>}
-                </span>
-                <span className="dl"><Download /></span>
-              </a>
-            ))}
+            {live.resources.map((r, i) => {
+              /* 게이트 판정 — 조건 설문이 종료 화면에 실제로 걸려 있어야 풀 길이 있다.
+                 빠졌으면 잠긴 채로 두고 문구로 알린다(조용히 열어 주면 조건이 거짓이 된다). */
+              const gate = r.surveyId ? surveys?.find((sv) => sv.surveyId === r.surveyId) : undefined;
+              const needsSurvey = Boolean(r.surveyId) && !completedSurveyIds.includes(r.surveyId);
+              const locked = Boolean(r.surveyId) && (!hasRegistration || needsSurvey);
+              const why = !hasRegistration
+                ? "사전등록하면 받을 수 있어요"
+                : gate
+                  ? `${gate.title?.trim() || "설문"}을 완료하면 받을 수 있어요`
+                  : "지금은 받을 수 없어요 — 조건 설문이 닫혔어요";
+
+              const body = (
+                <>
+                  <span className="fi">{locked ? <Lock /> : <FileText />}</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span className="nm" style={{ display: "block" }}>{r.title}</span>
+                    {r.meta && <span className="mt">{r.meta}</span>}
+                    {locked && <span className="why">{why}</span>}
+                  </span>
+                  {!locked && <span className="dl"><Download /></span>}
+                </>
+              );
+
+              if (!locked) {
+                return (
+                  <a key={i} href={r.url} target="_blank" rel="noopener noreferrer">{body}</a>
+                );
+              }
+              /* 눌렀을 때 다음 걸음으로 보낸다 — 미등록은 등록, 설문 미완료는 **그 설문을 바로 연다**.
+                 안내만 띄우면 사용자가 설문을 다시 찾아 올라가야 한다. */
+              return (
+                <a
+                  key={i}
+                  className="locked"
+                  role="button"
+                  tabIndex={0}
+                  aria-disabled="true"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (!hasRegistration) onRequireRegister?.();
+                    else if (gate) onOpenSurvey?.(gate);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" && e.key !== " ") return;
+                    e.preventDefault();
+                    if (!hasRegistration) onRequireRegister?.();
+                    else if (gate) onOpenSurvey?.(gate);
+                  }}
+                >
+                  {body}
+                </a>
+              );
+            })}
           </div>
         )}
 
