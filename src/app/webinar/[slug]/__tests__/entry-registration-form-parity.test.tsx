@@ -117,7 +117,7 @@ async function renderLivePageInEntryState(webinarValue = webinar) {
     if (url.endsWith("/register")) {
       return jsonResponse({ registration: { id: "registration-success" }, youtubeId: null });
     }
-    if (url.endsWith("/info")) {
+    if (url.includes("/info")) {
       return jsonResponse({
         webinar: webinarValue,
         status: "registration",
@@ -409,7 +409,7 @@ describe("입장 화면 사전등록 폼", () => {
     vi.stubGlobal("ResizeObserver", ResizeObserverStub);
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.endsWith("/info")) {
+      if (url.includes("/info")) {
         return jsonResponse({
           webinar,
           status: "registration",
