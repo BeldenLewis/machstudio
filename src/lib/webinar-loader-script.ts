@@ -967,6 +967,14 @@ ${ATTRIBUTION_CORE_JS}
     var successCta = form.successCta || {};
     var successCtaUrl = safeHttpCtaUrl(successCta.url);
     var showCta = successCta.enabled === true && !!String(successCta.label || "").trim() && !!successCtaUrl;
+    /**
+     * 확인(또는 닫기)이 이동할 주소. 비면 종전처럼 모달만 닫는다.
+     * 자체 대기 화면(live/page.tsx confirmCompletion)과 **같은 규칙**이어야 한다 — 한 사람이
+     * 랜딩에서 등록했는지 대기 화면에서 등록했는지에 따라 다음 걸음이 달라지면 안 된다.
+     * 서버(embed config)가 safeHttpUrl 로 걸러 보내지만, 로더가 다른 소비처에서도 쓰이므로
+     * 여기서 한 번 더 통과시킨다(javascript: 방어).
+     */
+    var redirectUrl = safeHttpCtaUrl(form.successRedirectUrl);
     var restoreTarget = modalOpener;
     if (!restoreTarget && inlineRestoreTarget && document.contains(inlineRestoreTarget)) {
       inlineRestoreTarget.setAttribute("tabindex", "-1");
@@ -995,6 +1003,14 @@ ${ATTRIBUTION_CORE_JS}
         try { restoreTarget.focus(); } catch (e) {}
       }
     }
+    /* 목적지가 있으면 같은 탭에서 이동한다. CTA(새 탭)와 달리 이건 다음 걸음이다. */
+    function confirmDone() {
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
+        return;
+      }
+      close();
+    }
     var focusTarget;
     if (showCta) {
       var cta = el("a", "mw-done-btn mw-done-cta", String(successCta.label).trim());
@@ -1007,7 +1023,7 @@ ${ATTRIBUTION_CORE_JS}
 
       var closeBtn = el("button", "mw-done-close", "닫기");
       closeBtn.type = "button";
-      closeBtn.addEventListener("click", close);
+      closeBtn.addEventListener("click", confirmDone);
       card.appendChild(closeBtn);
       focusTarget = cta;
     } else {
@@ -1015,7 +1031,7 @@ ${ATTRIBUTION_CORE_JS}
       ok.type = "button";
       ok.style.background = accent;
       ok.style.color = theme().onAccent;
-      ok.addEventListener("click", close);
+      ok.addEventListener("click", confirmDone);
       card.appendChild(ok);
       focusTarget = ok;
     }

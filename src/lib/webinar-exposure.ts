@@ -311,8 +311,9 @@ export function buildExposureReport(input: ExposureInput): ExposureReport {
 
   add(W("waiting.agenda", "아젠다", ["waiting", "entry"], "waiting",
     gate(live.waiting.agenda, input.sessions.length > 0, "아젠다를 켰지만 세션이 없어요.")));
-  add(W("waiting.calendar", "캘린더에 추가", ["waiting", "entry"], "waiting",
-    gate(live.waiting.calendar, !!str(cfg.calendarUrl), "버튼을 켰지만 캘린더 URL이 없어요.")));
+  /* 캘린더는 웨비나 일정에서 만든다(webinar-calendar.ts) — 채울 URL 이 없으므로 데이터 게이트도 없다.
+     예전에는 URL 미입력이 "켰는데 안 나오는" 상태를 만들었다(모바일 배너가 아예 안 떴다). */
+  add(W("waiting.calendar", "캘린더에 추가", ["waiting", "entry"], "waiting", gate(live.waiting.calendar, true, "")));
   add(W("waiting.share", "초대 공유", ["waiting", "entry"], "waiting", gate(live.waiting.share, true, "")));
   /**
    * 시작 알림은 **면마다 관객이 다르다** — 대기 화면에서는 등록자에게만 버튼이 가고

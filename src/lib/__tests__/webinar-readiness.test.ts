@@ -61,20 +61,23 @@ describe("파생 규칙", () => {
   });
 
   /**
-   * 개수만 적으면 무엇이 세어졌는지 알 수 없고, 기본값 ON 인 토글(대기 아젠다·캘린더)을
-   * 잊어 기대값을 잘못 쓰기 쉽다 — 실제로 처음 3이라고 적었다가 5에서 틀렸다.
+   * 개수만 적으면 무엇이 세어졌는지 알 수 없고, 기본값 ON 인 토글(대기 아젠다)을 잊어
+   * 기대값을 잘못 쓰기 쉽다 — 실제로 처음 3이라고 적었다가 틀렸다.
+   *
+   * 캘린더는 이 목록에서 빠졌다. 링크를 운영자가 붙여 넣던 설정을 없애고 웨비나 일정에서
+   * 만들도록 바꿨으므로(webinar-calendar.ts) **채울 값이 없어 경고할 것도 없다** —
+   * 예전에는 URL 미입력이 "켰는데 안 나오는" 상태를 만들어 모바일 배너가 아예 안 떴다.
    */
-  it("섹션별 개수는 파생 목록에서 센다 — 시청 화면 5건은 대기 기본 토글까지 포함이다", () => {
+  it("섹션별 개수는 파생 목록에서 센다 — 시청 화면 4건은 대기 기본 토글까지 포함이다", () => {
     const list = issues({ config: { livePage: { ended: { resources: true, nextWebinar: true } } } });
     expect(list.filter((i) => i.section === "watch").map((i) => i.title)).toEqual([
       "영상이 연결되지 않아 방송이 시작돼도 화면에 아무것도 안 나와요.", // blocking 이 먼저
       "아젠다를 켰지만 세션이 없어요.",                                  // waiting.agenda 기본 ON
-      "버튼을 켰지만 캘린더 URL이 없어요.",                              // waiting.calendar 기본 ON
       "자료 영역을 켰지만 자료가 없어요.",
       "다음 웨비나를 켰지만 제목이 없어요.",
     ]);
     const by = readinessBySection(list);
-    expect(by.watch).toBe(5);
+    expect(by.watch).toBe(4);
     expect(by.landing).toBe(0); // 랜딩이 꺼져 있으면 랜딩 행은 전부 off — 경고를 쏟지 않는다
   });
 });

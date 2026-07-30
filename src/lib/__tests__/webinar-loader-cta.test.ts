@@ -6,7 +6,7 @@ import { PUBLIC_REGISTRATION_FORM_CSS } from "@/lib/webinar-public-form-css";
 type SuccessCta = { enabled: boolean; label: string; url: string };
 type LoaderWindow = Window & typeof globalThis & { MachWebinar: { openRegister: () => void } };
 
-function config(successCta: SuccessCta, accentColor = "#6d28d9") {
+function config(successCta: SuccessCta, accentColor = "#6d28d9", successRedirectUrl = "") {
   return {
     slug: "embed-test",
     name: "임베드 테스트",
@@ -58,6 +58,7 @@ function config(successCta: SuccessCta, accentColor = "#6d28d9") {
       marketingDefaultChecked: false,
       submitLabel: "등록하기",
       successCta,
+      successRedirectUrl,
     },
     links: { livePageUrl: null, surveyUrl: null, calendarUrl: null },
     ics: "",
@@ -80,9 +81,9 @@ async function settle() {
   await Promise.resolve();
 }
 
-async function boot(successCta: SuccessCta, accentColor = "#6d28d9") {
+async function boot(successCta: SuccessCta, accentColor = "#6d28d9", successRedirectUrl = "") {
   const fetchMock = vi.fn(async (url: string) => {
-    if (url.includes("/config")) return response(config(successCta, accentColor));
+    if (url.includes("/config")) return response(config(successCta, accentColor, successRedirectUrl));
     if (url.endsWith("/register")) return response({ id: "registration-test" });
     throw new Error(`Unexpected request: ${url}`);
   });
@@ -304,4 +305,54 @@ describe("임베드 등록 완료 CTA", () => {
       expect(document.activeElement).toBe(restoreTarget);
     },
   );
+});
+
+/**
+ * 완료 팝업이 두 벌이다 — 자체 대기 화면(React)과 이 로더(임베드·랜딩). 이동 설정을 한쪽에만
+ * 넣어 두면 "설정했는데 임베드에서만 안 된다" 가 된다(실제로 그랬다).
+ * 여기서 검증하는 계약: 목적지가 있으면 확인·닫기가 같은 탭에서 이동한다.
+ */
+describe("등록 완료 후 이동", () => {
+  const noCta = { enabled: false, label: "", url: "" };
+
+  async function pressConfirm(dialog: HTMLElement) {
+    const btn = dialog.querySelector<HTMLButtonElement>(".mw-done-close")
+      ?? dialog.querySelector<HTMLButtonElement>(".mw-done-btn");
+    expect(btn).toBeTruthy();
+    btn!.click();
+    await settle();
+  }
+
+  it("목적지가 없으면 확인은 팝업만 닫는다", async () => {
+    await boot(noCta);
+    const dialog = await submitRegistration();
+    await pressConfirm(dialog);
+    expect(document.querySelector(".mw-done-card")).toBeNull();
+  });
+
+  it("목적지가 있으면 확인이 같은 탭에서 이동한다", async () => {
+    const assign = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, set href(v: string) { assign(v); }, get href() { return "https://host.example/"; } },
+    });
+    await boot(noCta, "#6d28d9", "https://k-expo.example/webinarlive");
+    const dialog = await submitRegistration();
+    await pressConfirm(dialog);
+    expect(assign).toHaveBeenCalledWith("https://k-expo.example/webinarlive");
+  });
+
+  it("javascript: 는 이동 대상이 되지 않는다", async () => {
+    const assign = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, set href(v: string) { assign(v); }, get href() { return "https://host.example/"; } },
+    });
+    // eslint-disable-next-line no-script-url
+    await boot(noCta, "#6d28d9", "javascript:alert(1)");
+    const dialog = await submitRegistration();
+    await pressConfirm(dialog);
+    expect(assign).not.toHaveBeenCalled();
+    expect(document.querySelector(".mw-done-card")).toBeNull();
+  });
 });
