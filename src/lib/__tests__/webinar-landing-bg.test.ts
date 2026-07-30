@@ -64,7 +64,7 @@ describe("섹션 모드", () => {
 
   it("편집 UI 목록 순서가 랜딩 렌더 순서와 같다", () => {
     expect(LANDING_BG_SECTIONS.map((s) => s.key)).toEqual([
-      "hero", "intro", "sessions", "programs", "audience", "join", "faq",
+      "hero", "intro", "sessions", "programs", "audience", "highlights", "join", "faq",
     ]);
   });
 
@@ -73,12 +73,16 @@ describe("섹션 모드", () => {
    * 그래서 편집 UI 에 자기 칸이 없다: 골라도 아무 일이 안 일어나는 칸이면 "설정했는데 안 먹는다"
    * 가 된다. 값은 sectionBg.sessions 하나를 공유하고, 라벨이 세 섹션을 함께 말한다.
    */
-  it("혜택은 자기 배경 칸이 없다 — 키컬러 구간이라 루트가 칠한다", () => {
-    // 키를 문자열로 훑는다 — 타입에서 이미 빠져 있어 리터럴 비교는 컴파일이 거부한다.
-    const keys: string[] = LANDING_BG_SECTIONS.map((s) => s.key);
-    expect(keys).not.toContain("highlights");
-    // 라벨이 세 섹션을 함께 말해야 운영자가 "혜택 칸은 어디" 를 묻지 않는다.
-    expect(LANDING_BG_SECTIONS.find((s) => s.key === "sessions")!.label).toContain("혜택");
+  /**
+   * 혜택은 **일반 섹션**이다 — 자기 배경을 칠하고 지브라 교대에 참여한다. 한때 accent-zone 으로
+   * 두었지만 키컬러 구간이 셋이 되어 전환이 잦고 위아래 색 경계가 읽히지 않아 되돌렸다.
+   * 그래서 편집 UI 에 자기 칸이 있어야 한다 — 없으면 운영자가 이 섹션 색만 못 고친다.
+   */
+  it("혜택도 자기 배경 칸을 갖는다 — 일반 섹션이다", () => {
+    expect(LANDING_BG_SECTIONS.some((s) => s.key === "highlights")).toBe(true);
+    expect(lp({ sectionBg: { highlights: "light" } }).sectionBg.highlights).toBe("light");
+    // 키컬러 구간 라벨에서 혜택이 빠졌다
+    expect(LANDING_BG_SECTIONS.find((s) => s.key === "sessions")!.label).not.toContain("혜택");
   });
 });
 

@@ -34,10 +34,10 @@ type BgPreset = "light" | "dark" | "mix";
 function sectionBgFor(preset: BgPreset) {
   if (preset === "mix") {
     return { hero: "dark", intro: "light", sessions: "dark", programs: "light",
-             audience: "dark", join: "light", faq: "light" } as const;
+             audience: "dark", highlights: "light", join: "light", faq: "light" } as const;
   }
   return { hero: preset, intro: preset, sessions: preset, programs: preset,
-           audience: preset, join: preset, faq: preset } as const;
+           audience: preset, highlights: preset, join: preset, faq: preset } as const;
 }
 
 const mockWebinar = (origin: string, bg: BgPreset, lightBg: string, darkBg: string): LandingWebinar => ({

@@ -111,9 +111,8 @@ export function renderPrograms(m: LandingModel): HTMLElement | null {
 /**
  * 혜택 — "여기서 내가 얻는 것".
  *
- * accent-zone 을 쓰는 세 번째 섹션이다(세션·타임테이블에 이어). 자기 배경을 칠하지 않고
- * 화면 중앙에 걸릴 때 루트가 키컬러로 바뀌는 구간에 들어간다 — 참여 방법(How to Join)을
- * 읽기 **직전**에 화면 색이 통째로 뒤집혀 "여기서 결정하라" 는 신호를 준다.
+ * 일반 섹션이다 — 자기 배경을 칠하고 지브라 교대에 참여한다. 예전에는 accent-zone 이었지만
+ * 키컬러 구간이 셋이나 되어 전환이 잦고 위아래 섹션과의 색 경계가 읽히지 않았다.
  *
  * Programs·Highlights 가 예전에는 둘 다 3열 카드라 스크롤에서 구분되지 않았다(Audience 를
  * 체크 목록으로 만든 것과 같은 이유). 혜택은 카드 평면을 없애고 **번호 + 한 줄**로 눕힌다 —
@@ -123,8 +122,7 @@ export function renderHighlights(m: LandingModel): HTMLElement | null {
   if (!m.showHighlights) return null;
   return h(
     "section",
-    // accent-zone: 배경을 칠하지 않는다(mount 의 paintBg 가 건너뛴다). css.ts 머리말 참고.
-    { class: "section accent-zone benefit-zone", id: m.sectionId("lnd-highlights"), "aria-labelledby": m.sectionId("lnd-highlights-title") },
+    { class: "section benefit-zone", id: m.sectionId("lnd-highlights"), "aria-labelledby": m.sectionId("lnd-highlights-title") },
     h("h2", { class: "section-title rv", id: m.sectionId("lnd-highlights-title") }, m.highlightsTitle),
     h(
       "ol",

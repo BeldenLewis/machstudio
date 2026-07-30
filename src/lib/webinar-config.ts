@@ -326,12 +326,13 @@ export type LandingSectionBg = "light" | "dark";
 export const LANDING_BG_SECTIONS = [
   { key: "hero", label: "히어로", note: "미디어를 넣으면 글자는 항상 밝게 나갑니다" },
   { key: "intro", label: "About (소개)", note: "" },
-  /* 세션·타임테이블·혜택은 키컬러 구간이라 자기 배경을 칠하지 않는다 — 이 값은 그 **전후**에
-     보이는 루트 바탕색이다. 셋을 한 줄로 묶은 이유: 값이 sectionBg.sessions 하나로 공유된다
-     (혜택에 따로 칸을 두면 골라도 아무 일도 안 일어나는 칸이 된다). */
-  { key: "sessions", label: "세션 · 타임테이블 · 혜택", note: "스크롤이 이 구간에 걸리면 키컬러로 바뀝니다 — 그 전후에 보이는 바탕색" },
+  /* 세션·타임테이블만 키컬러 구간이라 자기 배경을 칠하지 않는다 — 이 값은 그 **전후**에
+     보이는 루트 바탕색이다. 혜택은 예전에 여기 묶여 있었지만 일반 섹션으로 되돌렸다. */
+  { key: "sessions", label: "세션 · 타임테이블", note: "스크롤이 이 구간에 걸리면 키컬러로 바뀝니다 — 그 전후에 보이는 바탕색" },
   { key: "programs", label: "Programs", note: "" },
+  /* 렌더 순서와 같아야 한다 — Audience 다음이 혜택이고 그 다음이 Join 이다(mount 주석). */
   { key: "audience", label: "이런 분들께 추천합니다", note: "" },
+  { key: "highlights", label: "혜택", note: "" },
   { key: "join", label: "How to Join", note: "" },
   { key: "faq", label: "FAQ", note: "" },
 ] as const;
@@ -351,7 +352,7 @@ export const DEFAULT_LANDING_COLORS: LandingColors = { lightBg: "#f6f8ff", darkB
 /** 기본은 전부 다크 — 이 기능이 들어오기 전과 같은 외관이어야 한다. */
 export const DEFAULT_LANDING_SECTION_BG: LandingSectionBgMap = {
   hero: "dark", intro: "dark", sessions: "dark", programs: "dark",
-  audience: "dark", join: "dark", faq: "dark",
+  audience: "dark", highlights: "dark", join: "dark", faq: "dark",
 };
 
 /** 6자리 hex 만 통과 — 공개 페이지 CSS 에 그대로 들어가는 값이라 문자열을 믿지 않는다. */
