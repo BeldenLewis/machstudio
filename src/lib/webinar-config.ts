@@ -47,6 +47,23 @@ export interface WebinarLinkCtaConfig {
   url: string;
 }
 
+/**
+ * "이 웨비나는" 소개 카드. 세 칸 모두 **비면 지금 동작으로 떨어진다** — 기존 웨비나의 화면이
+ * 조용히 바뀌면 안 되므로 기본값을 넣지 않는다.
+ *
+ * 왜 웨비나 이름·설명을 그대로 쓰지 않고 덮어쓸 자리를 두나: 기본정보의 이름은 목록·메일·
+ * 리마인더까지 쓰는 식별자라 길고 정확해야 하는데, 대기 화면의 이 카드는 **읽히는 카피**다.
+ * 랜딩의 intro 가 이미 같은 이유로 자기 제목·본문을 갖고 있다.
+ */
+export interface WebinarWaitingAboutConfig {
+  /** 카드 머리의 작은 라벨. 비면 "이 웨비나는". */
+  eyebrow: string;
+  /** 큰 제목. 비면 웨비나 이름. */
+  title: string;
+  /** 구분선 아래 본문. 비면 웨비나 설명. 줄바꿈을 보존해 렌더한다. */
+  body: string;
+}
+
 export interface WebinarWaitingFollowUpConfig {
   enabled: boolean;
   /**
@@ -181,6 +198,7 @@ export interface LivePageConfig {
     calendar: boolean;
     share: boolean;
     notify: boolean;
+    about: WebinarWaitingAboutConfig;
     followUp: WebinarWaitingFollowUpConfig;
   };
   entry: { viewerCount: boolean };
@@ -202,6 +220,8 @@ export function normalizeLivePageConfig(config: unknown): LivePageConfig {
   const bool = (v: unknown, def: boolean) => (typeof v === "boolean" ? v : def);
   const w = obj(lp.waiting), e = obj(lp.entry), en = obj(lp.ended);
   const followUp = obj(w.followUp);
+  const about = obj(w.about);
+  const text = (v: unknown) => (typeof v === "string" ? v : "");
 
   const resources: LiveResource[] = Array.isArray(lp.resources)
     ? (lp.resources as unknown[])
@@ -223,6 +243,11 @@ export function normalizeLivePageConfig(config: unknown): LivePageConfig {
       calendar: bool(w.calendar, true),
       share: bool(w.share, true),
       notify: bool(w.notify, true),
+      about: {
+        eyebrow: text(about.eyebrow),
+        title: text(about.title),
+        body: text(about.body),
+      },
       followUp: {
         enabled: bool(followUp.enabled, false),
         title: typeof followUp.title === "string" ? followUp.title : "",

@@ -172,3 +172,35 @@ describe("등록 완료 후 이동 주소", () => {
     expect(form.successRedirectUrl).toBe("https://example.com/thanks");
   });
 });
+
+describe("이 웨비나는 소개 카드", () => {
+  /**
+   * 세 칸 모두 **선택**이다 — 비면 뷰가 웨비나 기본정보(이름·설명)로 떨어진다.
+   * 기본값을 config 에 심지 않는 이유: 기존 웨비나의 화면이 조용히 바뀌면 안 된다.
+   */
+  it("기존 웨비나는 세 칸이 모두 빈 값", () => {
+    expect(normalizeLivePageConfig({}).waiting.about).toEqual({ eyebrow: "", title: "", body: "" });
+  });
+
+  it("채운 값을 그대로 보존한다 — 줄바꿈까지", () => {
+    const about = normalizeLivePageConfig({
+      livePage: { waiting: { about: { eyebrow: "이번 세션은", title: "LA 진출 실전", body: "첫 줄\n둘째 줄" } } },
+    }).waiting.about;
+    expect(about).toEqual({ eyebrow: "이번 세션은", title: "LA 진출 실전", body: "첫 줄\n둘째 줄" });
+  });
+
+  it.each([null, 42, [], {}])("문자열이 아니면(%j) 빈 값으로 떨어진다", (bad) => {
+    const about = normalizeLivePageConfig({
+      livePage: { waiting: { about: { eyebrow: bad, title: bad, body: bad } } },
+    }).waiting.about;
+    expect(about).toEqual({ eyebrow: "", title: "", body: "" });
+  });
+
+  it("about 자체가 객체가 아니어도 안전하다", () => {
+    for (const bad of [null, "about", 42, []]) {
+      expect(normalizeLivePageConfig({
+        livePage: { waiting: { about: bad } },
+      }).waiting.about).toEqual({ eyebrow: "", title: "", body: "" });
+    }
+  });
+});

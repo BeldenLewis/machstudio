@@ -228,6 +228,11 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [followUpItems]);
 
+  const setAbout = (patch: Partial<LivePageConfig["waiting"]["about"]>) =>
+    setScreens((s) => ({
+      ...s,
+      waiting: { ...s.waiting, about: { ...s.waiting.about, ...patch } },
+    }));
   const setFollowUp = (patch: Partial<LivePageConfig["waiting"]["followUp"]>) =>
     setScreens((s) => ({
       ...s,
@@ -472,6 +477,36 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
               <Toggle label="캘린더에 추가" checked={screens.waiting.calendar} onChange={(v) => setW("calendar", v)} desc="웨비나 일정으로 만들어 담아요 · 모바일에서만 보여요" />
               <Toggle label="초대 공유" checked={screens.waiting.share} onChange={(v) => setW("share", v)} />
               <Toggle label="시작 알림 받기" checked={screens.waiting.notify} onChange={(v) => setW("notify", v)} desc="이메일 등록자에게 시작 리마인더를 보낼 수 있어요" />
+            </div>
+          </Blk>
+
+          {/* 소개 카드 — 세 칸 모두 선택이다. 비우면 웨비나 기본정보(이름·설명)가 그대로 나가고,
+              채우면 이 화면에서만 그 값을 쓴다. 기본정보의 이름은 목록·메일·리마인더까지 쓰는
+              식별자라 길고 정확해야 하는데 이 카드는 읽히는 카피라 요구가 다르다. */}
+          <Blk title="이 웨비나는 소개 카드" goes={goesFor("waiting", "entry")} hint="비우면 웨비나 이름·설명이 그대로 나가요.">
+            <div className="space-y-3">
+              <input
+                aria-label="소개 카드 라벨"
+                value={screens.waiting.about.eyebrow}
+                onChange={(e) => setAbout({ eyebrow: e.target.value })}
+                className={inputCls}
+                placeholder="예: 이 웨비나는 (비우면 그대로)"
+              />
+              <input
+                aria-label="소개 카드 제목"
+                value={screens.waiting.about.title}
+                onChange={(e) => setAbout({ title: e.target.value })}
+                className={inputCls}
+                placeholder="비우면 웨비나 이름"
+              />
+              <textarea
+                aria-label="소개 카드 본문"
+                value={screens.waiting.about.body}
+                onChange={(e) => setAbout({ body: e.target.value })}
+                className={inputCls}
+                rows={3}
+                placeholder="비우면 웨비나 설명 · 줄바꿈은 그대로 보여요"
+              />
             </div>
           </Blk>
 
