@@ -345,7 +345,14 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
     lp.entry = screens.entry;
     lp.ended = screens.ended;
     const res = stripRowKeys(resources).filter((r) => r.url.trim());
-    if (res.length) lp.resources = res.map((r) => ({ title: r.title.trim() || "자료", meta: r.meta.trim(), url: r.url.trim() }));
+    /* surveyId 를 반드시 실어야 한다 — 여기서 빠뜨려 어드민에서 조건을 골라도 저장되지 않았고,
+       뷰어는 조건 없는 자료로 보고 그대로 열어 줬다(게이팅이 통째로 무력화). */
+    if (res.length) lp.resources = res.map((r) => ({
+      title: r.title.trim() || "자료",
+      meta: r.meta.trim(),
+      url: r.url.trim(),
+      surveyId: r.surveyId.trim(),
+    }));
     if (nextWeb.title.trim()) lp.nextWebinar = { title: nextWeb.title.trim(), when: nextWeb.when.trim(), url: nextWeb.url.trim() };
     return lp;
   };
