@@ -103,15 +103,28 @@ describe("고정 목차는 배경 모드별로 읽을 수 있는 색을 쓴다",
    */
   it("어두운 목차 레이어의 비활성 글자는 --paper 에서 파생한다", () => {
     const block = LANDING_CSS.match(
-      /\.lnd\.lnd-toc-layer:not\(\.on-accent\)\s+\.toc-link\[data-bg="dark"\]\s*\{([^}]*)\}/,
+      /\.lnd\.lnd-toc-layer:not\(\.on-accent\)\s+\.toc-link\[data-bg="dark"\]:not\(\[aria-current="true"\]\)\s*\{([^}]*)\}/,
     );
     expect(block).not.toBeNull();
     expect(block![1]).toMatch(/color:\s*color-mix\([^;]*var\(--paper\)/);
   });
 
-  it("어두운 목차 레이어의 활성 글자는 --paper 를 그대로 쓴다", () => {
+  /**
+   * 활성 항목은 어두운 면에서도 **키컬러**다 — 지금 어디를 보고 있는지 말하는 유일한 신호라
+   * 흰색으로 덮으면 hover 와 구분되지 않는다.
+   *
+   * 이 규칙은 앞선 결론을 뒤집은 것이다: [data-bg="dark"] 블록이 특정도 (0,4,0) 으로 기본 활성
+   * 규칙 (0,3,0) 을 이기고 있어서, 어두운 섹션에 걸린 활성 항목이 키컬러를 조용히 잃었다(실측).
+   */
+  it("어두운 목차 레이어의 활성 글자는 키컬러를 유지한다", () => {
     expect(LANDING_CSS).toMatch(
-      /\.lnd\.lnd-toc-layer:not\(\.on-accent\)[^{]*\.toc-link\[data-bg="dark"\]\[aria-current="true"\]\s*\{[^}]*color:\s*var\(--paper\)/,
+      /\.lnd\.lnd-toc-layer:not\(\.on-accent\)[^{]*\.toc-link\[data-bg="dark"\]\[aria-current="true"\]\s*\{[^}]*color:\s*var\(--primary-bright\)/,
+    );
+  });
+
+  it("활성 마크도 키컬러 — 글자와 짝이 맞아야 한 덩어리로 읽힌다", () => {
+    expect(LANDING_CSS).toMatch(
+      /\.toc-link\[data-bg="dark"\]\[aria-current="true"\]\s+\.toc-mark\s*\{[^}]*background:\s*var\(--primary-bright\)/,
     );
   });
 });

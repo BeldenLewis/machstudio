@@ -255,12 +255,10 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
    */
   const audience = renderAudience(m);
   if (audience) body.appendChild(paintBg(audience, "audience"));
-  /* 혜택은 data-bg 를 받지 않는다 — 세션·타임테이블과 같은 accent-zone 이라 루트가 칠한다.
-     여기서 칠하면 키컬러 전환이 그 섹션에서 가려진다.
-     Join **바로 앞**에 두는 게 이 accent-zone 의 요점이다: 화면 색이 통째로 뒤집힌 직후
-     참여 방법이 와서 "여기서 결정하라" 가 된다. 사이에 중립 섹션이 끼면 그 기세가 죽는다. */
+  /* 혜택은 자기 배경을 칠하고 지브라 교대에 참여한다 — Audience·Join 과 같은 규칙이라
+     세 섹션의 색 경계가 순서대로 읽힌다. */
   const highlights = renderHighlights(m);
-  if (highlights) body.appendChild(highlights);
+  if (highlights) body.appendChild(paintBg(highlights, "highlights"));
   const join = renderJoin(m);
   if (join) body.appendChild(paintBg(join, "join"));
 
@@ -346,9 +344,9 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   // 타임테이블·FAQ 아코디언 모션. 재렌더(FAQ 카테고리 전환)마다 다시 붙는 자리라야 한다 —
   // 새로 그려진 details 에는 리스너가 없다.
   cleanups.push(attachAccordion(root));
-  /* 키컬러 구간 — 혜택이 세 번째로 들어온다. 참여 방법(How to Join) 직전에 화면 색이 뒤집혀
-     "여기서 결정하라" 는 신호가 된다. 세 섹션 모두 자기 배경을 칠하지 않는다(paintBg 가 건너뜀). */
-  const accentZones = [m.sectionId("lnd-sessions"), m.sectionId("lnd-timetable"), m.sectionId("lnd-highlights")];
+  /* 키컬러 구간은 세션·타임테이블 둘만. 혜택도 넣어 봤지만 전환이 잦아지고 위아래 섹션과의
+     색 경계가 읽히지 않아 되돌렸다 — 혜택은 자기 배경을 칠하는 일반 섹션이다. */
+  const accentZones = [m.sectionId("lnd-sessions"), m.sectionId("lnd-timetable")];
   // 목차 레이어에도 on-accent 를 미러링한다 — 루트 밖으로 나갔으니 후손 선택자가 안 걸린다.
   cleanups.push(attachAccentZone(root, accentZones, tocLayer ? [tocLayer] : []));
   // 목차 레이어는 루트 밖이라 섹션 모드를 못 받는다 → 스파이가 활성 섹션 모드를 미러링한다.

@@ -212,16 +212,26 @@ export const LANDING_CSS = `
 /* 섹션 경계가 고정 목차를 가로지를 때 링크마다 뒤의 면이 다르다. effects 가 각 링크에
    실제 세로 위치의 data-bg 를 심으므로, 어두운 면에 놓인 항목만 밝게 처리한다.
    이미지 히어로에서는 11px 목차가 --muted 로는 빠듯해 짧은 그림자도 함께 받친다. */
-.lnd.lnd-toc-layer:not(.on-accent) .toc-link[data-bg="dark"] {
+/* :not([aria-current]) 로 활성 항목을 아예 제외한다 — 특정도 경쟁을 만들지 않는 게 요점이다.
+   예전에는 이 규칙이 활성 항목까지 덮고(0,4,0 > 0,3,0) 아래 키컬러 규칙을 이겨서, 어두운
+   섹션에 걸린 활성 항목이 키컬러를 조용히 잃었다. 제외하면 그 항목은 키컬러 규칙으로 떨어진다. */
+.lnd.lnd-toc-layer:not(.on-accent) .toc-link[data-bg="dark"]:not([aria-current="true"]) {
   color: color-mix(in srgb, var(--paper) 82%, transparent) !important;
   text-shadow: 0 1px 3px rgba(0, 0, 0, .38);
 }
-.lnd.lnd-toc-layer:not(.on-accent) .toc-link[data-bg="dark"]:hover,
-.lnd.lnd-toc-layer:not(.on-accent) .toc-link[data-bg="dark"][aria-current="true"] {
+.lnd.lnd-toc-layer:not(.on-accent) .toc-link[data-bg="dark"]:hover {
   color: var(--paper) !important;
 }
+/* 활성 항목은 **어두운 면에서도 키컬러**다 — 지금 어디를 보고 있는지 말하는 유일한 신호라
+   흰색으로 덮으면 hover 와 구분되지 않는다. 위 [data-bg="dark"] 규칙이 특정도 (0,4,0) 으로
+   기본 활성 규칙 (0,3,0) 을 이기고 있었어서, 키컬러가 조용히 사라졌다(실측). 여기서 되찾는다.
+   어두운 면에서는 --primary-bright 가 흰색 쪽으로 섞인 값이라 그대로 쓸 수 있다. */
+.lnd.lnd-toc-layer:not(.on-accent) .toc-link[data-bg="dark"][aria-current="true"] {
+  color: var(--primary-bright) !important;
+  text-shadow: none;
+}
 .lnd.lnd-toc-layer:not(.on-accent) .toc-link[data-bg="dark"][aria-current="true"] .toc-mark {
-  background: var(--paper);
+  background: var(--primary-bright);
 }
 .lnd.on-accent .toc-link { color: color-mix(in srgb, var(--on-primary) 58%, transparent) !important; }
 .lnd.on-accent .toc-link:hover,
@@ -748,14 +758,13 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 .lnd .join-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 
 /* ── 혜택 ──────────────────────────────────────────────────────────────
-   accent-zone 이라 배경을 칠하지 않는다 — 화면 중앙에 걸리면 루트가 키컬러로 바뀌고,
-   그 전환이 참여 방법(How to Join) **직전**에 와서 "여기서 결정하라" 는 신호가 된다.
+   **일반 섹션이다** — 자기 배경을 칠하고 지브라 교대에 참여한다. 예전에는 accent-zone 이라
+   화면 중앙에 걸릴 때 배경이 통째로 키컬러로 뒤집혔는데, 키컬러 구간이 셋(세션·타임테이블·혜택)
+   이나 되어 전환이 잦고 위아래 섹션과의 색 경계가 읽히지 않았다.
 
-   Programs 와 형태를 나눈 이유: 둘 다 3열 카드였을 때 스크롤에서 구분되지 않았다
+   Programs 와 형태를 나눈 이유는 그대로다: 둘 다 3열 카드였을 때 스크롤에서 구분되지 않았다
    (Audience 를 체크 목록으로 만든 것과 같은 판단). 카드 평면을 없애고 번호 + 한 줄로 눕힌다 —
-   훑을 때 필요한 건 "몇 가지이고 무엇인가" 뿐이고, 판이 늘어나면 그게 묻힌다.
-
-   키컬러가 켜지면 글자·구분선이 on-primary 로 반전된다(아래 .on-accent 블록). */
+   훑을 때 필요한 건 "몇 가지이고 무엇인가" 뿐이고, 판이 늘어나면 그게 묻힌다. */
 .lnd .benefit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
 .lnd .benefit-row {
   display: grid; grid-template-columns: auto 1fr; gap: 22px; align-items: baseline;
@@ -785,12 +794,7 @@ ${sessionLogoCss(".lnd .schedule-logo")}
   white-space: pre-line; word-break: keep-all;
   transition: color .8s ease;
 }
-/* 키컬러가 켜진 동안 — 번호는 배경과 같은 계열로 눕히고(on-primary 를 옅게) 제목만 또렷하게.
-   번호까지 100% 로 두면 세 요소가 같은 무게로 소리쳐 훑기가 어려워진다. */
-.lnd.on-accent .benefit-row { border-color: color-mix(in srgb, var(--on-primary) 22%, transparent); }
-.lnd.on-accent .benefit-number { color: color-mix(in srgb, var(--on-primary) 55%, transparent); }
-.lnd.on-accent .benefit-body h3 { color: var(--on-primary); }
-.lnd.on-accent .benefit-body p { color: color-mix(in srgb, var(--on-primary) 78%, transparent); }
+
 .lnd .join-step { padding: 26px; }
 .lnd .join-k {
   display: block; font-size: 12px; font-weight: 900; letter-spacing: .18em; text-transform: uppercase;
