@@ -30,6 +30,8 @@ export const LANDING_CSS = `
   --card: color-mix(in srgb, var(--bg-dark) 55%, #2d3a54);
   --card-2: color-mix(in srgb, var(--bg-dark) 20%, #373b44);
   --card-shadow: 0 18px 48px rgba(2, 8, 24, .25);
+  --faq-card: var(--card-2);
+  --faq-shadow: var(--card-shadow);
   /* 파생값도 여기 한 벌 둔다. 섹션에서는 [data-bg] 블록이 **다시 선언**해 그 섹션의
      --paper/--sec-bg 로 재계산한다 — 여기 값만 두면 계산 결과가 상속돼 모드가 안 먹는다. */
   --body: color-mix(in srgb, var(--paper) 78%, var(--sec-bg));
@@ -68,6 +70,8 @@ export const LANDING_CSS = `
   --card: color-mix(in srgb, var(--bg-dark) 55%, #2d3a54);
   --card-2: color-mix(in srgb, var(--bg-dark) 20%, #373b44);
   --card-shadow: 0 18px 48px rgba(2, 8, 24, .25);
+  --faq-card: var(--card-2);
+  --faq-shadow: var(--card-shadow);
 }
 .lnd[data-bg="light"], .lnd [data-bg="light"] {
   --sec-bg: var(--bg-light);
@@ -77,6 +81,9 @@ export const LANDING_CSS = `
      (lightBg #f6f8ff 에서 1.03:1, #ffffff 면 완전 동일색). */
   --card-2: color-mix(in srgb, var(--bg-light) 92%, var(--paper));
   --card-shadow: 0 12px 30px rgba(23, 32, 56, .10);
+  /* FAQ 는 반복되는 얕은 판이라 회색 면 + 큰 그림자보다 흰 면 + 접촉 그림자가 선명하다. */
+  --faq-card: var(--card);
+  --faq-shadow: 0 1px 2px rgba(23, 32, 56, .05), 0 6px 16px rgba(23, 32, 56, .06);
   /* 강조 글자·아웃라인용 키컬러. 이름은 bright 지만 라이트 모드에서는 **어둡게** 가야
      보인다 — 흰색 쪽으로 섞은 값은 밝은 배경에서 노랑 키컬러일 때 1.31:1 까지 떨어졌다.
      48% 는 최악(밝은 노랑 #facc15)에서 .join-k(12px/900) 대비 4.74 로 AA 를 통과하는
@@ -202,6 +209,20 @@ export const LANDING_CSS = `
 .lnd .toc-link:hover { color: var(--paper) !important; }
 .lnd .toc-link[aria-current="true"] { color: var(--primary-bright) !important; }
 .lnd .toc-link[aria-current="true"] .toc-mark { width: 30px; opacity: 1; background: var(--primary-bright); }
+/* 섹션 경계가 고정 목차를 가로지를 때 링크마다 뒤의 면이 다르다. effects 가 각 링크에
+   실제 세로 위치의 data-bg 를 심으므로, 어두운 면에 놓인 항목만 밝게 처리한다.
+   이미지 히어로에서는 11px 목차가 --muted 로는 빠듯해 짧은 그림자도 함께 받친다. */
+.lnd.lnd-toc-layer:not(.on-accent) .toc-link[data-bg="dark"] {
+  color: color-mix(in srgb, var(--paper) 82%, transparent) !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .38);
+}
+.lnd.lnd-toc-layer:not(.on-accent) .toc-link[data-bg="dark"]:hover,
+.lnd.lnd-toc-layer:not(.on-accent) .toc-link[data-bg="dark"][aria-current="true"] {
+  color: var(--paper) !important;
+}
+.lnd.lnd-toc-layer:not(.on-accent) .toc-link[data-bg="dark"][aria-current="true"] .toc-mark {
+  background: var(--paper);
+}
 .lnd.on-accent .toc-link { color: color-mix(in srgb, var(--on-primary) 58%, transparent) !important; }
 .lnd.on-accent .toc-link:hover,
 .lnd.on-accent .toc-link[aria-current="true"] { color: var(--on-primary) !important; }
@@ -385,11 +406,13 @@ export const LANDING_CSS = `
   --paper: #f6f8ff;
   --body: #c3cad6;
   --muted: #abb5c7;
+  /* 키컬러가 아주 어두워도 최소 절반은 밝은 카드 글자색을 섞어 사진 위 대비를 지킨다. */
+  --session-accent: color-mix(in srgb, var(--primary) 48%, var(--paper));
   color: var(--paper);
 }
 .lnd .session-card.is-clickable { cursor: pointer; transition: transform .22s ease, box-shadow .22s ease; }
 .lnd .session-card.is-clickable:hover { transform: translateY(-4px); box-shadow: 0 26px 54px rgba(0, 0, 0, .5); }
-.lnd .session-card.is-clickable:focus-visible { outline: 2px solid var(--primary-bright); outline-offset: 3px; }
+.lnd .session-card.is-clickable:focus-visible { outline: 2px solid var(--session-accent); outline-offset: 3px; }
 .lnd .session-photo { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: cover; }
 .lnd .session-card::after {
   content: ""; position: absolute; inset: 0; z-index: 1;
@@ -417,7 +440,7 @@ export const LANDING_CSS = `
 .lnd .speaker-co { color: #b9c2d1; font-size: 13.5px; font-weight: 600; letter-spacing: -.01em; }
 .lnd .session-more {
   flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
-  font-size: 14px; font-weight: 800; letter-spacing: -.01em; color: var(--primary-bright);
+  font-size: 14px; font-weight: 800; letter-spacing: -.01em; color: var(--session-accent);
 }
 .lnd .session-more svg { width: 16px; height: 16px; }
 
@@ -741,9 +764,9 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 }
 .lnd .faq-tab[aria-pressed="true"] { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
 .lnd .faq-list { display: grid; gap: 12px; }
-/* 그림자는 형제 카드(.program-card/.benefit-card/.join-step/.audience-item)와 같은 값.
-   없으면 라이트 모드에서 배경과 색이 가까울 때 판이 통째로 사라진다. */
-.lnd .faq-item { border-radius: 8px; background: var(--card-2); overflow: hidden; box-shadow: var(--card-shadow); }
+/* 반복되는 얕은 판은 전용 표면과 짧은 그림자를 쓴다. 공용 카드의 큰 그림자를 쓰면
+   라이트 배경에서 카드 사이가 넓은 회색 덩어리처럼 이어져 보인다. */
+.lnd .faq-item { border-radius: 8px; background: var(--faq-card); overflow: hidden; box-shadow: var(--faq-shadow); }
 .lnd .faq-item summary {
   min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 20px;
   padding: 0 18px; cursor: pointer; list-style: none;

@@ -161,6 +161,26 @@ export function attachTocSpy(
   const links = Array.from(tocEl.querySelectorAll<HTMLElement>("[data-toc-id]"));
   const byId = new Map(sections.map((el) => [el.id, el]));
   let active: string | null = null;
+  const fallbackBg = root.getAttribute("data-bg") || "dark";
+
+  /**
+   * 고정 목차는 섹션 경계를 걸칠 수 있다. 레이어 전체에 모드 하나만 걸면 위 링크는 히어로,
+   * 아래 링크는 다음 섹션 위에 있는데도 같은 색이 되어 한쪽이 반드시 묻힌다.
+   * 섹션의 가상 배경은 화면 폭 전체지만 실제 section 박스는 가운데 칼럼뿐이므로,
+   * elementFromPoint 대신 세로 rect 로 각 링크 뒤의 섹션을 찾는다.
+  */
+  const syncLinkBackgrounds = () => {
+    const surfaces = sections.map((section) => ({
+      rect: section.getBoundingClientRect(),
+      bg: section.getAttribute("data-bg") || fallbackBg,
+    }));
+    for (const link of links) {
+      const rect = link.getBoundingClientRect();
+      const y = rect.top + rect.height / 2;
+      const surface = surfaces.find(({ rect: surfaceRect }) => surfaceRect.top <= y && surfaceRect.bottom > y);
+      link.setAttribute("data-bg", surface?.bg || topBg || fallbackBg);
+    }
+  };
 
   const apply = () => {
     for (const link of links) {
@@ -173,14 +193,16 @@ export function attachTocSpy(
       // 아직 아무 섹션도 밴드에 안 걸렸다 = 히어로를 보는 중. 루트 모드로 떨어지면 안 된다 —
       // 루트는 세션 구간 바탕이라 히어로와 모드가 반대일 수 있고, 그때 목차가 통째로 사라진다
       // (실측: 히어로 다크 이미지 + 루트 라이트 → 진회색 글자가 이미지에 묻혔다).
-      const fallback = root.getAttribute("data-bg") || "dark";
       mirrorBgTo.setAttribute(
         "data-bg",
-        active ? el?.getAttribute("data-bg") || fallback : topBg || fallback,
+        active ? el?.getAttribute("data-bg") || fallbackBg : topBg || fallbackBg,
       );
     }
   };
   apply(); // 첫 화면(교차 이벤트 전)에도 목차 색이 맞아야 한다
+  syncLinkBackgrounds();
+  window.addEventListener("scroll", syncLinkBackgrounds, { passive: true });
+  window.addEventListener("resize", syncLinkBackgrounds);
 
   const io = new IntersectionObserver(
     (entries) => {
@@ -199,6 +221,9 @@ export function attachTocSpy(
   sections.forEach((section) => io.observe(section));
   return () => {
     io.disconnect();
+    window.removeEventListener("scroll", syncLinkBackgrounds);
+    window.removeEventListener("resize", syncLinkBackgrounds);
+    links.forEach((link) => link.removeAttribute("data-bg"));
     active = null;
     apply();
   };
