@@ -222,7 +222,9 @@ describe("PreLiveWaiting 안내 CTA", () => {
     }, 2);
 
     const band = view.querySelector(".plw-together");
-    expect(band?.textContent).toContain("2명이 사전등록했어요");
+    /* 문구의 주어가 *이 웨비나* 다 — 카드의 다른 줄(라벨·제목·설명)과 주어가 같아야
+       마지막 줄이 붕 뜨지 않는다. 값은 누적 사전등록자다(지금 접속 인원이 아니다). */
+    expect(band?.textContent).toContain("2명이 이 웨비나를 기다려요");
     // 원은 개수를 세는 장식이 아니라 고정 4칸 — 실제 수는 문장이 말한다.
     expect(band?.querySelectorAll(".plw-avatars span")).toHaveLength(4);
     // 장식이라 스크린리더에서 감춘다
