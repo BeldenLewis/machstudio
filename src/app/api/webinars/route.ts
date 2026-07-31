@@ -45,6 +45,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "필수 항목이 누락됐어요" }, { status: 400 });
   }
 
+  // 슬러그 형식 검증 — 이전엔 !slug (빈 문자열)만 막아서 클라이언트 자동생성이 한글 이름을
+  // "-"·"--" 로 뭉개도 그대로 통과했다. 소문자·숫자·하이픈만, 2자 이상, 하이픈만으로는 안 됨.
+  if (!/^[a-z0-9-]{2,}$/.test(slug) || /^-+$/.test(slug)) {
+    return NextResponse.json({ error: "주소(슬러그)가 올바르지 않아요 — 소문자·숫자·하이픈만 쓸 수 있고 하이픈만으로는 만들 수 없어요" }, { status: 400 });
+  }
+
   // 존재 검증만으로는 부족하다 — 순서까지 본다(PATCH 와 같은 규칙, webinar-schedule).
   // 종료가 시작보다 앞선 웨비나가 저장되면 상태머신이 시작 전에도 '종료'로 판정해 등록·입장이 다 막힌다.
   let startAt: Date, endAt: Date, deadlineAt: Date;
@@ -115,9 +121,21 @@ export async function POST(request: Request) {
     });
     if (!source) return NextResponse.json({ error: "복제할 원본 웨비나를 찾을 수 없어요" }, { status: 400 });
     theme = source.theme;
-    // config 는 재사용 가능한 registrationForm 만 복제 (youtubeId·surveyUrl 등 행사별 값 제외)
+    // config 는 재사용 가능한 표현(등록폼·랜딩·라이브 화면 구성)만 복제한다.
+    // youtubeId·surveyUrl 등 행사별 값은 config 최상위에 없어 자동으로 제외된다.
     const srcConfig = (source.config ?? {}) as Record<string, unknown>;
-    config = srcConfig.registrationForm ? { registrationForm: srcConfig.registrationForm } : {};
+    const clonedConfig: Record<string, unknown> = {};
+    if (srcConfig.registrationForm) clonedConfig.registrationForm = srcConfig.registrationForm;
+    if (srcConfig.landingPage) clonedConfig.landingPage = srcConfig.landingPage;
+    if (srcConfig.livePage && typeof srcConfig.livePage === "object") {
+      // resources(자료 목록)·nextWebinar(다음 회차 안내)는 이번 회차만의 데이터라 제외 —
+      // 나머지(공지문·화면 on/off·CTA 카드 등 재사용 가능한 구성)만 옮긴다.
+      const livePage = { ...(srcConfig.livePage as Record<string, unknown>) };
+      delete livePage.resources;
+      delete livePage.nextWebinar;
+      clonedConfig.livePage = livePage;
+    }
+    config = clonedConfig;
     components = source.components ?? undefined;
     /* speakerLinks 는 Json 컬럼이라 null 을 그대로 넘길 수 없다 — Prisma 는 JSON 필드의
        "값을 비운다" 를 DbNull 로 표현한다(그냥 null 은 타입 오류). */

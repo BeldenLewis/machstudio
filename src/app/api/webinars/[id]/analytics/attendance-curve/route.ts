@@ -36,22 +36,43 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     _min: { startedAt: true },
     _max: { endedAt: true },
   });
-  // 방치된 탭의 heartbeat 가 방송 후 며칠까지 이어지면 축이 통째로 늘어나
-  // 실제 90분 방송이 한두 포인트로 뭉개진다 → 방송 시간 ±1시간으로 창을 자른다.
-  const PAD_MS = 60 * 60_000;
-  const clampLow = new Date(webinar.liveStartAt.getTime() - PAD_MS);
-  const clampHigh = new Date(webinar.liveEndAt.getTime() + PAD_MS);
   const rawFrom = bounds._min.startedAt;
   const rawTo = bounds._max.endedAt;
-  const fullFrom = rawFrom ? new Date(Math.max(rawFrom.getTime(), clampLow.getTime())) : null;
-  const to = rawTo ? new Date(Math.min(rawTo.getTime(), clampHigh.getTime())) : null;
 
-  if (!fullFrom || !to || to.getTime() <= fullFrom.getTime()) {
+  if (!rawFrom || !rawTo || rawTo.getTime() <= rawFrom.getTime()) {
     return NextResponse.json(
-      { points: [], peak: 0, avg: 0, hasData: false },
+      { points: [], peak: 0, avg: 0, hasData: false, clamped: false },
       { headers: { "Cache-Control": "private, max-age=60" } },
     );
   }
+
+  // 방치된 탭의 heartbeat 가 방송 후 며칠까지 이어지면 축이 통째로 늘어나
+  // 실제 90분 방송이 한두 포인트로 뭉개진다 → 우선 방송 시간 ±1시간으로 창을 자른다.
+  const PAD_MS = 60 * 60_000;
+  const clampLowMs = webinar.liveStartAt.getTime() - PAD_MS;
+  const clampHighMs = webinar.liveEndAt.getTime() + PAD_MS;
+  const clampedFromMs = Math.max(rawFrom.getTime(), clampLowMs);
+  const clampedToMs = Math.min(rawTo.getTime(), clampHighMs);
+
+  // statusOverride 로 예정 방송창 밖(훨씬 이른/늦은 시각)에 실제로 방송하면 위 클램프의 교집합이
+  // 비게 돼(clampedFromMs >= clampedToMs) points:[] 만 나온다 — 이 경우 클램프를 포기하고
+  // 세그먼트 실측 범위로 폴백한다. 폭주 방지는 실측 범위가 MAX_SPAN_MS 를 넘을 때만 최근 구간으로
+  // 자르는 별도 상한으로 대신한다(방송 시간 창과 무관하게 항상 적용 가능한 안전장치).
+  const MAX_SPAN_MS = 24 * 60 * 60_000;
+  let fullFrom: Date;
+  let to: Date;
+  if (clampedToMs > clampedFromMs) {
+    fullFrom = new Date(clampedFromMs);
+    to = new Date(clampedToMs);
+  } else {
+    to = rawTo;
+    fullFrom = rawTo.getTime() - rawFrom.getTime() > MAX_SPAN_MS
+      ? new Date(rawTo.getTime() - MAX_SPAN_MS)
+      : rawFrom;
+  }
+  // 반환 구간이 실측 범위보다 좁으면(±1시간 창에 걸렸거나 MAX_SPAN_MS 로 잘렸거나) 프런트가
+  // 캡션을 달 수 있게 알려준다.
+  const clamped = fullFrom.getTime() > rawFrom.getTime() || to.getTime() < rawTo.getTime();
 
   // 창 선택: all(전체·기본) | 60m | 30m — 최근 N분만. 데이터는 5분 버킷이라 해상도는 그대로.
   const range = new URL(request.url).searchParams.get("range");
@@ -96,7 +117,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const avg = points.length ? Math.round(points.reduce((sum, p) => sum + p.viewers, 0) / points.length) : 0;
 
   return NextResponse.json(
-    { points, peak, avg, bucketMinutes: Math.round(bucketSeconds / 60), fromMs: from.getTime(), bucketMs: bucketSeconds * 1000, hasData: points.length > 0, range: range ?? "all" },
+    { points, peak, avg, bucketMinutes: Math.round(bucketSeconds / 60), fromMs: from.getTime(), bucketMs: bucketSeconds * 1000, hasData: points.length > 0, range: range ?? "all", clamped },
     { headers: { "Cache-Control": "private, max-age=60" } },
   );
 }

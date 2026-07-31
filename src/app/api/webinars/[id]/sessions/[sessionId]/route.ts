@@ -62,32 +62,50 @@ export async function PATCH(
     return NextResponse.json({ error: "세션 유형을 확인해주세요" }, { status: 400 });
   }
 
-  const updated = await prisma.webinarSession.update({
-    where: { id: session.id },
-    data: {
-      ...(number !== undefined && { number }),
-      ...(body.type !== undefined && { type: String(body.type) }),
-      ...(title !== undefined && { title }),
-      // `?? ""` 가 반드시 있어야 한다. body.speaker 가 JSON null 이면 null !== undefined 라 이 항목이
-      // 통과하고, String(null) === "null" 이 그대로 저장돼 화면에 "null" 이 찍힌다.
-      // (연사가 없는 Break/Q&A 행이 정확히 이렇게 speaker="null" 로 저장돼 있었다. POST 쪽은
-      //  원래 `?? ""` 가 있어 멀쩡했고 PATCH 에만 빠져 있었다.)
-      ...(body.speaker !== undefined && { speaker: String(body.speaker ?? "").trim() || null }),
-      ...(body.speakerCompany !== undefined && { speakerCompany: String(body.speakerCompany ?? "").trim() || null }),
-      ...(body.speakerPhotoUrl !== undefined && { speakerPhotoUrl: String(body.speakerPhotoUrl ?? "").trim() || null }),
-      ...(body.logoUrl !== undefined && { logoUrl: String(body.logoUrl ?? "").trim() || null }),
-      ...(body.description !== undefined && { description: String(body.description ?? "").trim() || null }),
-      ...(body.speakerBio !== undefined && { speakerBio: String(body.speakerBio ?? "").trim() || null }),
-      // 링크는 스킴 검증을 거친다(POST 와 같은 규칙). 잘못된 스킴은 저장하지 않고 비운다 —
-      // 조용히 통과시키면 랜딩에서 클릭 가능한 위험 링크가 된다.
-      ...(body.speakerHomepage !== undefined && { speakerHomepage: safeHttpUrl(body.speakerHomepage) || null }),
-      // Json 컬럼을 비우는 것은 null 이 아니라 Prisma.DbNull 이다(그냥 null 은 타입 오류).
-      ...(body.speakerLinks !== undefined && {
-        speakerLinks: serializeSpeakerLinks(body.speakerLinks) ?? Prisma.DbNull,
-      }),
-      ...(startTime !== undefined && { startTime }),
-      ...(endTime !== undefined && { endTime }),
-    },
+  // number(=진행 순서)는 표시값이 아니라 WebinarQA.sessionNumber 의 참조 키다(reorder 라우트
+  // 주석 참고). 여기서 번호만 바꾸고 끝내면 "세션 2에 대한 질문"이 새 번호를 가진 다른 세션의
+  // 질문으로 조용히 바뀐다. reorder 와 같은 규칙으로 옛 번호→새 번호 참조를 같이 옮긴다.
+  // 이 스키마엔 (webinarId, number) 유일성 제약이 없어 두 세션이 같은 번호를 가질 수 있으므로
+  // reorder 처럼 여러 행을 동시에 미는 게 아니라면 임시 음수 이동 같은 충돌 방지는 필요 없다 —
+  // 여기선 세션 한 행만 바뀐다.
+  const previousNumber = session.number;
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.webinarSession.update({
+      where: { id: session.id },
+      data: {
+        ...(number !== undefined && { number }),
+        ...(body.type !== undefined && { type: String(body.type) }),
+        ...(title !== undefined && { title }),
+        // `?? ""` 가 반드시 있어야 한다. body.speaker 가 JSON null 이면 null !== undefined 라 이 항목이
+        // 통과하고, String(null) === "null" 이 그대로 저장돼 화면에 "null" 이 찍힌다.
+        // (연사가 없는 Break/Q&A 행이 정확히 이렇게 speaker="null" 로 저장돼 있었다. POST 쪽은
+        //  원래 `?? ""` 가 있어 멀쩡했고 PATCH 에만 빠져 있었다.)
+        ...(body.speaker !== undefined && { speaker: String(body.speaker ?? "").trim() || null }),
+        ...(body.speakerCompany !== undefined && { speakerCompany: String(body.speakerCompany ?? "").trim() || null }),
+        ...(body.speakerPhotoUrl !== undefined && { speakerPhotoUrl: String(body.speakerPhotoUrl ?? "").trim() || null }),
+        ...(body.logoUrl !== undefined && { logoUrl: String(body.logoUrl ?? "").trim() || null }),
+        ...(body.description !== undefined && { description: String(body.description ?? "").trim() || null }),
+        ...(body.speakerBio !== undefined && { speakerBio: String(body.speakerBio ?? "").trim() || null }),
+        // 링크는 스킴 검증을 거친다(POST 와 같은 규칙). 잘못된 스킴은 저장하지 않고 비운다 —
+        // 조용히 통과시키면 랜딩에서 클릭 가능한 위험 링크가 된다.
+        ...(body.speakerHomepage !== undefined && { speakerHomepage: safeHttpUrl(body.speakerHomepage) || null }),
+        // Json 컬럼을 비우는 것은 null 이 아니라 Prisma.DbNull 이다(그냥 null 은 타입 오류).
+        ...(body.speakerLinks !== undefined && {
+          speakerLinks: serializeSpeakerLinks(body.speakerLinks) ?? Prisma.DbNull,
+        }),
+        ...(startTime !== undefined && { startTime }),
+        ...(endTime !== undefined && { endTime }),
+      },
+    });
+
+    if (number !== undefined && number !== previousNumber) {
+      await tx.webinarQA.updateMany({
+        where: { webinarId: id, sessionNumber: previousNumber },
+        data: { sessionNumber: number },
+      });
+    }
+
+    return result;
   });
 
   await logActivity({

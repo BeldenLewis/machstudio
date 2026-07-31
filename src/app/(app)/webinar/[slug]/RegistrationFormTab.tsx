@@ -29,6 +29,8 @@ interface Webinar {
   theme?: Record<string, string>;
   /** 접수 창 계산의 기준 — 마감 프리셋(시작 시점/하루 전)이 이 값에 상대적이다. */
   liveStartAt: string;
+  /** 마감 ≤ 종료 사전 검증용 — 없으면(호출부가 아직 안 넘기면) 그 검증만 건너뛴다. */
+  liveEndAt?: string;
   signupDeadline: string;
   components?: Record<string, unknown> | null;
   /** 약관 전문 템플릿 — 이 웨비나가 비워 두면 상속한다(IA 8단계). */
@@ -553,6 +555,9 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
    * 경고할 자리가 없었다.** 한 블록으로 모으니 그 자리가 생긴다.
    */
   const liveStartLocal = kstDateTimeLocalInput(webinar.liveStartAt);
+  // 서버 규칙(webinar-schedule.ts: assertScheduleOrder)이 "마감 ≤ 종료" 를 요구한다 — 어기면
+  // 이 탭 전체가 쓰는 단일 PATCH 가 400 으로 통째로 거부된다. 제출 전에 여기서 미리 잡는다.
+  const liveEndLocal = webinar.liveEndAt ? kstDateTimeLocalInput(webinar.liveEndAt) : null;
   const [deadline, setDeadline] = useState(() => kstDateTimeLocalInput(webinar.signupDeadline));
   const liveRegOf = (c: Record<string, unknown> | null | undefined) =>
     c?.allowLiveRegistration === false ? "closed" : c?.allowLiveRegistration === true ? "open" : "auto";
@@ -617,7 +622,14 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
           },
         }),
       });
-      if (!res.ok) { toast.error("자동 저장 실패 — 잠시 후 다시 시도돼요", { id: "autosave-error" }); return false; }
+      if (!res.ok) {
+        // 서버 400(예: "등록 마감은 종료 시각보다 앞이어야 해요")은 조건이 안 바뀌면 재시도해도
+        // 계속 실패한다 — "잠시 후 다시 시도돼요"는 거짓 안내라 서버 문구를 그대로 보여준다.
+        const body = await res.json().catch(() => null);
+        const message = typeof body?.error === "string" && body.error ? body.error : "자동 저장 실패 — 잠시 후 다시 시도돼요";
+        toast.error(message, { id: "autosave-error" });
+        return false;
+      }
       onSilentUpdate();
       return true;
     } catch { return false; }
@@ -628,6 +640,10 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
   );
   // 표시는 껍데기 한 곳에서 그린다(만들기 화면당 1개) — 저장 경로는 그대로 각자.
   useReportAutosave(saveState, retry);
+
+  // 마감이 종료보다 뒤면 서버가 무조건 400 을 준다(assertScheduleOrder) — 재시도해도 조건이
+  // 안 바뀌는 한 계속 실패한다. 이건 "안내"가 아니라 제출 전에 막아야 하는 에러다.
+  const deadlineAfterLiveEnd = liveEndLocal !== null && deadline > liveEndLocal;
 
   /**
    * 접수 창의 두 값이 서로를 무의미하게 만드는 조합만 짚는다(에러가 아니라 안내).
@@ -653,6 +669,9 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
           </div>
           <div className="space-y-3 rounded-2xl bg-secondary/20 p-4">
             <SignupDeadlineField liveStartAt={liveStartLocal} value={deadline} onChange={setDeadline} />
+            {deadlineAfterLiveEnd && (
+              <p className="text-[11px] text-destructive">등록 마감이 라이브 종료 시각보다 뒤예요 — 종료 전으로 옮겨야 저장돼요.</p>
+            )}
 
             <div className="space-y-1.5 pt-1">
               <span className="text-xs font-medium">라이브 중 사전등록</span>

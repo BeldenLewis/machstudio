@@ -36,8 +36,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     );
   }
 
-  const webinar = await prisma.webinar.findUnique({ where: { slug } });
-  if (!webinar) return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404, headers: CORS_HEADERS });
+  const webinar = await prisma.webinar.findUnique({
+    where: { slug },
+    include: { project: { select: { deletedAt: true } } },
+  });
+  // project.deletedAt 이 있으면 그 프로젝트가 삭제 유예(30일) 중 — 파기 예정 데이터에
+  // 새 등록이 쌓이는 것을 막기 위해 못 찾은 웨비나와 동일하게 응답한다.
+  if (!webinar || webinar.project.deletedAt !== null) {
+    return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404, headers: CORS_HEADERS });
+  }
 
   // 상태 머신 단일 판정 — signupDeadline 직접 비교 제거.
   // registration 이면 허용, live 중에는 components.allowLiveRegistration(미설정 시 기존 마감 규칙) 을 따른다.

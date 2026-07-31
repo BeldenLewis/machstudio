@@ -13,20 +13,35 @@
  *     자기 화면에 못 들어가는 잠김이 생긴다).
  *   · /settings — 개인 설정. 워크스페이스를 참조하지 않는다(하위 /settings/workspace 는
  *     워크스페이스가 필요하므로 정확히 일치할 때만 통과시킨다).
+ *
+ * "워크스페이스 0개"와 "목록을 못 불러옴"은 다른 상태다 — 후자를 전자로 보여주면 워크스페이스
+ * 3개짜리 멤버가 일시적 네트워크 오류에 "새로 만들기"를 권유받는 사고가 난다(loadError 로
+ * 구분, workspace.tsx 참고). 못 불러온 경우엔 재시도가 있는 오류 화면을 대신 띄운다.
  */
 
 import { usePathname } from "next/navigation";
 import { useWorkspace } from "@/contexts/workspace";
 import { NoWorkspace } from "@/components/workspace/no-workspace";
+import { InlineError } from "@/components/ui/inline-error";
 
 export function WorkspaceGate({ children }: { children: React.ReactNode }) {
-  const { workspaces, isLoading } = useWorkspace();
+  const { workspaces, isLoading, loadError, loadWorkspaces } = useWorkspace();
   const pathname = usePathname();
 
   const exempt = pathname === "/settings" || pathname.startsWith("/admin");
   // 로딩 중에는 통과 — 각 화면이 자기 로딩 상태를 그린다. 여기서 안내를 먼저 띄우면
   // 워크스페이스가 있는 사람에게도 "없어요" 가 한 번 번쩍인다.
   if (isLoading || exempt || workspaces.length > 0) return children;
+
+  if (loadError) {
+    return (
+      <InlineError
+        message="워크스페이스 목록을 불러오지 못했어요"
+        hint="네트워크 상태를 확인한 뒤 다시 시도해주세요."
+        onRetry={() => void loadWorkspaces()}
+      />
+    );
+  }
 
   return <NoWorkspace />;
 }

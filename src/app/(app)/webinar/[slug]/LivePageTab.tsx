@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { formatSurveyOpensAt, surveyOpenState, type SurveyOpenState } from "@/lib/webinar-survey";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
@@ -126,10 +126,12 @@ function btnToForm(b?: RawCtaButton): CtaBtnForm {
     open: b?.open === "modal" ? "modal" : "newTab",
   };
 }
-function ctaToForm(raw: Record<string, unknown>): CtaFormCard {
+// index 로 안정 id 를 만든다(무작위였다면 useExternalSync 의 JSON.stringify 비교가 내용이
+// 그대로여도 매번 "바뀐 것"으로 봐서, 이 창의 자동저장 한 번마다 카드 목록이 리마운트된다).
+function ctaToForm(raw: Record<string, unknown>, index: number): CtaFormCard {
   const buttons = Array.isArray(raw.buttons) ? (raw.buttons as RawCtaButton[]) : [];
   return {
-    id: crypto.randomUUID(),
+    id: `cta-${index}`,
     eyebrow: (raw.eyebrow as string) ?? "",
     title: (raw.title as string) ?? "",
     description: (raw.description as string) ?? "",
@@ -188,7 +190,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
   const initialCtas: CtaFormCard[] = (Array.isArray(livePage.ctas)
     ? (livePage.ctas as Record<string, unknown>[])
     : livePage.cta ? [livePage.cta as Record<string, unknown>] : []
-  ).map(ctaToForm);
+  ).map((c, i) => ctaToForm(c, i));
 
   const uid = useId();
   const [form, setForm] = useState({
@@ -257,17 +259,24 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
    * 제목만 받으면 편집기가 응답 기간을 모른다. 시작 예약을 걸어 둔 폼을 CTA 나 종료 화면에
    * 붙여도 아무 말이 없어서, 운영자는 붙였는데 시청자에게 안 뜨는 이유를 화면에서 알 수 없었다.
    */
+  // null = 모름(아직 응답 안 옴 — 로딩 중이거나 방금 실패). PageSetupTab 의 다른 "모르는 값"
+  // 패턴처럼 null 과 "실제로 0개"([])를 구분해야, 로딩/실패 중에 종료 화면 3택이 "외부 링크"로
+  // 잘못 판정되지 않는다. 실패는 별도 플래그로 남기고 재시도 버튼을 둔다(빈 배열로 뭉개지 않는다).
   const [surveyOptions, setSurveyOptions] = useState<
     { id: string; title: string; showOnEnded: boolean; state: SurveyOpenState; opensAt: string | null }[] | null
   >(null);
+  const [surveyOptionsError, setSurveyOptionsError] = useState(false);
+  const [surveyRetryTick, setSurveyRetryTick] = useState(0);
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      setSurveyOptionsError(false);
       try {
         const res = await fetch(`/api/webinars/${webinar.id}/surveys`);
         if (cancelled) return;
-        if (!res.ok) { setSurveyOptions([]); return; }
+        if (!res.ok) { setSurveyOptionsError(true); return; }
         const data = await res.json();
+        if (cancelled) return;
         setSurveyOptions(((data.surveys ?? []) as { id: string; title: string; showOnEnded?: boolean; isOpen?: boolean; opensAt?: string | null; closesAt?: string | null }[])
           .map((s) => ({
             id: s.id,
@@ -276,10 +285,11 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
             state: surveyOpenState({ isOpen: s.isOpen !== false, opensAt: s.opensAt, closesAt: s.closesAt }),
             opensAt: s.opensAt ?? null,
           })));
-      } catch { if (!cancelled) setSurveyOptions([]); }
+      } catch { if (!cancelled) setSurveyOptionsError(true); }
     })();
     return () => { cancelled = true; };
-  }, [webinar.id]);
+  }, [webinar.id, surveyRetryTick]);
+  const retrySurveyOptions = () => setSurveyRetryTick((v) => v + 1);
 
   /**
    * 종료 화면 설문 연결 — **3중 소유를 단일 결정으로**.
@@ -299,8 +309,17 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
    * 자체 설문 vs 외부 URL 은 여전히 배타적이다 — 자체가 하나라도 있으면 URL 은 무시된다.
    */
   const linkedSurveys = surveyOptions?.filter((s) => s.showOnEnded) ?? [];
-  const surveyLink: "none" | "internal" | "external" =
-    !screens.ended.survey ? "none" : linkedSurveys.length > 0 ? "internal" : "external";
+  // surveyOptions 가 아직 null(로딩 중이거나 실패)일 때 "자체 설문 0개"와 구분하지 않으면
+  // linkedSurveys.length가 0으로 계산돼 "외부 링크"가 선택된 것처럼 그려진다 — 실제로는
+  // 목록을 아직 모르는 것뿐이다. 이 경우엔 별도의 "loading" 로 두고 어느 칸도 선택하지 않는다.
+  const surveyLink: "none" | "internal" | "external" | "loading" =
+    !screens.ended.survey
+      ? "none"
+      : surveyOptions === null
+        ? "loading"
+        : linkedSurveys.length > 0
+          ? "internal"
+          : "external";
 
   /**
    * 자체 설문 연결 토글 — 설문은 별도 엔드포인트라 즉시 저장된다(설문 탭과 같은 방식).
@@ -436,6 +455,46 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
     [webinar.config, webinar.components],
   );
   useExternalSync(incomingForm, setForm, dirty);
+
+  /**
+   * screens·resources·nextWeb·ctaCards 도 config.livePage 를 통해 여러 창이 공유한다 —
+   * 저장은 이 livePage 객체를 통째로 재구성해 보내므로(buildLivePage, 최상위 얕은 병합),
+   * 다른 창/다른 사람이 그 사이 종료 화면 설정이나 자료를 고치면 이 창에서 토글 하나만
+   * 눌러도 그 변경이 통째로 되돌아간다. form 과 같은 규칙(편집 중이면 대기)으로 넷을 맞춘다.
+   */
+  const incomingScreens = useMemo(() => normalizeLivePageConfig(webinar.config), [webinar.config]);
+  // screens 를 외부 값으로 갈아치울 때, followUpItems(EditableList 용 로컬 미러)도 같이
+  // 맞춰야 한다 — 안 맞추면 이 창에서 안내 항목을 하나만 건드려도(effect: followUpItems→screens)
+  // 방금 채택한 외부 값이 그 자리에서 다시 로컬의 옛 스냅샷으로 덮인다.
+  const applyIncomingScreens = useCallback((next: LivePageConfig) => {
+    setScreens(next);
+    setFollowUpItems(withRowKeys(next.waiting.followUp.items.map((value) => ({ value }))));
+  }, []);
+  useExternalSync(incomingScreens, applyIncomingScreens, dirty);
+
+  // withRowKeys 는 무작위 키를 붙인다 — resources 자체는 순서 있는 배열이라 index 로 충분히
+  // 안정적이다. 무작위 키를 그대로 비교에 쓰면 내용이 그대로여도 이 창의 자동저장 한 번마다
+  // (onSilentUpdate → webinar.config 갱신) "바뀐 것"으로 보여 목록이 매번 리마운트된다.
+  const incomingResources = useMemo(
+    () => normalizeLivePageConfig(webinar.config).resources.map((r, i) => ({ ...r, [ROW_KEY]: `res-${i}` })),
+    [webinar.config],
+  );
+  useExternalSync(incomingResources, setResources, dirty);
+
+  const incomingNextWeb = useMemo(
+    () => normalizeLivePageConfig(webinar.config).nextWebinar ?? { title: "", when: "", url: "" },
+    [webinar.config],
+  );
+  useExternalSync(incomingNextWeb, setNextWeb, dirty);
+
+  const incomingCtaCards = useMemo(() => {
+    const raw = Array.isArray(livePage.ctas)
+      ? (livePage.ctas as Record<string, unknown>[])
+      : livePage.cta ? [livePage.cta as Record<string, unknown>] : [];
+    return raw.map((c, i) => ctaToForm(c, i));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [webinar.config]);
+  useExternalSync(incomingCtaCards, setCtaCards, dirty);
 
 
   /**
@@ -716,7 +775,14 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                               )}
                             </>
                           ) : surveyOptions === null ? (
-                            <p className="text-[11px] text-muted-foreground">폼 목록 불러오는 중…</p>
+                            surveyOptionsError ? (
+                              <p className="text-[11px] text-amber-600">
+                                폼 목록을 불러오지 못했어요 —{" "}
+                                <button type="button" onClick={retrySurveyOptions} className="underline underline-offset-2 hover:text-amber-700">다시 시도</button>
+                              </p>
+                            ) : (
+                              <p className="text-[11px] text-muted-foreground">폼 목록 불러오는 중…</p>
+                            )
                           ) : surveyOptions.length === 0 ? (
                             <p className="text-[11px] text-amber-600">
                                 연결할 폼이 없어요 —{" "}
@@ -914,6 +980,17 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                   </button>
                 ))}
               </div>
+
+              {surveyLink === "loading" && (
+                surveyOptionsError ? (
+                  <p className="text-[11px] text-amber-600">
+                    설문 목록을 불러오지 못했어요 —{" "}
+                    <button type="button" onClick={retrySurveyOptions} className="underline underline-offset-2 hover:text-amber-700">다시 시도</button>
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">설문 목록을 불러오는 중…</p>
+                )
+              )}
 
               {surveyLink === "internal" && (
                 surveyOptions === null ? (

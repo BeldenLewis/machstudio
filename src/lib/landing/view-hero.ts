@@ -51,9 +51,25 @@ function scrollWithinRoot(from: HTMLElement, fullId: string): void {
   scrollToSectionIn(from.closest<HTMLElement>(".lnd"), fullId);
 }
 
-/** 히어로 배경 영상 — muted 는 속성만으로 자동재생이 막히는 브라우저가 있어 프로퍼티도 함께 세팅. */
+/**
+ * reduced-motion 판정 — effects.ts 에 같은 함수(prefersReducedMotion)가 이미 있지만 export 되어
+ * 있지 않고, 이 그룹은 effects.ts 를 고칠 권한이 없다(참고용 읽기 전용 파일). 로직만 그대로
+ * 복제한다 — effects.ts 쪽이 export 되면 그때 import 로 바꿔 중복을 없앨 것.
+ */
+function prefersReducedMotion(): boolean {
+  return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/**
+ * 히어로 배경 영상 — muted 는 속성만으로 자동재생이 막히는 브라우저가 있어 프로퍼티도 함께 세팅.
+ * OS "동작 줄이기"(prefers-reduced-motion)가 켜져 있으면 자동재생·반복을 걸지 않는다 — 정지
+ * 이미지처럼 보이도록 preload 를 metadata 로 낮추고, 방문자가 직접 재생할 수 있게 controls 를 켠다.
+ */
 function renderHeroVideo(url: string): HTMLElement {
-  const video = h("video", { src: url, autoplay: "", muted: "", loop: "", playsinline: "" });
+  const reduceMotion = prefersReducedMotion();
+  const video = reduceMotion
+    ? h("video", { src: url, preload: "metadata", playsinline: "", muted: "", controls: "" })
+    : h("video", { src: url, autoplay: "", muted: "", loop: "", playsinline: "" });
   (video as HTMLVideoElement).muted = true;
   return video;
 }
@@ -109,6 +125,11 @@ export function renderHero(m: LandingModel): HTMLElement {
        * 이벤트는 cancelable — 로더가 처리하면 preventDefault 로 알려 준다. 로더가 없으면
        * (단독 랜딩·어드민 미리보기) 아무도 처리하지 않으므로 href 링크 이동으로 그냥 폴백한다.
        * href 를 유지하는 이유: 새 탭으로 열기·JS 실패에서도 등록 경로가 살아 있어야 한다.
+       *
+       * detail.slug 를 함께 싣는다 — 파트너 페이지에 웨비나 A 의 랜딩과 웨비나 B 의 /w 로더가
+       * 함께 붙어 있으면, slug 없는 이벤트는 로더가 무조건 자기(B) 폼을 열어 방문자가 A 로
+       * 왔는데 B 에 등록되는 사고가 난다. 로더는 이 slug 가 자기 웨비나와 다르면 처리하지 않고
+       * 그냥 반환하므로(webinar-loader-script.ts), 이 랜딩은 href 로 폴백해 올바른 웨비나로 간다.
        */
       onclick: (e: Event) => {
         // 상태가 등록중이 아닐 때(입장·종료·마감)는 손대지 않는다 — 링크가 알맞은 화면으로 보낸다.
@@ -117,7 +138,11 @@ export function renderHero(m: LandingModel): HTMLElement {
         // 보조 클릭(새 탭/다운로드 의도)은 그대로 링크에 맡긴다.
         const me = e as MouseEvent;
         if (me.metaKey || me.ctrlKey || me.shiftKey || me.altKey || me.button === 1) return;
-        const req = new CustomEvent("machstudio:open-register", { cancelable: true, bubbles: true });
+        const req = new CustomEvent("machstudio:open-register", {
+          detail: { slug: m.webinar.slug },
+          cancelable: true,
+          bubbles: true,
+        });
         const handled = !document.dispatchEvent(req); // preventDefault 됐으면 처리된 것
         if (handled) e.preventDefault();
       },

@@ -31,6 +31,14 @@ interface WorkspaceContextType {
   refreshProjects: () => Promise<void>;
   refreshWorkspaces: () => Promise<Workspace[]>;
   isLoading: boolean;
+  /**
+   * 초기 워크스페이스 목록 로드가 실패했는지(네트워크·5xx). "워크스페이스 0개"와 다른 상태 —
+   * workspaces 가 비어 있어도 이 값이 true 면 실제로는 못 불러온 것뿐이니 gate 가 "새로
+   * 만들기" 화면을 띄우면 안 된다.
+   */
+  loadError: boolean;
+  /** loadError 상태에서 재시도할 때 호출 — 마운트 시 초기 로드와 동일한 로직을 다시 수행한다. */
+  loadWorkspaces: () => Promise<void>;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType | null>(null);
@@ -41,6 +49,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProject, setCurrentProjectState] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const setCurrentProject = (project: Project) => {
     setCurrentProjectState(project);
@@ -57,82 +66,112 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const refreshProjects = useCallback(async () => {
     const currentWsId = localStorage.getItem("currentWorkspaceId");
     const url = currentWsId ? `/api/workspace/${currentWsId}` : "/api/workspace";
-    const res = await fetch(url);
-    if (!res.ok) return;
-    const data = await res.json();
-    if (data.workspace) setWorkspace(data.workspace);
-    if (data.workspaces) setWorkspaces(data.workspaces);
-    applyProjects(data.projects ?? []);
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.workspace) setWorkspace(data.workspace);
+      if (data.workspaces) setWorkspaces(data.workspaces);
+      applyProjects(data.projects ?? []);
+    } catch {
+      // 네트워크 오류 — 직전 저장이 성공했더라도 여기서 던지면 호출부의 성공 처리(토스트 등)를
+      // 덮어써 "실패했다"고 오인시킨다. 기존 프로젝트 목록을 그대로 두고 조용히 넘어간다.
+    }
   }, []);
 
   // 워크스페이스 목록만 다시 가져오기 — 워크스페이스 생성/삭제 후 즉시 반영용.
   const refreshWorkspaces = useCallback(async () => {
-    const res = await fetch("/api/workspace");
-    if (!res.ok) return [];
-    const data = await res.json();
-    const list: Workspace[] = data.workspaces ?? [];
-    setWorkspaces(list);
-    // 현재 선택된 워크스페이스가 사라졌으면 첫 번째로 전환.
-    const currentWsId = localStorage.getItem("currentWorkspaceId");
-    const stillExists = list.find((w) => w.id === currentWsId);
-    if (!stillExists && list.length > 0) {
-      localStorage.setItem("currentWorkspaceId", list[0].id);
-      localStorage.removeItem("currentProjectId");
-      setWorkspace(list[0]);
-      const wsRes = await fetch(`/api/workspace/${list[0].id}`);
-      if (wsRes.ok) {
-        const wsData = await wsRes.json();
-        applyProjects(wsData.projects ?? []);
+    try {
+      const res = await fetch("/api/workspace");
+      if (!res.ok) return [];
+      const data = await res.json();
+      const list: Workspace[] = data.workspaces ?? [];
+      setWorkspaces(list);
+      // 현재 선택된 워크스페이스가 사라졌으면 첫 번째로 전환.
+      const currentWsId = localStorage.getItem("currentWorkspaceId");
+      const stillExists = list.find((w) => w.id === currentWsId);
+      if (!stillExists && list.length > 0) {
+        localStorage.setItem("currentWorkspaceId", list[0].id);
+        localStorage.removeItem("currentProjectId");
+        setWorkspace(list[0]);
+        const wsRes = await fetch(`/api/workspace/${list[0].id}`);
+        if (wsRes.ok) {
+          const wsData = await wsRes.json();
+          applyProjects(wsData.projects ?? []);
+        }
+      } else if (list.length === 0) {
+        setWorkspace(null);
+        setProjects([]);
+        setCurrentProjectState(null);
       }
-    } else if (list.length === 0) {
-      setWorkspace(null);
-      setProjects([]);
-      setCurrentProjectState(null);
+      return list;
+    } catch {
+      // 네트워크 오류 — 호출부(초대 수락 등)의 본 작업은 이미 끝났을 수 있으니 여기서 던져
+      // 그 성공 처리를 막지 않는다. 목록 갱신만 다음 기회로 미룬다.
+      return [];
     }
-    return list;
   }, []);
 
   const switchWorkspace = useCallback(async (ws: Workspace) => {
     localStorage.setItem("currentWorkspaceId", ws.id);
     localStorage.removeItem("currentProjectId");
     setWorkspace(ws);
-    const [wsListRes, wsRes] = await Promise.all([
-      fetch("/api/workspace"),
-      fetch(`/api/workspace/${ws.id}`),
-    ]);
-    if (wsListRes.ok) {
-      const listData = await wsListRes.json();
-      setWorkspaces(listData.workspaces ?? []);
+    try {
+      const [wsListRes, wsRes] = await Promise.all([
+        fetch("/api/workspace"),
+        fetch(`/api/workspace/${ws.id}`),
+      ]);
+      if (wsListRes.ok) {
+        const listData = await wsListRes.json();
+        setWorkspaces(listData.workspaces ?? []);
+      }
+      if (!wsRes.ok) return;
+      const data = await wsRes.json();
+      applyProjects(data.projects ?? []);
+    } catch {
+      // 네트워크 오류 — 전환 자체(선택된 워크스페이스, localStorage)는 이미 반영됐고
+      // 상세 데이터만 못 가져온 상태. 다음 refreshProjects 등에서 다시 채워진다.
     }
-    if (!wsRes.ok) return;
-    const data = await wsRes.json();
-    applyProjects(data.projects ?? []);
   }, []);
 
-  useEffect(() => {
-    const init = async () => {
+  // 초기 워크스페이스 목록 로드 — 마운트 시 1회, 그리고 loadError 상태에서 재시도할 때 재사용.
+  // 목록 자체(list)를 못 가져온 경우만 loadError 로 표시한다 — 저장된 워크스페이스의 상세
+  // 정보를 못 가져온 건 별개 문제라(목록은 이미 확보했으니) loadError 를 건드리지 않는다.
+  const loadWorkspaces = useCallback(async () => {
+    setLoadError(false);
+    try {
       const res = await fetch("/api/workspace");
-      if (!res.ok) return;
+      if (!res.ok) { setLoadError(true); return; }
       const data = await res.json();
       setWorkspaces(data.workspaces ?? []);
 
       const savedWsId = localStorage.getItem("currentWorkspaceId");
       const savedWs = (data.workspaces ?? []).find((w: Workspace) => w.id === savedWsId);
       const activeWs = savedWs ?? data.workspace;
+      if (!activeWs) return;
 
-      if (activeWs) {
-        setWorkspace(activeWs);
-        if (activeWs.id !== data.workspace?.id) {
-          const wsRes = await fetch(`/api/workspace/${activeWs.id}`);
-          const wsData = await wsRes.json();
-          applyProjects(wsData.projects ?? []);
-        } else {
-          applyProjects(data.projects ?? []);
-        }
+      setWorkspace(activeWs);
+      if (activeWs.id === data.workspace?.id) {
+        applyProjects(data.projects ?? []);
+        return;
       }
-    };
-    init().finally(() => setIsLoading(false));
+      try {
+        const wsRes = await fetch(`/api/workspace/${activeWs.id}`);
+        if (!wsRes.ok) return;
+        const wsData = await wsRes.json();
+        applyProjects(wsData.projects ?? []);
+      } catch {
+        // 무시 — 워크스페이스 목록은 이미 확보됐다.
+      }
+    } catch {
+      // 목록 자체를 못 불러온 경우 — "워크스페이스 0개"로 위장되지 않도록 표시.
+      setLoadError(true);
+    }
   }, []);
+
+  useEffect(() => {
+    loadWorkspaces().finally(() => setIsLoading(false));
+  }, [loadWorkspaces]);
 
   // 마지막 활동 시각 갱신 — 하루 1회만 (localStorage throttle). 세션 유지 사용자의
   // 실제 접속을 추적하기 위함 (last_sign_in_at은 명시적 로그인만 갱신됨).
@@ -151,6 +190,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     <WorkspaceContext.Provider value={{
       workspace, workspaces, projects, currentProject,
       setCurrentProject, switchWorkspace, refreshProjects, refreshWorkspaces, isLoading,
+      loadError, loadWorkspaces,
     }}>
       {children}
     </WorkspaceContext.Provider>

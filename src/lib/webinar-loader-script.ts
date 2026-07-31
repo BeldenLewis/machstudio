@@ -1072,6 +1072,10 @@ ${ATTRIBUTION_CORE_JS}
   document.addEventListener("machstudio:open-register", function(ev) {
     try {
       if (!CFG) return;          /* 아직 config 로딩 전 — 링크 이동에 맡긴다 */
+      /* 이벤트에 slug 가 실려 있고 이 로더의 웨비나와 다르면(파트너 페이지에 다른 웨비나의
+         랜딩이 함께 붙어 있는 경우) 손대지 않고 반환한다 — preventDefault 를 안 하면 랜딩이
+         자기 href 로 폴백해 올바른 웨비나로 이동한다. slug 가 없는 옛 이벤트는 그대로 처리한다. */
+      if (ev.detail && ev.detail.slug && ev.detail.slug !== CFG.slug) return;
       openFormModal();
       if (ev.cancelable) ev.preventDefault();
     } catch (e) { warn("open-register failed", e); }

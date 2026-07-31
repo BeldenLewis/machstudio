@@ -138,6 +138,7 @@ const CHART_EVENT_ACTIONS = new Set([
   "webinar.poll_created", "webinar.poll_updated",
   "webinar.announcement_created", "webinar.announcement_updated",
   "webinar.popup_updated", "webinar.tally_push_updated", "webinar.reminder_sent",
+  "webinar.survey_updated",
 ]);
 
 function Section({
@@ -933,7 +934,7 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false, onEnabledChange }:
   useEffect(() => { if (tick > 0 && !mutatingRef.current) void fetchMessages(); }, [tick, fetchMessages]);
 
   const sendHost = async () => {
-    if (!hostMsg.trim() || busy) return;
+    if (!hostMsg.trim() || busy || !settings.chatEnabled) return;
     setBusy(true);
     try {
       const res = await fetch(`/api/webinars/${webinarId}/chat`, {
@@ -963,8 +964,9 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false, onEnabledChange }:
     } finally { mutatingRef.current = false; }
   };
 
-  // 고정 — 웨비나당 1개(켜면 나머지 고정 해제).
+  // 고정 — 웨비나당 1개(켜면 나머지 고정 해제). 채팅이 꺼져 있으면 고정해도 시청자에게 안 보인다.
   const togglePin = async (m: AdminChatMessage) => {
+    if (!settings.chatEnabled) return;
     mutatingRef.current = true;
     reqIdRef.current++;
     try {
@@ -1070,9 +1072,10 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false, onEnabledChange }:
                   <p className="mt-0.5 break-words text-[12.5px] text-foreground">{m.message}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-0.5 opacity-60 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-                  <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => togglePin(m)}
-                    className={`rounded-lg p-1.5 transition-colors ${m.isPinned ? "text-violet-500" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
-                    title={m.isPinned ? "고정 해제" : "고정"} aria-label={m.isPinned ? "고정 해제" : "메시지 고정"}>
+                  {/* 채팅이 꺼져 있으면 고정해도 시청자 화면엔 아무 채팅 자체가 안 내려간다 — 헛수고를 막는다. */}
+                  <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => togglePin(m)} disabled={!settings.chatEnabled}
+                    className={`rounded-lg p-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${m.isPinned ? "text-violet-500" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
+                    title={settings.chatEnabled ? (m.isPinned ? "고정 해제" : "고정") : "시청자 채팅이 꺼져 있어요"} aria-label={m.isPinned ? "고정 해제" : "메시지 고정"}>
                     <Pin className="h-3.5 w-3.5" />
                   </motion.button>
                   {!m.isHost && m.registrationId && (
@@ -1118,15 +1121,24 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false, onEnabledChange }:
               className="shrink-0 rounded-lg bg-violet-500 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">저장</motion.button>
           </div>
         )}
+        {/* chatEnabled 가 꺼져 있으면 컴포저가 열려 있어도 서버는 201 을 주고 성공 토스트가 뜨지만
+            live-state 가 채팅 데이터를 아예 안 내려줘 시청자는 아무도 못 본다 — 보내기 전에 막는다. */}
+        {!loading && !settings.chatEnabled && (
+          <p className="rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-2.5 py-2 text-[11px] leading-relaxed text-amber-600 dark:text-amber-400">
+            시청자 채팅이 꺼져 있어요 — 지금 보낸 메시지는 시청자에게 보이지 않아요.
+            {fillHeight ? " 위쪽 켜기 스위치로 켤 수 있어요." : " 만들기 → 라이브 페이지 → 참여 구성 → 채팅 탭 사용을 켜야 보여요."}
+          </p>
+        )}
         <div className="flex gap-2">
           <input
             value={hostMsg}
             onChange={(e) => setHostMsg(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) void sendHost(); }}
-            placeholder="진행자(HOST)로 메시지 보내기…"
-            className={inputCls}
+            placeholder={settings.chatEnabled ? "진행자(HOST)로 메시지 보내기…" : "시청자 채팅이 꺼져 있어요"}
+            disabled={!settings.chatEnabled}
+            className={`${inputCls} disabled:cursor-not-allowed disabled:opacity-50`}
           />
-          <motion.button whileTap={{ scale: 0.97 }} onClick={sendHost} disabled={!hostMsg.trim() || busy}
+          <motion.button whileTap={{ scale: 0.97 }} onClick={sendHost} disabled={!hostMsg.trim() || busy || !settings.chatEnabled}
             className="shrink-0 rounded-lg bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">
             보내기
           </motion.button>
@@ -1136,14 +1148,39 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false, onEnabledChange }:
   );
 }
 
+// 버튼 링크 정규화 — 서버(lib/email.ts 의 normalizeReminderUrl)와 같은 규칙: 스킴이 없으면
+// https:// 를 붙이고, 그래도 http(s) 로 파싱되지 않으면 무효. 서버는 이걸 조용히 버려서
+// 버튼 없는 메일이 대량 발송되므로, 입력 시점(blur)에 여기서 먼저 잡는다.
+function normalizeButtonUrl(raw: string): { value: string; error: string | null } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { value: "", error: null };
+  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return { value: candidate, error: "http(s) 링크만 사용할 수 있어요" };
+    }
+    return { value: candidate, error: null };
+  } catch {
+    return { value: candidate, error: "올바른 링크 형식이 아니에요" };
+  }
+}
+
 /* ── 알림 발송 패널 ("알림 받고 이어보기" 구독자에게) ── */
 function ReminderPanel({ webinarId }: { webinarId: string }) {
   const confirm = useConfirm();
   const [count, setCount] = useState(0);
   const [emailReady, setEmailReady] = useState(false);
   const [form, setForm] = useState({ subject: "", message: "", url: "", buttonLabel: "" });
+  const [urlError, setUrlError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const handleUrlBlur = () => {
+    const { value, error } = normalizeButtonUrl(form.url);
+    setForm((f) => ({ ...f, url: value }));
+    setUrlError(error);
+  };
 
   const fetchReminders = useCallback(async () => {
     const res = await fetch(`/api/webinars/${webinarId}/reminders`);
@@ -1158,18 +1195,41 @@ function ReminderPanel({ webinarId }: { webinarId: string }) {
 
   const send = async () => {
     if (!form.subject.trim() || !form.message.trim() || busy) return;
-    // 구독자 전원에게 즉시 발송되는 되돌릴 수 없는 동작 — 확인 후 진행.
-    if (!(await confirm({ title: `구독자 ${count}명에게 발송할까요?`, description: `제목: "${form.subject.trim()}" · 발송 후에는 취소할 수 없어요.`, confirmLabel: "발송" }))) return;
+    // blur 를 안 거치고 붙여넣은 값으로 바로 발송을 누르는 경우도 있다 — 발송 직전 한 번 더 정규화·검증.
+    const { value: normalizedUrl, error } = normalizeButtonUrl(form.url);
+    if (error) {
+      setForm((f) => ({ ...f, url: normalizedUrl }));
+      setUrlError(error);
+      return;
+    }
+    if (normalizedUrl !== form.url) setForm((f) => ({ ...f, url: normalizedUrl }));
+    // 구독자 전원에게 즉시 발송되는 되돌릴 수 없는 동작 — 확인 후 진행(최종 버튼 링크도 보여준다).
+    if (!(await confirm({
+      title: `구독자 ${count}명에게 발송할까요?`,
+      description: `제목: "${form.subject.trim()}"${normalizedUrl ? ` · 버튼 링크: ${normalizedUrl}` : ""} · 발송 후에는 취소할 수 없어요.`,
+      confirmLabel: "발송",
+    }))) return;
     setBusy(true);
     try {
       const res = await fetch(`/api/webinars/${webinarId}/reminders/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, url: normalizedUrl }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error);
-      if (d.emailConfigured) toast.success(`발송 완료 — ${d.sent}명 전송${d.failed ? `, ${d.failed}명 실패` : ""}`);
+      if (d.emailConfigured) {
+        // 200 이라도 sent:0·failed>0 이면 전량 실패다 — res.ok 만 보고 초록 "완료" 를 띄우면
+        // 운영자가 발송 사고를 놓친다. 부분 실패는 경고, 전량 실패는 에러로 구분한다.
+        const orphanedSuffix = d.orphaned > 0 ? ` · 삭제된 등록자 ${d.orphaned}명 제외` : "";
+        if (d.sent === 0 && d.failed > 0) {
+          toast.error(`발송 실패 — ${d.failed}명 전송 실패${orphanedSuffix}`);
+        } else if (d.failed > 0) {
+          toast.warning(`일부 발송 실패 — ${d.sent}명 전송, ${d.failed}명 실패${orphanedSuffix}`);
+        } else {
+          toast.success(`발송 완료 — ${d.sent}명 전송${orphanedSuffix}`);
+        }
+      }
       else toast.message(`이메일 발송 미설정 — 건너뜀 (구독자 ${d.total}명). RESEND_API_KEY 설정 후 사용하세요.`);
     } catch (e) {
       toast.error(e instanceof Error && e.message ? e.message : "발송에 실패했어요");
@@ -1202,11 +1262,21 @@ function ReminderPanel({ webinarId }: { webinarId: string }) {
         <input value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} placeholder="제목 (예: 곧 다음 세션이 시작돼요)" className={inputCls} />
         <textarea value={form.message} onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))} placeholder="내용" rows={3} className={`${inputCls} resize-none`} />
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <input value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} placeholder="버튼 링크 (선택)" className={inputCls} />
+          <div>
+            <input
+              value={form.url}
+              onChange={(e) => { setForm((f) => ({ ...f, url: e.target.value })); if (urlError) setUrlError(null); }}
+              onBlur={handleUrlBlur}
+              placeholder="버튼 링크 (선택)"
+              aria-invalid={urlError ? true : undefined}
+              className={`${inputCls}${urlError ? " border-red-500/60 focus:border-red-500" : ""}`}
+            />
+            {urlError && <p className="mt-1 text-[11px] text-red-500">{urlError}</p>}
+          </div>
           <input value={form.buttonLabel} onChange={(e) => setForm((f) => ({ ...f, buttonLabel: e.target.value }))} placeholder="버튼 라벨 (선택)" className={inputCls} />
         </div>
         <div className="flex justify-end">
-          <motion.button whileTap={{ scale: 0.97 }} onClick={send} disabled={!form.subject.trim() || !form.message.trim() || busy || count === 0}
+          <motion.button whileTap={{ scale: 0.97 }} onClick={send} disabled={!form.subject.trim() || !form.message.trim() || !!urlError || busy || count === 0}
             className="rounded-lg bg-violet-500 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50">
             {busy ? "발송 중…" : `구독자 ${count}명에게 발송`}
           </motion.button>
@@ -1559,7 +1629,10 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
       });
       // 실패해도 목록을 다시 읽는다 — "다른 항목이 켜졌다"는 사실이 카드에 보여야 재시도 판단이 된다.
       if (!res.ok) {
-        toast.error(res.status === 409 ? "다른 항목이 방금 켜졌어요. 목록을 새로고침했어요." : "변경에 실패했어요");
+        // 409(다른 항목이 방금 켜짐)는 자체 문구 유지 — 나머지는 서버가 준 이유(예: 설문 응답 기간 관련
+        // 400)를 그대로 보여준다. 문구를 "변경에 실패했어요"로 덮으면 왜 막혔는지 운영자가 알 수 없다.
+        const body = await res.json().catch(() => null);
+        toast.error(res.status === 409 ? "다른 항목이 방금 켜졌어요. 목록을 새로고침했어요." : body?.error || "변경에 실패했어요");
         await fetchAll();
         return;
       }
@@ -1618,12 +1691,16 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
     surveys.find((s) => surveyOpenState(s) === "before") ??
     null;
   const currentSurveyNote = currentSurvey && surveyOpenState(currentSurvey) === "before" ? " · 시작 전" : "";
+  // SurveyPushPanel(설문 탭)과 같은 기준 — open 이 아니고 이미 발행 중도 아니면 스위치를 눌러도
+  // live-state 가 걸러 시청자에게 안 나간다. 카드에서 그대로 눌러 끄기·켜기 가능해 보이면
+  // "눌렀는데 왜 안 되지"가 된다. 대신 설정 버튼으로 드로어의 설문 탭까지 안내한다.
+  const surveyGated = currentSurvey ? !currentSurvey.isActive && surveyOpenState(currentSurvey) !== "open" : false;
   const rows = [
-    { seg: "polls", icon: BarChart3, tone: "bg-violet-500/10 text-violet-600 dark:text-violet-400", name: "실시간 투표", cur: activePoll ?? polls[0] ?? null, summary: (activePoll ?? polls[0])?.question ?? "등록된 투표 없음" },
-    { seg: "surveys", icon: ClipboardCheck, tone: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", name: "설문", cur: currentSurvey, summary: currentSurvey ? `${currentSurvey.title}${currentSurveyNote}` : "등록된 설문 없음" },
-    { seg: "announcements", icon: Megaphone, tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400", name: "공지", cur: anns.find((a) => a.isActive) ?? anns[0] ?? null, summary: (anns.find((a) => a.isActive) ?? anns[0])?.message ?? "등록된 공지 없음" },
-    { seg: "popups", icon: MessageSquarePlus, tone: "bg-secondary text-muted-foreground", name: "팝업", cur: popups.find((p) => p.isActive) ?? popups[0] ?? null, summary: (popups.find((p) => p.isActive) ?? popups[0])?.title ?? "등록된 팝업 없음" },
-    { seg: "tally-pushes", icon: Bell, tone: "bg-secondary text-muted-foreground", name: "Tally 설문", cur: tallies.find((t) => t.isActive) ?? tallies[0] ?? null, summary: (tallies.find((t) => t.isActive) ?? tallies[0])?.title ?? "등록된 설문 없음" },
+    { seg: "polls", icon: BarChart3, tone: "bg-violet-500/10 text-violet-600 dark:text-violet-400", name: "실시간 투표", cur: activePoll ?? polls[0] ?? null, summary: (activePoll ?? polls[0])?.question ?? "등록된 투표 없음", gated: false },
+    { seg: "surveys", icon: ClipboardCheck, tone: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", name: "설문", cur: currentSurvey, summary: currentSurvey ? `${currentSurvey.title}${currentSurveyNote}` : "등록된 설문 없음", gated: surveyGated },
+    { seg: "announcements", icon: Megaphone, tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400", name: "공지", cur: anns.find((a) => a.isActive) ?? anns[0] ?? null, summary: (anns.find((a) => a.isActive) ?? anns[0])?.message ?? "등록된 공지 없음", gated: false },
+    { seg: "popups", icon: MessageSquarePlus, tone: "bg-secondary text-muted-foreground", name: "팝업", cur: popups.find((p) => p.isActive) ?? popups[0] ?? null, summary: (popups.find((p) => p.isActive) ?? popups[0])?.title ?? "등록된 팝업 없음", gated: false },
+    { seg: "tally-pushes", icon: Bell, tone: "bg-secondary text-muted-foreground", name: "Tally 설문", cur: tallies.find((t) => t.isActive) ?? tallies[0] ?? null, summary: (tallies.find((t) => t.isActive) ?? tallies[0])?.title ?? "등록된 설문 없음", gated: false },
   ] as const;
   const activeCount = rows.filter((r) => r.cur && (r.cur as { isActive: boolean }).isActive).length;
 
@@ -1641,6 +1718,7 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
       <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
         {rows.map((r) => {
           const cur = r.cur as { id: string; isActive: boolean } | null;
+          const showSwitch = cur && !r.gated;
           return (
             <div key={r.seg} className="flex items-center gap-3 border-b border-border/60 py-3 last:border-0">
               <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${r.tone}`}><r.icon className="h-4 w-4" /></span>
@@ -1648,7 +1726,7 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
                 <div className="text-[13px] font-medium">{r.name}</div>
                 <div className="truncate text-[11px] text-muted-foreground">{r.summary}</div>
               </div>
-              {cur ? (
+              {showSwitch ? (
                 <button onClick={() => patch(r.seg, cur.id, !cur.isActive, r.name)} role="switch" aria-checked={cur.isActive} aria-label={`${r.name} 송출`}
                   className={`relative h-[22px] w-[38px] shrink-0 rounded-full transition-colors ${cur.isActive ? "bg-violet-500" : "bg-secondary border border-border"}`}>
                   <span className={`absolute top-[2px] h-[16px] w-[16px] rounded-full bg-white shadow transition-all ${cur.isActive ? "left-[18px]" : "left-[3px]"}`} />
@@ -1867,12 +1945,26 @@ export default function LiveConsoleTab({
 
   const setOverride = async (value: WebinarStatus | null) => {
     if (switching) return;
-    // 공개 아임웹 사이트를 즉시 바꾸는 고영향 전환(라이브 시작·종료)은 오조작 방지를 위해 확인
+    // 확인창 게이트는 "값 이름"이 아니라 "지금 시청자에게 보이는 것이 바뀌는가"로 잡는다 —
+    // 방송 중(live)에 다른 값으로 나가는 전환은 registration·ended·null(자동) 어떤 값이든
+    // 시청 화면을 대기 화면으로 되돌리고 영상을 끊는다. 값 이름만 보고 live/ended 전환에만
+    // 확인창을 달면, '등록 중' 오클릭이 확인 없이 시청자 전원을 축출한다.
+    const currentStatus = data?.status ?? "registration";
+    const viewerCount = data?.summary?.activeViewers ?? 0;
+    const knockOutDesc =
+      viewerCount > 0
+        ? `지금 시청 중인 시청자 ${viewerCount.toLocaleString()}명이 대기 화면으로 돌아가고 영상이 중단돼요.`
+        : "지금 시청 중인 시청자가 대기 화면으로 돌아가고 영상이 중단돼요.";
     const confirmCfg =
       value === "live"
         ? { title: "'라이브'로 전환할까요?", description: "아임웹의 버튼·배너가 즉시 라이브 모드로 바뀌고, 등록자에게 시청 화면이 열려요.", confirmLabel: "라이브 시작", tone: "danger" as const }
-        : value === "ended"
-          ? { title: "'종료'로 전환할까요?", description: "아임웹의 버튼·배너가 즉시 종료 모드로 바뀌어요.", confirmLabel: "종료", tone: "danger" as const }
+        : currentStatus === "live"
+          ? {
+              title: value === "ended" ? "'종료'로 전환할까요?" : value === null ? "자동 판정으로 되돌릴까요?" : "'등록 중'으로 전환할까요?",
+              description: knockOutDesc,
+              confirmLabel: value === "ended" ? "종료" : "전환",
+              tone: "danger" as const,
+            }
           : null;
     if (confirmCfg && !(await confirm(confirmCfg))) return;
     setSwitching(true);

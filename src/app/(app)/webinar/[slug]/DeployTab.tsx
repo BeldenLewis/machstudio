@@ -23,6 +23,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { getPublicAppOrigin } from "@/lib/app-url";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
+import { normalizeLandingPageConfig } from "@/lib/webinar-config";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -125,11 +126,17 @@ const MOUNT_MARKERS = [
 //
 // 인라인 <script> 를 쓰지 않는 이유: 아임웹 코드위젯이 재저장 시 인라인 스크립트를 지우는 경우가 있다.
 // div 안의 링크는 스크립트가 영영 안 와도 등록 경로가 살아 있게 하는 폴백이다.
-function buildLandingEmbedSnippet(origin: string, slug: string, name: string) {
+//
+// bg: 스크립트가 도착해 실제 랜딩을 그리기 전까지 보이는 마운트 판의 배경색.
+// 예전엔 #06080d 로 고정돼 있어서, 랜딩을 화이트로 설정한 웨비나도 스크립트 도착 전까지
+// 검은 판이 떴다 — 저장된 랜딩 배경(히어로 섹션 모드가 light 면 lightBg, dark 면 darkBg)을
+// 읽어 그대로 쓴다. 색을 못 정한 경우(폴백 인자를 안 준 경우)에만 옛 값으로 되돌아간다.
+const FALLBACK_LANDING_BG = "#06080d";
+function buildLandingEmbedSnippet(origin: string, slug: string, name: string, bg: string) {
   const label = (name || "웨비나").replace(/[<>&]/g, "");
   return `<!-- machstudio 웨비나 랜딩 -->
 <div id="ms-landing-${slug}" data-ms-landing-mount data-ms-slug="${slug}"
-     style="display:block;min-height:100svh;background:#06080d">
+     style="display:block;min-height:100svh;background:${bg}">
   <a href="${origin}/webinar/${slug}/landing"
      style="display:block;padding:96px 20px;color:#abb5c7;text-align:center;text-decoration:none;font:600 15px/1.7 Pretendard,-apple-system,sans-serif">
     ${label} 사전 등록 페이지 열기 →
@@ -190,10 +197,32 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
   const [liveUrlDrafts, setLiveUrlDrafts] = useState<Record<string, string>>({});
   const [bannerDrafts, setBannerDrafts] = useState<Record<string, string>>({});
   const hasLoadedRef = useRef(false);
+  // 랜딩 배경색 — 스니펫 마운트 판이 스크립트 도착 전까지 보여줄 색. props 로 landingPage
+  // config 가 안 내려오므로(이 탭은 components 만 받는다) 여기서 따로 읽어 온다.
+  // null 이면 아직 못 정한 상태 — 스니펫은 옛 고정값(#06080d)으로 폴백한다.
+  const [landingBg, setLandingBg] = useState<string | null>(null);
 
   // 스니펫은 파트너 사이트에 그대로 박히므로 배포 URL 기준이어야 한다.
   // 접속 중인 호스트(localhost·프리뷰 배포)를 쓰면 곧 죽는 주소가 남는다.
   const origin = getPublicAppOrigin();
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/webinars/${webinarId}`);
+        const data = await res.json().catch(() => null);
+        if (!alive || !res.ok || !data?.webinar) return;
+        const lp = normalizeLandingPageConfig(data.webinar.config);
+        setLandingBg(lp.sectionBg.hero === "light" ? lp.colors.lightBg : lp.colors.darkBg);
+      } catch {
+        /* 실패해도 조용히 폴백 색을 쓴다 */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [webinarId]);
 
   const fetchSites = useCallback(async () => {
     if (!workspace || !currentProject) return;
@@ -317,7 +346,7 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
           </div>
           <div>
             <p className="mb-1 text-xs font-medium text-muted-foreground">임베드 코드 (아임웹 HTML 위젯)</p>
-            <CodeBlock code={buildLandingEmbedSnippet(origin, slug, webinarName)} />
+            <CodeBlock code={buildLandingEmbedSnippet(origin, slug, webinarName, landingBg ?? FALLBACK_LANDING_BG)} />
           </div>
           <p className="text-[11px] text-muted-foreground">
             비공개 상태면 방문자에게 “아직 공개되지 않은 페이지” 안내만 보여요 — 만들기 → 랜딩 페이지에서 공개로 켜세요.

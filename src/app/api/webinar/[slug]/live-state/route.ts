@@ -22,9 +22,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     where: { slug },
     select: {
       id: true, statusOverride: true, liveStartAt: true, liveEndAt: true, signupDeadline: true, components: true, config: true,
+      project: { select: { deletedAt: true } },
     },
   });
-  if (!webinar) return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404, headers: CORS });
+  // project.deletedAt 이 있으면 삭제 유예(30일) 중인 프로젝트 — 지금 못 찾는 웨비나와 동일하게 처리한다.
+  if (!webinar || webinar.project.deletedAt !== null) {
+    return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404, headers: CORS });
+  }
 
   const statusInfo = resolveWebinarStatus(webinar);
   const components = (webinar.components ?? {}) as Record<string, unknown>;

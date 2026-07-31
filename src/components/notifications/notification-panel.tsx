@@ -31,6 +31,8 @@ interface Notification {
   data: NotificationData;
   read: boolean;
   createdAt: string;
+  // WORKSPACE_INVITE 만 채워짐 — data 의 스냅샷이 아니라 지금 초대 상태(/api/notifications 가 조인).
+  invitationStatus?: string | null;
 }
 
 const ROLE_LABEL: Record<string, string> = { OWNER: "소유자", ADMIN: "편집자", MEMBER: "뷰어" };
@@ -82,7 +84,9 @@ function NotificationItem({ n, onAction }: { n: Notification; onAction: () => vo
               <span className="text-violet-500">{n.data.inviterName}</span>님이 <span className="font-semibold">{n.data.workspaceName}</span> 워크스페이스에 초대했어요
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">{ROLE_LABEL[n.data.role ?? "MEMBER"]} 권한 · {timeAgo(n.createdAt)}</p>
-            {!n.read && (
+            {/* 버튼 노출은 read 가 아니라 초대의 실제 상태를 따른다 — '모두 읽음' 을 눌러도
+                아직 PENDING 인 초대는 계속 수락/거절할 수 있어야 한다. read 는 카드 강조만 담당. */}
+            {n.invitationStatus === "PENDING" && (
               <div className="flex gap-2 mt-3">
                 <motion.button whileTap={{ scale: 0.95 }}
                   onClick={() => handleInvite("accept")} disabled={isActing}
@@ -95,6 +99,12 @@ function NotificationItem({ n, onAction }: { n: Notification; onAction: () => vo
                   <X className="w-3 h-3" />거절
                 </motion.button>
               </div>
+            )}
+            {n.invitationStatus === "ACCEPTED" && (
+              <p className="text-xs text-violet-500 mt-1.5">수락했어요</p>
+            )}
+            {n.invitationStatus === "DECLINED" && (
+              <p className="text-xs text-muted-foreground mt-1.5">거절했어요</p>
             )}
           </div>
         </div>

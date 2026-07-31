@@ -14,9 +14,10 @@ import { OptionRows } from "@/components/ui/option-rows";
 import { EditableList } from "@/components/ui/editable-list";
 import { Switch } from "@/components/ui/switch";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { isSurveyAcceptingResponses, normalizeSurveyQuestions, surveyOpenState, SURVEY_MAX_QUESTIONS, SURVEY_TYPE_LABELS, type SurveyQuestion, type SurveyQuestionType } from "@/lib/webinar-survey";
+import { formatSurveyOpensAt, isSurveyAcceptingResponses, normalizeSurveyQuestions, surveyOpenState, SURVEY_MAX_QUESTIONS, SURVEY_TYPE_LABELS, type SurveyQuestion, type SurveyQuestionType } from "@/lib/webinar-survey";
 import SurveyForm, { SURVEY_FORM_CSS } from "@/app/webinar/[slug]/SurveyForm";
 import { buildStkCss } from "@/app/webinar/[slug]/LiveContentStk";
+import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -53,23 +54,14 @@ interface AdminSurvey {
   _count?: { responses: number };
 }
 
-/** ISO → datetime-local 입력값(로컬 타임존 yyyy-MM-ddTHH:mm) */
+/**
+ * ISO → datetime-local 입력값(KST 벽시각 yyyy-MM-ddTHH:mm).
+ * 기기 로컬 타임존이 아니라 KST 로 고정한다 — 라이브 시작·마감 등 이 플랫폼의 다른 모든
+ * 일정 입력칸과 기준을 맞춰야 화면에 보이는 값과 저장되는 값이 어긋나지 않는다.
+ */
 function toLocalInputValue(iso: string | null): string {
   if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  const p = (v: number) => String(v).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-
-/** 예약 시각을 사람이 읽는 짧은 형태로 — "8월 11일(화) 14:00" */
-function fmtSchedule(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  const dow = ["일", "월", "화", "수", "목", "금", "토"][d.getDay()];
-  const p = (v: number) => String(v).padStart(2, "0");
-  return `${d.getMonth() + 1}월 ${d.getDate()}일(${dow}) ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return kstDateTimeLocalInput(iso);
 }
 
 interface ViewerTheme { accent: string; text: string; surface: string }
@@ -457,7 +449,7 @@ function SurveyEditor({
   const SCHEDULE_LABEL = { opensAt: "시작 예약", closesAt: "마감 예약" } as const;
 
   const commitSchedule = async (field: "opensAt" | "closesAt", local: string) => {
-    const iso = local ? new Date(local).toISOString() : null;
+    const iso = local ? kstDateTimeLocalToIso(local) : null;
     if (toLocalInputValue(iso) === toLocalInputValue(survey[field])) return; // 변경 없음
     // 뒤집힌 기간은 **보내기 전에 그 자리에서** 막는다 — 저장되면 운영자는 기간을 정했다고
     // 믿는데 설문은 영구히 닫힌다. draft 는 지우지 않는다(방금 입력한 값이 보여야 고칠 수 있다).
@@ -483,7 +475,7 @@ function SurveyEditor({
   // 지금 실제로 받고 있는지 — 스위치와 두 예약을 한 번에 판정한다(공개 라우트와 같은 함수)
   const openState = surveyOpenState(survey);
   const scheduleNote =
-    openState === "before" ? `시작 예약 전 — ${fmtSchedule(survey.opensAt)}부터 받아요`
+    openState === "before" ? `시작 예약 전 — ${formatSurveyOpensAt(survey.opensAt)}부터 받아요`
     : openState === "closed" ? "예약 시각이 지나 마감됨"
     : null;
 
@@ -760,7 +752,7 @@ function SurveyEditor({
             )}
             {!rangeError && (survey.opensAt || survey.closesAt) && (
               <p className="w-full text-[11px] leading-relaxed text-muted-foreground/70">
-                {survey.opensAt ? `${fmtSchedule(survey.opensAt)}부터` : "지금부터"} {survey.closesAt ? `${fmtSchedule(survey.closesAt)}까지` : "무기한"} 받아요.
+                {survey.opensAt ? `${formatSurveyOpensAt(survey.opensAt)}부터` : "지금부터"} {survey.closesAt ? `${formatSurveyOpensAt(survey.closesAt)}까지` : "무기한"} 받아요.
                 {" "}응답 받기를 끄면 기간과 무관하게 즉시 멈춰요.
               </p>
             )}

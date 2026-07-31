@@ -831,8 +831,10 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       // 안내대로 사전등록을 눌러도 중복으로 막혀 완전한 막다른 길이 된다 → 원인별로 구분한다.
       if (res.status === 429) {
         setVerifyError(data?.error ?? "요청이 잦아 잠시 막혔어요. 조금 뒤 다시 시도해주세요.");
+        return;
       } else if (!res.ok && res.status >= 500) {
         setVerifyError("일시적인 오류예요. 잠시 후 다시 시도해주세요.");
+        return;
       } else if (!res.ok || !data?.found || !data?.registration) {
         setVerifyError("등록 내역을 찾지 못했습니다. 다른 인증 방법으로도 시도해보세요.");
         return;
@@ -1030,6 +1032,19 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         setTimeout(() => setShareCopied(false), 2000);
       }
     } catch { /* 공유 취소·미지원 무시 */ }
+  };
+  /**
+   * 무효 registrationId 탈출구 — 등록 건이 삭제되면(운영자가 테스트 등록 정리 등) localStorage
+   * 의 재접속 유지 값은 그대로 남아 새로고침해도 시청 화면으로 들어간다. 서버 쪽 게이트는 다
+   * 소속 검증을 하므로 영상은 "연결되지 않았어요", 질문·채팅·투표는 모두 403 인데 재인증 경로가
+   * 없었다 — 이 화면(LiveContentStk)에 항상 보이는 보조 액션으로 저장값을 지우고 EntryVerify 로
+   * 되돌린다.
+   */
+  const handleReauth = () => {
+    if (isPreviewUrl()) return;
+    try { localStorage.removeItem(`mach_reg_${slug}`); } catch { /* 스토리지 차단 무시 */ }
+    setRegistrationId(null);
+    setVideoId(null);
   };
   // 자체 설문 N개 vs 외부 URL 하나의 배타적 폴백 — 규칙은 webinar-ended-surveys.ts 한 곳에.
   // 존재 플래그를 함께 넘긴다: 시작 예약 창에서 목록이 비어도 옛 외부 URL 이 되살아나지 않게.
@@ -1260,6 +1275,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             error: chatError,
           } : undefined}
           notifyState={{ subscribed: notifySubscribed, onToggle: handleNotifyToggle, error: notifyError, pending: notifyPending }}
+          onReauth={previewMode ? undefined : handleReauth}
         />
       ) : (
       <div>
@@ -1497,7 +1513,9 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             onCalendar={downloadCalendar}
             onShare={handleShare}
             shareCopied={shareCopied}
-            onNotify={handleNotifyToggle}
+            // 이 화면 진입 시 registrationId 는 항상 null(인증 전) — 버튼을 넘기면 누르는 즉시
+            // "이메일이 없어 알림을 받을 수 없어요" 가 뜬다. 대기 화면(PreLiveWaiting)과 같은 기준.
+            onNotify={registrationId ? handleNotifyToggle : undefined}
             notify={{ subscribed: notifySubscribed, pending: notifyPending, error: notifyError }}
           />
         )}
@@ -1515,8 +1533,12 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             onOpenSurvey={(s) => setOpenedSurvey(s)}
             hasRegistration={hasRegistration}
             completedSurveyIds={completedSurveyIds}
-            /* 미등록자가 잠긴 자료를 누르면 등록 모달로 — 안내만 띄우면 등록 경로를 다시 찾아야 한다. */
-            onRequireRegister={() => { setViewParam("signup"); setView("signup"); setRegModalOpen(true); }}
+            /* 종료 화면에서는 등록 자체가 이미 마감(canRegister=false)돼 있다 — 예전엔 여기서
+               등록 모달을 열었지만, 상태 폴 이펙트가 곧바로 ?view=signup 고정을 무시하고 되돌려
+               버튼이 눌러도 반응 없는 것처럼 보였고, 모달이 열려도 "등록이 마감되었어요" 라는
+               틀린 안내만 떴다(아무것도 안 쓴 사람에게). 이 게이트를 열 의도가 없는 쪽으로
+               고친다 — onRequireRegister 를 넘기지 않으면 EndedScreen 이 문구·커서 모두
+               클릭 불가로 보여준다(EndedScreen.tsx 의 hasNextStep 참고). */
             // 다시보기 신청은 등록 이메일이 있어야 발송된다 — 미등록자에겐 버튼을 숨긴다(누르면 항상 400).
             onReplay={hasRegistration ? handleNotifyToggle : undefined}
             replayRequested={notifySubscribed}

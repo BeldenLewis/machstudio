@@ -158,6 +158,7 @@ export default function LivePushLayer({
   const [surveySubmitting, setSurveySubmitting] = useState(false);
   const [surveyDone, setSurveyDone] = useState(false);
   const [surveyError, setSurveyError] = useState("");
+  const [pollError, setPollError] = useState("");
   const [popupReopenKey, setPopupReopenKey] = useState<string | null>(null);
   const [pollReopenKey, setPollReopenKey] = useState<string | null>(null);
   const [surveyReopenKey, setSurveyReopenKey] = useState<string | null>(null);
@@ -227,6 +228,7 @@ export default function LivePushLayer({
     if (incomingPoll && (!sessionGet(key!) || pollReopenKey === key)) {
       setActivePoll(incomingPoll);
       setVoted(sessionGet(`mach_pollvote_${incomingPoll.id}`));
+      setPollError(""); // 새/재오픈 투표는 이전 투표의 실패 메시지를 물려받지 않는다
     } else {
       if (!incomingPoll) setPollReopenKey(null);
       setActivePoll(null);
@@ -262,6 +264,7 @@ export default function LivePushLayer({
     sessionSet(`mach_pollclosed_${activePoll.id}_${activePoll.updatedAt}`);
     setPollReopenKey(null);
     setActivePoll(null);
+    setPollError("");
   };
 
   const dismissSurvey = () => {
@@ -331,18 +334,27 @@ export default function LivePushLayer({
 
   const castVote = async (optionId: string) => {
     if (!activePoll || voted) return;
+    setPollError("");
     try {
       const res = await fetch(`/api/webinar/${slug}/polls/${activePoll.id}/vote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ optionId, registrationId }),
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        // 서버 거절 이유(중복 투표·마감 등)를 그대로 보여준다 — 조용히 사라지면
+        // 눌렀다는 사실 자체를 확인할 길이 없다(설문 제출 실패와 같은 패턴).
+        const data = await res.json().catch(() => ({}));
+        setPollError(data.error ?? "투표에 실패했어요. 잠시 후 다시 시도해주세요.");
+        return;
+      }
       const data = await res.json();
       sessionSet(`mach_pollvote_${activePoll.id}`);
       setActivePoll((p) => (p ? { ...p, options: data.options ?? p.options } : p));
       setVoted(true);
-    } catch { /* 투표 전송 실패는 무시 (다음 시도 가능) */ }
+    } catch {
+      setPollError("네트워크 오류가 발생했어요. 잠시 후 다시 시도해주세요.");
+    }
   };
 
   // CTA/팝업 버튼 클릭 비콘 — 클릭률·리드 스코어링 집계용. 실패는 조용히 무시(사용자 흐름 방해 금지).
@@ -518,6 +530,7 @@ export default function LivePushLayer({
               );
             })}
           </div>
+          {pollError && <p className="mt-2 text-[13px] text-red-400" role="alert">{pollError}</p>}
           <p className="mt-2 text-[11px]" style={{ color: soft(45) }}>{voted ? "참여해주셔서 감사합니다" : "탭해서 투표에 참여하세요"}</p>
         </div>
       )}

@@ -67,6 +67,9 @@ interface Registration {
   connectedSeconds: number;
   focusSeconds: number;
   isActive: boolean;
+  // isActive 는 heartbeat 가 세운 뒤 leave 이벤트가 안 오면(탭 강제종료 등) 영원히 true 로 남는다
+  // — 서버가 최근성(5분 창)까지 반영해 계산해 준 값. 상태 열은 이 값으로 그린다.
+  isLive?: boolean;
   submittedAt: string;
   enteredAt: string | null;
   lastPingAt: string | null;
@@ -1427,7 +1430,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                       <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{formatDate(r.enteredAt)}</td>
                       <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{formatDateShort(r.submittedAt)}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        {r.isActive ? (
+                        {(r.isLive ?? r.isActive) ? (
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400">시청 중</span>
                         ) : r.enteredAt ? (
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">시청함</span>

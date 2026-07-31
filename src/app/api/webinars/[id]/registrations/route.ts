@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeSurveyQuestions } from "@/lib/webinar-survey";
+import { buildMemo, parseMemo } from "@/lib/webinar-memo";
 
 type DuplicateMode = "skip" | "include" | "update";
 
@@ -123,6 +124,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     } : {}),
   };
 
+  // "현재 시청" 판정 창 — isActive 는 heartbeat 가 세운 뒤 leave 이벤트가 안 오면(탭 강제종료 등)
+  // 방송이 끝난 뒤에도 영원히 true 로 남는다. live-state 라우트(공개 뷰어 카운트)가 이미 같은
+  // 함정을 피하려고 쓰는 최근성 창(presencePingAt/lastPingAt 이 최근 5분 안)을 여기서도 쓴다 —
+  // 어드민 요약 카드와 상태 열이 서로 다른 "현재 시청" 숫자를 보여주면 안 된다.
+  const PRESENCE_WINDOW_MS = 5 * 60_000;
+  const presenceSince = new Date(Date.now() - PRESENCE_WINDOW_MS);
+
   const [registrations, total, registered, entered, active, surveys, surveyParticipants] = await Promise.all([
     prisma.webinarRegistration.findMany({
       where,
@@ -134,13 +142,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         id: true, name: true, phone: true, email: true, company: true, department: true,
         jobTitle: true, industry: true, agreeMarketing: true, agreePrivacy: true, memo: true,
         connectedSeconds: true, focusSeconds: true, stayMinutes: true,
-        isActive: true, submittedAt: true, enteredAt: true, lastPingAt: true,
+        isActive: true, submittedAt: true, enteredAt: true, lastPingAt: true, presencePingAt: true,
       },
     }),
     prisma.webinarRegistration.count({ where }),
     prisma.webinarRegistration.count({ where: { webinarId: id } }),
     prisma.webinarRegistration.count({ where: { webinarId: id, enteredAt: { not: null } } }),
-    prisma.webinarRegistration.count({ where: { webinarId: id, isActive: true } }),
+    prisma.webinarRegistration.count({
+      where: {
+        webinarId: id,
+        isActive: true,
+        OR: [{ presencePingAt: { gte: presenceSince } }, { lastPingAt: { gte: presenceSince } }],
+      },
+    }),
     // 목록에는 설문별 참여 현황과 답변 라벨이 필요하다. 응답은 현재 페이지 등록자만 뒤에서
     // 가져와 페이징당 전송량을 제한하고, 설문 정의는 작으므로 한 번에 함께 보낸다.
     prisma.webinarSurvey.findMany({
@@ -153,6 +167,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       where: { webinarId: id, registrationId: { not: null } },
     }),
   ]);
+
+  // 상태 열도 같은 최근성 기준을 쓰도록 행마다 isLive 를 함께 내려준다 — isActive 원본값만 보면
+  // 방송이 끝난 뒤에도 계속 "시청 중"으로 표시된다(위 active 집계와 같은 함정).
+  const registrationsWithLiveFlag = registrations.map((r) => ({
+    ...r,
+    isLive: r.isActive && (
+      (r.presencePingAt !== null && r.presencePingAt >= presenceSince) ||
+      (r.lastPingAt !== null && r.lastPingAt >= presenceSince)
+    ),
+  }));
 
   const registrationIds = registrations.map((registration) => registration.id);
   /* 설문 응답과 문의를 같은 방식으로 붙인다 — 현재 페이지 등록자분만. 문의는 1인 N건이라
@@ -175,7 +199,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   // stats 는 검색 필터와 무관한 전체 집계(요약 카드용). total 은 검색 반영 페이지네이션용.
   return NextResponse.json({
-    registrations,
+    registrations: registrationsWithLiveFlag,
     total,
     stats: { registered, entered, active, surveyResponded: surveyParticipants.length },
     surveys: surveys.map((survey) => ({
@@ -250,9 +274,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
 
       if (duplicate && duplicateMode === "update") {
-        const updateData = providedFields
+        const updateData: Record<string, unknown> = providedFields
           ? Object.fromEntries(Object.entries(data).filter(([k]) => providedFields.has(k)))
-          : data;
+          : { ...data };
+        // memo 컬럼은 평문이 아니라 { memo, customFields } JSON 이다(webinar-memo.ts). data.memo 는
+        // normalizeInput 이 만든 평문 노트뿐이라, 그대로 update 에 실으면 이 등록자가 등록 폼에서
+        // 제출한 customFields 가 영구히 지워진다(단건 PATCH 가 이미 겪었던 문제와 같음). 단건 PATCH
+        // 와 같은 방식으로 기존 memo 에서 customFields 만 꺼내 새 note 와 재조립한다 — providedFields
+        // 가 null(수동 등록 폼)이라 모든 칸을 덮어쓰는 경우도 이 규칙은 그대로 적용한다.
+        if ("memo" in updateData) {
+          updateData.memo = buildMemo(data.memo ?? "", parseMemo(duplicate.memo).customFields);
+        }
         await prisma.webinarRegistration.update({
           where: { id: duplicate.id },
           data: updateData,

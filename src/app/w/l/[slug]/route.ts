@@ -89,9 +89,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
             endTime: true,
           },
         },
+        project: { select: { deletedAt: true } }, // 삭제 유예(30일) 중인 프로젝트 판정용
       },
     });
-    if (row) {
+    // project.deletedAt 이 있으면 삭제 유예 중 — 지금 없는 웨비나와 동일하게 취급한다.
+    if (row && row.project.deletedAt !== null) {
+      notFound = true;
+    } else if (row) {
       // config 는 랜딩이 실제로 쓰는 키만 — youtubeId 등 민감 키가 외부 사이트로 새지 않게.
       const rawConfig = (row.config ?? {}) as Record<string, unknown>;
       const landingRaw = rawConfig.landingPage;
@@ -104,8 +108,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
       // 임베드에는 소유자 미리보기 개념이 없으므로 조건 없이 차단한다.
       const st = resolveWebinarStatus(row);
       const stateFields = { status: st.status, entryOpen: st.entryOpen, canRegister: st.canRegister };
+      // project 는 위 삭제유예 판정에만 쓰는 내부 필드다 — 공개 스크립트 페이로드에서 뺀다.
+      const { project: _project, ...publicRow } = row;
       webinar = landingEnabled
-        ? { ...row, ...stateFields, config: { landingPage: landingRaw } }
+        ? { ...publicRow, ...stateFields, config: { landingPage: landingRaw } }
         : {
             // 렌더러가 "아직 공개되지 않은 페이지예요." 를 그릴 최소 정보만 남긴다.
             id: row.id,

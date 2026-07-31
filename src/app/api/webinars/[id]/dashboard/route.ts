@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { ACTIVE_VIEWER_WINDOW_MS, resolveWebinarStatus } from "@/lib/webinar-status";
+import { resolveWatchCapMinutes } from "@/lib/webinar-scoring";
 
 function pct(part: number, total: number) {
   if (!total) return 0;
@@ -40,8 +41,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const now = new Date();
   const activeSince = new Date(now.getTime() - ACTIVE_VIEWER_WINDOW_MS);
   const presenceSince = new Date(now.getTime() - 5 * 60 * 1000);
-  // 체류 상한 — 방송 경과(예정 종료로 상한). 며칠째 방치된 세션의 체류 폭주 방지(analytics 와 동일 규칙).
-  const capMinutes = Math.max(0, Math.floor((Math.min(now.getTime(), webinar.liveEndAt.getTime()) - webinar.liveStartAt.getTime()) / 60000));
 
   const [
     totalRegistered,
@@ -53,7 +52,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     answeredQuestions,
     dismissedQuestions,
     totalQuestions,
-    stayStats,
+    earliestEntry,
     currentViewers,
     latestQuestions,
   ] = await Promise.all([
@@ -74,37 +73,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     prisma.webinarQA.count({ where: { webinarId: id, status: "answered" } }),
     prisma.webinarQA.count({ where: { webinarId: id, status: "dismissed" } }),
     prisma.webinarQA.count({ where: { webinarId: id } }),
-    // EGRESS: 체류 통계는 전 행을 JS로 옮기지 않고 Postgres에서 집계 (avg/max/stay30/stay60)
-    prisma.$queryRaw<
-      {
-        avgStayMinutes: number | string | null;
-        maxStayMinutes: number | string | null;
-        stay30: bigint | number;
-        stay60: bigint | number;
-      }[]
-    >`
-      SELECT
-        COALESCE(AVG("eff"), 0) AS "avgStayMinutes",
-        COALESCE(MAX("eff"), 0) AS "maxStayMinutes",
-        COUNT(*) FILTER (WHERE "eff" >= 30) AS "stay30",
-        COUNT(*) FILTER (WHERE "eff" >= 60) AS "stay60"
-      FROM (
-        -- 접속 시간(connectedSeconds)이 단일 소스 — ping 간격 누적이라 구간 겹침으로 이중계산되지 않는다.
-        -- 0 인데 입장 기록이 있으면 이 컬럼 도입 전 데이터 → 옛 스팬으로만 폴백.
-        SELECT LEAST(
-          CASE WHEN COALESCE(r."connectedSeconds", 0) > 0
-            THEN FLOOR(r."connectedSeconds" / 60.0)::int
-            ELSE GREATEST(
-              COALESCE(r."stayMinutes", 0),
-              FLOOR(EXTRACT(EPOCH FROM (COALESCE(r."lastPingAt", now()) - r."enteredAt")) / 60)
-            )
-          END,
-          ${capMinutes}::int
-        ) AS "eff"
-        FROM "WebinarRegistration" r
-        WHERE r."enteredAt" IS NOT NULL AND r."webinarId" = ${id}
-      ) sub
-    `,
+    // 체류 상한의 하한(아래 capMinutes) 산정용 — 실제 관측이 시작된 시각.
+    prisma.webinarRegistration.aggregate({
+      where: { webinarId: id, enteredAt: { not: null } },
+      _min: { enteredAt: true },
+    }),
     prisma.webinarRegistration.findMany({
       where: {
         webinarId: id,
@@ -146,6 +119,45 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       },
     }),
   ]);
+
+  // 체류 상한 — 하한은 "예정 liveStartAt" 이 아니라 실제 관측 시작 시각(earliestEntry)과
+  // liveStartAt 중 이른 쪽(webinar-scoring.ts 의 assembleWebinarEngagement 와 동일 규칙).
+  // statusOverride="live" 로 예정 시각 전에 강제 라이브 전환하면 하한을 liveStartAt 에 고정한
+  // 기존 계산은 상한 구간이 음수(0 클램프)가 되어 체류가 전부 사라졌다.
+  const earliestObservedAt = earliestEntry._min.enteredAt?.getTime() ?? null;
+  const capMinutes = resolveWatchCapMinutes(now.getTime(), webinar.liveStartAt.getTime(), webinar.liveEndAt.getTime(), earliestObservedAt);
+
+  // EGRESS: 체류 통계는 전 행을 JS로 옮기지 않고 Postgres에서 집계 (avg/max/stay30/stay60)
+  const stayStats = await prisma.$queryRaw<
+    {
+      avgStayMinutes: number | string | null;
+      maxStayMinutes: number | string | null;
+      stay30: bigint | number;
+      stay60: bigint | number;
+    }[]
+  >`
+    SELECT
+      COALESCE(AVG("eff"), 0) AS "avgStayMinutes",
+      COALESCE(MAX("eff"), 0) AS "maxStayMinutes",
+      COUNT(*) FILTER (WHERE "eff" >= 30) AS "stay30",
+      COUNT(*) FILTER (WHERE "eff" >= 60) AS "stay60"
+    FROM (
+      -- 접속 시간(connectedSeconds)이 단일 소스 — ping 간격 누적이라 구간 겹침으로 이중계산되지 않는다.
+      -- 0 인데 입장 기록이 있으면 이 컬럼 도입 전 데이터 → 옛 스팬으로만 폴백.
+      SELECT LEAST(
+        CASE WHEN COALESCE(r."connectedSeconds", 0) > 0
+          THEN FLOOR(r."connectedSeconds" / 60.0)::int
+          ELSE GREATEST(
+            COALESCE(r."stayMinutes", 0),
+            FLOOR(EXTRACT(EPOCH FROM (COALESCE(r."lastPingAt", now()) - r."enteredAt")) / 60)
+          )
+        END,
+        ${capMinutes}::int
+      ) AS "eff"
+      FROM "WebinarRegistration" r
+      WHERE r."enteredAt" IS NOT NULL AND r."webinarId" = ${id}
+    ) sub
+  `;
 
   const stayRow = stayStats[0];
   const avgStayMinutes = Math.round(Number(stayRow?.avgStayMinutes ?? 0));

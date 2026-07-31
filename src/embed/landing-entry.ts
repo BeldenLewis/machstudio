@@ -114,12 +114,59 @@ async function fetchWebinar(cfg: BootConfig): Promise<LandingWebinar | null> {
       credentials: "omit",
       mode: "cors",
     });
-    const data = (await res.json()) as { webinar?: LandingWebinar } | null;
-    return data?.webinar ?? null;
+    const data = (await res.json()) as
+      | { webinar?: LandingWebinar; status?: string; entryOpen?: boolean; canRegister?: boolean }
+      | null;
+    if (!data?.webinar) return null;
+    // /info 는 status/entryOpen/canRegister 를 webinar 밖(top-level)에 준다 — 모델이 읽는
+    // 자리로 합친다(landing/page.tsx 의 초기 fetch 와 같은 규칙). 이게 없으면 buildLandingModel
+    // 이 상태를 "등록중"으로 기본 취급해(build-model.ts) 재조회해도 CTA 가 갱신되지 않는다.
+    return { ...data.webinar, status: data.status, entryOpen: data.entryOpen, canRegister: data.canRegister };
   } catch (e) {
     warn("데이터 요청 실패", e);
     return null;
   }
+}
+
+/**
+ * /info(과 부트 스냅샷) 는 liveEndAt·signupDeadline 도 함께 주지만 LandingWebinar 타입은
+ * 뷰가 쓰는 liveStartAt 만 선언한다 — 경계 계산에만 쓰는 값이라 여기서 지역적으로 넓혀 읽는다.
+ */
+type BootBoundaryFields = { liveStartAt?: string | null; liveEndAt?: string | null; signupDeadline?: string | null };
+
+/** 라이브 시작·마감·종료 중 가장 가까운 **미래** 시각(ms). 남은 경계가 없으면 null. */
+function nextBoundaryMs(w: BootBoundaryFields | null): number | null {
+  if (!w) return null;
+  const now = Date.now();
+  const times = [w.liveStartAt, w.liveEndAt, w.signupDeadline]
+    .map((iso) => (iso ? new Date(iso).getTime() : NaN))
+    .filter((t) => Number.isFinite(t) && t > now);
+  return times.length ? Math.min(...times) : null;
+}
+
+/**
+ * 상태 경계(라이브 시작·마감·종료) 통과 시 데이터를 다시 받아 렌더를 갱신한다.
+ *
+ * boot() 는 서버가 스크립트에 구워 보낸 스냅샷을 한 번 그리고 끝났다 — 시청자가 랜딩을 열어
+ * 둔 채 기다리면 경계를 지나도 CTA 가 그대로 남는다(landing/page.tsx 와 같은 문제, 같은 고침).
+ *
+ * setTimeout 은 ~24.8일(2^31ms)을 넘기면 즉시 발화하므로 12시간 상한을 씌운다. 상한에 걸려
+ * 일찍 깨어나도 다시 fetch·재계산할 뿐이라 안전하다(webinar-loader-script.ts scheduleBoundary
+ * 와 같은 패턴) — 실제 경계가 아니면 데이터가 그대로라 다음 스케줄도 같은 시각으로 다시 잡힌다.
+ */
+function scheduleBoundary(inst: Instance): void {
+  const boundary = nextBoundaryMs(inst.cfg.webinar);
+  if (boundary === null) return;
+  const delay = Math.min(boundary - Date.now() + 1000, 12 * 3600 * 1000);
+  setTimeout(() => {
+    void fetchWebinar(inst.cfg).then((w) => {
+      if (w) {
+        inst.cfg = { ...inst.cfg, webinar: w };
+        render(inst);
+      }
+      scheduleBoundary(inst);
+    });
+  }, Math.max(delay, 1000));
 }
 
 function render(inst: Instance): void {
@@ -214,11 +261,13 @@ export function boot(cfg: BootConfig): void {
           }
           render(inst);
           watchForRerender(inst);
+          scheduleBoundary(inst);
         });
         return;
       }
       render(inst);
       watchForRerender(inst);
+      scheduleBoundary(inst);
     };
 
     if (document.readyState === "loading") {
