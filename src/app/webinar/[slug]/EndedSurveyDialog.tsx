@@ -49,6 +49,7 @@ export default function EndedSurveyDialog({
     description: string | null;
     questions: SurveyQuestion[];
     isOpen: boolean;
+    state?: "open" | "off" | "before" | "closed"; // 못 받는 이유 — 시작 전과 마감을 다르게 말한다
     doneTitle: string | null;
     doneDescription: string | null;
   } | null>(null);
@@ -73,6 +74,7 @@ export default function EndedSurveyDialog({
           description: data?.survey?.description ?? null,
           questions: Array.isArray(data?.survey?.questions) ? data.survey.questions : [],
           isOpen: data?.survey?.isOpen === true,
+          state: data?.survey?.state,
           doneTitle: data?.survey?.doneTitle ?? null,
           doneDescription: data?.survey?.doneDescription ?? null,
         });
@@ -134,9 +136,11 @@ export default function EndedSurveyDialog({
       ) : survey === null ? (
         <p className="py-8 text-center text-sm" style={{ color: soft(50) }}>설문을 불러오는 중…</p>
       ) : closed ? (
-        // 마감된 설문 — 종료 화면 카드는 노출 조건을 서버에서 판정하지만, 페이지를 열어 둔 채
-        // 마감 시각이 지나는 경우가 있다. 빈 폼 대신 이유를 말한다.
-        <p className="py-8 text-center text-sm" style={{ color: soft(65) }}>이 설문은 응답이 마감됐어요.</p>
+        // 마감/시작 전 — 종료 화면 카드는 노출 조건을 서버에서 판정하지만, 페이지를 열어 둔 채
+        // 예약 시각이 지나는(또는 아직 오지 않은) 경우가 있다. 빈 폼 대신 이유를 말한다.
+        <p className="py-8 text-center text-sm" style={{ color: soft(65) }}>
+          {survey.state === "before" ? "이 설문은 아직 응답을 받기 전이에요." : "이 설문은 응답이 마감됐어요."}
+        </p>
       ) : (
         <>
           <h2 className="mb-1 pr-9 text-lg font-bold leading-snug">{survey.title}</h2>

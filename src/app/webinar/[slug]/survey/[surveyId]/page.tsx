@@ -28,11 +28,23 @@ interface PublicSurvey {
   description: string | null;
   questions: SurveyQuestion[];
   isOpen: boolean;
+  /** 못 받는 이유 — "아직 시작 전" 과 "마감" 은 시청자에게 다른 말이다. */
+  state?: "open" | "off" | "before" | "closed";
+  /** 시작 전일 때만 온다 — 언제 다시 오면 되는지 알려주기 위한 값. */
+  opensAt?: string | null;
   doneTitle?: string | null;
   doneDescription?: string | null;
 }
 
-type PageState = "loading" | "notfound" | "closed" | "form" | "done";
+/** 시작 예약 시각 안내 — "8월 11일(화) 오후 2:00". 시청자용이라 24시간제 대신 오전/오후. */
+function fmtOpensAt(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleString("ko-KR", { month: "long", day: "numeric", weekday: "short", hour: "numeric", minute: "2-digit" });
+}
+
+type PageState = "loading" | "notfound" | "closed" | "before" | "form" | "done";
 
 export default function SurveyPage({ params }: { params: Promise<{ slug: string; surveyId: string }> }) {
   const { slug, surveyId } = use(params);
@@ -65,7 +77,8 @@ export default function SurveyPage({ params }: { params: Promise<{ slug: string;
             surface: t.surfaceColor || "#FFFFFF",
           });
         }
-        setState(surveyData.survey?.isOpen ? "form" : "closed");
+        // 시작 전은 마감과 다르게 안내한다 — 마감은 끝난 것이고, 시작 전은 다시 오면 되는 것이다
+        setState(surveyData.survey?.isOpen ? "form" : surveyData.survey?.state === "before" ? "before" : "closed");
       } catch {
         if (!cancelled) setState("notfound");
       }
@@ -125,6 +138,15 @@ export default function SurveyPage({ params }: { params: Promise<{ slug: string;
         <div className="svp-center">
           <p className="svp-done-title">마감된 설문이에요</p>
           <p style={{ margin: 0, fontSize: 14 }}>소중한 관심 감사합니다.</p>
+        </div>
+      )}
+
+      {state === "before" && (
+        <div className="svp-center">
+          <p className="svp-done-title">아직 응답을 받기 전이에요</p>
+          <p style={{ margin: 0, fontSize: 14 }}>
+            {fmtOpensAt(survey?.opensAt) ? `${fmtOpensAt(survey?.opensAt)}부터 참여할 수 있어요.` : "잠시 후 다시 열어주세요."}
+          </p>
         </div>
       )}
 

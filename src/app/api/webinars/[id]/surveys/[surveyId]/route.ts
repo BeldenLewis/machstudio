@@ -75,14 +75,38 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   if (typeof body?.isOpen === "boolean") data.isOpen = body.isOpen;
 
-  // 마감 예약 — null/빈 문자열이면 해제, 아니면 유효한 시각만 수용
+  /**
+   * 응답 기간 — 시작·마감 예약. null/빈 문자열이면 해제, 아니면 유효한 시각만 수용.
+   *
+   * 뒤집힌 범위(시작 >= 마감)는 **거부한다.** 판정 함수(surveyOpenState)는 그 조합에서
+   * "마감" 을 택해 안전하게 동작하지만, 저장까지 받아 주면 운영자는 기간을 설정했다고
+   * 믿는데 설문은 영구히 닫힌 상태가 된다 — 조용히 죽는 설정은 만들지 않는다.
+   * 한쪽만 보내는 PATCH 도 있으므로 검사는 **저장 후 최종 상태**로 한다.
+   */
+  const parseSchedule = (value: unknown, label: string): Date | null | { error: string } => {
+    if (value === null || value === "") return null;
+    const d = new Date(value as string);
+    return isNaN(d.getTime()) ? { error: `${label} 시각이 올바르지 않아요` } : d;
+  };
+  if (body?.opensAt !== undefined) {
+    const r = parseSchedule(body.opensAt, "시작 예약");
+    if (r && typeof r === "object" && "error" in r) return NextResponse.json({ error: r.error }, { status: 400 });
+    data.opensAt = r;
+  }
   if (body?.closesAt !== undefined) {
-    if (body.closesAt === null || body.closesAt === "") {
-      data.closesAt = null;
-    } else {
-      const d = new Date(body.closesAt);
-      if (isNaN(d.getTime())) return NextResponse.json({ error: "마감 예약 시각이 올바르지 않아요" }, { status: 400 });
-      data.closesAt = d;
+    const r = parseSchedule(body.closesAt, "마감 예약");
+    if (r && typeof r === "object" && "error" in r) return NextResponse.json({ error: r.error }, { status: 400 });
+    data.closesAt = r;
+  }
+  if (body?.opensAt !== undefined || body?.closesAt !== undefined) {
+    const existing = await prisma.webinarSurvey.findUnique({
+      where: { id: surveyId },
+      select: { opensAt: true, closesAt: true },
+    });
+    const nextOpens = data.opensAt !== undefined ? (data.opensAt as Date | null) : (existing?.opensAt ?? null);
+    const nextCloses = data.closesAt !== undefined ? (data.closesAt as Date | null) : (existing?.closesAt ?? null);
+    if (nextOpens && nextCloses && nextOpens.getTime() >= nextCloses.getTime()) {
+      return NextResponse.json({ error: "시작이 마감보다 늦어요 — 기간을 다시 확인해주세요" }, { status: 400 });
     }
   }
 
@@ -117,7 +141,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const survey = await prisma.webinarSurvey.update({ where: { id: surveyId }, data });
   // 자동저장(문항 편집)까지 전부 기록하면 피드가 시끄러워짐 — 발행/중지·마감·마감 예약·종료화면 연결 같은 상태 변화만 남긴다
-  if (body?.isActive === false || typeof body?.isOpen === "boolean" || typeof body?.showOnEnded === "boolean" || body?.closesAt !== undefined) {
+  if (body?.isActive === false || typeof body?.isOpen === "boolean" || typeof body?.showOnEnded === "boolean" || body?.opensAt !== undefined || body?.closesAt !== undefined) {
     await logSurveyUpdate(webinar.workspaceId, user.id, id, surveyId, Object.keys(data));
   }
   // retired — 답변이 있어 보관 처리된 문항 수. 편집기가 "지웠지만 보관됨" 을 알릴 수 있게 함께 준다.

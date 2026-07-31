@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { surveyAcceptingWhere } from "@/lib/webinar-survey";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
@@ -41,7 +42,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
 
   // /info 와 동일 — 종료 화면에 연결된 자체 설문(여러 개). 미리보기가 실제 시청자와 같은 화면을 보도록.
   const endedSurveys = await prisma.webinarSurvey.findMany({
-    where: { webinarId: webinar.id, showOnEnded: true, isOpen: true, OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }] },
+    where: { webinarId: webinar.id, showOnEnded: true, ...surveyAcceptingWhere() },
     // 만든 순서대로 — 종료 화면 카드 순서가 관리자 목록 순서와 같아야 어느 카드를 고칠지 알 수 있다
     orderBy: { createdAt: "asc" },
     select: { id: true, title: true, description: true, ctaLabel: true },

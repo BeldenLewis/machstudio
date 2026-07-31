@@ -38,7 +38,7 @@ import QATab from "./QATab";
 import AnnouncementsTab from "./AnnouncementsTab";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { WEBINAR_STATUS_META } from "@/lib/webinar-status";
-import { isSurveyAcceptingResponses, type SurveyQuestion } from "@/lib/webinar-survey";
+import { surveyOpenState, type SurveyQuestion } from "@/lib/webinar-survey";
 import { formatKst } from "@/lib/datetime";
 import { isPauseSession, isRealSession, sessionTypeLabel } from "@/lib/webinar-sessions";
 
@@ -99,6 +99,9 @@ interface AdminSurveyPush {
   title: string;
   isActive: boolean;
   isOpen: boolean;
+  // 응답 기간 — 둘 다 판정에 들어간다. 하나라도 타입에서 빠지면 isSurveyAcceptingResponses 가
+  // undefined 를 "설정 없음" 으로 보고 "받는 중" 이라 답한다(시작 전 설문을 열린 것처럼 표시).
+  opensAt?: string | null;
   closesAt?: string | null;
   _count?: { responses: number };
 }
@@ -360,8 +363,10 @@ function SurveyPushPanel({ webinarId }: { webinarId: string }) {
         <p className="text-xs text-muted-foreground">아직 설문이 없어요. 만들기 → 설문에서 먼저 만들어주세요.</p>
       ) : (
         surveys.map((s) => {
-          // 마감 예약(closesAt) 경과도 마감 — 발행해도 live-state 가 걸러 시청자에게 안 나가므로 콘솔에서도 막는다
-          const accepting = isSurveyAcceptingResponses(s);
+          // 응답 기간(시작·마감 예약)을 벗어나면 발행해도 live-state 가 걸러 시청자에게 안 나간다 —
+          // 그래서 콘솔에서도 막는다. 다만 **이유를 말한다**: 시작 전을 "마감" 이라 하면 예약을 지운다.
+          const state = surveyOpenState(s);
+          const accepting = state === "open";
           return (
           <div key={s.id} className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${s.isActive ? "border-green-500/40 bg-green-500/[0.06]" : "border-border"}`}>
             <div className="min-w-0">
@@ -369,7 +374,7 @@ function SurveyPushPanel({ webinarId }: { webinarId: string }) {
                 {s.isActive && <span className="mr-1.5 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-green-600 dark:text-green-400">송출 중</span>}
                 {s.title}
               </p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">응답 {s._count?.responses ?? 0}건{!accepting && (s.isOpen ? " · 예약 마감됨" : " · 마감됨")}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">응답 {s._count?.responses ?? 0}건{state === "before" ? " · 시작 전" : state === "closed" ? " · 예약 마감됨" : state === "off" ? " · 마감됨" : ""}</p>
             </div>
             <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={() => toggle(s)} disabled={!accepting && !s.isActive}
               className={`shrink-0 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-40 ${s.isActive ? "border-border text-muted-foreground hover:bg-secondary" : "border-green-500/40 text-green-600 dark:text-green-400 hover:bg-green-500/10"}`}>
@@ -1600,7 +1605,7 @@ function BroadcastCard({ webinarId, tick = 0, sections }: { webinarId: string; t
 
   const activePoll = polls.find((p) => p.isActive) ?? null;
   // 마감된 설문(수동·예약 마감 모두)은 발행해도 시청자에게 보이지 않으므로, 새 발행 대상으로는 응답 수집 중인 설문만 노출한다.
-  const currentSurvey = surveys.find((s) => s.isActive) ?? surveys.find((s) => isSurveyAcceptingResponses(s)) ?? null;
+  const currentSurvey = surveys.find((s) => s.isActive) ?? surveys.find((s) => surveyOpenState(s) === "open") ?? null;
   const rows = [
     { seg: "polls", icon: BarChart3, tone: "bg-violet-500/10 text-violet-600 dark:text-violet-400", name: "실시간 투표", cur: activePoll ?? polls[0] ?? null, summary: (activePoll ?? polls[0])?.question ?? "등록된 투표 없음" },
     { seg: "surveys", icon: ClipboardCheck, tone: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", name: "설문", cur: currentSurvey, summary: currentSurvey?.title ?? "등록된 설문 없음" },

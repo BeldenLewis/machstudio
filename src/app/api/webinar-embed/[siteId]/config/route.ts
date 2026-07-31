@@ -7,6 +7,7 @@
  *   오리진(Supabase) 조회는 CDN이 흡수한다. CORS 는 * (Origin echo 는 캐시 파편화 유발).
  */
 import { buildIcs } from "@/lib/webinar-calendar";
+import { surveyAcceptingWhere } from "@/lib/webinar-survey";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
@@ -135,12 +136,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ siteId: 
    * 어느 설문이 뽑힐지 DB 순서에 달리고, 캐시된 임베드 설정이 조용히 다른 링크를 갖게 된다.
    */
   const endedSurvey = await prisma.webinarSurvey.findFirst({
-    where: {
-      webinarId: webinar.id,
-      showOnEnded: true,
-      isOpen: true,
-      OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }],
-    },
+    where: { webinarId: webinar.id, showOnEnded: true, ...surveyAcceptingWhere() },
     orderBy: { createdAt: "asc" },
     select: { id: true },
   });

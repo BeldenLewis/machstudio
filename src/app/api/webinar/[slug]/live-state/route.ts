@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { surveyAcceptingWhere } from "@/lib/webinar-survey";
 import { prisma } from "@/lib/prisma";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
 import { normalizeQaMode } from "@/lib/webinar-config";
@@ -84,10 +85,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         layout: true, width: true, autoClose: true, showOnce: true, doNotShowAfterSubmit: true, updatedAt: true,
       },
     }),
-    // 자체 설문 푸시 — 발행 중(isActive)이고 응답 수집 중(isOpen)인 것만.
+    // 자체 설문 푸시 — 발행 중(isActive)이고 지금 응답을 받는 것만(온·오프 + 응답 기간).
     // questions 는 폴 페이로드에 싣지 않는다(매 폴 중복 전송 방지) — 모달이 공개 GET 으로 1회 로드.
     prisma.webinarSurvey.findFirst({
-      where: { webinarId: wid, isActive: true, isOpen: true, OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }] },
+      where: { webinarId: wid, isActive: true, ...surveyAcceptingWhere() },
       select: { id: true, title: true, pushedAt: true },
     }),
     wantChat && chatEnabled && isViewer

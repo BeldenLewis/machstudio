@@ -14,7 +14,7 @@ import { OptionRows } from "@/components/ui/option-rows";
 import { EditableList } from "@/components/ui/editable-list";
 import { Switch } from "@/components/ui/switch";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { isSurveyAcceptingResponses, normalizeSurveyQuestions, SURVEY_MAX_QUESTIONS, SURVEY_TYPE_LABELS, type SurveyQuestion, type SurveyQuestionType } from "@/lib/webinar-survey";
+import { isSurveyAcceptingResponses, normalizeSurveyQuestions, surveyOpenState, SURVEY_MAX_QUESTIONS, SURVEY_TYPE_LABELS, type SurveyQuestion, type SurveyQuestionType } from "@/lib/webinar-survey";
 import SurveyForm, { SURVEY_FORM_CSS } from "@/app/webinar/[slug]/SurveyForm";
 import { buildStkCss } from "@/app/webinar/[slug]/LiveContentStk";
 
@@ -43,6 +43,7 @@ interface AdminSurvey {
   description: string | null;
   questions: SurveyQuestion[];
   isOpen: boolean;
+  opensAt: string | null; // 시작 예약 — 이 시각 전에는 isOpen 이 켜져 있어도 받지 않음
   closesAt: string | null; // 마감 예약 — 지나면 isOpen 과 무관하게 응답 마감
   doneTitle: string | null; // 제출 완료 화면 제목(없으면 기본 문구)
   doneDescription: string | null; // 제출 완료 화면 설명
@@ -59,6 +60,16 @@ function toLocalInputValue(iso: string | null): string {
   if (isNaN(d.getTime())) return "";
   const p = (v: number) => String(v).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** 예약 시각을 사람이 읽는 짧은 형태로 — "8월 11일(화) 14:00" */
+function fmtSchedule(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const dow = ["일", "월", "화", "수", "목", "금", "토"][d.getDay()];
+  const p = (v: number) => String(v).padStart(2, "0");
+  return `${d.getMonth() + 1}월 ${d.getDate()}일(${dow}) ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 interface ViewerTheme { accent: string; text: string; surface: string }
@@ -436,21 +447,45 @@ function SurveyEditor({
      */
   };
 
-  // 마감 예약 — 입력 중엔 로컬 draft, 확정(blur/해제)에만 PATCH (datetime-local 은 필드 편집마다 change 가 발생)
+  // 응답 기간(시작·마감 예약) — 입력 중엔 로컬 draft, 확정(blur/해제)에만 PATCH
+  // (datetime-local 은 연·월·일·시·분을 하나씩 채울 때마다 change 가 나서, change 마다 저장하면 중간 쓰레기 값이 날아간다)
+  const [opensDraft, setOpensDraft] = useState(() => toLocalInputValue(survey.opensAt));
   const [closesDraft, setClosesDraft] = useState(() => toLocalInputValue(survey.closesAt));
+  useEffect(() => { setOpensDraft(toLocalInputValue(survey.opensAt)); }, [survey.opensAt]);
   useEffect(() => { setClosesDraft(toLocalInputValue(survey.closesAt)); }, [survey.closesAt]);
-  const commitClosesAt = async (local: string) => {
+  const [rangeError, setRangeError] = useState<string | null>(null);
+  const SCHEDULE_LABEL = { opensAt: "시작 예약", closesAt: "마감 예약" } as const;
+
+  const commitSchedule = async (field: "opensAt" | "closesAt", local: string) => {
     const iso = local ? new Date(local).toISOString() : null;
-    if (toLocalInputValue(iso) === toLocalInputValue(survey.closesAt)) return; // 변경 없음
+    if (toLocalInputValue(iso) === toLocalInputValue(survey[field])) return; // 변경 없음
+    // 뒤집힌 기간은 **보내기 전에 그 자리에서** 막는다 — 저장되면 운영자는 기간을 정했다고
+    // 믿는데 설문은 영구히 닫힌다. draft 는 지우지 않는다(방금 입력한 값이 보여야 고칠 수 있다).
+    const nextOpens = field === "opensAt" ? iso : survey.opensAt;
+    const nextCloses = field === "closesAt" ? iso : survey.closesAt;
+    if (nextOpens && nextCloses && new Date(nextOpens).getTime() >= new Date(nextCloses).getTime()) {
+      setRangeError("시작이 마감보다 늦어요 — 이대로면 응답을 받지 않아요");
+      return;
+    }
+    setRangeError(null);
     const res = await fetch(`/api/webinars/${webinarId}/surveys/${survey.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ closesAt: iso }),
+      body: JSON.stringify({ [field]: iso }),
     });
-    if (res.ok) onMetaChanged({ closesAt: iso });
-    else { toast.error("마감 예약 변경에 실패했어요"); setClosesDraft(toLocalInputValue(survey.closesAt)); }
+    if (res.ok) onMetaChanged({ [field]: iso });
+    else {
+      toast.error(`${SCHEDULE_LABEL[field]} 변경에 실패했어요`);
+      (field === "opensAt" ? setOpensDraft : setClosesDraft)(toLocalInputValue(survey[field]));
+    }
   };
-  const scheduledClosed = !!survey.closesAt && new Date(survey.closesAt).getTime() <= Date.now();
+
+  // 지금 실제로 받고 있는지 — 스위치와 두 예약을 한 번에 판정한다(공개 라우트와 같은 함수)
+  const openState = surveyOpenState(survey);
+  const scheduleNote =
+    openState === "before" ? `시작 예약 전 — ${fmtSchedule(survey.opensAt)}부터 받아요`
+    : openState === "closed" ? "예약 시각이 지나 마감됨"
+    : null;
 
   const remove = async () => {
     if (!(await confirm({
@@ -672,31 +707,63 @@ function SurveyEditor({
                 )}
               </p>
             )}
-            <label className="flex select-none items-center gap-1.5 text-xs text-muted-foreground">
-              <CalendarClock className="h-3.5 w-3.5" />마감 예약
+            {/* 응답 기간 — 시작·마감을 한 줄에 나란히. 비우면 각각 "즉시 시작"·"무기한"이고,
+                그 뜻은 placeholder 가 아니라 아래 안내 한 줄이 말한다(빈 datetime-local 은 tt:tt 만 보인다). */}
+            <div className="flex select-none flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+              <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+              <span>응답 기간</span>
+              <input
+                type="datetime-local"
+                value={opensDraft}
+                onChange={(e) => setOpensDraft(e.target.value)}
+                onBlur={(e) => void commitSchedule("opensAt", e.target.value)}
+                aria-label="응답 시작 예약 시각"
+                className={`${FIELD_CLS} min-h-0 px-1.5 py-1 text-[11px] tabular-nums`}
+              />
+              {survey.opensAt && (
+                <button
+                  type="button"
+                  onClick={() => { setOpensDraft(""); void commitSchedule("opensAt", ""); }}
+                  aria-label="시작 예약 해제"
+                  className="grid h-5 w-5 place-items-center rounded-lg text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+              <span aria-hidden className="text-muted-foreground/50">→</span>
               <input
                 type="datetime-local"
                 value={closesDraft}
                 onChange={(e) => setClosesDraft(e.target.value)}
-                onBlur={(e) => void commitClosesAt(e.target.value)}
-                aria-label="마감 예약 시각"
+                onBlur={(e) => void commitSchedule("closesAt", e.target.value)}
+                aria-label="응답 마감 예약 시각"
                 className={`${FIELD_CLS} min-h-0 px-1.5 py-1 text-[11px] tabular-nums`}
               />
               {survey.closesAt && (
                 <button
                   type="button"
-                  onClick={() => { setClosesDraft(""); void commitClosesAt(""); }}
+                  onClick={() => { setClosesDraft(""); void commitSchedule("closesAt", ""); }}
                   aria-label="마감 예약 해제"
                   className="grid h-5 w-5 place-items-center rounded-lg text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
                 >
                   <X className="h-3 w-3" />
                 </button>
               )}
-              {scheduledClosed && (
-                <span className="rounded-lg bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">예약 시각이 지나 마감됨</span>
+              {scheduleNote && (
+                <span className="rounded-lg bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">{scheduleNote}</span>
               )}
-            </label>
+            </div>
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground/70"><BarChart3 className="h-3 w-3" />응답 {survey._count?.responses ?? 0}건</span>
+            {/* 검증 피드백은 해당 필드 바로 아래 인라인으로 — 저장을 시도하기 전에 알린다 */}
+            {rangeError && (
+              <p className="w-full text-[11px] font-medium text-destructive">{rangeError}</p>
+            )}
+            {!rangeError && (survey.opensAt || survey.closesAt) && (
+              <p className="w-full text-[11px] leading-relaxed text-muted-foreground/70">
+                {survey.opensAt ? `${fmtSchedule(survey.opensAt)}부터` : "지금부터"} {survey.closesAt ? `${fmtSchedule(survey.closesAt)}까지` : "무기한"} 받아요.
+                {" "}응답 받기를 끄면 기간과 무관하게 즉시 멈춰요.
+              </p>
+            )}
             <button type="button" onClick={copyLink} className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground">
               <Link2 className="h-3.5 w-3.5" />{copied ? "복사됨 ✓" : "응답 링크 복사"}
             </button>
@@ -844,7 +911,10 @@ export default function SurveyTab({
         <div className="space-y-2">
           {surveys.map((s) => {
             const qCount = s.questions.filter((q) => q.title.trim() && !((q.type === "single" || q.type === "multiple") && q.options.filter(Boolean).length === 0)).length;
-            const accepting = isSurveyAcceptingResponses(s);
+            // 상태를 이유까지 구분한다 — "시작 전" 을 "마감" 이라 부르면 운영자가 예약을 지운다
+            const state = surveyOpenState(s);
+            const accepting = state === "open";
+            const stateLabel = { open: "응답 받는 중", before: "시작 전", closed: "마감", off: "마감" }[state];
             return (
               <button
                 key={s.id}
@@ -860,8 +930,8 @@ export default function SurveyTab({
                     <span className="truncate text-sm font-semibold">{s.title || "제목 없는 설문"}</span>
                     {s.isActive && <span className="rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-green-600 dark:text-green-400">송출 중</span>}
                     {s.showOnEnded && <span className="rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-medium text-violet-600 dark:text-violet-400">종료 화면</span>}
-                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${accepting ? "bg-green-500/10 text-green-600 dark:text-green-400" : "bg-secondary text-muted-foreground"}`}>
-                      {accepting ? "응답 받는 중" : "마감"}
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${accepting ? "bg-green-500/10 text-green-600 dark:text-green-400" : state === "before" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-secondary text-muted-foreground"}`}>
+                      {stateLabel}
                     </span>
                   </span>
                   <span className="mt-0.5 block text-[11px] text-muted-foreground tabular-nums">
