@@ -5,6 +5,7 @@ import { useChartColors } from "@/components/ui/use-chart-colors";
 import { motion } from "framer-motion";
 import { Download, Loader2, RefreshCw, BarChart3, MessageSquare, HelpCircle, Users, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { formatKst, formatKstDateTime } from "@/lib/datetime";
 import { useUndoableDelete } from "@/components/ui/use-undoable-delete";
 import {
   ResponsiveContainer,
@@ -234,8 +235,10 @@ function formatAnswer(type: string, v: number | string | string[] | undefined): 
   return String(v);
 }
 
+// KST 고정 — timeZone 없는 new Date().toLocaleString("ko-KR") 은 브라우저 타임존 기준이라
+// 서버(Vercel, TZ=UTC)와 사용자(KST) 브라우저에서 같은 값이 다르게 보였다.
 const fmtSubmittedAt = (iso: string) =>
-  new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+  formatKst(iso, { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
 function SurveyResponsesPanel({ webinarId, surveyId }: { webinarId: string; surveyId: string }) {
   const [data, setData] = useState<SurveyResponsesData | null>(null);
@@ -292,7 +295,9 @@ function SurveyResponsesPanel({ webinarId, surveyId }: { webinarId: string; surv
     };
     const headers = ["제출시각", "이름", "이메일", "전화", "회사", "소스", ...data.questions.map(questionLabel)];
     const rows = data.responses.map((r) => [
-      new Date(r.submittedAt).toLocaleString("ko-KR"),
+      // CSV 는 화면 축약 표기 대신 formatKstDateTime 의 풀 자리수 표기(YYYY-MM-DD HH:mm:ss)를 쓴다 —
+      // 엑셀에서 정렬·필터링하기 좋고, KST 고정이라 기기 타임존과 무관하다.
+      formatKstDateTime(r.submittedAt),
       r.registrant?.name ?? "익명",
       r.registrant?.email ?? "",
       r.registrant?.phone ?? "",
@@ -611,7 +616,41 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
 
   // 좁은 범위를 보고 있어도 KPI 는 전체 기준이라 'all' 곡선도 함께 갱신한다.
   const refreshAll = () => { void fetchCore(true); void fetchCurve(range); if (range !== "all") void fetchCurve("all"); };
-  const exportCsv = () => { window.open(`/api/webinars/${webinarId}/registrations/export`, "_blank"); };
+
+  /**
+   * 등록자 명단 내보내기 — RegistrantsTab.tsx 의 downloadRegistrantsCsv 와 같은 방식으로 맞춘다.
+   * 예전엔 window.open(url, "_blank") 을 썼는데, 이 라우트가 MEMBER 권한을 403 으로 막으면
+   * 빈 새 탭에 원문 JSON 이 그대로 뜨고 이 화면엔 아무 피드백도 남지 않았다 — fetch 로 바꿔
+   * 실패는 토스트로 알리고, 성공하면 blob 을 내려받는다. 헤더로 온 미연결 설문·문의 건수도
+   * 명단에서 빠진 이유를 그 자리에서 안내한다.
+   */
+  const exportCsv = async () => {
+    const res = await fetch(`/api/webinars/${webinarId}/registrations/export`);
+    if (!res.ok) {
+      const msg = await res.json().then((d) => d?.error).catch(() => null);
+      toast.error(msg || "내보내기 실패");
+      return;
+    }
+    const unlinkedSurveys = Number(res.headers.get("X-Mach-Unlinked-Surveys") ?? 0);
+    const unlinkedQa = Number(res.headers.get("X-Mach-Unlinked-Qa") ?? 0);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `registrations-${webinarId}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    const unlinked = [
+      unlinkedSurveys > 0 ? `설문 응답 ${unlinkedSurveys}건` : null,
+      unlinkedQa > 0 ? `문의 ${unlinkedQa}건` : null,
+    ].filter(Boolean);
+    if (unlinked.length) {
+      toast.info(`${unlinked.join(" · ")}은 등록자와 연결되지 않아 명단에 없어요`, {
+        description: "공유 링크로 답하거나 미검증 상태로 남긴 것들이에요.",
+      });
+    }
+  };
 
   // 운영 이벤트를 시청 곡선의 버킷에 스냅 (fromMs + i*bucketMs)
   const events = useMemo(() => {

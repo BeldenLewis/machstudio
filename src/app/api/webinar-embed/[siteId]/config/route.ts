@@ -91,12 +91,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ siteId: 
           components: true,
           updatedAt: true,
           // sessions 는 로더가 렌더하지 않음(아젠다는 라이브 페이지 iframe 담당) — 미전송으로 페이로드 절감
+          project: { select: { deletedAt: true } }, // 삭제 유예(30일) 중인 프로젝트 판정용
         },
       },
     },
   });
 
-  if (!site || site.deletedAt !== null || !site.isActive || !site.activeWebinar) {
+  // activeWebinar.project.deletedAt 이 있으면 그 프로젝트가 삭제 유예 중 — 사이트 자체는 살아 있어도
+  // 그 웨비나는 지금 노출 중인 웨비나가 없는 것과 동일하게 처리한다.
+  if (!site || site.deletedAt !== null || !site.isActive || !site.activeWebinar || site.activeWebinar.project.deletedAt !== null) {
     return NextResponse.json(
       { error: "노출 중인 웨비나가 없어요" },
       { status: 404, headers: { ...CORS_HEADERS, "Cache-Control": CACHE_MISS } },

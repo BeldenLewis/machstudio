@@ -14,6 +14,22 @@ import { Loader2 } from "lucide-react";
 import { mountLanding } from "@/lib/landing/mount";
 import type { LandingWebinar } from "@/lib/landing/types";
 
+/**
+ * /info 는 liveEndAt·signupDeadline 도 함께 내려주지만 LandingWebinar 타입은 뷰가 실제로
+ * 쓰는 liveStartAt 만 선언한다(webinar-loader-script.ts 의 CFG 와 달리 이 타입은 렌더 계약이라
+ * 필드를 늘리지 않는다). 경계 계산에만 쓰는 값이라 여기서 지역적으로 넓혀 읽는다.
+ */
+type LandingBoundaryFields = { liveStartAt?: string | null; liveEndAt?: string | null; signupDeadline?: string | null };
+
+/** 라이브 시작·마감·종료 중 가장 가까운 **미래** 시각(ms). 남은 경계가 없으면 null. */
+function nextLandingBoundaryMs(w: LandingBoundaryFields): number | null {
+  const now = Date.now();
+  const times = [w.liveStartAt, w.liveEndAt, w.signupDeadline]
+    .map((iso) => (iso ? new Date(iso).getTime() : NaN))
+    .filter((t) => Number.isFinite(t) && t > now);
+  return times.length ? Math.min(...times) : null;
+}
+
 export default function WebinarLandingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
   const [webinar, setWebinar] = useState<LandingWebinar | null>(null);
@@ -49,6 +65,53 @@ export default function WebinarLandingPage({ params }: { params: Promise<{ slug:
       alive = false;
     };
   }, [slug]);
+
+  /**
+   * 상태 경계(라이브 시작·마감·종료) 통과 시 /info 를 다시 불러 상태를 갱신한다.
+   *
+   * 마운트 시 한 번만 상태를 굳히면, 시청자가 랜딩을 열어 둔 채 기다리다 라이브 시작 시각이
+   * 지나도 CTA 가 "사전 등록하기" 로 남는다. 그 링크의 ?view=signup 은 라이브 페이지의 대기
+   * 화면을 고정시켜, 등록자가 눌러도 입장이 안 된다(buildLiveUrl 근처 주석 참고).
+   *
+   * 다음 경계가 setTimeout 상한(~24.8일 = 2^31ms)보다 멀 수 있으므로 12시간으로 캡을 씌운다.
+   * 캡에 걸려 일찍 깨어나도 그냥 다시 fetch 하고 재계산할 뿐이라 안전하다 — 실제 경계가
+   * 아니면 상태가 그대로라 다음 스케줄도 같은 시각으로 다시 잡힌다
+   * (webinar-loader-script.ts 의 scheduleBoundary 와 같은 패턴).
+   */
+  useEffect(() => {
+    if (!webinar) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNext = () => {
+      const boundary = nextLandingBoundaryMs(webinar);
+      if (boundary === null) return;
+      const delay = Math.min(boundary - Date.now() + 1000, 12 * 3600 * 1000);
+      timer = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/webinar/${slug}/info`);
+          const data = await res.json().catch(() => null);
+          if (!alive || !res.ok || !data?.webinar) return;
+          setWebinar({
+            ...(data.webinar as LandingWebinar),
+            status: data.status,
+            entryOpen: data.entryOpen,
+            canRegister: data.canRegister,
+          });
+        } catch {
+          /* 실패해도 조용히 넘어가고 다음 경계에서 다시 시도한다 */
+        } finally {
+          if (alive) scheduleNext();
+        }
+      }, Math.max(delay, 1000));
+    };
+
+    scheduleNext();
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [webinar, slug]);
 
   useEffect(() => {
     if (webinar?.name) document.title = `${webinar.name} — 사전 등록`;

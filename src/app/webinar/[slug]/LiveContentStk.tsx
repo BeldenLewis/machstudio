@@ -213,6 +213,11 @@ const WATCH_CSS = `
 .stk-live .lv-share { display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 14px; border-radius:10px; background:var(--card); color:var(--muted); font:inherit; font-size:13px; font-weight:650; cursor:pointer; box-shadow:var(--btn-shadow); transition:color .15s ease, box-shadow .15s ease, transform .15s ease; }
 .stk-live .lv-share:hover { color:var(--text); box-shadow:var(--btn-shadow-hover); transform:translateY(-1px); }
 .stk-live .lv-share svg { width:15px; height:15px; }
+/* 재확인 — 무효 등록건(삭제됨)으로 갇힌 시청자의 탈출구. 눈에 띄되 공유 버튼보다 낮은 위계(항상
+   쓰는 액션이 아니라서). 텍스트 버튼 + 밑줄로 "여기서 뭔가 바뀐다" 는 신호만 준다. */
+.stk-live .lv-reauth { display:inline-flex; align-items:center; background:none; border:0; padding:0 2px; height:34px; font:inherit; font-size:12.5px; font-weight:600; color:var(--sub); cursor:pointer; text-decoration:underline; text-underline-offset:3px; transition:color .15s ease; }
+.stk-live .lv-reauth:hover { color:var(--muted); }
+@media (max-width:720px) { .stk-live .lv-reauth { min-height:44px; } }
 /* 스테이지 — 기본 단일 컬럼(모바일), 941px↑에서만 2컬럼+배치 (경계 소수 픽셀 깨짐 방지) */
 .stk-live .lv-stage { display:grid; grid-template-columns:1fr; gap:16px; align-items:start; }
 @media (min-width:941px) {
@@ -253,6 +258,7 @@ const WATCH_CSS = `
 .stk-live .lv-ask { display:flex; gap:8px; margin-bottom:12px; flex:0 0 auto; }
 .stk-live .lv-ask input { flex:1; min-width:0; height:40px; padding:0 13px; border-radius:11px; border:1px solid var(--line); background:var(--card-2); color:var(--text); font:inherit; font-size:14px; outline:none; transition:border-color .15s ease; }
 .stk-live .lv-ask input:focus { border-color:var(--key); }
+.stk-live .lv-ask input:disabled, .stk-live .lv-chatbar input:disabled { opacity:0.55; cursor:not-allowed; }
 .stk-live .lv-ask button { flex-shrink:0; width:44px; border-radius:11px; border:0; background:var(--key); color:var(--on-key); cursor:pointer; display:grid; place-items:center; box-shadow:var(--btn-shadow-key); }
 .stk-live .lv-ask button:disabled { opacity:0.4; cursor:not-allowed; }
 .stk-live .lv-ask button svg { width:17px; height:17px; }
@@ -398,6 +404,7 @@ export default function LiveContentStk({
   notifyState,
   slug,
   registrationId,
+  onReauth,
 }: {
   webinar: WebinarForLive;
   accent: string;
@@ -416,6 +423,11 @@ export default function LiveContentStk({
   slug?: string;
   /** 폼 응답을 등록자와 연결 (없으면 익명 응답) */
   registrationId?: string | null;
+  /**
+   * 저장된 등록건이 삭제돼 무효가 됐을 때의 탈출구 — localStorage 를 지우고 EntryVerify 로
+   * 되돌린다. 없으면(미리보기 하니스 등) 버튼 자체를 그리지 않는다.
+   */
+  onReauth?: () => void;
 }) {
   const css = useMemo(
     () => buildStkCss(accent || "#FE5816", text || "#f0f0f2", surface || "#121216") + WATCH_CSS + SURVEY_FORM_CSS,
@@ -595,7 +607,11 @@ export default function LiveContentStk({
   const notifyOn = notifyState ? notifyState.subscribed : notifyOnLocal;
   const toggleNotify = notifyState ? notifyState.onToggle : () => setNotifyOnLocal((v) => !v);
 
-  const canSend = !!qa.question.trim() && !qa.isSending;
+  /* 입장오픈 창(라이브 시작 전, entryOpenBeforeMinutes 이내)엔 등록자가 이미 들어와 있지만
+     서버는 라이브 중에만 질문/채팅을 받는다(400). 입력을 활성으로 그려두면 눌러도 거절만
+     당하므로 isLive 를 게이트로 써서 입력을 막고 이유를 인라인으로 알린다. 탭·기존 목록은
+     그대로 둔다 — 공지·이미 달린 답변은 지금도 볼 값이 있다. */
+  const canSend = !!qa.question.trim() && !qa.isSending && isLive;
 
   return (
     <section className="stk-live lv-live">
@@ -611,6 +627,11 @@ export default function LiveContentStk({
           )}
           <span className="lv-evname">{webinar.name}</span>
           <span className="lv-sp" />
+          {onReauth && (
+            <button type="button" className="lv-reauth" onClick={onReauth}>
+              다른 정보로 다시 확인
+            </button>
+          )}
           <motion.button whileTap={{ scale: 0.96 }} transition={spring} className="lv-share" onClick={handleShare}>
             <Share2 />{shared ? "복사됨" : "공유"}
           </motion.button>
@@ -703,8 +724,9 @@ export default function LiveContentStk({
                       value={qa.question}
                       onChange={(e) => qa.setQuestion(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && canSend) qa.onSend(); }}
-                      placeholder="궁금한 걸 질문해보세요"
+                      placeholder={isLive ? "궁금한 걸 질문해보세요" : "방송이 시작되면 질문할 수 있어요"}
                       aria-label="질문 입력"
+                      disabled={!isLive}
                     />
                     <motion.button
                       whileTap={{ scale: 0.9 }}
@@ -718,6 +740,7 @@ export default function LiveContentStk({
                     </motion.button>
                   </div>
                   <div aria-live="polite">
+                    {!isLive && <p className="lv-hint" style={{ color: "var(--sub)" }}>방송이 시작되면 질문을 받아요. 지금은 공지·기존 질문만 볼 수 있어요.</p>}
                     {qa.sent && <p className="lv-hint" style={{ color: "#2f9e63" }}>질문이 전달됐어요!</p>}
                     {qa.error && <p className="lv-hint" role="alert" style={{ color: "#f87171" }}>{qa.error}</p>}
                   </div>
@@ -787,14 +810,16 @@ export default function LiveContentStk({
                         <input
                           value={chat.input}
                           onChange={(e) => chat.setInput(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && chat.input.trim() && !chat.isSending) chat.onSend(); }}
-                          placeholder="메시지 보내기…"
+                          onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && isLive && chat.input.trim() && !chat.isSending) chat.onSend(); }}
+                          placeholder={isLive ? "메시지 보내기…" : "방송이 시작되면 채팅할 수 있어요"}
                           aria-label="채팅 입력"
+                          disabled={!isLive}
                         />
-                        <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={chat.onSend} disabled={!chat.input.trim() || chat.isSending} aria-label="채팅 전송">
+                        <motion.button whileTap={{ scale: 0.9 }} transition={spring} onClick={chat.onSend} disabled={!isLive || !chat.input.trim() || chat.isSending} aria-label="채팅 전송">
                           <Send />
                         </motion.button>
                       </div>
+                      {!isLive && <p className="lv-hint" style={{ marginTop: 6, color: "var(--sub)" }}>방송이 시작되면 채팅을 받아요. 지금은 대화만 볼 수 있어요.</p>}
                       {chat.error && <p className="lv-hint" role="alert" style={{ color: "#f87171", marginTop: 6 }}>{chat.error}</p>}
                     </>
                   ) : (

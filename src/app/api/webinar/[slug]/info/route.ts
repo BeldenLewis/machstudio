@@ -23,10 +23,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       config: true,
       sessions: { orderBy: { number: "asc" } },
       // _count(등록자 수)는 공개 엔드포인트라 제거 — 라이브 페이지가 사용하지 않음
+      project: { select: { deletedAt: true } }, // 삭제 유예(30일) 중인 프로젝트 판정용
     },
   });
 
-  if (!webinar) return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404 });
+  // project.deletedAt 이 있으면 그 프로젝트가 삭제 유예 중 — 랜딩·라이브 페이지가 "찾을 수 없어요" 를
+  // 보게 지금 없는 웨비나와 동일하게 응답한다.
+  if (!webinar || webinar.project.deletedAt !== null) {
+    return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404 });
+  }
 
   // 상태머신 단일 판정 — 라이브 페이지가 운영 콘솔의 statusOverride·입장오픈 윈도를 반영하도록.
   const statusInfo = resolveWebinarStatus(webinar);
@@ -105,8 +110,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     landingPreviewAllowed = isOwner;
   }
 
-  // workspaceId 는 위 멤버십 검사에만 쓰는 내부 식별자다 — 공개 응답에서 뺀다.
-  const { workspaceId: _workspaceId, ...publicWebinar } = webinar;
+  // workspaceId·project 는 위 멤버십/삭제유예 검사에만 쓰는 내부 필드다 — 공개 응답에서 뺀다.
+  const { workspaceId: _workspaceId, project: _project, ...publicWebinar } = webinar;
 
   /* 등록자별 설문 완료 목록 — registrationId 가 이 웨비나 등록 건일 때만 센다(타 웨비나·위조 id 차단). */
   const reqRegistrationId = new URL(request.url).searchParams.get("registrationId");

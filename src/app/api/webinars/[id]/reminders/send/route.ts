@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
-import { sendEmailBatch, reminderEmailHtml, emailConfigured } from "@/lib/email";
+import { sendEmailBatch, reminderEmailHtml, emailConfigured, normalizeReminderUrl } from "@/lib/email";
 import { rateLimitAsync } from "@/lib/ratelimit";
 
 async function authorize(webinarId: string, userId: string) {
@@ -33,10 +33,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const body = await request.json();
   const subject = String(body.subject ?? "").trim().slice(0, 150);
   const message = String(body.message ?? "").trim().slice(0, 2000);
-  const url = body.url ? String(body.url).trim().slice(0, 500) : undefined;
+  const rawUrl = body.url ? String(body.url).trim().slice(0, 500) : undefined;
   const buttonLabel = body.buttonLabel ? String(body.buttonLabel).trim().slice(0, 40) : undefined;
   if (!subject || !message) {
     return NextResponse.json({ error: "제목과 내용을 입력해주세요" }, { status: 400 });
+  }
+  // 스킴 없는 URL("example.com")을 조용히 버려 버튼 없는 메일이 나가지 않도록 — 대량 발송 전에 막는다.
+  let url: string | undefined;
+  if (rawUrl) {
+    const normalized = normalizeReminderUrl(rawUrl);
+    if (!normalized) {
+      return NextResponse.json({ error: "버튼 링크 주소가 올바르지 않아요" }, { status: 400 });
+    }
+    url = normalized;
   }
 
   // 구독 행에는 두 종류가 섞여 있다: 등록자가 켠 것(registrationId 있음)과 등록 없이 신청한 것(null).

@@ -8,6 +8,7 @@
  *
  * 값은 전부 문자열로 만든다 — 셀 인용(csvCell)은 호출부가 담당한다.
  */
+import { formatKstDateTime } from "@/lib/datetime";
 import { parseMemo } from "@/lib/webinar-memo";
 import { SEGMENT_LABEL, type Segment } from "@/lib/webinar-scoring";
 import {
@@ -82,7 +83,10 @@ interface Column {
 }
 
 function fixedColumns(engagementByRegistrant: Map<string, CsvEngagement>): Column[] {
-  const localDateTime = (v: Date | string | null) => (v ? new Date(v).toLocaleString("ko-KR") : "");
+  // KST 고정 — new Date().toLocaleString("ko-KR") 은 timeZone 이 없어 이 코드가 도는
+  // 서버(Vercel, TZ=UTC) 기준 시각이 나온다. 화면(RegistrantsTab)은 formatKst 를 쓰므로
+  // 같은 등록자의 등록일이 화면과 CSV 에서 9시간 어긋나 보였다.
+  const localDateTime = (v: Date | string | null) => (v ? formatKstDateTime(v) : "");
   return [
     { header: "이름", value: (r) => r.name },
     { header: "연락처", value: (r) => r.phone ?? "" },

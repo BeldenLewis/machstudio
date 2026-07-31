@@ -63,14 +63,29 @@ export async function sendEmailBatch(
   return { sent, skipped: 0, failed };
 }
 
+// 알림 메일 버튼 URL 정규화 — 스킴을 빼먹고 입력한 값("example.com")이 조용히 버튼째 사라지지 않도록
+// https:// 를 붙여 재시도한다. 그래도 http(s) 로 파싱되지 않으면(공백·잘못된 호스트 등) null —
+// 호출부가 null 을 "버튼 없음"이 아니라 "입력값이 틀렸다"로 다뤄야 대량 발송 중 조용한 유실을 막는다.
+export function normalizeReminderUrl(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const parsed = new URL(candidate);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? candidate : null;
+  } catch {
+    return null;
+  }
+}
+
 // 간단한 알림 이메일 HTML — 제목/본문/버튼(선택).
 export function reminderEmailHtml(opts: { title: string; body: string; url?: string; buttonLabel?: string }): string {
   const { title, body, url, buttonLabel } = opts;
   // 속성 컨텍스트까지 안전하게 — 따옴표도 이스케이프
   const esc = (s: string) =>
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-  // http(s) 링크만 허용 (javascript:/data: 등 차단)
-  const safeUrl = url && /^https?:\/\//i.test(url.trim()) ? url.trim() : "";
+  // http(s) 링크만 허용 (javascript:/data: 등 차단) — 스킴 누락은 normalizeReminderUrl 이 보정
+  const safeUrl = url ? normalizeReminderUrl(url) ?? "" : "";
   const button = safeUrl
     ? `<a href="${esc(safeUrl)}" style="display:inline-block;margin-top:20px;padding:12px 22px;border-radius:10px;background:#5b5bd6;color:#fff;text-decoration:none;font-weight:700;font-size:14px;">${esc(buttonLabel || "바로가기")}</a>`
     : "";

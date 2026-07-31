@@ -228,6 +228,35 @@ function WebinarDetail({ id }: { id: string }) {
 
   useEffect(() => { void Promise.resolve().then(() => fetchWebinar()); }, [fetchWebinar]);
 
+  // resolveWebinarStatus(webinar) 는 마운트 시 한 번, 자동저장 후에만 다시 계산된다 —
+  // 시간이 지나 라이브 시작·마감 등 경계 시각을 넘어도 리렌더 트리거가 없어서 헤더 배지·
+  // 아이콘 색, PageSetupTab 에 내려주는 isLive/canRegister 가 낡은 값으로 남는다.
+  // 매초 갱신 같은 과한 폴링 대신, 다음 경계 시각 하나에만 타이머를 걸고 도달하면
+  // 강제 리렌더(statusTick 토글)한 뒤 다음 경계로 다시 스케줄한다.
+  const [, setStatusTick] = useState(0);
+  useEffect(() => {
+    if (!webinar) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleNext = () => {
+      const { entryOpenAt } = resolveWebinarStatus(webinar);
+      const boundaries = [
+        entryOpenAt.getTime(),
+        new Date(webinar.liveStartAt).getTime(),
+        new Date(webinar.liveEndAt).getTime(),
+        new Date(webinar.signupDeadline).getTime(),
+      ];
+      const now = Date.now();
+      const nextBoundary = boundaries.filter((t) => t > now).sort((a, b) => a - b)[0];
+      if (nextBoundary === undefined) return; // 모든 경계가 이미 지났다 — 더 스케줄할 것 없음
+      timer = setTimeout(() => {
+        setStatusTick((v) => v + 1);
+        scheduleNext();
+      }, nextBoundary - now);
+    };
+    scheduleNext();
+    return () => { if (timer) clearTimeout(timer); };
+  }, [webinar]);
+
   // tab 쿼리가 없으면 계산된 기본 탭을 URL 에 명시(replace) — 위치를 URL 단일 소스로 고정
   useEffect(() => {
     if (!webinar || !computedDefaultTab) return;
@@ -445,7 +474,12 @@ function WebinarDetail({ id }: { id: string }) {
             {activeTab === "create" && (
               <PageSetupTab
                 webinar={webinar}
-                onUpdate={fetchWebinar}
+                // 세션 저장(추가·수정·순서변경·삭제)이 이 콜백을 통해 여기까지 올라온다.
+                // fetchWebinar()(비침묵판)를 쓰면 isLoading 이 세워져 만들기 화면 전체가
+                // 스피너로 바뀌며 언마운트된다 — 그 사이 다른 필드 자동저장이 디바운스 대기
+                // 중이면 화면이 사라지는 동안 값이 옛 값으로 잠깐 보였다가 자기치유된다.
+                // silent 갱신으로 화면을 유지한 채 데이터만 최신화한다.
+                onUpdate={() => fetchWebinar(true)}
                 onSilentUpdate={() => fetchWebinar(true)}
                 section={settingsSection}
                 onSectionChange={(section) => navigate("create", section, { replace: true })}

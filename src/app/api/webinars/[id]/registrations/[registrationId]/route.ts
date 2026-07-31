@@ -34,6 +34,11 @@ async function authorize(webinarId: string): Promise<AuthResult> {
     where: { userId_workspaceId: { userId: user.id, workspaceId: webinar.workspaceId } },
   });
   if (!membership) return { error: NextResponse.json({ error: "접근 권한 없음" }, { status: 403 }) };
+  // 등록자 단건 삭제·수정(동의 상태 포함) — 같은 화면의 일괄 삭제·명단 내보내기와 동일하게 관리자
+  // 이상만(MEMBER 차단). 여기만 빠져 있으면 멤버가 단건 API로 그 가드를 그냥 우회할 수 있었다.
+  if (membership.role === "MEMBER") {
+    return { error: NextResponse.json({ error: "이 작업을 할 권한이 없어요. 관리자에게 문의하세요." }, { status: 403 }) };
+  }
 
   return { error: null, workspaceId: webinar.workspaceId, userId: user.id };
 }

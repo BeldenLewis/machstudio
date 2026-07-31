@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Video, Loader2, ChevronRight, Calendar, Users, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspace } from "@/contexts/workspace";
-import { kstDateTimeLocalToIso, formatKst } from "@/lib/datetime";
+import { kstDateTimeLocalToIso, formatKst, kstDateString } from "@/lib/datetime";
 import { InlineError } from "@/components/ui/inline-error";
 import { resolveWebinarStatus, WEBINAR_STATUS_META } from "@/lib/webinar-status";
 import WebinarSchedulePicker from "@/components/webinar/WebinarSchedulePicker";
@@ -77,8 +77,22 @@ export default function WebinarPage() {
   useEffect(() => { fetchWebinars(); }, [fetchWebinars]);
   useEffect(() => { if (showCreate) void fetchCloneSources(); }, [showCreate, fetchCloneSources]);
 
-  const autoSlug = (name: string) =>
-    name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 50);
+  const autoSlug = (name: string) => {
+    const base = name
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    // 한글 등 비ASCII 이름은 위 규칙이 문자를 전부 걷어내 ""나 "-"만 남긴다
+    // ('웨비나' → "", '정기 웨비나' → "-") — 그런 값은 슬러그로 못 쓰니 날짜+랜덤 폴백을 쓴다.
+    if (base.length < 2) {
+      const yymm = kstDateString().replace(/-/g, "").slice(2, 6);
+      const rand = Math.random().toString(36).slice(2, 6);
+      return `webinar-${yymm}-${rand}`;
+    }
+    return base.slice(0, 50);
+  };
 
   const handleCreate = async () => {
     if (!form.name.trim() || !form.liveStartAt || !form.liveEndAt || !form.signupDeadline || !workspace || !currentProject) return;
@@ -181,7 +195,8 @@ export default function WebinarPage() {
                   </select>
                   {cloneFromId && (
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      테마·등록폼·세션 구성·컴포넌트 설정을 복사해요. 일정·등록자·주소(슬러그)는 새로 지정합니다.
+                      테마·등록폼·랜딩·라이브 화면 구성·세션·컴포넌트 설정을 복사해요. 일정·등록자·주소(슬러그)와
+                      자료 목록·다음 웨비나 안내처럼 회차마다 달라지는 값은 새로 지정합니다.
                     </p>
                   )}
                 </div>
@@ -207,6 +222,11 @@ export default function WebinarPage() {
                     onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
                     className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400 font-mono"
                   />
+                  {/* 공개 주소 실시간 프리뷰 — 슬러그를 고치는 그 자리에서 결과를 바로 확인 */}
+                  <p className="mt-1 text-[11px] text-muted-foreground font-mono truncate">
+                    {typeof window !== "undefined" ? window.location.host : "machstudio.vercel.app"}/webinar/
+                    {form.slug || (form.name.trim() ? autoSlug(form.name.trim()) : "…")}
+                  </p>
                 </div>
               </div>
               <div>

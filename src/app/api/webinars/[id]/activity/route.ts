@@ -29,6 +29,11 @@ const LABEL: Record<string, string> = {
   "webinar.registration_deleted": "등록자 삭제",
   "webinar.registrations_bulk_deleted": "등록자 일괄 삭제",
   "webinar.registrations.exported": "등록자 내보내기",
+  "webinar.survey_updated": "설문 상태 변경",
+  "webinar.survey_deleted": "설문 삭제",
+  "webinar.survey_response_deleted": "설문 응답 삭제",
+  "webinar.qa_deleted": "질문 삭제",
+  "webinar.sessions_reordered": "세션 순서 변경",
 };
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -55,7 +60,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const items = rows.map((r) => ({
     id: r.id,
     action: r.action,
-    label: LABEL[r.action] ?? r.action,
+    // 라벨 없는 액션이 raw 문자열("webinar.foo_bar")로 그대로 노출되지 않게 한글 폴백을 둔다.
+    label: LABEL[r.action] ?? "운영 변경",
     at: r.createdAt,
     actor: r.user?.name ?? null,
   }));

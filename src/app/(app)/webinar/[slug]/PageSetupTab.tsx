@@ -490,8 +490,10 @@ export default function PageSetupTab({
                   <RegistrationFormTab
                     webinar={{
                       id: webinar.id, slug: webinar.slug, config: webinar.config, theme: webinar.theme,
-                      // 접수 창(마감·라이브 중 접수)이 이 탭으로 옮겨와 일정·components 가 필요하다
-                      liveStartAt: webinar.liveStartAt, signupDeadline: webinar.signupDeadline, components: webinar.components,
+                      // 접수 창(마감·라이브 중 접수)이 이 탭으로 옮겨와 일정·components 가 필요하다.
+                      // liveEndAt 은 마감 > 종료 조합을 제출 전에 인라인으로 막는 데 쓴다(안 넘기면
+                      // 그 검증이 죽은 코드로 남는다 — 서버 400 은 여전히 뜨지만 이유는 안 보인다).
+                      liveStartAt: webinar.liveStartAt, liveEndAt: webinar.liveEndAt, signupDeadline: webinar.signupDeadline, components: webinar.components,
                       workspace: webinar.workspace,
                     }}
                     onSilentUpdate={onSilentUpdate}

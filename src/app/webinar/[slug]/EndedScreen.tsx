@@ -202,13 +202,20 @@ export default function EndedScreen({
                */
               const gateState = gate ? stateOf(gate) : null;
               const gateName = gate?.title?.trim() || "설문";
+              /* 종료 화면에서 !hasRegistration 은 "아직 사전등록을 안 한 방문자" 이지, 지금 등록할 수
+                 있다는 뜻이 아니다 — 이 화면이 뜰 땐 등록 자체가 이미 마감된 상태다. "사전등록하면
+                 받을 수 있어요" 는 열어 줄 것처럼 읽혀서 눌러보게 만들고, 눌러도 반응이 없으면
+                 고장으로 보인다. 마감을 그대로 말해 클릭을 유도하지 않는다(아래 hasNextStep 도 함께). */
               const why = !hasRegistration
-                ? "사전등록하면 받을 수 있어요"
+                ? "등록이 마감돼 배포가 끝났어요"
                 : gateState === "before"
                   ? `${gateName}은 ${formatSurveyOpensAt(gate?.opensAt) || "곧"}부터 열려요`
                   : gate
                     ? `${gateName}을 완료하면 받을 수 있어요`
                     : "지금은 조건 설문이 열려 있지 않아요";
+              // 다음 걸음이 실제로 있는가 — 미등록은 onRequireRegister 가 있을 때만(지금은 종료
+              // 화면에서 이 게이트를 열지 않기로 했으므로 항상 없다), 조건 설문 미완료는 gate 가 있을 때만.
+              const hasNextStep = hasRegistration ? Boolean(gate) : Boolean(onRequireRegister);
 
               const body = (
                 <>
@@ -247,8 +254,8 @@ export default function EndedScreen({
                     if (!hasRegistration) onRequireRegister?.();
                     else if (gate) onOpenSurvey?.(gate);
                   }}
-                  /* 다음 걸음이 없는 경우(조건 설문이 연결에서 빠짐)엔 눌릴 것처럼 보이지 않게 한다 */
-                  style={!hasRegistration || gate ? undefined : { cursor: "default" }}
+                  /* 다음 걸음이 없으면(등록 마감·조건 설문 연결 빠짐) 손 커서로 클릭을 유도하지 않는다 */
+                  style={hasNextStep ? undefined : { cursor: "default" }}
                 >
                   {body}
                 </a>

@@ -224,7 +224,7 @@ export function Sidebar() {
   const handleDeleteProject = async (project: { id: string; name: string }) => {
     const ok = await confirm({
       title: "프로젝트를 삭제할까요?",
-      description: `"${project.name}" 프로젝트와 그 안의 웨비나·수집 데이터가 목록에서 사라져요.`,
+      description: `"${project.name}" 프로젝트는 이 프로젝트의 웨비나와 등록자 데이터를 포함해 30일 후 영구 삭제되고, 그 전까지는 관리자에게 복구를 요청할 수 있어요.`,
       confirmLabel: "삭제",
       tone: "danger",
     });

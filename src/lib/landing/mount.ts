@@ -269,6 +269,16 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   const faqBand = faqMode === prevMode && runIndex % 2 === 0;
   let faqCategory: string | null = null;
   const faqSlot = h("div", null);
+  /**
+   * 목차 스크롤 스파이 재부착 훅. paintFaq() 는 카테고리를 바꿀 때마다 FAQ 섹션 노드를
+   * 통째로 새로 만든다 — attachTocSpy 가 부착 시점에 찾아 둔 옛 노드는 DOM 에서 떨어져 나가
+   * 다시는 교차하지 않으므로, 그 순간부터 목차 활성 표시·배경 모드 판정이 FAQ 구간에서 멈춘다.
+   * 배경·지브라(faqMode/faqBand)를 재렌더마다 다시 붙이는 것과 같은 이유·같은 자리다.
+   * toc 부착이 끝나는 "이펙트" 구간에서 실제 함수가 채워진다 — 첫 렌더(paintFaq() 최초 호출)는
+   * toc 가 아직 없어 필요 없고, 카테고리를 눌러 재렌더될 때는 이미 채워져 있다(전체 마운트가
+   * 끝난 뒤에야 사용자가 누를 수 있으므로).
+   */
+  let onFaqRerender: (() => void) | null = null;
   const paintFaq = () => {
     clearNode(faqSlot);
     const faq = renderFaq(m, {
@@ -279,6 +289,7 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
         // 새로 생긴 .rv 노드는 관찰 대상이 아니므로 즉시 노출시킨다
         // (안 그러면 translateY(12px) 상태로 굳는다).
         faqSlot.querySelectorAll(".rv").forEach((el) => el.classList.add("in"));
+        onFaqRerender?.();
       },
     });
     if (faq) {
@@ -353,7 +364,15 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   // 첫 화면(히어로)에는 활성 섹션이 없으므로 히어로 모드를 따로 넘긴다. 미디어 히어로는
   // 설정이 라이트여도 스크림이 어둡다 → 항상 다크로 본다(css .hero-has-media 와 같은 규칙).
   const heroBg = m.lp.heroMedia ? "dark" : m.lp.sectionBg.hero;
-  cleanups.push(attachTocSpy(root, toc, m.tocItems.map((t) => m.sectionId(t.id)), tocLayer, heroBg));
+  // FAQ 재렌더마다 다시 붙일 수 있도록 변수에 담는다(위 onFaqRerender 주석 참고) — 배경·지브라를
+  // 재적용하는 자리와 같은 원리로, 여기서도 "다시 붙이는 방법"을 남겨 둬야 재렌더가 써먹는다.
+  let tocSpyCleanup: (() => void) | null = null;
+  onFaqRerender = () => {
+    tocSpyCleanup?.();
+    tocSpyCleanup = attachTocSpy(root, toc, m.tocItems.map((t) => m.sectionId(t.id)), tocLayer, heroBg);
+  };
+  onFaqRerender();
+  cleanups.push(() => tocSpyCleanup?.());
   // 임베드는 랜딩 위아래로 호스트 콘텐츠가 있다 → 랜딩을 벗어나면 고정 목차를 감춘다.
   cleanups.push(attachTocVisibility(body, toc));
 
