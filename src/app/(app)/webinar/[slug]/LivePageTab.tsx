@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState } from "react";
+import { formatSurveyOpensAt, surveyOpenState, type SurveyOpenState } from "@/lib/webinar-survey";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { useAutosave, useExternalSync, diffPatch } from "@/components/ui/use-autosave";
@@ -250,7 +251,15 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
 
   // 자체 설문 목록 — CTA 폼형 버튼의 연결 대상이자, 종료 화면 '설문 연결' 의 선택지.
   // showOnEnded 를 함께 받는다: 종료 화면에 지금 무엇이 연결돼 있는지 판정하는 근거다.
-  const [surveyOptions, setSurveyOptions] = useState<{ id: string; title: string; showOnEnded: boolean }[] | null>(null);
+  /**
+   * 연결 후보 설문 — **상태까지** 들고 온다.
+   *
+   * 제목만 받으면 편집기가 응답 기간을 모른다. 시작 예약을 걸어 둔 폼을 CTA 나 종료 화면에
+   * 붙여도 아무 말이 없어서, 운영자는 붙였는데 시청자에게 안 뜨는 이유를 화면에서 알 수 없었다.
+   */
+  const [surveyOptions, setSurveyOptions] = useState<
+    { id: string; title: string; showOnEnded: boolean; state: SurveyOpenState; opensAt: string | null }[] | null
+  >(null);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -259,8 +268,14 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
         if (cancelled) return;
         if (!res.ok) { setSurveyOptions([]); return; }
         const data = await res.json();
-        setSurveyOptions(((data.surveys ?? []) as { id: string; title: string; showOnEnded?: boolean }[])
-          .map((s) => ({ id: s.id, title: s.title, showOnEnded: s.showOnEnded === true })));
+        setSurveyOptions(((data.surveys ?? []) as { id: string; title: string; showOnEnded?: boolean; isOpen?: boolean; opensAt?: string | null; closesAt?: string | null }[])
+          .map((s) => ({
+            id: s.id,
+            title: s.title,
+            showOnEnded: s.showOnEnded === true,
+            state: surveyOpenState({ isOpen: s.isOpen !== false, opensAt: s.opensAt, closesAt: s.closesAt }),
+            opensAt: s.opensAt ?? null,
+          })));
       } catch { if (!cancelled) setSurveyOptions([]); }
     })();
     return () => { cancelled = true; };
@@ -712,9 +727,27 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                               <select value={btn.surveyId} onChange={(e) => upd({ surveyId: e.target.value })} aria-label="연결할 폼" className={inputCls}>
                                 <option value="">폼 선택…</option>
                                 {surveyOptions.map((s) => (
-                                  <option key={s.id} value={s.id}>{s.title}</option>
+                                  <option key={s.id} value={s.id}>
+                                    {s.title}
+                                    {s.state === "before" ? ` — ${formatSurveyOpensAt(s.opensAt) || "예약"}부터` : s.state === "closed" ? " — 마감" : s.state === "off" ? " — 응답 받기 꺼짐" : ""}
+                                  </option>
                                 ))}
                               </select>
+                              {/* 고른 폼이 지금 응답을 안 받으면 그 자리에서 알린다 — 라이브 중에
+                                  시청자가 눌러 보고 "아직 열리지 않았어요" 를 보는 것보다 먼저 알아야 한다 */}
+                              {(() => {
+                                const picked = surveyOptions.find((s) => s.id === btn.surveyId);
+                                if (!picked || picked.state === "open") return null;
+                                return (
+                                  <p className="text-[11px] text-amber-600">
+                                    {picked.state === "before"
+                                      ? `이 폼은 ${formatSurveyOpensAt(picked.opensAt) || "예약 시각"}부터 열려요 — 그전에 누르면 "아직 열리지 않았어요" 가 보여요.`
+                                      : picked.state === "closed"
+                                        ? "이 폼은 응답이 마감됐어요 — 누르면 마감 안내가 보여요."
+                                        : "이 폼은 응답 받기가 꺼져 있어요 — 설문 탭에서 켜주세요."}
+                                  </p>
+                                );
+                              })()}
                               <p className="text-[11px] text-muted-foreground">응답은 분석 탭 → 설문 결과에서 개별 확인·CSV로 내려받을 수 있어요.</p>
                             </>
                           )}
@@ -906,12 +939,19 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                             className="size-4 shrink-0 accent-violet-500"
                           />
                           <span className={o.showOnEnded ? "" : "text-muted-foreground"}>{o.title || "제목 없는 설문"}</span>
+                          {/* 상태를 그 자리에서 — 붙였는데 안 뜨는 이유를 다른 탭에 가서 찾지 않게 */}
+                          {o.state !== "open" && (
+                            <span className={`shrink-0 rounded-lg px-1.5 py-0.5 text-[10px] font-semibold ${o.state === "before" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-secondary text-muted-foreground"}`}>
+                              {o.state === "before" ? `${formatSurveyOpensAt(o.opensAt) || "예약"}부터` : o.state === "closed" ? "마감" : "응답 받기 꺼짐"}
+                            </span>
+                          )}
                         </label>
                       ))}
                     </div>
                     <p className="text-[11px] text-muted-foreground">
                       고른 순서가 아니라 <b className="font-medium">설문을 만든 순서</b>로 종료 화면에 나란히 놓여요.
-                      설문이 닫혀 있거나 마감이 지나면 그 카드는 표시되지 않아요.
+                      응답 받기를 껐거나 마감이 지나면 그 카드는 표시되지 않고, <b className="font-medium">시작 예약 전</b>이면
+                      카드는 보이되 &quot;OO부터&quot; 로 안내돼요.
                     </p>
                   </div>
                 )

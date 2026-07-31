@@ -6,6 +6,7 @@ import { Check, Play, ClipboardCheck, FileText, Download, Share2, Link2, Lock } 
 import { buildStkCss } from "./LiveContentStk";
 import { DEFAULT_ENDED_DESCRIPTION, DEFAULT_ENDED_TITLE, type LivePageConfig } from "@/lib/webinar-config";
 import type { EndedSurveyLink } from "@/lib/webinar-ended-surveys";
+import { formatSurveyOpensAt, surveyOpenState } from "@/lib/webinar-survey";
 
 /**
  * 라이브 종료 화면 — 감사 + 다음 스텝 전환.
@@ -94,16 +95,26 @@ interface EndedScreenProps {
   replayPending?: boolean;
   onShare?: () => void;
   shareCopied?: boolean;
+  /** 서버 시계(폴링이 갱신) — 응답 기간 판정을 여기서 하려면 서버 기준 시각이 필요하다. */
+  serverNowMs?: number;
 }
 
 export default function EndedScreen({
   webinar, accent, text, surface, live, surveys, onOpenSurvey,
   hasRegistration = true, completedSurveyIds = [], onRequireRegister,
-  onReplay, replayRequested, replayPending, onShare, shareCopied,
+  onReplay, replayRequested, replayPending, onShare, shareCopied, serverNowMs,
 }: EndedScreenProps) {
   const css = useMemo(() => buildStkCss(accent || "#6D28D9", text || "#141320", surface || "#FFFFFF") + EXTRA_CSS, [accent, text, surface]);
 
   const showReplay = live.ended.replay && !!onReplay;
+  /**
+   * 응답 기간을 **여기서** 판정한다 — 서버가 판정 결과만 주면 그 값은 fetch 시점에 굳고,
+   * 종료 화면은 오래 열려 있어서 예약 시각이 지나도 새로고침할 때까지 안 열렸다.
+   * serverNowMs 는 폴링이 갱신하므로 시각이 되는 순간 카드가 스스로 열린다.
+   * (외부 설문 URL 카드는 일정이 없다 — isOpen 미정이면 열린 것으로 본다.)
+   */
+  const stateOf = (s: EndedSurveyLink) =>
+    s.isOpen === undefined ? "open" : surveyOpenState({ isOpen: s.isOpen, opensAt: s.opensAt, closesAt: s.closesAt }, serverNowMs ?? Date.now());
   // 이중 게이트 — 영역 토글 ON + 실제 설문 있음(AGENTS §4). 껍데기 카드를 시청자에게 안 보인다.
   const surveyList = live.ended.survey ? (surveys ?? []).filter((s) => s.url) : [];
   const showResources = live.ended.resources && live.resources.length > 0;
@@ -151,7 +162,14 @@ export default function EndedScreen({
                   * 열리면 뒤에 있는 자료·다음 웨비나가 잊힌다. 외부 설문 URL 은 문항을 받아올 수
                   * 없고 iframe 도 상대가 막을 수 있어 새 탭이 정직하다.
                   */}
-                {survey.surveyId && onOpenSurvey ? (
+                {/* 시작 예약 전 — 버튼을 열어 두면 눌러서 "아직 열리지 않았어요" 를 보게 된다.
+                    누르기 전에 **언제부터인지** 말해 주는 쪽이 낫다. 시각이 지나면 폴링이 갱신한
+                    serverNowMs 로 이 분기가 스스로 풀린다. */}
+                {stateOf(survey) === "before" ? (
+                  <span className="en-btn soft" aria-disabled="true" style={{ opacity: 0.55, cursor: "default" }}>
+                    {formatSurveyOpensAt(survey.opensAt) ? `${formatSurveyOpensAt(survey.opensAt)}부터` : "잠시 후 열려요"}
+                  </span>
+                ) : survey.surveyId && onOpenSurvey ? (
                   <button type="button" onClick={() => onOpenSurvey(survey)} className="en-btn soft">
                     {survey.ctaLabel?.trim() || DEFAULT_SURVEY_CTA}
                   </button>
@@ -174,11 +192,23 @@ export default function EndedScreen({
               const gate = r.surveyId ? surveys?.find((sv) => sv.surveyId === r.surveyId) : undefined;
               const needsSurvey = Boolean(r.surveyId) && !completedSurveyIds.includes(r.surveyId);
               const locked = Boolean(r.surveyId) && (!hasRegistration || needsSurvey);
+              /**
+               * 잠긴 이유는 **아는 만큼만** 말한다.
+               *
+               * 예전엔 gate 를 못 찾으면 무조건 "조건 설문이 닫혔어요" 라고 했다. 그런데 조건 설문에
+               * 시작 예약이 걸려 있으면 목록에 없어서 gate 가 비었고, 아직 열리지도 않은 설문을
+               * 끝났다고 말했다 — 게다가 이 행은 눌러도 아무 일이 안 났다(gate 가 없어 분기 둘 다 안 탐).
+               * 지금은 시작 전 설문도 목록에 실려 오므로 gate 를 찾고, 상태별로 말이 갈린다.
+               */
+              const gateState = gate ? stateOf(gate) : null;
+              const gateName = gate?.title?.trim() || "설문";
               const why = !hasRegistration
                 ? "사전등록하면 받을 수 있어요"
-                : gate
-                  ? `${gate.title?.trim() || "설문"}을 완료하면 받을 수 있어요`
-                  : "지금은 받을 수 없어요 — 조건 설문이 닫혔어요";
+                : gateState === "before"
+                  ? `${gateName}은 ${formatSurveyOpensAt(gate?.opensAt) || "곧"}부터 열려요`
+                  : gate
+                    ? `${gateName}을 완료하면 받을 수 있어요`
+                    : "지금은 조건 설문이 열려 있지 않아요";
 
               const body = (
                 <>
@@ -217,6 +247,8 @@ export default function EndedScreen({
                     if (!hasRegistration) onRequireRegister?.();
                     else if (gate) onOpenSurvey?.(gate);
                   }}
+                  /* 다음 걸음이 없는 경우(조건 설문이 연결에서 빠짐)엔 눌릴 것처럼 보이지 않게 한다 */
+                  style={!hasRegistration || gate ? undefined : { cursor: "default" }}
                 >
                   {body}
                 </a>

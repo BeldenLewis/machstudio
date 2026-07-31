@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState, type ElementType } from "react";
+import { isSurveyAcceptingResponses } from "@/lib/webinar-survey";
 import { motion, AnimatePresence } from "framer-motion";
 import { FileText, ListChecks, MonitorPlay, SlidersHorizontal, ClipboardCheck, Megaphone } from "lucide-react";
 import SourceInfoTab from "./SourceInfoTab";
@@ -134,9 +135,11 @@ export default function PageSetupTab({
         const res = await fetch(`/api/webinars/${webinar.id}/surveys`);
         if (cancelled || !res.ok) return;
         const data = await res.json();
-        const list = (data.surveys ?? []) as { showOnEnded?: boolean; isOpen?: boolean; closesAt?: string | null }[];
-        const isOpenNow = (v: { isOpen?: boolean; closesAt?: string | null }) =>
-          v.isOpen === true && (!v.closesAt || new Date(v.closesAt).getTime() > Date.now());
+        /* 판정은 공용 함수 하나로 — 여기서 손으로 다시 쓰면 필드가 늘 때(opensAt 이 그랬다)
+           이 화면만 조용히 낡는다. 시작 예약이 걸린 설문을 "공개 중" 이라고 그리던 원인이다. */
+        const list = (data.surveys ?? []) as { showOnEnded?: boolean; isOpen?: boolean; opensAt?: string | null; closesAt?: string | null }[];
+        const isOpenNow = (v: { isOpen?: boolean; opensAt?: string | null; closesAt?: string | null }) =>
+          v.isOpen === true && isSurveyAcceptingResponses({ isOpen: true, opensAt: v.opensAt, closesAt: v.closesAt });
         setHasLinkedEndedSurvey(list.some((v) => v.showOnEnded === true && isOpenNow(v)));
         setHasOpenSurvey(list.some(isOpenNow));
       } catch { /* 준비 상태는 부가 정보라 실패해도 화면을 막지 않는다 */ }

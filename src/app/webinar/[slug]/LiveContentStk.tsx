@@ -13,7 +13,7 @@ import { CheckCircle2, Send, Share2 } from "lucide-react";
 import { formatKst, kstDateString } from "@/lib/datetime";
 import { buildSessionNumbering, cleanSessionText, isPauseSession, isRealSession, parseSpeaker, sessionHasSpeaker, sessionTypeLabel } from "@/lib/webinar-sessions";
 import SurveyForm, { SURVEY_FORM_CSS, clearSurveyDraft } from "./SurveyForm";
-import type { SurveyAnswers, SurveyQuestion } from "@/lib/webinar-survey";
+import { formatSurveyOpensAt, type SurveyAnswers, type SurveyQuestion } from "@/lib/webinar-survey";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -978,8 +978,9 @@ function CtaFormModal({ slug, surveyId, registrationId, onClose }: {
   registrationId: string | null;
   onClose: () => void;
 }) {
-  const [state, setState] = useState<"loading" | "form" | "closed" | "error" | "done">("loading");
-  const [survey, setSurvey] = useState<{ title: string; description: string | null; questions: SurveyQuestion[]; doneTitle?: string | null; doneDescription?: string | null } | null>(null);
+  // "before"(시작 예약 전)를 "closed" 와 나눈다 — 둘을 합치면 아직 열리지도 않은 폼이 이미 끝난 것처럼 보인다
+  const [state, setState] = useState<"loading" | "form" | "closed" | "before" | "error" | "done">("loading");
+  const [survey, setSurvey] = useState<{ title: string; description: string | null; questions: SurveyQuestion[]; opensAt?: string | null; doneTitle?: string | null; doneDescription?: string | null } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const draftKey = `mach_survey_draft_page_${surveyId}`; // 독립 페이지와 초안 공유 — 어느 쪽에서 열어도 이어쓴다
@@ -993,7 +994,7 @@ function CtaFormModal({ slug, surveyId, registrationId, onClose }: {
         if (!res.ok) { setState("error"); return; }
         const data = await res.json();
         setSurvey(data.survey);
-        setState(data.survey?.isOpen ? "form" : "closed");
+        setState(data.survey?.isOpen ? "form" : data.survey?.state === "before" ? "before" : "closed");
       } catch { if (!cancelled) setState("error"); }
     })();
     return () => { cancelled = true; };
@@ -1041,6 +1042,12 @@ function CtaFormModal({ slug, surveyId, registrationId, onClose }: {
         {state === "loading" && <p className="lv-ctamodal-center">불러오는 중…</p>}
         {state === "error" && <p className="lv-ctamodal-center">폼을 불러오지 못했어요.<br />잠시 후 다시 시도해주세요.</p>}
         {state === "closed" && <p className="lv-ctamodal-center">마감된 폼이에요.<br />소중한 관심 감사합니다.</p>}
+        {state === "before" && (
+          <p className="lv-ctamodal-center">
+            아직 열리지 않았어요.<br />
+            {formatSurveyOpensAt(survey?.opensAt) ? `${formatSurveyOpensAt(survey?.opensAt)}부터 참여할 수 있어요.` : "잠시 후 다시 열어주세요."}
+          </p>
+        )}
 
         {state === "form" && survey && (
           <>

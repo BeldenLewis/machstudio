@@ -3,7 +3,7 @@ import type { Prisma } from "@/generated/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
-import { normalizeSurveyQuestions, retainAnsweredQuestions, validateSurveyQuestionLimits } from "@/lib/webinar-survey";
+import { isSurveyAcceptingResponses, normalizeSurveyQuestions, retainAnsweredQuestions, surveyOpenState, validateSurveyQuestionLimits } from "@/lib/webinar-survey";
 
 async function authorize(webinarId: string, userId: string) {
   const webinar = await prisma.webinar.findUnique({ where: { id: webinarId }, select: { id: true, workspaceId: true } });
@@ -75,14 +75,52 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   if (typeof body?.isOpen === "boolean") data.isOpen = body.isOpen;
 
-  // 마감 예약 — null/빈 문자열이면 해제, 아니면 유효한 시각만 수용
+  /**
+   * 응답 기간 — 시작·마감 예약. null/빈 문자열이면 해제, 아니면 유효한 시각만 수용.
+   *
+   * 뒤집힌 범위(시작 >= 마감)는 **거부한다.** 판정 함수(surveyOpenState)는 그 조합에서
+   * "마감" 을 택해 안전하게 동작하지만, 저장까지 받아 주면 운영자는 기간을 설정했다고
+   * 믿는데 설문은 영구히 닫힌 상태가 된다 — 조용히 죽는 설정은 만들지 않는다.
+   * 한쪽만 보내는 PATCH 도 있으므로 검사는 **저장 후 최종 상태**로 한다.
+   */
+  const parseSchedule = (value: unknown, label: string): Date | null | { error: string } => {
+    if (value === null || value === "") return null;
+    const d = new Date(value as string);
+    return isNaN(d.getTime()) ? { error: `${label} 시각이 올바르지 않아요` } : d;
+  };
+  if (body?.opensAt !== undefined) {
+    const r = parseSchedule(body.opensAt, "시작 예약");
+    if (r && typeof r === "object" && "error" in r) return NextResponse.json({ error: r.error }, { status: 400 });
+    data.opensAt = r;
+  }
   if (body?.closesAt !== undefined) {
-    if (body.closesAt === null || body.closesAt === "") {
-      data.closesAt = null;
-    } else {
-      const d = new Date(body.closesAt);
-      if (isNaN(d.getTime())) return NextResponse.json({ error: "마감 예약 시각이 올바르지 않아요" }, { status: 400 });
-      data.closesAt = d;
+    const r = parseSchedule(body.closesAt, "마감 예약");
+    if (r && typeof r === "object" && "error" in r) return NextResponse.json({ error: r.error }, { status: 400 });
+    data.closesAt = r;
+  }
+  /**
+   * 저장 후 최종 응답 창을 미리 계산한다 — 아래 두 판정이 이 값을 쓴다.
+   * (한쪽만 보내는 PATCH 가 흔하므로 현재 값과 합쳐야 한다.)
+   */
+  const scheduleTouched = body?.opensAt !== undefined || body?.closesAt !== undefined;
+  const nextWindow = {
+    isOpen: typeof body?.isOpen === "boolean" ? body.isOpen : existing.isOpen,
+    opensAt: data.opensAt !== undefined ? (data.opensAt as Date | null) : existing.opensAt,
+    closesAt: data.closesAt !== undefined ? (data.closesAt as Date | null) : existing.closesAt,
+  };
+  if (scheduleTouched) {
+    if (nextWindow.opensAt && nextWindow.closesAt && nextWindow.opensAt.getTime() >= nextWindow.closesAt.getTime()) {
+      return NextResponse.json({ error: "시작이 마감보다 늦어요 — 기간을 다시 확인해주세요" }, { status: 400 });
+    }
+    /**
+     * 송출 중인 설문에 응답 기간을 걸어 지금 못 받게 만들면 **발행도 내린다.**
+     *
+     * live-state 는 응답 기간을 벗어난 설문을 걸러 시청자에게 안 보낸다. 그래서 발행 플래그만
+     * 남으면 콘솔은 "송출 중" 이라 하고 시청자 화면엔 아무것도 없는, 아무도 못 알아채는 어긋남이
+     * 생긴다. 상태를 바꾼 그 요청에서 같이 정리하는 게 정직하다.
+     */
+    if (existing.isActive && !isSurveyAcceptingResponses(nextWindow)) {
+      data.isActive = false;
     }
   }
 
@@ -98,6 +136,28 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   // 라이브 푸시 활성화 — 원-액티브: 켤 때 기존 활성 설문을 먼저 내린다 (부분 유니크 인덱스가 레이스 보증, P2002→409)
   if (body?.isActive === true) {
+    /**
+     * 지금 응답을 받지 않는 설문은 **발행을 거절한다.**
+     *
+     * 예전엔 그대로 200 이었다. 그런데 live-state 가 걸러서 시청자에게는 아무것도 안 뜨고,
+     * 더 나쁜 건 아래 트랜잭션 첫 줄이 **지금 잘 송출되던 설문을 내려버린다**는 것이다 —
+     * 라이브 중에 화면이 조용히 비는 사고가 된다. 그래서 트랜잭션 앞에서 막는다.
+     */
+    if (!isSurveyAcceptingResponses(nextWindow)) {
+      const state = surveyOpenState(nextWindow);
+      return NextResponse.json(
+        {
+          error:
+            state === "before"
+              ? "아직 응답 시작 전인 설문이에요 — 시작 예약을 지우거나 시각이 지난 뒤 발행해주세요"
+              : state === "closed"
+                ? "응답이 마감된 설문이에요 — 마감 예약을 지운 뒤 발행해주세요"
+                : "응답 받기가 꺼진 설문이에요 — 먼저 켜주세요",
+          state,
+        },
+        { status: 400 },
+      );
+    }
     try {
       const [, survey] = await prisma.$transaction([
         prisma.webinarSurvey.updateMany({ where: { webinarId: id, isActive: true }, data: { isActive: false } }),
@@ -117,7 +177,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const survey = await prisma.webinarSurvey.update({ where: { id: surveyId }, data });
   // 자동저장(문항 편집)까지 전부 기록하면 피드가 시끄러워짐 — 발행/중지·마감·마감 예약·종료화면 연결 같은 상태 변화만 남긴다
-  if (body?.isActive === false || typeof body?.isOpen === "boolean" || typeof body?.showOnEnded === "boolean" || body?.closesAt !== undefined) {
+  if (body?.isActive === false || typeof body?.isOpen === "boolean" || typeof body?.showOnEnded === "boolean" || body?.opensAt !== undefined || body?.closesAt !== undefined) {
     await logSurveyUpdate(webinar.workspaceId, user.id, id, surveyId, Object.keys(data));
   }
   // retired — 답변이 있어 보관 처리된 문항 수. 편집기가 "지웠지만 보관됨" 을 알릴 수 있게 함께 준다.

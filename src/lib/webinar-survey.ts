@@ -1,6 +1,8 @@
 // 자체 설문 — 문항 스키마 정규화 + 응답 검증. 어드민 빌더/공개 응답 페이지/라이브 푸시/결과 집계가 공유한다.
 // 문항은 WebinarSurvey.questions(JSON) 에 저장: [{ id, type, title, required, options[] }]
 
+import { formatKst } from "@/lib/datetime";
+
 export type SurveyQuestionType = "rating" | "single" | "multiple" | "text" | "nps";
 
 export interface SurveyQuestion {
@@ -117,11 +119,85 @@ export function retainAnsweredQuestions(
   return rescued.length ? [...incoming, ...rescued] : incoming;
 }
 
-/** 응답 수집 중인가 — 수동 토글(isOpen)과 마감 예약(closesAt) 양쪽을 판정. 공개 GET/POST·노출면 게이트가 공유. */
-export function isSurveyAcceptingResponses(s: { isOpen: boolean; closesAt?: string | Date | null }): boolean {
-  if (!s.isOpen) return false;
-  if (!s.closesAt) return true;
-  return new Date(s.closesAt).getTime() > Date.now();
+/** 응답 수집 창의 세 요소. 셋이 함께 판정된다. */
+export interface SurveyWindow {
+  /** 운영자 수동 온·오프 — 마스터 게이트. 꺼져 있으면 시각과 무관하게 안 받는다. */
+  isOpen: boolean;
+  /** 시작 예약 — 이 시각 전에는 받지 않는다. 비우면 즉시 시작. */
+  opensAt?: string | Date | null;
+  /** 마감 예약 — 이 시각부터 받지 않는다. 비우면 무기한. */
+  closesAt?: string | Date | null;
+}
+
+/**
+ * 응답을 못 받는 **이유**까지 알려준다.
+ *
+ * boolean 하나로는 시청자에게 할 말을 고를 수 없다 — "아직 시작 전" 과 "마감됐다" 는
+ * 다른 말이고, 전자는 다시 오면 되지만 후자는 아니다. 예전에는 두 경우가 모두
+ * "마감된 설문이에요" 로 나가서, 시작 예약을 걸어 둔 설문이 이미 끝난 것처럼 보였다.
+ *
+ * · off    — 운영자가 응답 받기를 껐다
+ * · before — 시작 예약이 아직 오지 않았다
+ * · closed — 마감 예약이 지났다
+ * · open   — 받는 중
+ */
+export type SurveyOpenState = "open" | "off" | "before" | "closed";
+
+export function surveyOpenState(s: SurveyWindow, now: number = Date.now()): SurveyOpenState {
+  if (!s.isOpen) return "off";
+  // 잘못된 날짜 문자열은 "설정 없음" 으로 본다 — 판정 불가로 응답을 막으면 조용히 설문이 죽는다.
+  const at = (v: string | Date | null | undefined): number | null => {
+    if (!v) return null;
+    const t = new Date(v).getTime();
+    return Number.isNaN(t) ? null : t;
+  };
+  const opens = at(s.opensAt);
+  const closes = at(s.closesAt);
+  // 마감을 먼저 본다 — 두 값이 뒤집힌 설정(시작 > 마감)에서도 "마감" 이 이긴다.
+  // 그 조합은 운영자가 실수한 것이고, 그때 받아 버리는 것보다 안 받는 쪽이 안전하다.
+  if (closes !== null && now >= closes) return "closed";
+  if (opens !== null && now < opens) return "before";
+  return "open";
+}
+
+/** 응답 수집 중인가 — 온·오프와 시작·마감 예약을 함께 판정. 공개 GET/POST·노출면 게이트가 공유. */
+export function isSurveyAcceptingResponses(s: SurveyWindow): boolean {
+  return surveyOpenState(s) === "open";
+}
+
+/**
+ * 위 판정을 **Prisma where 로 옮긴 것**. DB 단계에서 걸러야 하는 면(라이브 푸시·종료 화면 카드·
+ * 임베드 config)이 쓴다. surveyOpenState 와 같은 뜻이어야 한다 — 갈라지면 목록엔 떠도 제출은
+ * 400 이 되는 유령 설문이 생긴다. 예전엔 이 조건을 네 곳에서 각자 손으로 써서, 응답 시작(opensAt)이
+ * 생기자 네 곳을 모두 찾아 고쳐야 했다. 그래서 조각으로 묶었다.
+ *
+ * webinarId 같은 다른 조건과 함께 스프레드해서 쓴다 — OR 키가 부딪히지 않도록 AND 로 감쌌다.
+ */
+/**
+ * 시작 예약 시각을 사람이 읽는 형태로 — "8월 11일(화) 15:00".
+ *
+ * **KST 고정**이다. 이 플랫폼의 모든 사용자 노출 시각은 한국시간 기준(src/lib/datetime.ts 규약)이고,
+ * 기기 타임존으로 그리면 해외에서 접속한 시청자에게 운영자가 안내한 시각과 다른 숫자가 보인다.
+ * 24시간제도 같은 이유 — 같은 화면의 웨비나 일정이 24시간제로 나온다.
+ *
+ * 뷰어 3면(응답 링크·종료 화면 모달·라이브 CTA 모달)과 어드민이 함께 쓴다. 예전엔 면마다
+ * 각자 toLocaleString 을 불러서 같은 시각이 화면마다 다르게 보였다.
+ */
+export function formatSurveyOpensAt(input: string | Date | null | undefined): string {
+  if (!input) return "";
+  const t = new Date(input).getTime();
+  if (Number.isNaN(t)) return "";
+  return formatKst(t, { month: "long", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+export function surveyAcceptingWhere(now: Date = new Date()) {
+  return {
+    isOpen: true,
+    AND: [
+      { OR: [{ opensAt: null }, { opensAt: { lte: now } }] },
+      { OR: [{ closesAt: null }, { closesAt: { gt: now } }] },
+    ],
+  };
 }
 
 export type SurveyAnswers = Record<string, number | string | string[]>;

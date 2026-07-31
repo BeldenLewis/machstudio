@@ -902,8 +902,9 @@ model WebinarSurvey {
   title       String
   description String?
   questions   Json      @default("[]")
-  isOpen      Boolean   @default(true) // 응답 수집 여부 (마감 시 false)
-  closesAt    DateTime? // 마감 예약 — 이 시각이 지나면 isOpen 과 무관하게 응답 마감
+  isOpen      Boolean   @default(true) // 응답 수집 여부 — 운영자 수동 온·오프(마스터 게이트)
+  opensAt     DateTime? // 시작 예약 — 이 시각 전에는 isOpen 이 켜져 있어도 받지 않는다. 비우면 즉시
+  closesAt    DateTime? // 마감 예약 — 이 시각이 지나면 isOpen 과 무관하게 응답 마감. 비우면 무기한
   doneTitle       String? // 제출 완료 화면 제목 (없으면 노출면별 기본 문구)
   doneDescription String? // 제출 완료 화면 설명
   ctaLabel        String? // 종료 화면 카드의 버튼 문구 (없으면 기본: "설문 참여하기")

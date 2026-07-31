@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import type { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { rateLimitAsync, getClientIp } from "@/lib/ratelimit";
-import { isSurveyAcceptingResponses, normalizeSurveyQuestions, validateSurveyAnswers } from "@/lib/webinar-survey";
+import { isSurveyAcceptingResponses, normalizeSurveyQuestions, surveyOpenState, validateSurveyAnswers } from "@/lib/webinar-survey";
 
 const CORS_HEADERS = { "Access-Control-Allow-Origin": "*" };
 
 async function findSurvey(slug: string, surveyId: string) {
   return prisma.webinarSurvey.findFirst({
     where: { id: surveyId, webinar: { slug } },
-    select: { id: true, webinarId: true, title: true, description: true, questions: true, isOpen: true, closesAt: true, doneTitle: true, doneDescription: true },
+    select: { id: true, webinarId: true, title: true, description: true, questions: true, isOpen: true, opensAt: true, closesAt: true, doneTitle: true, doneDescription: true },
   });
 }
 
@@ -26,7 +26,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         title: survey.title,
         description: survey.description,
         questions: normalizeSurveyQuestions(survey.questions),
-        isOpen: isSurveyAcceptingResponses(survey), // 마감 예약(closesAt) 경과도 마감으로
+        isOpen: isSurveyAcceptingResponses(survey), // 온·오프 + 시작·마감 예약을 함께 판정
+        // 못 받는 이유 — 뷰어가 "아직 시작 전" 과 "마감" 을 다르게 말해야 한다.
+        state: surveyOpenState(survey),
+        // 시작 전일 때만 언제부터인지 알려 준다(마감 시각은 시청자가 할 수 있는 게 없다).
+        opensAt: surveyOpenState(survey) === "before" ? survey.opensAt : null,
         doneTitle: survey.doneTitle,
         doneDescription: survey.doneDescription,
       },
@@ -50,7 +54,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   const survey = await findSurvey(slug, surveyId);
   if (!survey) return NextResponse.json({ error: "없는 설문이에요" }, { status: 404, headers: CORS_HEADERS });
-  if (!isSurveyAcceptingResponses(survey)) return NextResponse.json({ error: "마감된 설문이에요" }, { status: 400, headers: CORS_HEADERS });
+  if (!isSurveyAcceptingResponses(survey)) {
+    const state = surveyOpenState(survey);
+    return NextResponse.json(
+      { error: state === "before" ? "아직 응답을 받기 전이에요" : "마감된 설문이에요", state },
+      { status: 400, headers: CORS_HEADERS },
+    );
+  }
 
   const body = await request.json().catch(() => ({}));
   const questions = normalizeSurveyQuestions(survey.questions);

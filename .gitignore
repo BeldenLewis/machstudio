@@ -61,3 +61,9 @@ next-env.d.ts
 
 # Agent skills lockfile (로컬 설치 목록)
 skills-lock.json
+
+# 캠페인 산출물·스크래치 — 코드가 아니라 재생성 가능한 결과물이라 이력에 넣지 않는다.
+# (광고 소재 PNG·목업·zip·리포트 렌더로 19MB 였다. 커밋하면 이후 clone 마다 따라오고
+#  지우려면 이력 리라이트가 필요하다.) 납품물을 버전 관리하려면 이 두 줄을 지운다.
+exports/
+tmp/
