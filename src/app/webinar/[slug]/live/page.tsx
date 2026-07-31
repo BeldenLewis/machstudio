@@ -9,7 +9,7 @@ import LiveContentStk, { onAccentColor } from "../LiveContentStk";
 import PreLiveWaiting from "../PreLiveWaiting";
 import EntryVerify from "../EntryVerify";
 import EndedScreen from "../EndedScreen";
-import { endedSurveyLinks, readEndedSurveys, type EndedSurveyLink, type EndedSurveyRef } from "@/lib/webinar-ended-surveys";
+import { endedSurveyLinks, readEndedSurveys, readHasInternalEndedSurvey, type EndedSurveyLink, type EndedSurveyRef } from "@/lib/webinar-ended-surveys";
 import ViewerModal from "../ViewerModal";
 import EndedSurveyDialog from "../EndedSurveyDialog";
 import { formatKst } from "@/lib/datetime";
@@ -242,6 +242,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const consentDefaultsAppliedRef = useRef(false);
   // 종료 화면에 연결된 자체 설문 (/info 가 내려줌) — 있으면 외부 surveyUrl 보다 우선
   const [endedSurveys, setEndedSurveys] = useState<EndedSurveyRef[]>([]);
+  // 자체 설문 연결 여부 — 응답 기간을 벗어난 설문도 '있음' 으로 센다(외부 URL 배타 폴백용)
+  const [hasInternalEndedSurvey, setHasInternalEndedSurvey] = useState<boolean | undefined>(undefined);
   /* 이 등록자가 이미 낸 설문 — 자료 게이팅이 본다. /info 가 registrationId 를 받으면 함께 준다. */
   const [completedSurveyIds, setCompletedSurveyIds] = useState<string[]>([]);
   /** 종료 화면 설문 팝업 — 새 창 대신 이 자리에서 답한다(EndedSurveyDialog). */
@@ -314,6 +316,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       const data = await res.json();
       setWebinar(data.webinar);
       setEndedSurveys(readEndedSurveys(data));
+      setHasInternalEndedSurvey(readHasInternalEndedSurvey(data));
       setCompletedSurveyIds(Array.isArray(data.completedSurveyIds) ? data.completedSurveyIds.filter((v: unknown) => typeof v === "string") : []);
       if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
 
@@ -536,6 +539,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             if (!alive) return; // json 파싱 대기 중 slug 변경/언마운트 — stale 데이터로 새 상태를 덮지 않게
             setWebinar(data.webinar);
             setEndedSurveys(readEndedSurveys(data)); // 미리보기도 실제 시청자와 같은 종료 화면 설문을 보도록
+            setHasInternalEndedSurvey(readHasInternalEndedSurvey(data));
             if (typeof data.serverNow === "string") setServerNowMs(new Date(data.serverNow).getTime());
             setPreviewVideoId(typeof data.youtubeId === "string" ? data.youtubeId : null);
             setPreviewState(init);
@@ -1028,10 +1032,12 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     } catch { /* 공유 취소·미지원 무시 */ }
   };
   // 자체 설문 N개 vs 외부 URL 하나의 배타적 폴백 — 규칙은 webinar-ended-surveys.ts 한 곳에.
+  // 존재 플래그를 함께 넘긴다: 시작 예약 창에서 목록이 비어도 옛 외부 URL 이 되살아나지 않게.
   const surveyLinks = endedSurveyLinks(
     endedSurveys,
     webinar.config?.surveyUrl,
     (id) => `/webinar/${slug}/survey/${id}?src=ended`,
+    hasInternalEndedSurvey ?? endedSurveys.length > 0,
   );
   const live = normalizeLivePageConfig(webinar.config);
   // 등록 완료 여부 — 대기 화면은 모두에게 같은 걸 보여주고, 이 값으로 등록 CTA·폼만 켠다.
@@ -1505,6 +1511,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             surface={surface}
             live={live}
             surveys={surveyLinks}
+            serverNowMs={serverNowMs}
             onOpenSurvey={(s) => setOpenedSurvey(s)}
             hasRegistration={hasRegistration}
             completedSurveyIds={completedSurveyIds}

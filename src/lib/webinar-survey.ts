@@ -1,6 +1,8 @@
 // 자체 설문 — 문항 스키마 정규화 + 응답 검증. 어드민 빌더/공개 응답 페이지/라이브 푸시/결과 집계가 공유한다.
 // 문항은 WebinarSurvey.questions(JSON) 에 저장: [{ id, type, title, required, options[] }]
 
+import { formatKst } from "@/lib/datetime";
+
 export type SurveyQuestionType = "rating" | "single" | "multiple" | "text" | "nps";
 
 export interface SurveyQuestion {
@@ -171,6 +173,23 @@ export function isSurveyAcceptingResponses(s: SurveyWindow): boolean {
  *
  * webinarId 같은 다른 조건과 함께 스프레드해서 쓴다 — OR 키가 부딪히지 않도록 AND 로 감쌌다.
  */
+/**
+ * 시작 예약 시각을 사람이 읽는 형태로 — "8월 11일(화) 15:00".
+ *
+ * **KST 고정**이다. 이 플랫폼의 모든 사용자 노출 시각은 한국시간 기준(src/lib/datetime.ts 규약)이고,
+ * 기기 타임존으로 그리면 해외에서 접속한 시청자에게 운영자가 안내한 시각과 다른 숫자가 보인다.
+ * 24시간제도 같은 이유 — 같은 화면의 웨비나 일정이 24시간제로 나온다.
+ *
+ * 뷰어 3면(응답 링크·종료 화면 모달·라이브 CTA 모달)과 어드민이 함께 쓴다. 예전엔 면마다
+ * 각자 toLocaleString 을 불러서 같은 시각이 화면마다 다르게 보였다.
+ */
+export function formatSurveyOpensAt(input: string | Date | null | undefined): string {
+  if (!input) return "";
+  const t = new Date(input).getTime();
+  if (Number.isNaN(t)) return "";
+  return formatKst(t, { month: "long", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" });
+}
+
 export function surveyAcceptingWhere(now: Date = new Date()) {
   return {
     isOpen: true,

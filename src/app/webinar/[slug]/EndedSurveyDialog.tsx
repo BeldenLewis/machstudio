@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatSurveyOpensAt } from "@/lib/webinar-survey";
 import ViewerModal from "./ViewerModal";
 import SurveyForm, { SURVEY_FORM_CSS, clearSurveyDraft } from "./SurveyForm";
 import type { SurveyAnswers, SurveyQuestion } from "@/lib/webinar-survey";
@@ -50,6 +51,7 @@ export default function EndedSurveyDialog({
     questions: SurveyQuestion[];
     isOpen: boolean;
     state?: "open" | "off" | "before" | "closed"; // 못 받는 이유 — 시작 전과 마감을 다르게 말한다
+    opensAt?: string | null; // 시작 전일 때만 온다 — 언제 다시 오면 되는지
     doneTitle: string | null;
     doneDescription: string | null;
   } | null>(null);
@@ -75,6 +77,7 @@ export default function EndedSurveyDialog({
           questions: Array.isArray(data?.survey?.questions) ? data.survey.questions : [],
           isOpen: data?.survey?.isOpen === true,
           state: data?.survey?.state,
+          opensAt: typeof data?.survey?.opensAt === "string" ? data.survey.opensAt : null,
           doneTitle: data?.survey?.doneTitle ?? null,
           doneDescription: data?.survey?.doneDescription ?? null,
         });
@@ -138,8 +141,22 @@ export default function EndedSurveyDialog({
       ) : closed ? (
         // 마감/시작 전 — 종료 화면 카드는 노출 조건을 서버에서 판정하지만, 페이지를 열어 둔 채
         // 예약 시각이 지나는(또는 아직 오지 않은) 경우가 있다. 빈 폼 대신 이유를 말한다.
-        <p className="py-8 text-center text-sm" style={{ color: soft(65) }}>
-          {survey.state === "before" ? "이 설문은 아직 응답을 받기 전이에요." : "이 설문은 응답이 마감됐어요."}
+        <p className="py-8 text-center text-sm leading-relaxed" style={{ color: soft(65) }}>
+          {survey.state === "before" ? (
+            <>
+              이 설문은 아직 응답을 받기 전이에요.
+              {/* 서버가 시작 시각을 함께 보내는데 예전엔 읽지 않아서, 세 노출면 중 이 팝업만
+                  "언제부터" 를 말하지 않았다. 다시 올 시점을 아는 게 이 화면의 전부다. */}
+              {formatSurveyOpensAt(survey.opensAt) && (
+                <>
+                  <br />
+                  {formatSurveyOpensAt(survey.opensAt)}부터 참여할 수 있어요.
+                </>
+              )}
+            </>
+          ) : (
+            "이 설문은 응답이 마감됐어요."
+          )}
         </p>
       ) : (
         <>

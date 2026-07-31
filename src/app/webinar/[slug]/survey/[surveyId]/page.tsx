@@ -4,7 +4,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import { Loader2, Check } from "lucide-react";
 import { buildStkCss } from "../../LiveContentStk";
 import SurveyForm, { SURVEY_FORM_CSS, clearSurveyDraft } from "../../SurveyForm";
-import type { SurveyAnswers, SurveyQuestion } from "@/lib/webinar-survey";
+import { formatSurveyOpensAt, type SurveyAnswers, type SurveyQuestion } from "@/lib/webinar-survey";
 
 /**
  * 독립 설문 응답 페이지 — /webinar/[slug]/survey/[surveyId]
@@ -36,14 +36,6 @@ interface PublicSurvey {
   doneDescription?: string | null;
 }
 
-/** 시작 예약 시각 안내 — "8월 11일(화) 오후 2:00". 시청자용이라 24시간제 대신 오전/오후. */
-function fmtOpensAt(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleString("ko-KR", { month: "long", day: "numeric", weekday: "short", hour: "numeric", minute: "2-digit" });
-}
-
 type PageState = "loading" | "notfound" | "closed" | "before" | "form" | "done";
 
 export default function SurveyPage({ params }: { params: Promise<{ slug: string; surveyId: string }> }) {
@@ -54,6 +46,24 @@ export default function SurveyPage({ params }: { params: Promise<{ slug: string;
   const [state, setState] = useState<PageState>("loading");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+
+  /**
+   * 시작 예약 시각이 되면 **스스로 열린다**.
+   *
+   * "8월 11일 15:00부터 참여할 수 있어요" 를 읽은 사람이 가장 많이 있는 곳이 바로 이 페이지다.
+   * 그 시각에 화면이 그대로면 안내가 거짓이 되고, 사용자는 새로고침해야 하는지 알 수 없다.
+   * 서버 시각을 따로 받지 않고 opensAt 까지 남은 시간만큼 기다렸다 다시 부른다(+2초 여유 —
+   * 기기 시계가 조금 빠르면 아직 before 로 돌아온다).
+   */
+  const [reloadKey, setReloadKey] = useState(0);
+  useEffect(() => {
+    if (state !== "before" || !survey?.opensAt) return;
+    const delay = new Date(survey.opensAt).getTime() - Date.now() + 2000;
+    // setTimeout 은 ~24.8일(32비트)을 넘기면 즉시 발화한다 — 먼 예약은 타이머를 걸지 않는다
+    if (!Number.isFinite(delay) || delay > 24 * 3600e3) return;
+    const t = setTimeout(() => setReloadKey((k) => k + 1), Math.max(delay, 1000));
+    return () => clearTimeout(t);
+  }, [state, survey?.opensAt]);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,7 +94,7 @@ export default function SurveyPage({ params }: { params: Promise<{ slug: string;
       }
     })();
     return () => { cancelled = true; };
-  }, [slug, surveyId]);
+  }, [slug, surveyId, reloadKey]);
 
   const css = useMemo(() => buildStkCss(theme.accent, theme.text, theme.surface) + SURVEY_FORM_CSS + PAGE_CSS, [theme]);
 
@@ -145,7 +155,7 @@ export default function SurveyPage({ params }: { params: Promise<{ slug: string;
         <div className="svp-center">
           <p className="svp-done-title">아직 응답을 받기 전이에요</p>
           <p style={{ margin: 0, fontSize: 14 }}>
-            {fmtOpensAt(survey?.opensAt) ? `${fmtOpensAt(survey?.opensAt)}부터 참여할 수 있어요.` : "잠시 후 다시 열어주세요."}
+            {formatSurveyOpensAt(survey?.opensAt) ? `${formatSurveyOpensAt(survey?.opensAt)}부터 참여할 수 있어요.` : "잠시 후 다시 열어주세요."}
           </p>
         </div>
       )}

@@ -3,7 +3,7 @@ import type { Prisma } from "@/generated/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
-import { normalizeSurveyQuestions, retainAnsweredQuestions, validateSurveyQuestionLimits } from "@/lib/webinar-survey";
+import { isSurveyAcceptingResponses, normalizeSurveyQuestions, retainAnsweredQuestions, surveyOpenState, validateSurveyQuestionLimits } from "@/lib/webinar-survey";
 
 async function authorize(webinarId: string, userId: string) {
   const webinar = await prisma.webinar.findUnique({ where: { id: webinarId }, select: { id: true, workspaceId: true } });
@@ -98,15 +98,29 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (r && typeof r === "object" && "error" in r) return NextResponse.json({ error: r.error }, { status: 400 });
     data.closesAt = r;
   }
-  if (body?.opensAt !== undefined || body?.closesAt !== undefined) {
-    const existing = await prisma.webinarSurvey.findUnique({
-      where: { id: surveyId },
-      select: { opensAt: true, closesAt: true },
-    });
-    const nextOpens = data.opensAt !== undefined ? (data.opensAt as Date | null) : (existing?.opensAt ?? null);
-    const nextCloses = data.closesAt !== undefined ? (data.closesAt as Date | null) : (existing?.closesAt ?? null);
-    if (nextOpens && nextCloses && nextOpens.getTime() >= nextCloses.getTime()) {
+  /**
+   * 저장 후 최종 응답 창을 미리 계산한다 — 아래 두 판정이 이 값을 쓴다.
+   * (한쪽만 보내는 PATCH 가 흔하므로 현재 값과 합쳐야 한다.)
+   */
+  const scheduleTouched = body?.opensAt !== undefined || body?.closesAt !== undefined;
+  const nextWindow = {
+    isOpen: typeof body?.isOpen === "boolean" ? body.isOpen : existing.isOpen,
+    opensAt: data.opensAt !== undefined ? (data.opensAt as Date | null) : existing.opensAt,
+    closesAt: data.closesAt !== undefined ? (data.closesAt as Date | null) : existing.closesAt,
+  };
+  if (scheduleTouched) {
+    if (nextWindow.opensAt && nextWindow.closesAt && nextWindow.opensAt.getTime() >= nextWindow.closesAt.getTime()) {
       return NextResponse.json({ error: "시작이 마감보다 늦어요 — 기간을 다시 확인해주세요" }, { status: 400 });
+    }
+    /**
+     * 송출 중인 설문에 응답 기간을 걸어 지금 못 받게 만들면 **발행도 내린다.**
+     *
+     * live-state 는 응답 기간을 벗어난 설문을 걸러 시청자에게 안 보낸다. 그래서 발행 플래그만
+     * 남으면 콘솔은 "송출 중" 이라 하고 시청자 화면엔 아무것도 없는, 아무도 못 알아채는 어긋남이
+     * 생긴다. 상태를 바꾼 그 요청에서 같이 정리하는 게 정직하다.
+     */
+    if (existing.isActive && !isSurveyAcceptingResponses(nextWindow)) {
+      data.isActive = false;
     }
   }
 
@@ -122,6 +136,28 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   // 라이브 푸시 활성화 — 원-액티브: 켤 때 기존 활성 설문을 먼저 내린다 (부분 유니크 인덱스가 레이스 보증, P2002→409)
   if (body?.isActive === true) {
+    /**
+     * 지금 응답을 받지 않는 설문은 **발행을 거절한다.**
+     *
+     * 예전엔 그대로 200 이었다. 그런데 live-state 가 걸러서 시청자에게는 아무것도 안 뜨고,
+     * 더 나쁜 건 아래 트랜잭션 첫 줄이 **지금 잘 송출되던 설문을 내려버린다**는 것이다 —
+     * 라이브 중에 화면이 조용히 비는 사고가 된다. 그래서 트랜잭션 앞에서 막는다.
+     */
+    if (!isSurveyAcceptingResponses(nextWindow)) {
+      const state = surveyOpenState(nextWindow);
+      return NextResponse.json(
+        {
+          error:
+            state === "before"
+              ? "아직 응답 시작 전인 설문이에요 — 시작 예약을 지우거나 시각이 지난 뒤 발행해주세요"
+              : state === "closed"
+                ? "응답이 마감된 설문이에요 — 마감 예약을 지운 뒤 발행해주세요"
+                : "응답 받기가 꺼진 설문이에요 — 먼저 켜주세요",
+          state,
+        },
+        { status: 400 },
+      );
+    }
     try {
       const [, survey] = await prisma.$transaction([
         prisma.webinarSurvey.updateMany({ where: { webinarId: id, isActive: true }, data: { isActive: false } }),

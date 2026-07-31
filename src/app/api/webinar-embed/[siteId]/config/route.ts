@@ -7,7 +7,6 @@
  *   오리진(Supabase) 조회는 CDN이 흡수한다. CORS 는 * (Origin echo 는 캐시 파편화 유발).
  */
 import { buildIcs } from "@/lib/webinar-calendar";
-import { surveyAcceptingWhere } from "@/lib/webinar-survey";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
@@ -135,8 +134,18 @@ export async function GET(req: Request, { params }: { params: Promise<{ siteId: 
    * orderBy 는 결정론을 위한 것이다 — 정렬 없는 findFirst 는 여러 개가 되는 순간
    * 어느 설문이 뽑힐지 DB 순서에 달리고, 캐시된 임베드 설정이 조용히 다른 링크를 갖게 된다.
    */
+  /**
+   * 응답 기간으로 걸러 **뽑지 않는다** — 두 가지 이유.
+   * (1) 시작 예약·마감 창에서 자체 설문이 "없는 것" 이 되면 endedSurveyLinks 가 옛 외부
+   *     surveyUrl 로 폴백해, 파트너 사이트 배너가 **지웠다고 생각한 옛 폼**을 가리킨다.
+   * (2) 이 payload 는 CDN 에 캐시된다 — 시각에 따라 달라지는 값을 굳히면 예약 시각이 지나도
+   *     캐시가 만료될 때까지 옛 판정이 남는다. 링크는 시각과 무관하게 고정하고, 열림 여부는
+   *     그 링크가 가리키는 응답 페이지가 스스로 말한다("아직 열리지 않았어요" + 시각).
+   * off(운영자가 끔)·closed 인 설문도 링크는 유지된다 — 응답 페이지가 이유를 말하므로
+   *     옛 외부 폼으로 보내는 것보다 정확하다.
+   */
   const endedSurvey = await prisma.webinarSurvey.findFirst({
-    where: { webinarId: webinar.id, showOnEnded: true, ...surveyAcceptingWhere() },
+    where: { webinarId: webinar.id, showOnEnded: true },
     orderBy: { createdAt: "asc" },
     select: { id: true },
   });
