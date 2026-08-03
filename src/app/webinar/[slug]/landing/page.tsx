@@ -13,6 +13,7 @@ import { use, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { mountLanding } from "@/lib/landing/mount";
 import type { LandingWebinar } from "@/lib/landing/types";
+import { sendVisitBeacon } from "@/lib/attribution-client";
 
 /**
  * /info 는 liveEndAt·signupDeadline 도 함께 내려주지만 LandingWebinar 타입은 뷰가 실제로
@@ -37,6 +38,15 @@ export default function WebinarLandingPage({ params }: { params: Promise<{ slug:
   const [previewAllowed, setPreviewAllowed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * 방문 1회 기록(세션당 1회) — 퍼널의 "방문" 분모.
+   * 랜딩은 등록의 주 진입점인데 방문이 임베드 로더 비콘으로만 쌓여서, 이 페이지로 온 캠페인은
+   * 분석 표에서 분모 0(등록률 0%) 이었다. 미리보기 가드는 sendVisitBeacon 안에 있다.
+   */
+  useEffect(() => {
+    sendVisitBeacon(slug);
+  }, [slug]);
 
   useEffect(() => {
     let alive = true;

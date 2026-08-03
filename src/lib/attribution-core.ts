@@ -2,7 +2,17 @@
 // localStorage/sessionStorage/cookie 삼중 저장, first/last-touch, 여정(최대 20), 클릭ID 추론.
 // 노출 함수: migrateLegacyUtm(), captureUtm(), storageGet(key), emptyUtm(), inferFromReferrer()
 // 상수: UTM_LAST_KEY, UTM_FIRST_KEY, JOURNEY_KEY (localStorage 키를 공유하므로 collect와 웨비나가 같은 방문자 여정을 본다)
-// 주의: 보간 없는 순수 문자열이어야 한다 (로더 캐시가 사이트별로만 달라지도록).
+//
+// 주의: **사이트별로 달라지는 보간은 금지**다(로더 캐시가 사이트마다 갈라진다). 아래 맵 주입은
+// 앱 전체에서 상수라 캐시 키에 영향이 없다 — 채널 맵을 TS 모듈에서 가져와 박는 이유는, 예전에
+// 이 문자열과 서버·라이브 페이지가 각자 맵을 들고 있어서 같은 리퍼러가 경로마다 다른 채널로
+// 기록됐기 때문이다(정본: attribution-normalize.ts).
+
+import { CLICK_ID_MAP, REFERRER_MAP, UTM_MAX_LENGTH } from "./attribution-normalize";
+
+// REFERRER_MAP 은 [source, medium] 튜플 — 아래 문자열 코드가 배열 인덱스로 읽으므로 그대로 직렬화한다.
+const CLICK_ID_MAP_JSON = JSON.stringify(CLICK_ID_MAP);
+const REFERRER_MAP_JSON = JSON.stringify(REFERRER_MAP);
 
 export const ATTRIBUTION_CORE_JS = `  /* iOS Safari ITP: localStorage가 7일 후 만료될 수 있음. 서버측 first-party cookie 도입 시까지 제약. */
   var UTM_LAST_KEY  = "mach_utm";
@@ -16,33 +26,10 @@ export const ATTRIBUTION_CORE_JS = `  /* iOS Safari ITP: localStorage가 7일 �
   var JOURNEY_MAX = 20;
   var UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id"];
 
-  // 클릭 ID → source/medium 매핑 (UTM 없을 때 derive)
-  var CLICK_ID_MAP = {
-    gclid:     { source: "google",      medium: "cpc" },
-    fbclid:    { source: "facebook",    medium: "paid_social" },
-    msclkid:   { source: "bing",        medium: "cpc" },
-    yclid:     { source: "yandex",      medium: "cpc" },
-    dclid:     { source: "doubleclick", medium: "display" },
-    li_fat_id: { source: "linkedin",    medium: "paid_social" }
-  };
-
-  var REFERRER_MAP = {
-    "google.com":      ["google",    "organic"],
-    "naver.com":       ["naver",     "organic"],
-    "daum.net":        ["daum",      "organic"],
-    "bing.com":        ["bing",      "organic"],
-    "yahoo.com":       ["yahoo",     "organic"],
-    "duckduckgo.com":  ["duckduckgo","organic"],
-    "facebook.com":    ["facebook",  "social"],
-    "instagram.com":   ["instagram", "social"],
-    "twitter.com":     ["twitter",   "social"],
-    "x.com":           ["twitter",   "social"],
-    "youtube.com":     ["youtube",   "social"],
-    "linkedin.com":    ["linkedin",  "social"],
-    "kakao.com":       ["kakao",     "social"],
-    "tistory.com":     ["tistory",   "referral"],
-    "brunch.co.kr":    ["brunch",    "referral"]
-  };
+  // 클릭 ID → source/medium 매핑, 리퍼러 호스트 → [source, medium]
+  // 둘 다 정본은 attribution-normalize.ts — 서버·라이브 페이지와 같은 맵을 쓰기 위해 주입한다.
+  var CLICK_ID_MAP = ${CLICK_ID_MAP_JSON};
+  var REFERRER_MAP = ${REFERRER_MAP_JSON};
 
   function emptyUtm() { return { utmSource:"", utmMedium:"", utmCampaign:"", utmTerm:"", utmContent:"", utmId:"", referrer:"", seenAt:"" }; }
 
@@ -133,10 +120,18 @@ export const ATTRIBUTION_CORE_JS = `  /* iOS Safari ITP: localStorage가 7일 �
     return null;
   }
 
-  // utmSource/utmMedium 은 lowercase+trim, 나머지는 trim 만
+  // utmSource/utmMedium 은 lowercase+trim(+"어트리뷰션 없음" 센티널 접기), 나머지는 trim 만.
+  // 길이 컷은 서버(방문·등록)와 같은 값이어야 한다 — 예전엔 방문 100자/등록 500자라 긴 값이
+  // 두 키로 갈라져 같은 유입이 표에서 분리됐다.
+  var UTM_MAX_LEN = ${UTM_MAX_LENGTH};
+  var DIRECT_SENTINELS = ["(direct)", "(none)", "(not set)", "direct", "none"];
+  function foldDirect(v) {
+    for (var i = 0; i < DIRECT_SENTINELS.length; i++) { if (v === DIRECT_SENTINELS[i]) return ""; }
+    return v;
+  }
   function normalizeUtm(u) {
-    var lcTrim = function(s) { return (s || "").toString().trim().toLowerCase(); };
-    var tr = function(s) { return (s || "").toString().trim(); };
+    var lcTrim = function(s) { return foldDirect((s || "").toString().trim().toLowerCase()).slice(0, UTM_MAX_LEN); };
+    var tr = function(s) { return (s || "").toString().trim().slice(0, UTM_MAX_LEN); };
     return {
       utmSource:   lcTrim(u.utmSource),
       utmMedium:   lcTrim(u.utmMedium),
@@ -199,9 +194,13 @@ export const ATTRIBUTION_CORE_JS = `  /* iOS Safari ITP: localStorage가 7일 �
     } catch(e) { return null; }
   }
 
+  /* 완전 다이렉트는 **빈 값**으로 기록한다.
+     예전엔 리터럴 "(direct)"/"(none)" 을 저장했는데, 같은 상황을 자체 라이브 페이지는 null,
+     스토리지 실패는 "" 로 저장해서 집계가 세 키로 갈라졌다 — 표에는 똑같이 '직접 유입' 으로
+     보이는 행이 두 줄 생기고 방문과 등록이 서로 다른 줄에 붙었다. 라벨은 화면에서만 붙인다. */
   function inferDirect() {
     return normalizeUtm({
-      utmSource: "(direct)", utmMedium: "(none)",
+      utmSource: "", utmMedium: "",
       utmCampaign: "", utmTerm: "", utmContent: "", utmId: "",
       referrer: "", seenAt: new Date().toISOString()
     });

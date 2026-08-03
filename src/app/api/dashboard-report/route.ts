@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import type { RealtimeReportData } from "@/app/(app)/dashboard/RealtimeReport";
+import { normalizeUtmKey } from "@/lib/attribution-normalize";
 
 // 결과 캐싱 (egress 절감): 동일 조건 조회를 짧게 캐시해 반복 DB 트래픽 제거.
 // 서버리스 인스턴스 단위 캐시 — 같은 인스턴스에 도달하는 반복/동시 조회에 효과.
@@ -465,9 +466,10 @@ function buildDailyUtmTrendFromRows(
 ): { source: DailyUtmView; medium: DailyUtmView; combined: DailyUtmView } {
   const TOP = 5;
 
+  // 같은 채널이 대소문자 차이로 추이 차트에 두 시리즈로 갈라지지 않게 접는다(utmTop 과 같은 규칙).
   const getKey = (row: { source: string | null; medium: string | null }, dimension: "source" | "medium" | "combined") => {
-    const src = row.source ?? "";
-    const med = row.medium ?? "";
+    const src = normalizeUtmKey(row.source);
+    const med = normalizeUtmKey(row.medium);
     if (dimension === "source") return src;
     if (dimension === "medium") return med;
     return [src, med].filter(Boolean).join(" / ");
@@ -826,14 +828,26 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
     uniqueRatio: recordsWithEmail > 0 ? uniqueEmails / recordsWithEmail : null,
   };
 
-  const utmRows = utmGroups
-    .map((group) => {
-      const source = cleanUtmValue(group[utmCols.source]);
-      const medium = cleanUtmValue(group[utmCols.medium]);
-      const campaign = cleanUtmValue(group[utmCols.campaign]);
-      return { source, medium, campaign, count: group._count._all };
-    })
-    .filter((group) => group.source || group.medium || group.campaign);
+  /**
+   * source/medium 은 접은 키로 **재병합**한다.
+   *
+   * groupBy 는 DB 원본값으로 묶으므로 naver / Naver 가 별개 그룹으로 나온다. 예전엔 trim 만 하고
+   * 재병합을 안 해서 같은 채널이 리포트에 두 줄로 잡히고 비율(percent)이 서로 나뉘었다.
+   * 정규화 규칙은 웨비나 분석 표와 같은 함수(attribution-normalize)를 쓴다 — 한 제품 안에서
+   * 같은 채널이 화면마다 다른 이름·다른 비율로 보이면 안 된다.
+   */
+  const mergedUtm = new Map<string, { source: string; medium: string; campaign: string; count: number }>();
+  for (const group of utmGroups) {
+    const source = normalizeUtmKey(group[utmCols.source]);
+    const medium = normalizeUtmKey(group[utmCols.medium]);
+    const campaign = cleanUtmValue(group[utmCols.campaign]);
+    if (!source && !medium && !campaign) continue;
+    const key = `${source}|${medium}|${campaign}`;
+    const prev = mergedUtm.get(key);
+    if (prev) prev.count += group._count._all;
+    else mergedUtm.set(key, { source, medium, campaign, count: group._count._all });
+  }
+  const utmRows = Array.from(mergedUtm.values());
   const utmTotal = utmRows.reduce((sum, group) => sum + group.count, 0);
   const utmTop = utmRows
     .map((group) => ({

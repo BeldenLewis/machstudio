@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { useWorkspace } from "@/contexts/workspace";
 import { Select } from "@/components/ui/select";
 import { formatKst, kstDateString, kstYear } from "@/lib/datetime";
+import { normalizeUtmKey } from "@/lib/attribution-normalize";
 
 const BASIC_SOURCES = [
   { label: "구글",       value: "google" },
@@ -136,6 +137,18 @@ function hasCampaignFormatIssue(campaign: string) {
 
 function normalizeCampaign(campaign: string) {
   return campaign.replace(/\s+/g, "_").toLowerCase();
+}
+
+/**
+ * 생성되는 링크의 utm_source/utm_medium 을 **수집 규약(소문자)에 맞춰** 넣는다.
+ *
+ * 예전엔 폼 값을 원문 그대로 박았다. 그런데 수집·저장·집계는 이 두 필드를 소문자 키로 다루므로,
+ * 운영자가 'Naver' 로 만든 링크는 저장 시 naver 로 접히면서 **빌더 목록에 남은 값과 분석 표의
+ * 값이 영구히 달라졌다**(캠페인만 소문자 경고가 있었고 source/medium 은 자유 입력이었다).
+ * 링크를 만들 때부터 접어 두면 운영자가 보는 값과 집계 값이 같아진다.
+ */
+function utmKey(value: string) {
+  return normalizeUtmKey(value);
 }
 
 function uniqueValues(values: Array<string | null | undefined>) {
@@ -683,8 +696,8 @@ function CreateDrawer({ open, onClose, presets, templates, onSaved, editingLink,
     try {
       const base = baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`;
       const u = new URL(base);
-      u.searchParams.set("utm_source", form.source);
-      u.searchParams.set("utm_medium", form.medium);
+      u.searchParams.set("utm_source", utmKey(form.source));
+      u.searchParams.set("utm_medium", utmKey(form.medium));
       u.searchParams.set("utm_campaign", form.campaign);
       if (form.term)    u.searchParams.set("utm_term", form.term);
       if (form.content) u.searchParams.set("utm_content", form.content);
@@ -735,8 +748,8 @@ function CreateDrawer({ open, onClose, presets, templates, onSaved, editingLink,
     try {
       const base = url.startsWith("http") ? url : `https://${url}`;
       const u = new URL(base);
-      u.searchParams.set("utm_source", source);
-      u.searchParams.set("utm_medium", medium);
+      u.searchParams.set("utm_source", utmKey(source));
+      u.searchParams.set("utm_medium", utmKey(medium));
       u.searchParams.set("utm_campaign", form.campaign);
       if (form.term)    u.searchParams.set("utm_term", form.term);
       if (form.content) u.searchParams.set("utm_content", form.content);
@@ -767,8 +780,8 @@ function CreateDrawer({ open, onClose, presets, templates, onSaved, editingLink,
           const linkName = form.name
             ? (n === 1 ? form.name : `${form.name} · ${source}/${medium}`)
             : null;
-          u.searchParams.set("utm_source", source);
-          u.searchParams.set("utm_medium", medium);
+          u.searchParams.set("utm_source", utmKey(source));
+          u.searchParams.set("utm_medium", utmKey(medium));
           u.searchParams.set("utm_campaign", form.campaign);
           if (form.term)    u.searchParams.set("utm_term", form.term);
           if (form.content) u.searchParams.set("utm_content", form.content);
@@ -823,8 +836,8 @@ function CreateDrawer({ open, onClose, presets, templates, onSaved, editingLink,
     try {
       const base = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
       const u = new URL(base);
-      u.searchParams.set("utm_source", form.source);
-      u.searchParams.set("utm_medium", form.medium);
+      u.searchParams.set("utm_source", utmKey(form.source));
+      u.searchParams.set("utm_medium", utmKey(form.medium));
       u.searchParams.set("utm_campaign", form.campaign);
       if (form.term)    u.searchParams.set("utm_term", form.term);
       if (form.content) u.searchParams.set("utm_content", form.content);
@@ -1287,7 +1300,7 @@ function CreateDrawer({ open, onClose, presets, templates, onSaved, editingLink,
                             {advCombinations.map(({ url, source, medium }) => {
                               const base = url.startsWith("http") ? url : `https://${url}`;
                               let preview = "";
-                              try { const u = new URL(base); u.searchParams.set("utm_source", source); u.searchParams.set("utm_medium", medium); u.searchParams.set("utm_campaign", form.campaign); preview = u.toString(); } catch { preview = ""; }
+                              try { const u = new URL(base); u.searchParams.set("utm_source", utmKey(source)); u.searchParams.set("utm_medium", utmKey(medium)); u.searchParams.set("utm_campaign", form.campaign); preview = u.toString(); } catch { preview = ""; }
                               return (
                                 <div key={`${url}-${source}-${medium}`} className="space-y-0.5">
                                   <div className="flex items-center gap-1.5 text-[11px]">

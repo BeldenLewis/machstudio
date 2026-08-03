@@ -73,6 +73,14 @@ interface Registration {
   submittedAt: string;
   enteredAt: string | null;
   lastPingAt: string | null;
+  // 유입 경로 — 상세 패널이 보여준다(저장은 하는데 화면 어디에도 안 나오던 값).
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
+  firstUtmSource?: string | null;
+  firstUtmMedium?: string | null;
+  firstUtmCampaign?: string | null;
+  referrer?: string | null;
   surveyResponses: SurveyResponse[];
   qaItems: QAItem[];
 }
@@ -1153,6 +1161,40 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                     </dl>
                   </div>
                 )}
+
+                {/* 유입 경로 — utm 12컬럼·referrer 를 저장하는데 제품 UI 어디에도 안 보였다(파일로만
+                    나갔다). "이 리드가 어디서 왔나" 는 명단을 볼 때 가장 먼저 묻는 질문이라 여기 둔다.
+                    마지막 유입과 최초 유입이 다를 때만 둘 다 보여준다 — 같으면 한 줄로 충분하다. */}
+                {(() => {
+                  const r = selectedRegistration;
+                  if (!r) return null;
+                  const last = [r.utmSource, r.utmMedium, r.utmCampaign].filter(Boolean).join(" / ");
+                  const first = [r.firstUtmSource, r.firstUtmMedium, r.firstUtmCampaign].filter(Boolean).join(" / ");
+                  if (!last && !first && !r.referrer) return null;
+                  return (
+                    <div className="rounded-2xl border border-border bg-secondary/20 p-3">
+                      <p className="mb-2 text-xs font-medium text-muted-foreground">유입 경로</p>
+                      <dl className="space-y-1.5 text-sm">
+                        <div className="flex gap-2">
+                          <dt className="shrink-0 text-muted-foreground">{first && first !== last ? "마지막 유입" : "유입"}</dt>
+                          <dd className="break-words text-foreground">{last || "직접 유입"}</dd>
+                        </div>
+                        {first && first !== last && (
+                          <div className="flex gap-2">
+                            <dt className="shrink-0 text-muted-foreground">최초 유입</dt>
+                            <dd className="break-words text-foreground">{first}</dd>
+                          </div>
+                        )}
+                        {r.referrer && (
+                          <div className="flex gap-2">
+                            <dt className="shrink-0 text-muted-foreground">referrer</dt>
+                            <dd className="break-all text-xs text-muted-foreground">{r.referrer}</dd>
+                          </div>
+                        )}
+                      </dl>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="space-y-2 rounded-2xl border border-border bg-secondary/20 p-3">

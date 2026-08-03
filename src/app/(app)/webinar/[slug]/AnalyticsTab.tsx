@@ -110,6 +110,10 @@ interface AnalyticsData {
   interactions: Interactions;
   scoring: Scoring;
   hasVisitData: boolean;
+  /** 광고비 합산 기간 — 캠페인 표 캡션이 밝힌다(스키마상 웨비나 단위로 스코핑할 수 없어서). */
+  costScope?: { from: string; to: string };
+  /** 이름이 안 맞아 비용이 붙지 않은 광고 캠페인명 — 표 위에 안내로 띄운다. */
+  unmatchedAdCampaigns?: string[];
 }
 
 interface CurvePoint { label: string; viewers: number; entered: number; chat: number }
@@ -694,6 +698,11 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
   const campaigns = data.campaignBreakdown ?? [];
   const trend = data.registrationTrend ?? [];
   const hasVisits = data.hasVisitData;
+  const unmatchedAdCampaigns = data.unmatchedAdCampaigns ?? [];
+  // 광고비 합산 기간 — 캠페인 표 캡션용. 스키마에 webinarId 가 없어 기간으로만 좁힐 수 있다.
+  const costScope = data.costScope
+    ? `${formatKst(data.costScope.from, { month: "numeric", day: "numeric" })}~${formatKst(data.costScope.to, { month: "numeric", day: "numeric" })}`
+    : null;
   const funnelBase = hasVisits ? funnel.visits : funnel.registered;
   const peak = fullCurve?.peak ?? curve?.peak ?? 0;
   const avgConc = fullCurve?.avg ?? curve?.avg ?? 0;
@@ -1000,7 +1009,14 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
                     <td className="py-2 pr-3 text-muted-foreground">{SOURCE_LABEL[row.medium] ?? row.medium}</td>
                     {hasVisits && <td className="py-2 pr-3 text-right tabular-nums">{n(row.visits)}</td>}
                     <td className="py-2 pr-3 text-right tabular-nums">{n(row.registered)}</td>
-                    {hasVisits && <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">{row.regRate}%</td>}
+                    {/* 방문이 0인데 등록이 있으면 등록률은 0% 가 아니라 **알 수 없음**이다.
+                        (예: 방문 집계가 붙지 않은 유입 경로) 0% 로 쓰면 "전환이 하나도 없는 채널" 로
+                        오독되는데, 실제로는 가장 잘 전환된 채널일 수 있다. */}
+                    {hasVisits && (
+                      <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">
+                        {row.visits > 0 ? `${row.regRate}%` : <span className="text-muted-foreground/40" title="이 경로의 방문이 집계되지 않아 등록률을 낼 수 없어요">—</span>}
+                      </td>
+                    )}
                     <td className="py-2 pr-3 text-right tabular-nums">{n(row.entered)}</td>
                     <td className="py-2 text-right tabular-nums text-muted-foreground">{row.entryRate}%</td>
                   </motion.tr>
@@ -1014,7 +1030,20 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
       {/* 캠페인별 성과 · 광고비 */}
       <SectionCard>
         <h3 className="text-sm font-semibold">캠페인별 성과 · 광고비</h3>
-        <p className="mt-1 text-xs text-muted-foreground">등록을 캠페인으로 나누고, 광고 성과에 같은 캠페인명이 있으면 광고비를 붙여 등록당·참석당 비용을 냅니다. (캠페인명 정확 일치 · 광고비는 해당 캠페인 전체 누적)</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          등록을 캠페인으로 나누고, 광고 성과에 같은 캠페인명이 있으면 광고비를 붙여 등록당·참석당 비용을 냅니다.
+          {" "}캠페인명은 대소문자·공백을 무시해 맞춥니다
+          {costScope && <> · 광고비는 <b className="font-medium">{costScope}</b> 기간 합계</>}.
+        </p>
+        {/* 이름이 안 맞아 비용이 안 붙은 광고 캠페인을 밝힌다 — 이게 없으면 운영자는 '—' 를 보고
+            "광고비 데이터가 없다" 고만 읽고, 실제 원인(이름 불일치)을 찾을 방법이 없다. */}
+        {unmatchedAdCampaigns.length > 0 && (
+          <p className="mt-2 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-relaxed text-amber-700 dark:text-amber-400">
+            광고 캠페인 {unmatchedAdCampaigns.length}개가 등록의 utm_campaign 과 맞지 않아 비용이 붙지 않았어요 —{" "}
+            {unmatchedAdCampaigns.slice(0, 3).join(", ")}
+            {unmatchedAdCampaigns.length > 3 && ` 외 ${unmatchedAdCampaigns.length - 3}개`}. 광고 리포트의 캠페인명과 링크의 utm_campaign 을 같게 맞춰주세요.
+          </p>
+        )}
         {campaigns.length === 0 ? (
           <p className="mt-4 text-xs text-muted-foreground">캠페인(utm_campaign) 태그가 붙은 등록이 아직 없어요.</p>
         ) : (
