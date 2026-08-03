@@ -153,7 +153,7 @@ const reg = (patch: Partial<CsvRegistrant> = {}): CsvRegistrant => ({
   company: "엑스포럼", department: null, jobTitle: null, industry: null,
   agreeMarketing: true, submittedAt: "2026-08-20T05:00:00.000Z", enteredAt: null,
   memo: null, utmSource: null, utmMedium: null, utmCampaign: null,
-  firstUtmSource: null, firstUtmMedium: null, referrer: null, ...patch,
+  firstUtmSource: null, firstUtmMedium: null, firstUtmCampaign: null, referrer: null, ...patch,
 });
 
 /** answersByRegistrant 를 손으로 쓰면 객체 리터럴이 유니온으로 좁혀져 SurveyAnswers 와 안 맞는다. */

@@ -9,14 +9,23 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { assembleWebinarEngagement } from "@/lib/webinar-scoring";
+import { campaignJoinKey, normalizeUtmKey } from "@/lib/attribution-normalize";
 
 function pct(part: number, total: number) {
   if (!total) return 0;
   return Math.round((part / total) * 100);
 }
 
+/**
+ * (source, medium) 집계 키.
+ *
+ * normalizeUtmKey 로 접는 이유: 저장 경로가 여러 개라 과거 데이터에 대소문자·센티널
+ * ("(direct)"/"(none)") 이 섞여 있다. 지금은 저장 시점에 서버가 정규화하지만, **이미 쌓인 행**은
+ * 그대로다 — 집계에서 같은 규칙으로 한 번 더 접어야 naver/Naver 와 (direct)/"" 가 한 줄로 합쳐진다.
+ * (그래서 데이터 마이그레이션 없이 과거 분석도 즉시 교정된다.)
+ */
 function groupKey(source: string | null, medium: string | null) {
-  return `${(source ?? "").trim()}|${(medium ?? "").trim()}`;
+  return `${normalizeUtmKey(source)}|${normalizeUtmKey(medium)}`;
 }
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -27,7 +36,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const webinar = await prisma.webinar.findUnique({
     where: { id },
-    select: { workspaceId: true, projectId: true, liveStartAt: true, liveEndAt: true },
+    select: { workspaceId: true, projectId: true, liveStartAt: true, liveEndAt: true, createdAt: true },
   });
   if (!webinar) return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404 });
 
@@ -91,7 +100,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const key = groupKey(source, medium);
     let row = merged.get(key);
     if (!row) {
-      row = { source: (source ?? "").trim(), medium: (medium ?? "").trim(), visits: 0, registered: 0, entered: 0 };
+      // 행에 담는 값도 접힌 키를 쓴다 — 표시용 원문을 남기면 같은 행이 두 라벨을 갖는다.
+      row = { source: normalizeUtmKey(source), medium: normalizeUtmKey(medium), visits: 0, registered: 0, entered: 0 };
       merged.set(key, row);
     }
     return row;
@@ -116,7 +126,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   // ── 캠페인별 성과 + 광고비 조인 ──
   // 등록/입장을 utmCampaign 으로 나누고, 같은 projectId·campaignName 의 광고 성과가 있으면 비용을 붙인다.
-  // 매칭은 캠페인명 정확 일치(대소문자 구분). 미매칭 캠페인은 cost=null.
+  //
+  // 매칭은 **대소문자·공백 무시**다(campaignJoinKey). 예전엔 정확 일치라, 빌더가 URL 캠페인명을
+  // 소문자로 권하는데 광고 플랫폼 리포트는 원본 대소문자를 유지해서(spring_sale vs Spring_Sale)
+  // 조인이 조용히 실패했고 화면에는 비용이 '—' 로만 떠서 "광고비가 없는 것" 인지 "이름이 안 맞는 것"
+  // 인지 구분할 수 없었다. 미매칭 광고 캠페인명은 응답으로 함께 내려 화면이 안내한다.
   const campMap = new Map<string, { campaign: string; registered: number; entered: number }>();
   const ensureCamp = (c: string | null) => {
     const key = (c ?? "").trim();
@@ -131,18 +145,52 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   for (const r of campaignEnteredGroup) ensureCamp(r.utmCampaign).entered += r._count._all;
 
   const campaignNames = Array.from(campMap.values()).map((c) => c.campaign).filter(Boolean);
+  /**
+   * 광고비 기간 창 — 이 웨비나의 홍보 구간(생성일 ~ 라이브 종료)으로 제한한다.
+   *
+   * 예전엔 기간 조건이 아예 없어서, 같은 프로젝트의 웨비나 A·B 가 같은 캠페인명을 쓰면 A 도 B 도
+   * 광고비 **전액**을 표시하고 CPR 을 각자 계산했다(같은 지출의 이중 귀속). 스키마에 reportDate 가
+   * 있는데 안 쓰고 있었다. reportDate 가 없는 행은 reportStart/End 구간이 겹치는지로 판정한다.
+   *
+   * 남는 한계(스키마): AdPerformanceRecord 에 webinarId 가 없어 한 기간에 두 웨비나가 겹치면
+   * 여전히 양쪽에 계상된다 — 그건 응답의 costScope 로 화면이 밝힌다.
+   */
+  const costFrom = webinar.createdAt;
+  const costTo = webinar.liveEndAt;
   const adCostRows = campaignNames.length
     ? await prisma.adPerformanceRecord.groupBy({
         by: ["campaignName"],
-        where: { projectId: webinar.projectId, campaignName: { in: campaignNames } },
+        where: {
+          projectId: webinar.projectId,
+          OR: [
+            { reportDate: { gte: costFrom, lte: costTo } },
+            { AND: [{ reportDate: null }, { reportStart: { lte: costTo } }, { reportEnd: { gte: costFrom } }] },
+          ],
+        },
         _sum: { cost: true },
       })
     : [];
-  const costMap = new Map(adCostRows.map((r) => [r.campaignName, Math.round(r._sum.cost ?? 0)]));
+  /* 조인 키를 소문자로 접어 합산한다 — 같은 캠페인이 대소문자만 다르게 여러 배치로 들어올 수 있다.
+     cost 가 전부 NULL 인 캠페인은 0 이 아니라 **미상**이다(₩0 으로 보이면 '무료' 로 오독된다). */
+  const costMap = new Map<string, number | null>();
+  for (const row of adCostRows) {
+    const key = campaignJoinKey(row.campaignName);
+    const sum = row._sum.cost;
+    const prev = costMap.get(key);
+    if (sum == null) {
+      if (!costMap.has(key)) costMap.set(key, null);
+      continue;
+    }
+    costMap.set(key, Math.round((prev ?? 0) + sum));
+  }
 
+  const matchedCostKeys = new Set<string>();
   const campaignBreakdown = Array.from(campMap.values())
     .map((c) => {
-      const cost = costMap.has(c.campaign) ? costMap.get(c.campaign)! : null;
+      const key = campaignJoinKey(c.campaign);
+      const hasCost = c.campaign !== "" && costMap.has(key);
+      if (hasCost) matchedCostKeys.add(key);
+      const cost = hasCost ? costMap.get(key)! : null;
       return {
         campaign: c.campaign || "(캠페인 없음)",
         registered: c.registered,
@@ -154,6 +202,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       };
     })
     .sort((a, b) => (b.registered - a.registered) || (b.entered - a.entered));
+
+  /* 광고 데이터에는 있는데 어떤 등록 캠페인과도 안 맞은 이름 — 화면이 "N개가 매칭되지 않았어요" 로
+     알린다. 이게 없으면 운영자는 비용 '—' 를 보고 데이터가 없는 줄로만 안다. */
+  const unmatchedAdCampaigns = Array.from(
+    new Set(
+      adCostRows
+        .filter((r) => !matchedCostKeys.has(campaignJoinKey(r.campaignName)))
+        .map((r) => r.campaignName),
+    ),
+  ).slice(0, 20);
 
   // ── 참여 스코어링 + 인터랙션 아카이브 — 기존 모델 집계만(신규 수집 없음) ──
   const [engagement, pollRows, qaByStatus, qaTop, chatAgg, reminderCount, ctaAgg] = await Promise.all([
@@ -275,6 +333,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     },
     utmBreakdown,
     campaignBreakdown,
+    /* 광고비 조인 투명성 — 화면이 캡션·안내로 밝힌다.
+       costScope: 합산 기간. unmatchedAdCampaigns: 이름이 안 맞아 비용이 안 붙은 광고 캠페인. */
+    costScope: { from: costFrom.toISOString(), to: costTo.toISOString() },
+    unmatchedAdCampaigns,
     registrationTrend,
     interactions,
     scoring: {

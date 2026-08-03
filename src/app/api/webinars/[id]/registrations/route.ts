@@ -143,6 +143,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         jobTitle: true, industry: true, agreeMarketing: true, agreePrivacy: true, memo: true,
         connectedSeconds: true, focusSeconds: true, stayMinutes: true,
         isActive: true, submittedAt: true, enteredAt: true, lastPingAt: true, presencePingAt: true,
+        // 유입 경로 — 상세 패널이 "이 리드가 어디서 왔나" 를 보여준다(저장만 하고 화면엔 없던 값).
+        utmSource: true, utmMedium: true, utmCampaign: true,
+        firstUtmSource: true, firstUtmMedium: true, firstUtmCampaign: true, referrer: true,
       },
     }),
     prisma.webinarRegistration.count({ where }),

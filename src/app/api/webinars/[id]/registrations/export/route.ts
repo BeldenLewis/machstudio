@@ -35,7 +35,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       id: true, name: true, phone: true, email: true, company: true, department: true,
       jobTitle: true, industry: true, agreeMarketing: true, submittedAt: true, enteredAt: true,
       memo: true, utmSource: true, utmMedium: true, utmCampaign: true,
-      firstUtmSource: true, firstUtmMedium: true, referrer: true,
+      firstUtmSource: true, firstUtmMedium: true, firstUtmCampaign: true, referrer: true,
     },
   });
 

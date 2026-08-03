@@ -11,6 +11,10 @@ import { formatKst } from "@/lib/datetime";
 import { DEFAULT_LANDING_AUDIENCE_TITLE,
   DEFAULT_LANDING_HIGHLIGHTS_TITLE, normalizeLandingPageConfig, safeHttpUrl } from "@/lib/webinar-config";
 import { isRealSession } from "@/lib/webinar-sessions";
+import { UTM_QUERY_KEYS } from "@/lib/attribution-normalize";
+
+/** CTA 링크에 이어 붙일 파라미터 — 수집이 읽는 6종과 같아야 한다(정본: attribution-normalize). */
+const UTM_FORWARD_KEYS = UTM_QUERY_KEYS;
 import { SAFE_HEX, TOC_DEF, onPrimaryFor } from "./model";
 import type { LandingModel, LandingSession, LandingStatusInfo, LandingTocItem, LandingWebinar } from "./types";
 
@@ -23,9 +27,37 @@ export interface BuildLandingModelOptions {
   origin?: string;
 }
 
-/** 라이브 페이지 링크 — origin 이 있으면 절대 URL(임베드용). */
+/**
+ * 지금 페이지 URL 의 utm_* 를 그대로 이어 붙일 쿼리를 만든다.
+ *
+ * 왜 필요한가: 랜딩 CTA 가 `/live?view=signup` 만 만들고 방문 URL 의 utm 을 버렸다. 랜딩은
+ * 등록의 주 진입점인데, `utm_source=naver` 로 들어온 방문자가 등록 버튼을 누르는 순간
+ * 어트리뷰션이 끊겨 그 등록이 전부 '직접 유입' 으로 기록됐다 — 캠페인 성과 측정 자체가
+ * 성립하지 않았다. 임베드에서도 이 코드는 호스트 문서에서 실행되므로 호스트 URL 의 utm 을 읽는다.
+ *
+ * 값은 건드리지 않고 원문을 넘긴다 — 정규화는 등록 시점에 서버가 한 곳에서 한다
+ * (attribution-normalize). 여기서 또 정규화하면 규칙이 두 곳에 산다.
+ */
+function currentUtmQuery(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const from = new URLSearchParams(window.location.search);
+    const out = new URLSearchParams();
+    for (const key of UTM_FORWARD_KEYS) {
+      const value = from.get(key);
+      if (value) out.set(key, value);
+    }
+    return out.toString();
+  } catch {
+    return "";
+  }
+}
+
+/** 라이브 페이지 링크 — origin 이 있으면 절대 URL(임베드용). 유입 UTM 을 함께 넘긴다. */
 function buildLiveUrl(slug: string, origin: string | undefined, view: "signup" | null): string {
-  const path = `/webinar/${encodeURIComponent(slug)}/live${view ? `?view=${view}` : ""}`;
+  const utm = currentUtmQuery();
+  const query = [view ? `view=${view}` : "", utm].filter(Boolean).join("&");
+  const path = `/webinar/${encodeURIComponent(slug)}/live${query ? `?${query}` : ""}`;
   const base = (origin ?? "").trim();
   if (!base) return path;
   try {

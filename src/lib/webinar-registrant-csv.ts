@@ -39,6 +39,7 @@ export interface CsvRegistrant {
   utmCampaign: string | null;
   firstUtmSource: string | null;
   firstUtmMedium: string | null;
+  firstUtmCampaign: string | null;
   referrer: string | null;
 }
 
@@ -142,11 +143,15 @@ export function buildRegistrantCsvColumns(input: RegistrantCsvInput): Column[] {
     // 어긋난다) — 개수는 별 열로, 본문은 한 칸에 번호를 붙여 합친다. formatQAForCell 참고.
     { header: "문의수", value: (r) => String(qaByRegistrant.get(r.id)?.length ?? 0) },
     { header: "문의내용", value: (r) => formatQAForCell(qaByRegistrant.get(r.id) ?? []) },
-    { header: "UTM소스", value: (r) => r.utmSource ?? "" },
-    { header: "UTM매체", value: (r) => r.utmMedium ?? "" },
-    { header: "UTM캠페인", value: (r) => r.utmCampaign ?? "" },
+    /* 어트리뷰션 열 — 라벨에 last/first 를 **명시**한다. 예전엔 "UTM소스" 라고만 써서 그게
+       마지막 유입인지 최초 유입인지 파일만 보고 알 수 없었고, 최초 유입은 캠페인도 빠져 있어
+       first-touch 로 성과를 볼 수 없었다(저장은 하는데 파일에 안 나갔다). */
+    { header: "UTM소스(마지막유입)", value: (r) => r.utmSource ?? "" },
+    { header: "UTM매체(마지막유입)", value: (r) => r.utmMedium ?? "" },
+    { header: "UTM캠페인(마지막유입)", value: (r) => r.utmCampaign ?? "" },
     { header: "최초UTM소스", value: (r) => r.firstUtmSource ?? "" },
     { header: "최초UTM매체", value: (r) => r.firstUtmMedium ?? "" },
+    { header: "최초UTM캠페인", value: (r) => r.firstUtmCampaign ?? "" },
     { header: "유입경로(referrer)", value: (r) => r.referrer ?? "" },
     { header: "참여점수", value: (r) => { const e = engagementByRegistrant.get(r.id); return e ? String(e.score) : ""; } },
     {

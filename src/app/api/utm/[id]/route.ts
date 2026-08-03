@@ -31,6 +31,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     },
   });
 
+  /**
+   * 단축링크 목적지도 함께 갱신한다.
+   *
+   * UTMLink 와 ShortLink 는 별개 테이블이고 /r/[code] 는 ShortLink.longUrl 만 보고 리다이렉트한다.
+   * 예전엔 여기서 UTMLink 만 고쳐서, UTM 을 수정해도 **이미 배포한 단축링크는 옛 UTM 으로 계속
+   * 보냈다** — 인쇄물·QR 에 넣은 링크라면 되돌릴 수 없는 오귀속이다.
+   * 두 테이블을 잇는 유일한 단서가 shortUrl 의 마지막 경로 세그먼트(=code)라 그걸로 찾는다.
+   */
+  const shortCode = (updated.shortUrl ?? "").trim().split("/").filter(Boolean).pop();
+  if (fullUrl !== undefined && fullUrl !== link.fullUrl && shortCode) {
+    await prisma.shortLink
+      .updateMany({ where: { code: shortCode, workspaceId: link.workspaceId }, data: { longUrl: fullUrl } })
+      .catch(() => { /* 단축링크가 없거나 다른 워크스페이스면 조용히 넘어간다(UTM 수정 자체는 성공) */ });
+  }
+
   // 변경된 필드만 메타에 기록
   const changes: Record<string, { before: unknown; after: unknown }> = {};
   if (name !== undefined && (name || null) !== link.name) changes.name = { before: link.name, after: name || null };
