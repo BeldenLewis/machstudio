@@ -143,10 +143,21 @@ export function buildUtmEnvelope(): Record<string, unknown> | null {
 }
 
 /**
- * 방문 1회를 기록한다 — **세션당 1회**. 임베드 seen 비콘의 자체 면 대응물.
+ * 방문 1회를 기록한다 — **세션당 1회**.
+ *
+ * 호출하는 면 세 곳:
+ *   · 자체 랜딩 `/webinar/[slug]/landing`
+ *   · 자체 라이브 `/webinar/[slug]/live`
+ *   · **랜딩 임베드**(외부 사이트에서 실행) — 이때만 `origin` 을 넘긴다
+ *
+ * origin 이 필요한 이유: 임베드는 호스트 문서(k-expo.org 등)에서 돌아서 상대경로 POST 가
+ * 호스트 도메인으로 날아간다(404). 실측으로 이게 방문 집계 공백의 원인이었다 —
+ * 등록 262건이 전부 임베드 랜딩에서 일어나는데 그 페이지의 방문이 0이었다
+ * (로더의 seen 비콘은 `data-mach-webinar-mount` 만 찾아서 랜딩 마운트를 못 봤다).
+ *
  * 미리보기(?preview)에서는 부작용을 만들지 않는다(공개 페이지 규약).
  */
-export function sendVisitBeacon(slug: string): void {
+export function sendVisitBeacon(slug: string, opts?: { origin?: string }): void {
   if (typeof window === "undefined") return;
   try {
     if (new URLSearchParams(window.location.search).has("preview")) return;
@@ -166,7 +177,18 @@ export function sendVisitBeacon(slug: string): void {
       utmMedium: channel.utmMedium,
       ...(ref ? { ref } : {}),
     });
-    const url = `/api/webinar/${encodeURIComponent(slug)}/visit`;
+    /* 임베드는 절대 URL 이어야 한다 — 상대경로면 호스트 도메인으로 POST 돼 404 다.
+       origin 은 우리 라우트가 스크립트에 구워 보낸 값이지만, http(s) 가 아니면 쓰지 않는다. */
+    const base = (() => {
+      if (!opts?.origin) return "";
+      try {
+        const u = new URL(opts.origin);
+        return u.protocol === "http:" || u.protocol === "https:" ? u.origin : "";
+      } catch {
+        return "";
+      }
+    })();
+    const url = `${base}/api/webinar/${encodeURIComponent(slug)}/visit`;
     // 순수 문자열 = simple request. sendBeacon 은 preflight 를 못 하므로 JSON Blob 을 쓰지 않는다.
     if (navigator.sendBeacon) navigator.sendBeacon(url, payload);
     else void fetch(url, { method: "POST", body: payload, keepalive: true });

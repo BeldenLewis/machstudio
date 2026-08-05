@@ -599,8 +599,9 @@ function Stat({ label, value, sub, tone }: { label: string; value: string; sub?:
 
 /* ── 퍼널 단계 막대 ── */
 function FunnelStep({ label, value, base, color, delay = 0 }: { label: string; value: number; base: number; color: string; delay?: number }) {
-  // 방문은 임베드 비콘으로만 집계돼 직접 링크 유입이 많으면 등록 > 방문이 될 수 있다.
-  // 막대는 100% 로 잘라 넘치지 않게 하고, 비율은 초과 사실을 숨기지 않고 그대로 표기한다.
+  // 등록 > 방문이 될 수 있다: 방문 비콘이 붙기 전에 등록이 먼저 쌓인 기간이 있거나, 임베드가
+  // 없는 외부 페이지에서 유입됐거나. 막대는 100% 로 잘라 넘치지 않게 하고,
+  // 비율은 초과 사실을 숨기지 않고 그대로 표기한다.
   const width = base ? Math.min(100, Math.max(3, Math.round((value / base) * 100))) : 0;
   const rate = pct(value, base);
   return (
@@ -609,7 +610,7 @@ function FunnelStep({ label, value, base, color, delay = 0 }: { label: string; v
         <span className="text-muted-foreground">{label}</span>
         <span className="font-medium tabular-nums">
           {n(value)}명 · {rate}%
-          {rate > 100 && <span className="ml-1 text-amber-600" title="방문은 임베드 위젯이 붙은 페이지에서만 집계돼요">*</span>}
+          {rate > 100 && <span className="ml-1 text-amber-600" title="등록이 방문보다 많아요 — 방문 집계가 시작되기 전에 쌓인 등록이거나, 임베드가 붙지 않은 외부 페이지에서 유입된 등록이에요">*</span>}
         </span>
       </div>
       <div className="h-2.5 overflow-hidden rounded-full bg-secondary">
@@ -696,7 +697,7 @@ function PerformanceFunnelBody({ perf }: { perf: PerformanceFunnel }) {
       <div className="space-y-3.5">
         {hasVisits && (
           <PerfStep label="페이지 방문" value={perf.visits} prev={null} base={Math.max(perf.visits, base)} color="var(--chart-chat)" delay={0}
-            hint="임베드 위젯이 붙은 면과 자체 랜딩·라이브 페이지에서만 집계돼요" />
+            hint="랜딩·라이브 면에 도달한 세션 수예요. 임베드가 붙지 않은 외부 페이지는 세지 않고, 아임웹 랜딩과 우리 라이브 페이지를 각각 방문하면 도메인이 달라 2회로 셀 수 있어요." />
         )}
         <PerfStep label="사전 등록" value={perf.registered} prev={hasVisits ? perf.visits : null} base={hasVisits ? Math.max(perf.visits, base) : base} color="var(--chart-viewers)" delay={0.06} />
         <PerfStep label="실제 시청" value={perf.entered} prev={perf.registered} base={base} color="var(--chart-viewers)" delay={0.12} />
@@ -1611,7 +1612,10 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
       {/* 유입 채널별 성과 */}
       <SectionCard>
         <h3 className="text-sm font-semibold">유입 채널별 성과</h3>
-        <p className="mt-1 text-xs text-muted-foreground">등록 광고·캠페인이 어디서 성과를 냈는지 소스·매체로 나눠 봅니다.</p>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          등록 광고·캠페인이 어디서 성과를 냈는지 소스·매체로 나눠 봅니다.
+          {hasVisits && " 방문은 임베드·자체 랜딩·라이브 면에 도달한 세션이에요 — 등록이 방문보다 많으면 방문 집계 전에 쌓인 등록이에요."}
+        </p>
         {utm.length === 0 ? (
           <p className="mt-4 text-xs text-muted-foreground">아직 유입 데이터가 없어요.</p>
         ) : (
@@ -1643,7 +1647,7 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
                         오독되는데, 실제로는 가장 잘 전환된 채널일 수 있다. */}
                     {hasVisits && (
                       <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">
-                        {row.visits > 0 ? `${row.regRate}%` : <span className="text-muted-foreground/40" title="이 경로의 방문이 집계되지 않아 등록률을 낼 수 없어요">—</span>}
+                        {row.visits > 0 ? `${row.regRate}%` : <span className="text-muted-foreground/40" title="이 경로의 방문이 집계되지 않아 등록률을 낼 수 없어요 — 임베드가 붙은 면을 거치지 않은 유입이에요">—</span>}
                       </td>
                     )}
                     <td className="py-2 pr-3 text-right tabular-nums">{n(row.entered)}</td>
