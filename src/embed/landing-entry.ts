@@ -13,6 +13,7 @@
 
 import { mountLanding, type LandingHandle } from "@/lib/landing/mount";
 import type { LandingWebinar } from "@/lib/landing/types";
+import { sendVisitBeacon } from "@/lib/attribution-client";
 
 export interface BootConfig {
   slug: string;
@@ -251,6 +252,18 @@ export function boot(cfg: BootConfig): void {
     };
     reg[cfg.slug] = inst;
 
+    /* 첫 렌더 성공 후에만 방문 1회 — 폴백 링크만 남은 실패 경로는 세지 않는다.
+       세션당 1회 가드는 sendVisitBeacon 안에 있고, 절대 URL 이어야 하므로 origin 을 넘긴다
+       (호스트 문서에서 돌기 때문에 상대경로면 호스트 도메인으로 POST 된다).
+       이 비콘이 없던 동안 **등록이 일어나는 유일한 페이지의 방문이 0** 이었다 — 로더의
+       seen 비콘은 `data-mach-webinar-mount` 만 찾아서 랜딩 마운트를 보지 못한다. */
+    const rendered = () => {
+      render(inst);
+      watchForRerender(inst);
+      scheduleBoundary(inst);
+      try { sendVisitBeacon(inst.cfg.slug, { origin: inst.cfg.origin }); } catch { /* 호스트를 깨뜨리지 않는다 */ }
+    };
+
     const start = () => {
       if (!inst.cfg.webinar) {
         void fetchWebinar(inst.cfg).then((w) => {
@@ -259,15 +272,11 @@ export function boot(cfg: BootConfig): void {
             warn("데이터를 가져오지 못해 폴백 링크를 유지합니다");
             return;
           }
-          render(inst);
-          watchForRerender(inst);
-          scheduleBoundary(inst);
+          rendered();
         });
         return;
       }
-      render(inst);
-      watchForRerender(inst);
-      scheduleBoundary(inst);
+      rendered();
     };
 
     if (document.readyState === "loading") {
