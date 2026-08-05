@@ -20,6 +20,7 @@ import {
   scoreHistogram,
   summarizeFacet,
 } from "@/lib/webinar-lead-facets";
+import { goalQuestions, normalizeSurveyQuestions, responseHitsGoal, type SurveyAnswers } from "@/lib/webinar-survey";
 
 function pct(part: number, total: number) {
   if (!total) return 0;
@@ -311,6 +312,71 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
      안 나오는데, 웨비나 다음 액션(재초대·다시보기 안내)에서 제일 큰 덩어리다. */
   const retargetCount = engagement.rows.filter((r) => !r.entered && r.agreeMarketing).length;
 
+  /* ── 성과 퍼널 — 등록 → 시청 → 설문 응답 → 상담 희망 → 그중 마케팅 동의 ──
+   *
+   * 왜 이 순서인가(사장님 원안에서 한 군데 고침): 마케팅 약관 동의는 **등록 시점**에 체크하는
+   * 값이라 시청보다 먼저 일어난다. 퍼널 마지막에 두면 실측에서 `등록 257 → 시청 0 → 동의 142`
+   * 로 마지막 단계가 앞 단계보다 커진다(부분집합이 아니다). 그래서 마지막을
+   * **"상담 희망 중 마케팅도 동의한 사람"** 으로 둔다 — 바로 영업하고 마케팅도 보낼 수 있는
+   * 완전 활용 가능 리드이고, 단조 감소가 성립한다. 동의 전수는 별도 숫자로 함께 내려보낸다.
+   *
+   * '설문 응답' 단계를 넣은 이유: 시청→상담 낙차의 원인이 둘인데(설문을 못 봤다 / 봤지만
+   * 상담을 원치 않는다) 그 둘은 완전히 다른 문제다(노출·유도 vs 오퍼·콘텐츠).
+   *
+   * 익명 응답(registrationId=null)은 등록자 부분집합이 아니라 퍼널에서 제외한다 — 그 사실은
+   * unlinkedSurveyResponses 로 함께 내려 화면이 밝힌다(조용히 빼면 숫자가 작아 보인다).
+   */
+  const [surveyDefs, surveyResponses, consentedEntered, unlinkedCount] = await Promise.all([
+    prisma.webinarSurvey.findMany({ where: { webinarId: id }, select: { id: true, title: true, questions: true } }),
+    prisma.webinarSurveyResponse.findMany({
+      where: { webinarId: id, registrationId: { not: null } },
+      select: { surveyId: true, registrationId: true, answers: true },
+    }),
+    prisma.webinarRegistration.count({ where: { webinarId: id, agreeMarketing: true } }),
+    prisma.webinarSurveyResponse.count({ where: { webinarId: id, registrationId: null } }),
+  ]);
+
+  // 보관 문항까지 포함해야 이미 수집된 답변의 성과 지정이 살아 있다(관리자 경로와 같은 규칙).
+  const questionsBySurvey = new Map(
+    surveyDefs.map((s) => [s.id, normalizeSurveyQuestions(s.questions, { includeHidden: true })]),
+  );
+  const goalQuestionTitles = surveyDefs.flatMap((s) =>
+    goalQuestions(questionsBySurvey.get(s.id) ?? []).map((q) => q.title || s.title),
+  );
+
+  /* 사람 단위 distinct — 한 사람이 설문 두 개에서 성과 선택지를 골라도 1명이다. */
+  const respondedIds = new Set<string>();
+  const goalIds = new Set<string>();
+  for (const r of surveyResponses) {
+    if (!r.registrationId) continue;
+    respondedIds.add(r.registrationId);
+    const qs = questionsBySurvey.get(r.surveyId);
+    if (qs && responseHitsGoal(qs, (r.answers ?? {}) as SurveyAnswers)) goalIds.add(r.registrationId);
+  }
+  // 마케팅 동의는 점수 조립에 이미 있다 — 같은 소스를 써야 등록자 탭·CSV 와 어긋나지 않는다.
+  const marketingIds = new Set(engagement.rows.filter((r) => r.agreeMarketing).map((r) => r.registrationId));
+  const goalWithMarketing = [...goalIds].filter((rid) => marketingIds.has(rid)).length;
+
+  const performanceFunnel = {
+    /** 방문은 임베드 비콘이 붙은 면에서만 집계된다 — 0 이면 화면이 단계를 숨긴다. */
+    visits,
+    registered: totalRegistered,
+    entered: attended,
+    surveyResponded: respondedIds.size,
+    goalReached: goalIds.size,
+    goalWithMarketing,
+    /** 체류는 퍼널 단계가 아니라 보조 줄로 — 성과로 가는 경로가 아니라 시청의 질이다. */
+    stay30,
+    stay60,
+    /** 성과 문항이 지정되지 않았으면 화면이 "설문에서 지정하면 볼 수 있어요" 로 안내한다. */
+    goalConfigured: goalQuestionTitles.length > 0,
+    goalQuestionTitles: goalQuestionTitles.slice(0, 3),
+    /** 마케팅 동의 전수(노쇼 포함) — 퍼널 축이 아니라 별도 숫자다. */
+    marketingConsented: consentedEntered,
+    /** 등록자와 연결되지 않은 익명 설문 응답 — 퍼널에서 제외된 건수 */
+    unlinkedSurveyResponses: unlinkedCount,
+  };
+
   /* ── 리드 분석 — 점수를 "결정에 쓸 수 있는 축" 으로 쪼갠다 ──
      세그먼트 4칸만으로는 다음 웨비나를 어떻게 바꿀지 알 수 없다. 규칙은 webinar-lead-facets 에
      모아 두고(테스트로 묶임) 여기서는 조립만 한다. */
@@ -508,6 +574,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         registered: Number(r.registered) || 0,
       })),
     },
+    performanceFunnel,
     leadAnalysis,
     hasVisitData: visits > 0,
     generatedAt: new Date().toISOString(),

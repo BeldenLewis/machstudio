@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useChartColors } from "@/components/ui/use-chart-colors";
 import { motion } from "framer-motion";
-import { Download, Loader2, RefreshCw, BarChart3, MessageSquare, HelpCircle, Users, Trash2, RotateCcw, Share2 } from "lucide-react";
+import { Download, Loader2, RefreshCw, BarChart3, MessageSquare, HelpCircle, Users, Trash2, RotateCcw, Share2, Target } from "lucide-react";
 import { toast } from "sonner";
 import { formatKst, formatKstDateTime } from "@/lib/datetime";
 import { useUndoableDelete } from "@/components/ui/use-undoable-delete";
@@ -115,6 +115,31 @@ interface Scoring {
   leadQuality: { consented: number; withEmail: number; withPhone: number; withCompany: number };
 }
 
+/**
+ * 성과 퍼널 — 등록 → 시청 → 설문 응답 → 상담 희망 → 그중 마케팅 동의.
+ *
+ * 마케팅 동의를 마지막 단계로 두지 않은 이유: 등록 시점에 체크하는 값이라 시청보다 먼저
+ * 일어나고, 실측에서 `등록 257 → 시청 0 → 동의 142` 로 마지막이 앞 단계보다 커졌다.
+ * 마지막은 "상담 희망 중 마케팅도 동의한 사람" = 바로 영업하고 마케팅도 보낼 수 있는 리드다.
+ */
+interface PerformanceFunnel {
+  visits: number;
+  registered: number;
+  entered: number;
+  surveyResponded: number;
+  goalReached: number;
+  goalWithMarketing: number;
+  stay30: number;
+  stay60: number;
+  /** 설문에서 성과 선택지를 지정했나 — false 면 마지막 두 단계 대신 안내를 띄운다 */
+  goalConfigured: boolean;
+  goalQuestionTitles: string[];
+  /** 마케팅 동의 전수(노쇼 포함) — 퍼널 축이 아니라 별도 숫자 */
+  marketingConsented: number;
+  /** 등록자와 연결되지 않아 퍼널에서 제외된 익명 설문 응답 */
+  unlinkedSurveyResponses: number;
+}
+
 /** 세분화 축 한 줄 — 업종·직함·채널이 같은 모양을 쓴다(webinar-lead-facets.FacetRow). */
 interface FacetRow {
   label: string;
@@ -157,6 +182,7 @@ interface AnalyticsData {
   registrationTrend: { date: string; count: number }[];
   interactions: Interactions;
   scoring: Scoring;
+  performanceFunnel?: PerformanceFunnel;
   leadAnalysis?: LeadAnalysis;
   wordOfMouth?: WordOfMouth;
   hasVisitData: boolean;
@@ -596,6 +622,126 @@ function FunnelStep({ label, value, base, color, delay = 0 }: { label: string; v
         />
       </div>
     </div>
+  );
+}
+
+/**
+ * 성과 퍼널 한 단계.
+ *
+ * 두 비율을 함께 보여준다:
+ *   · **직전 단계 대비**(굵게) — 어디서 사람이 빠졌는지. 사장님이 요청한 "넘어갈 때 전환율".
+ *   · 전체(등록) 대비(작게) — 규모 감각. 막대 길이도 이 값이다.
+ * 하나만 보여주면 "시청 56%" 가 등록 대비인지 방문 대비인지 매번 헷갈린다.
+ */
+function PerfStep({
+  label, value, prev, base, color, hint, delay = 0, emphasis = false,
+}: {
+  label: string; value: number; prev: number | null; base: number;
+  color: string; hint?: string; delay?: number; emphasis?: boolean;
+}) {
+  const width = base ? Math.min(100, Math.max(value > 0 ? 3 : 0, Math.round((value / base) * 100))) : 0;
+  const stepRate = prev === null ? null : pct(value, prev);
+  return (
+    <div>
+      <div className="mb-1.5 flex items-baseline justify-between gap-3 text-xs">
+        <span className={emphasis ? "font-semibold" : "text-muted-foreground"} title={hint}>
+          {label}
+          {hint && <span className="ml-1 cursor-help text-muted-foreground/50">ⓘ</span>}
+        </span>
+        <span className="shrink-0 tabular-nums">
+          <b className={emphasis ? "text-violet-600 dark:text-violet-400" : ""}>{n(value)}명</b>
+          {stepRate !== null && (
+            <span className="ml-1.5 text-muted-foreground" title="직전 단계 대비 전환율">
+              <b className="text-foreground">{stepRate}%</b>
+              <span className="text-muted-foreground/60">{` · 전체 ${pct(value, base)}%`}</span>
+            </span>
+          )}
+        </span>
+      </div>
+      <div className="h-2.5 overflow-hidden rounded-full bg-secondary">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${width}%` }}
+          transition={{ duration: 0.5, ease: "easeOut", delay }}
+          className="h-full rounded-full"
+          style={{ backgroundColor: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 성과 퍼널 본문 — 등록 → 시청 → 설문 응답 → 상담 희망 → 그중 마케팅 동의.
+ *
+ * 체류(30분↑·60분↑)는 단계가 아니라 **보조 줄**이다: 성과로 가는 경로가 아니라 시청의 질이고,
+ * 단계로 넣으면 6줄이 되어 막대가 짧아진다.
+ *
+ * 성과 문항이 지정되지 않았으면 마지막 두 단계 대신 안내를 띄운다 — 0명 막대를 그리면
+ * "아무도 상담을 원하지 않았다" 로 읽히는데, 실제로는 **세는 기준이 없는 것**이다.
+ */
+function PerformanceFunnelBody({ perf }: { perf: PerformanceFunnel }) {
+  const base = Math.max(perf.registered, 1);
+  const hasVisits = perf.visits > 0;
+  return (
+    <>
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold">성과 퍼널</h3>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          {hasVisits ? "방문 → 등록 → 시청 → 설문 → 상담 희망" : "등록 → 시청 → 설문 → 상담 희망"} 단계별 전환 ·
+          굵은 %는 <b>직전 단계 대비</b>예요.
+        </p>
+      </div>
+
+      <div className="space-y-3.5">
+        {hasVisits && (
+          <PerfStep label="페이지 방문" value={perf.visits} prev={null} base={Math.max(perf.visits, base)} color="var(--chart-chat)" delay={0}
+            hint="임베드 위젯이 붙은 면과 자체 랜딩·라이브 페이지에서만 집계돼요" />
+        )}
+        <PerfStep label="사전 등록" value={perf.registered} prev={hasVisits ? perf.visits : null} base={hasVisits ? Math.max(perf.visits, base) : base} color="var(--chart-viewers)" delay={0.06} />
+        <PerfStep label="실제 시청" value={perf.entered} prev={perf.registered} base={base} color="var(--chart-viewers)" delay={0.12} />
+        <PerfStep label="설문 응답" value={perf.surveyResponded} prev={perf.entered} base={base} color="var(--chart-entered)" delay={0.18}
+          hint="여기서 크게 빠지면 설문 노출·유도 문제예요(상담 의사와는 다른 문제)" />
+        {perf.goalConfigured ? (
+          <>
+            <PerfStep label="상담 희망" value={perf.goalReached} prev={perf.surveyResponded} base={base} color="#f59e0b" delay={0.24}
+              hint={perf.goalQuestionTitles.length ? `성과로 지정된 문항: ${perf.goalQuestionTitles.join(" · ")}` : undefined} />
+            <PerfStep label="상담 희망 + 마케팅 동의" value={perf.goalWithMarketing} prev={perf.goalReached} base={base} color="#8b5cf6" delay={0.3} emphasis
+              hint="바로 연락하고 마케팅도 보낼 수 있는 리드 — 이 웨비나의 최종 성과예요" />
+          </>
+        ) : (
+          /* 0명 막대를 그리면 "아무도 상담을 원하지 않았다" 로 읽힌다 — 실제로는 기준이 없는 것이다. */
+          <div className="flex items-start gap-2.5 rounded-xl bg-secondary/60 p-3">
+            <Target className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-500" />
+            <p className="text-[11px] leading-relaxed">
+              <b>상담 희망 단계는 아직 셀 수 없어요.</b>{" "}
+              <span className="text-muted-foreground">
+                설문 탭에서 객관식 문항의 선택지를 <b>‘성과로 셀 선택지’</b>로 지정하면(예: “네, 상담을 희망합니다”)
+                여기에 상담 희망 전환율과 최종 성과가 표시돼요.
+              </span>
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* 보조 줄 — 체류의 질과 퍼널에서 빠진 값들. 단계가 아니라 각주다. */}
+      <div className="mt-4 space-y-1.5 border-t border-dashed border-border pt-3 text-[10.5px] leading-relaxed text-muted-foreground">
+        <p className="tabular-nums">
+          체류 30분↑ <b className="text-foreground">{n(perf.stay30)}명</b> · 60분↑ <b className="text-foreground">{n(perf.stay60)}명</b>
+          {perf.entered > 0 && <span>{` (시청자의 ${pct(perf.stay30, perf.entered)}% · ${pct(perf.stay60, perf.entered)}%)`}</span>}
+        </p>
+        <p className="tabular-nums">
+          마케팅 수신 동의 <b className="text-foreground">{n(perf.marketingConsented)}명</b>
+          <span> — 등록 시점에 받는 값이라 퍼널 단계가 아니에요(노쇼도 포함).</span>
+        </p>
+        {perf.unlinkedSurveyResponses > 0 && (
+          <p className="tabular-nums">
+            익명 설문 응답 <b className="text-foreground">{n(perf.unlinkedSurveyResponses)}건</b>
+            <span> — 등록자와 연결되지 않아 퍼널에서 제외했어요(공유 링크로 응답한 경우).</span>
+          </p>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -1097,6 +1243,8 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
   }
 
   const { funnel, interactions, scoring } = data;
+  /* 성과 퍼널 — 서버가 안 내려주는 옛 응답(캐시된 탭 등)에서는 기존 참가 퍼널로 폴백한다. */
+  const perf = data.performanceFunnel;
   const utm = data.utmBreakdown ?? [];
   const campaigns = data.campaignBreakdown ?? [];
   const trend = data.registrationTrend ?? [];
@@ -1367,20 +1515,25 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
           )}
         </SectionCard>
 
+        {/* 성과 퍼널 — '참가 퍼널' 을 대체한다. 시청까지가 아니라 **상담 희망까지** 가는 경로를 본다. */}
         <SectionCard>
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold">참가 퍼널</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {hasVisits ? "방문 → 등록 → 입장 → 체류 단계별 전환" : "등록 → 입장 → 체류 (방문 데이터는 아임웹 부착 후 집계돼요)"}
-            </p>
-          </div>
-          <div className="space-y-3.5">
-            {hasVisits && <FunnelStep label="페이지 방문" value={funnel.visits} base={funnelBase} color="var(--chart-chat)" delay={0} />}
-            <FunnelStep label="사전 등록" value={funnel.registered} base={funnelBase} color="var(--chart-viewers)" delay={0.06} />
-            <FunnelStep label="실제 입장" value={funnel.attended} base={funnelBase} color="var(--chart-viewers)" delay={0.12} />
-            <FunnelStep label="30분 이상 체류" value={funnel.stay30} base={funnelBase} color="var(--chart-entered)" delay={0.18} />
-            <FunnelStep label="60분 이상 체류" value={funnel.stay60} base={funnelBase} color="var(--chart-entered)" delay={0.24} />
-          </div>
+          {perf ? <PerformanceFunnelBody perf={perf} /> : (
+            <>
+              <div className="mb-4">
+                <h3 className="text-sm font-semibold">참가 퍼널</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {hasVisits ? "방문 → 등록 → 입장 → 체류 단계별 전환" : "등록 → 입장 → 체류 (방문 데이터는 아임웹 부착 후 집계돼요)"}
+                </p>
+              </div>
+              <div className="space-y-3.5">
+                {hasVisits && <FunnelStep label="페이지 방문" value={funnel.visits} base={funnelBase} color="var(--chart-chat)" delay={0} />}
+                <FunnelStep label="사전 등록" value={funnel.registered} base={funnelBase} color="var(--chart-viewers)" delay={0.06} />
+                <FunnelStep label="실제 입장" value={funnel.attended} base={funnelBase} color="var(--chart-viewers)" delay={0.12} />
+                <FunnelStep label="30분 이상 체류" value={funnel.stay30} base={funnelBase} color="var(--chart-entered)" delay={0.18} />
+                <FunnelStep label="60분 이상 체류" value={funnel.stay60} base={funnelBase} color="var(--chart-entered)" delay={0.24} />
+              </div>
+            </>
+          )}
         </SectionCard>
       </div>
 

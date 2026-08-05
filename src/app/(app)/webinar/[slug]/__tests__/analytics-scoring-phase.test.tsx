@@ -51,6 +51,22 @@ const LEAD_ANALYSIS = {
   minReliableSample: 20,
 };
 
+/**
+ * 성과 퍼널 — 등록 → 시청 → 설문 응답 → 상담 희망 → 그중 마케팅 동의.
+ *
+ * 마케팅 동의가 마지막이 아닌 이유: 등록 시점에 받는 값이라 시청보다 먼저 일어나고,
+ * 실측에서 `등록 257 → 시청 0 → 동의 142` 로 마지막이 앞 단계보다 커졌다(부분집합이 아니다).
+ */
+const PERF = {
+  visits: 2750, registered: 239, entered: 133, surveyResponded: 74,
+  goalReached: 31, goalWithMarketing: 22,
+  stay30: 88, stay60: 51,
+  goalConfigured: true,
+  goalQuestionTitles: ["부스 참가 1:1 상담을 희망하시나요?"],
+  marketingConsented: 131,
+  unlinkedSurveyResponses: 6,
+};
+
 const SCORING_BEFORE = {
   total: 254, liveMinutes: 1, scheduledMinutes: 120, phase: "before" as const,
   distribution: { hot: 0, warm: 0, cold: 0, noShow: 254 },
@@ -77,7 +93,7 @@ function mockFetch(scoring: unknown, extra: Record<string, unknown> = {}) {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     const body = url.includes("/analytics") && !url.includes("attendance-curve")
-      ? { ...BASE, scoring, leadAnalysis: LEAD_ANALYSIS, ...extra }
+      ? { ...BASE, scoring, leadAnalysis: LEAD_ANALYSIS, performanceFunnel: PERF, ...extra }
       : url.includes("attendance-curve")
         ? { points: [], peak: 0, avg: 0 }
         : { items: [] };
@@ -121,11 +137,15 @@ afterEach(() => {
 describe("방송 전 — 세그먼트 대신 확보한 리드", () => {
   it("'노쇼' 대신 지금 쓸 수 있는 숫자를 보여준다 — 등록 254명 중 마케팅 동의 142명(56%)", async () => {
     mockFetch(SCORING_BEFORE);
-    const text = await render();
-    expect(text).toContain("확보한 리드");
+    await render();
+    const card = cardOf("확보한 리드");
+    expect(card, "확보한 리드 카드").toBeTruthy();
+    const text = card!.textContent ?? "";
     expect(text).toContain("254");
     expect(text).toContain("마케팅 수신 동의");
     expect(text).toContain("142명 · 56%");
+    /* 이 카드 안에 '노쇼' 가 없어야 한다 — 세그먼트 막대(노쇼 254 · 100%)로 오진했던 자리.
+       퍼널 각주의 "노쇼도 포함" 같은 정당한 문구까지 막지 않도록 카드 범위로 좁힌다. */
     expect(text).not.toContain("노쇼");
   });
 });
@@ -159,23 +179,23 @@ describe("방송 후 — 세그먼트 + 점수 근거 + 리타겟", () => {
  * 좌우 2열 — 전체 폭 카드로 한 줄씩 쌓으면 방송 전에도 막대 4개 + 막대 5개를 보려고
  * 두 번 스크롤해야 했다. 리드 요약과 퍼널은 둘 다 "몇 명이 어디까지 왔나" 라 나란히 둔다.
  */
-describe("리드 요약 + 참가 퍼널은 같은 2열 그리드에 나란히 있다", () => {
-  it("방송 전: 확보한 리드 | 참가 퍼널", async () => {
+describe("리드 요약 + 성과 퍼널은 같은 2열 그리드에 나란히 있다", () => {
+  it("방송 전: 확보한 리드 | 성과 퍼널", async () => {
     mockFetch(SCORING_BEFORE);
     await render();
     const lead = cardOf("확보한 리드");
-    const funnel = cardOf("참가 퍼널");
+    const funnel = cardOf("성과 퍼널");
     expect(lead, "확보한 리드 카드").toBeTruthy();
-    expect(funnel, "참가 퍼널 카드").toBeTruthy();
+    expect(funnel, "성과 퍼널 카드").toBeTruthy();
     expect(lead!.parentElement).toBe(funnel!.parentElement);
     expect(lead!.parentElement?.className).toContain("lg:grid-cols-2");
   });
 
-  it("방송 후: 리드 스코어링 | 참가 퍼널 · 상위 참여자는 그리드 밖 전체 폭", async () => {
+  it("방송 후: 리드 스코어링 | 성과 퍼널 · 상위 참여자는 그리드 밖 전체 폭", async () => {
     mockFetch(SCORING_ENDED);
     await render();
     const lead = cardOf("리드 스코어링");
-    const funnel = cardOf("참가 퍼널");
+    const funnel = cardOf("성과 퍼널");
     const top = cardOf("상위 참여자");
     expect(lead!.parentElement).toBe(funnel!.parentElement);
     expect(lead!.parentElement?.className).toContain("lg:grid-cols-2");
@@ -188,6 +208,70 @@ describe("리드 요약 + 참가 퍼널은 같은 2열 그리드에 나란히 �
     mockFetch(SCORING_BEFORE);
     await render();
     expect(cardOf("상위 참여자")).toBeNull();
+  });
+});
+
+/**
+ * 성과 퍼널 — '참가 퍼널' 을 대체한다. 시청까지가 아니라 **상담 희망까지** 가는 경로를 본다.
+ * 사장님이 요청한 "넘어갈 때 전환율" = 직전 단계 대비 비율.
+ */
+describe("성과 퍼널", () => {
+  it("다섯 단계를 순서대로 그린다", async () => {
+    mockFetch(SCORING_ENDED);
+    await render();
+    const card = cardOf("성과 퍼널");
+    expect(card, "성과 퍼널 카드").toBeTruthy();
+    const text = card!.textContent ?? "";
+    for (const step of ["사전 등록", "실제 시청", "설문 응답", "상담 희망", "상담 희망 + 마케팅 동의"]) {
+      expect(text, step).toContain(step);
+    }
+    // '참가 퍼널' 은 더 이상 없다
+    expect(cardOf("참가 퍼널")).toBeNull();
+  });
+
+  /** 사장님 요청의 핵심 — 각 단계가 직전 단계 대비 몇 %인지. */
+  it("직전 단계 대비 전환율을 보여준다", async () => {
+    mockFetch(SCORING_ENDED);
+    await render();
+    const text = cardOf("성과 퍼널")!.textContent ?? "";
+    expect(text).toContain("직전 단계 대비");
+    expect(text).toContain("56%"); // 시청 133 / 등록 239
+    expect(text).toContain("42%"); // 상담 31 / 설문 74
+    expect(text).toContain("71%"); // 최종 22 / 상담 31
+  });
+
+  /** 체류는 성과로 가는 경로가 아니라 시청의 질 — 단계가 아니라 각주로 남긴다. */
+  it("체류·마케팅 동의 전수·익명 응답은 보조 줄로 남긴다", async () => {
+    mockFetch(SCORING_ENDED);
+    await render();
+    const text = cardOf("성과 퍼널")!.textContent ?? "";
+    expect(text).toContain("체류 30분↑");
+    expect(text).toContain("88명");
+    expect(text).toContain("마케팅 수신 동의");
+    expect(text).toContain("퍼널 단계가 아니에요");
+    expect(text).toContain("익명 설문 응답");
+  });
+
+  /**
+   * 0명 막대를 그리면 "아무도 상담을 원하지 않았다" 로 읽히는데,
+   * 실제로는 **세는 기준이 없는 것**이다 — 그 차이를 화면이 말해야 한다.
+   */
+  it("성과 문항이 지정되지 않으면 0명 막대 대신 지정 안내를 띄운다", async () => {
+    mockFetch(SCORING_ENDED, {
+      performanceFunnel: { ...PERF, goalConfigured: false, goalQuestionTitles: [], goalReached: 0, goalWithMarketing: 0 },
+    });
+    await render();
+    const text = cardOf("성과 퍼널")!.textContent ?? "";
+    expect(text).toContain("아직 셀 수 없어요");
+    expect(text).toContain("성과로 셀 선택지");
+    expect(text).not.toContain("상담 희망 + 마케팅 동의");
+  });
+
+  it("성과로 지정된 문항 제목을 밝힌다 — 무엇을 세는지 알 수 있게", async () => {
+    mockFetch(SCORING_ENDED);
+    await render();
+    const titles = [...(cardOf("성과 퍼널")!.querySelectorAll("[title]"))].map((n) => n.getAttribute("title") ?? "");
+    expect(titles.some((t) => t.includes("부스 참가 1:1 상담을 희망하시나요?"))).toBe(true);
   });
 });
 

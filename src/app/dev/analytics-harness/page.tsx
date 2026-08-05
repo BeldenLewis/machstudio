@@ -115,7 +115,26 @@ const LEAD_ANALYSIS_BEFORE = {
   lift: [],
 };
 
-function analyticsBody(before: boolean) {
+/* 성과 퍼널 — 등록 → 시청 → 설문 → 상담 희망 → 그중 마케팅 동의.
+   ?nogoal=1 로 성과 문항 미지정 상태(안내 문구)도 볼 수 있게 한다. */
+function performanceFunnel(before: boolean, noGoal: boolean) {
+  return {
+    visits: 2750,
+    registered: before ? 262 : 239,
+    entered: before ? 0 : 133,
+    surveyResponded: before ? 0 : 74,
+    goalReached: before ? 0 : 31,
+    goalWithMarketing: before ? 0 : 22,
+    stay30: before ? 0 : 88,
+    stay60: before ? 0 : 51,
+    goalConfigured: !noGoal,
+    goalQuestionTitles: noGoal ? [] : ["부스 참가 1:1 상담을 희망하시나요?", "현재 단계는 어디에 가깝나요?"],
+    marketingConsented: before ? 142 : 131,
+    unlinkedSurveyResponses: before ? 0 : 6,
+  };
+}
+
+function analyticsBody(before: boolean, noGoal: boolean) {
   const registered = before ? 262 : 239;
   const attended = before ? 0 : 133;
   return {
@@ -145,6 +164,7 @@ function analyticsBody(before: boolean) {
       cta: before ? { clicks: 0, clickers: 0 } : { clicks: 22, clickers: 18 },
       reminders: 118,
     },
+    performanceFunnel: performanceFunnel(before, noGoal),
     scoring: before ? SCORING_BEFORE : SCORING_ENDED,
     leadAnalysis: before ? LEAD_ANALYSIS_BEFORE : LEAD_ANALYSIS_ENDED,
     wordOfMouth: before ? { sharers: 0, shares: 0, clicks: 0, registered: 0, bySurface: [], top: [] } : WORD_OF_MOUTH,
@@ -175,6 +195,9 @@ export default function AnalyticsHarnessPage() {
   /* ?before=1 — 아직 방송 전(phase=before). '확보한 리드' 로 갈리고, 상위 참여자·입소문
      섹션이 사라져야 한다. 두 상태를 다 볼 수 있어야 게이트를 확인할 수 있다. */
   const before = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("before");
+  /* ?nogoal=1 — 설문에 성과 선택지를 지정하지 않은 상태. 상담 희망 단계 대신 안내가 떠야 한다
+     (0명 막대를 그리면 "아무도 원하지 않았다" 로 읽히는데 실제로는 기준이 없는 것이다). */
+  const noGoal = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("nogoal");
 
   const patched = useRef(false);
   if (typeof window !== "undefined" && !patched.current) {
@@ -186,7 +209,7 @@ export default function AnalyticsHarnessPage() {
       if (url.includes("/activity")) return Promise.resolve(Response.json({ items: before ? [] : ACTIVITY }));
       // 설문 결과 섹션 — 하니스에서는 설문 없음으로 둬 분석 본문에 집중한다
       if (url.includes("/surveys")) return Promise.resolve(Response.json({ surveys: [] }));
-      if (url.includes("/analytics")) return Promise.resolve(Response.json(analyticsBody(before)));
+      if (url.includes("/analytics")) return Promise.resolve(Response.json(analyticsBody(before, noGoal)));
       return real(input, init);
     };
   }
@@ -200,7 +223,8 @@ export default function AnalyticsHarnessPage() {
         </p>
         <p className="mt-1 text-[11px] text-muted-foreground">
           토글: <a className="underline" href="?">방송 후(세그먼트·상위 참여자·입소문)</a> ·{" "}
-          <a className="underline" href="?before=1">방송 전(확보한 리드)</a>
+          <a className="underline" href="?before=1">방송 전(확보한 리드)</a> ·{" "}
+          <a className="underline" href="?nogoal=1">성과 문항 미지정</a>
         </p>
       </header>
       <AnalyticsTab webinarId="harness" />
