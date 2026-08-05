@@ -59,12 +59,61 @@ const WORD_OF_MOUTH = {
   ],
 };
 
+/* 유입 표 — 등록 수만이 아니라 리드 품질(평균 점수·핫 비율)까지. meta 173명은 신뢰 가능하지만
+   kakao 13명의 평균은 노이즈라 scoreReliable=false 로 흐리게 나와야 한다. */
 const UTM = [
-  { source: "meta", medium: "da", visits: 2100, registered: 173, entered: 96, regRate: 8, attendRate: 55, cost: 1800000, cpr: 10405, cpa: 18750 },
-  { source: "kakao", medium: "content", visits: 240, registered: 13, entered: 9, regRate: 5, attendRate: 69, cost: null, cpr: null, cpa: null },
-  { source: "newsletter", medium: "content", visits: 90, registered: 9, entered: 7, regRate: 10, attendRate: 78, cost: null, cpr: null, cpa: null },
-  { source: "", medium: "", visits: 320, registered: 44, entered: 21, regRate: 14, attendRate: 48, cost: null, cpr: null, cpa: null },
+  { source: "meta", medium: "da", visits: 2100, registered: 173, entered: 96, regRate: 8, entryRate: 55, avgScore: 44, hot: 6, hotRate: 6, scoreReliable: true },
+  { source: "kakao", medium: "content", visits: 240, registered: 13, entered: 9, regRate: 5, entryRate: 69, avgScore: 71, hot: 4, hotRate: 44, scoreReliable: false },
+  { source: "newsletter", medium: "content", visits: 90, registered: 9, entered: 7, regRate: 10, entryRate: 78, avgScore: 66, hot: 3, hotRate: 43, scoreReliable: false },
+  { source: "(direct)", medium: "(none)", visits: 320, registered: 44, entered: 21, regRate: 14, entryRate: 48, avgScore: 39, hot: 1, hotRate: 5, scoreReliable: true },
+  { source: "eventus", medium: "content", visits: 20, registered: 2, entered: 0, regRate: 10, entryRate: 0, avgScore: 0, hot: 0, hotRate: 0, scoreReliable: false },
 ];
+
+/** 리드 분석 — 실제 8/11 웨비나의 업종·직함 분포를 그대로 쓴다(하니스가 현실과 어긋나지 않게). */
+const LEAD_ANALYSIS_BASE = {
+  byIndustry: [
+    { label: "K-뷰티", total: 109, entered: 61, avgScore: 47, hot: 5, reliable: true },
+    { label: "K-푸드", total: 61, entered: 33, avgScore: 41, hot: 2, reliable: true },
+    { label: "K-라이프스타일", total: 59, entered: 30, avgScore: 38, hot: 1, reliable: true },
+    { label: "기타", total: 27, entered: 9, avgScore: 52, hot: 2, reliable: true },
+  ],
+  byRole: [
+    { label: "의사결정권자", total: 137, entered: 79, avgScore: 51, hot: 8, reliable: true },
+    { label: "중간관리자", total: 54, entered: 31, avgScore: 40, hot: 2, reliable: true },
+    { label: "실무·기타", total: 65, entered: 23, avgScore: 33, hot: 0, reliable: true },
+  ],
+  minReliableSample: 20,
+};
+
+const LEAD_ANALYSIS_ENDED = {
+  ...LEAD_ANALYSIS_BASE,
+  // 60~69 칸이 가장 높다 = 끝까지 봤지만 아무 행동도 안 한 시청자가 제일 많다
+  histogram: [
+    { from: 0, to: 9, count: 0 }, { from: 10, to: 19, count: 3 }, { from: 20, to: 29, count: 11 },
+    { from: 30, to: 39, count: 24 }, { from: 40, to: 49, count: 29 }, { from: 50, to: 59, count: 21 },
+    { from: 60, to: 69, count: 34 }, { from: 70, to: 79, count: 8 }, { from: 80, to: 89, count: 2 },
+    { from: 90, to: 100, count: 1 },
+  ],
+  composition: { attend: 3325, watch: 2618, interact: 412, intent: 940, total: 7295 },
+  lift: [
+    { action: "투표", withCount: 61, withAvg: 62, withoutAvg: 41, reliable: true },
+    { action: "채팅", withCount: 31, withAvg: 66, withoutAvg: 43, reliable: true },
+    { action: "질문", withCount: 12, withAvg: 71, withoutAvg: 45, reliable: false },
+    { action: "질문 추천", withCount: 0, withAvg: 0, withoutAvg: 46, reliable: false },
+    { action: "CTA 클릭", withCount: 18, withAvg: 69, withoutAvg: 44, reliable: false },
+    { action: "공유", withCount: 6, withAvg: 73, withoutAvg: 45, reliable: false },
+  ],
+};
+
+/** 방송 전 — 점수가 전부 0 이라 화면이 업종·직함 구성만 남긴다(분포·구성·리프트 카드 사라짐). */
+const LEAD_ANALYSIS_BEFORE = {
+  ...LEAD_ANALYSIS_BASE,
+  byIndustry: LEAD_ANALYSIS_BASE.byIndustry.map((f) => ({ ...f, entered: 0, avgScore: 0, hot: 0 })),
+  byRole: LEAD_ANALYSIS_BASE.byRole.map((f) => ({ ...f, entered: 0, avgScore: 0, hot: 0 })),
+  histogram: Array.from({ length: 10 }, (_, i) => ({ from: i * 10, to: i === 9 ? 100 : i * 10 + 9, count: 0 })),
+  composition: { attend: 0, watch: 0, interact: 0, intent: 0, total: 0 },
+  lift: [],
+};
 
 function analyticsBody(before: boolean) {
   const registered = before ? 262 : 239;
@@ -97,6 +146,7 @@ function analyticsBody(before: boolean) {
       reminders: 118,
     },
     scoring: before ? SCORING_BEFORE : SCORING_ENDED,
+    leadAnalysis: before ? LEAD_ANALYSIS_BEFORE : LEAD_ANALYSIS_ENDED,
     wordOfMouth: before ? { sharers: 0, shares: 0, clicks: 0, registered: 0, bySurface: [], top: [] } : WORD_OF_MOUTH,
     hasVisitData: true,
     generatedAt: "2026-08-11T04:30:00.000Z",

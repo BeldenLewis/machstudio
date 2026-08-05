@@ -30,6 +30,27 @@ const BASE = {
   generatedAt: new Date("2026-08-05T02:00:00Z").toISOString(),
 };
 
+const LEAD_ANALYSIS = {
+  histogram: [
+    { from: 0, to: 9, count: 0 }, { from: 10, to: 19, count: 1 }, { from: 20, to: 29, count: 2 },
+    { from: 30, to: 39, count: 3 }, { from: 40, to: 49, count: 4 }, { from: 50, to: 59, count: 2 },
+    { from: 60, to: 69, count: 9 }, { from: 70, to: 79, count: 1 }, { from: 80, to: 89, count: 0 },
+    { from: 90, to: 100, count: 0 },
+  ],
+  composition: { attend: 550, watch: 430, interact: 0, intent: 120, total: 1100 },
+  byIndustry: [
+    { label: "K-뷰티", total: 109, entered: 61, avgScore: 47, hot: 5, reliable: true },
+    { label: "패션", total: 4, entered: 2, avgScore: 71, hot: 1, reliable: false },
+  ],
+  byRole: [{ label: "의사결정권자", total: 137, entered: 79, avgScore: 51, hot: 8, reliable: true }],
+  lift: [
+    { action: "투표", withCount: 61, withAvg: 62, withoutAvg: 41, reliable: true },
+    // withCount 0 인 줄은 화면에서 빠져야 한다 — 0 vs 0 비교는 자리만 차지한다
+    { action: "질문 추천", withCount: 0, withAvg: 0, withoutAvg: 46, reliable: false },
+  ],
+  minReliableSample: 20,
+};
+
 const SCORING_BEFORE = {
   total: 254, liveMinutes: 1, scheduledMinutes: 120, phase: "before" as const,
   distribution: { hot: 0, warm: 0, cold: 0, noShow: 254 },
@@ -56,7 +77,7 @@ function mockFetch(scoring: unknown, extra: Record<string, unknown> = {}) {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     const body = url.includes("/analytics") && !url.includes("attendance-curve")
-      ? { ...BASE, scoring, ...extra }
+      ? { ...BASE, scoring, leadAnalysis: LEAD_ANALYSIS, ...extra }
       : url.includes("attendance-curve")
         ? { points: [], peak: 0, avg: 0 }
         : { items: [] };
@@ -167,6 +188,62 @@ describe("리드 요약 + 참가 퍼널은 같은 2열 그리드에 나란히 �
     mockFetch(SCORING_BEFORE);
     await render();
     expect(cardOf("상위 참여자")).toBeNull();
+  });
+});
+
+/**
+ * 리드 분석 패널 — 세그먼트 4칸으로는 다음 웨비나를 어떻게 바꿀지 알 수 없다.
+ * 방송 전에는 점수가 전부 0 이라 업종·직함 **구성만** 남긴다.
+ */
+describe("리드 분석 패널", () => {
+  it("방송 후: 분포·구성·업종·직함이 모두 뜨고 2열로 짝지어진다", async () => {
+    mockFetch(SCORING_ENDED);
+    await render();
+    for (const t of ["점수 분포", "점수 구성", "업종별 리드", "직함별 리드"]) {
+      expect(cardOf(t), t).toBeTruthy();
+    }
+    expect(cardOf("점수 분포")!.parentElement).toBe(cardOf("점수 구성")!.parentElement);
+    expect(cardOf("업종별 리드")!.parentElement).toBe(cardOf("직함별 리드")!.parentElement);
+    expect(cardOf("점수 분포")!.parentElement?.className).toContain("lg:grid-cols-2");
+  });
+
+  /** 방송 전에는 평균이 전부 0 이라 숫자를 보여주면 오해만 만든다. */
+  it("방송 전: 점수 카드는 사라지고 업종·직함 구성만 남는다", async () => {
+    mockFetch(SCORING_BEFORE);
+    await render();
+    expect(cardOf("점수 분포")).toBeNull();
+    expect(cardOf("점수 구성")).toBeNull();
+    expect(cardOf("행동한 사람")).toBeNull();
+    expect(cardOf("업종별 리드")).toBeTruthy();
+    expect(cardOf("업종별 리드")!.textContent).toContain("109명");
+    // 설명 문구에는 "방송이 끝나면 평균 점수도" 가 있으므로 **데이터 줄**에 값이 없는지 본다.
+    expect(cardOf("업종별 리드")!.textContent).not.toContain("평균 47점");
+    expect(cardOf("업종별 리드")!.textContent).not.toContain("표본 부족");
+  });
+
+  it("표본이 작은 그룹은 '표본 부족' 으로 밝힌다 — 4명의 평균은 노이즈다", async () => {
+    mockFetch(SCORING_ENDED);
+    await render();
+    const text = cardOf("업종별 리드")!.textContent ?? "";
+    expect(text).toContain("평균 47점");
+    expect(text).toContain("표본 부족");
+  });
+
+  /** 이 문구가 이 카드의 정직성이다 — 행동 가점을 포함하면 동어반복이 된다. */
+  it("행동 리프트는 '가점은 빼고 비교' 를 명시하고, 아무도 안 한 행동은 뺀다", async () => {
+    mockFetch(SCORING_ENDED);
+    await render();
+    const card = cardOf("행동한 사람");
+    expect(card).toBeTruthy();
+    expect(card!.textContent).toContain("그 행동으로 받은 가점은 빼고");
+    expect(card!.textContent).toContain("투표");
+    expect(card!.textContent).not.toContain("질문 추천");
+  });
+
+  it("아무도 반응하지 않았으면 점수 구성이 그 사실을 말한다", async () => {
+    mockFetch(SCORING_ENDED);
+    await render();
+    expect(cardOf("점수 구성")!.textContent).toContain("행동 기여도가 0");
   });
 });
 

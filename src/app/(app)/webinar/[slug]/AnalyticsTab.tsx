@@ -46,6 +46,12 @@ interface UtmRow {
   entered: number;
   regRate: number;
   entryRate: number;
+  /* 리드 품질 — 등록 수만 보면 meta 173명이 압도적이지만, 그 리드가 좋았는지는 평균 점수가 답한다.
+     scoreReliable=false 면(표본 20명 미만) 평균을 흐리게 표시한다 — 13명 채널의 평균은 노이즈다. */
+  avgScore?: number;
+  hot?: number;
+  hotRate?: number;
+  scoreReliable?: boolean;
 }
 
 interface CampaignRow {
@@ -109,6 +115,27 @@ interface Scoring {
   leadQuality: { consented: number; withEmail: number; withPhone: number; withCompany: number };
 }
 
+/** 세분화 축 한 줄 — 업종·직함·채널이 같은 모양을 쓴다(webinar-lead-facets.FacetRow). */
+interface FacetRow {
+  label: string;
+  total: number;
+  entered: number;
+  avgScore: number;
+  hot: number;
+  /** false 면 평균을 흐리게 + "표본 부족" 으로 표시한다 */
+  reliable: boolean;
+}
+
+/** 리드 분석 — 점수를 결정에 쓸 수 있는 축으로 쪼갠 결과. */
+interface LeadAnalysis {
+  histogram: { from: number; to: number; count: number }[];
+  composition: { attend: number; watch: number; interact: number; intent: number; total: number };
+  byIndustry: FacetRow[];
+  byRole: FacetRow[];
+  lift: { action: string; withCount: number; withAvg: number; withoutAvg: number; reliable: boolean }[];
+  minReliableSample: number;
+}
+
 /** 입소문(추천 링크) — 공유 → 클릭 → 등록. 아무도 공유하지 않으면 섹션 자체를 숨긴다. */
 interface WordOfMouth {
   /** 공유 버튼을 누른 사람 수 */
@@ -130,6 +157,7 @@ interface AnalyticsData {
   registrationTrend: { date: string; count: number }[];
   interactions: Interactions;
   scoring: Scoring;
+  leadAnalysis?: LeadAnalysis;
   wordOfMouth?: WordOfMouth;
   hasVisitData: boolean;
   /** 광고비 합산 기간 — 캠페인 표 캡션이 밝힌다(스키마상 웨비나 단위로 스코핑할 수 없어서). */
@@ -601,6 +629,225 @@ function scoreBreakdownText(t: TopEngaged): string {
   const b = t.breakdown;
   const capped = b.interactRaw > b.interact ? ` (원점수 ${b.interactRaw}, 30점에서 멈춤)` : "";
   return `참석 ${b.attend} + 체류 ${b.watch} (${t.watchMinutes}/${b.evaluatedMinutes}분) + 행동 ${b.interact}${capped} + 인텐트 ${b.intent} = ${t.score}점`;
+}
+
+/** 점수 구성 네 덩어리의 색 — 세그먼트 색과 겹치지 않게 별도 계열을 쓴다. */
+const COMPOSITION_PARTS = [
+  { key: "attend" as const, label: "참석", color: "var(--chart-viewers)", hint: "입장하면 고정 25점" },
+  { key: "watch" as const, label: "체류", color: "var(--chart-entered)", hint: "방송 경과 대비 시청 비율 · 최대 35점" },
+  { key: "interact" as const, label: "행동", color: "#f59e0b", hint: "채팅·투표·질문·CTA·공유 · 최대 30점" },
+  { key: "intent" as const, label: "인텐트", color: "#8b5cf6", hint: "마케팅 수신 동의 10점" },
+];
+
+/**
+ * 세분화 표 한 덩어리 — 업종·직함이 같은 모양을 쓴다.
+ *
+ * 등록 수(막대)와 평균 점수를 한 줄에 붙인다: "많이 왔는가" 와 "잘 왔는가" 는 다른 질문이고,
+ * 둘을 같이 봐야 다음 웨비나의 타깃을 정할 수 있다.
+ * 방송 전에는 평균·핫이 전부 0 이라 구성(등록 수)만 보여준다.
+ */
+function FacetTable({ rows, showScore, minSample }: { rows: FacetRow[]; showScore: boolean; minSample: number }) {
+  if (rows.length === 0) return <p className="text-xs text-muted-foreground">아직 집계할 값이 없어요.</p>;
+  const max = Math.max(...rows.map((r) => r.total), 1);
+  return (
+    <div className="space-y-2.5">
+      {rows.map((r) => (
+        <div key={r.label}>
+          <div className="mb-1 flex items-baseline justify-between gap-2 text-[11px]">
+            <span className="min-w-0 flex-1 truncate" title={r.label}>{r.label}</span>
+            <span className="shrink-0 tabular-nums text-muted-foreground">
+              {n(r.total)}명
+              {showScore && (
+                <>
+                  {" · "}
+                  <b
+                    className={r.reliable ? "text-foreground" : "text-muted-foreground/60"}
+                    title={r.reliable ? `입장 ${n(r.entered)}명의 평균` : `표본 ${n(r.total)}명 — ${n(minSample)}명 미만이라 평균을 믿기 어려워요`}
+                  >
+                    평균 {n(r.avgScore)}점
+                  </b>
+                  {r.hot > 0 && <span className="text-green-600 dark:text-green-400">{` · 핫 ${n(r.hot)}`}</span>}
+                  {!r.reliable && <span className="text-muted-foreground/60">{" · 표본 부족"}</span>}
+                </>
+              )}
+            </span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${pct(r.total, max)}%` }}
+              transition={{ duration: 0.45, ease: "easeOut" }}
+              className="h-full rounded-full bg-violet-500"
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 리드 분석 패널 — 세그먼트 4칸으로는 **다음 웨비나를 어떻게 바꿀지** 알 수 없다.
+ *
+ * 네 덩어리를 2열로 깐다:
+ *   분포(경계가 맞나) | 점수 구성(무엇이 점수를 만들었나)
+ *   업종별            | 직함별
+ * 행동 리프트는 그 행동을 한 사람이 있을 때만 아래 전체 폭으로.
+ *
+ * 방송 전에는 점수가 전부 0 이므로 업종·직함 **구성**만 남긴다 —
+ * "우리 리드가 어느 업종·직급으로 채워졌나" 는 그때도 쓸 수 있는 정보다.
+ */
+function LeadAnalysisSection({ la, showScore }: { la: LeadAnalysis; showScore: boolean }) {
+  const comp = la.composition;
+  const hist = la.histogram;
+  const histMax = Math.max(...hist.map((b) => b.count), 1);
+  const scored = hist.reduce((s, b) => s + b.count, 0);
+  // 그 행동을 한 사람이 아무도 없는 줄은 뺀다 — 0 vs 0 비교는 화면만 채운다.
+  const lift = la.lift.filter((l) => l.withCount > 0);
+
+  return (
+    <>
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        {showScore && (
+          <SectionCard>
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold">점수 분포</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                입장자 {n(scored)}명의 10점 구간 분포 · 세그먼트 4칸으로는 안 보이는 쏠림을 확인해요.
+              </p>
+            </div>
+            {scored === 0 ? (
+              <p className="text-xs text-muted-foreground">입장한 참여자가 없어요.</p>
+            ) : (
+              <>
+                <div className="flex h-28 items-end gap-1">
+                  {hist.map((b) => (
+                    <div key={b.from} className="flex flex-1 flex-col items-center gap-1" title={`${b.from}~${b.to}점 · ${n(b.count)}명`}>
+                      <span className="text-[9px] tabular-nums text-muted-foreground">{b.count || ""}</span>
+                      <motion.div
+                        initial={{ height: 0 }}
+                        animate={{ height: `${Math.max(b.count ? 4 : 0, pct(b.count, histMax))}%` }}
+                        transition={{ duration: 0.45, ease: "easeOut" }}
+                        // 핫 경계(65점)를 넘는 칸은 초록 — 경계가 어디인지 막대에서 바로 읽히게
+                        className={`w-full rounded-t ${b.from >= 60 ? "bg-green-500/70" : "bg-violet-500/60"}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-1 flex gap-1 text-[9px] tabular-nums text-muted-foreground">
+                  {hist.map((b) => (
+                    <span key={b.from} className="flex-1 text-center">{b.from}</span>
+                  ))}
+                </div>
+                <p className="mt-3 text-[10.5px] leading-relaxed text-muted-foreground">
+                  60~69 칸에 사람이 뭉쳐 있으면 <b>끝까지 봤지만 아무 행동도 하지 않은 시청자</b>가 많다는 뜻이에요 —
+                  다음 웨비나에 투표·질문 유도를 넣을 근거가 돼요.
+                </p>
+              </>
+            )}
+          </SectionCard>
+        )}
+
+        {showScore && (
+          <SectionCard>
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold">점수 구성</h3>
+              <p className="mt-1 text-xs text-muted-foreground">입장자 점수 총합이 어디서 왔는지 — 이번 웨비나의 성격이 한 줄로 보여요.</p>
+            </div>
+            {comp.total === 0 ? (
+              <p className="text-xs text-muted-foreground">입장한 참여자가 없어요.</p>
+            ) : (
+              <>
+                <div className="mb-3 flex h-2.5 overflow-hidden rounded-full bg-secondary">
+                  {COMPOSITION_PARTS.map((p) =>
+                    comp[p.key] > 0 ? <div key={p.key} style={{ width: `${pct(comp[p.key], comp.total)}%`, background: p.color }} /> : null,
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  {COMPOSITION_PARTS.map((p) => (
+                    <div key={p.key} className="flex items-baseline justify-between text-[11px]" title={p.hint}>
+                      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                        <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
+                        {p.label}
+                      </span>
+                      <span className="tabular-nums">
+                        <b>{pct(comp[p.key], comp.total)}%</b>
+                        <span className="text-muted-foreground">{` · ${n(comp[p.key])}점`}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {comp.interact === 0 && (
+                  <p className="mt-3 text-[10.5px] leading-relaxed text-muted-foreground">
+                    <b>행동 기여도가 0</b> 이에요 — 아무도 채팅·투표·질문·CTA를 남기지 않았어요. 시청은 했지만 참여는 없던 웨비나예요.
+                  </p>
+                )}
+              </>
+            )}
+          </SectionCard>
+        )}
+
+        <SectionCard>
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold">업종별 리드</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {showScore ? "어느 업종이 실제로 관심이 있었는지 — 다음 웨비나 주제·타깃의 근거예요." : "등록 폼의 업종 구성이에요. 방송이 끝나면 업종별 평균 점수도 함께 보여드려요."}
+            </p>
+          </div>
+          <FacetTable rows={la.byIndustry} showScore={showScore} minSample={la.minReliableSample} />
+        </SectionCard>
+
+        <SectionCard>
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold">직함별 리드</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {showScore
+                ? "결정권자가 실제로 끝까지 봤는지 — 영업 우선순위와 콘텐츠 난이도의 근거예요."
+                : "직함을 결재선 기준으로 묶었어요(대표·대표이사·CEO가 갈리지 않게)."}
+            </p>
+          </div>
+          <FacetTable rows={la.byRole} showScore={showScore} minSample={la.minReliableSample} />
+        </SectionCard>
+      </div>
+
+      {showScore && lift.length > 0 && (
+        <SectionCard>
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold">행동한 사람은 원래 더 열심이었나</h3>
+            {/* 이 카드의 정직성이 여기 달렸다 — 행동 가점을 포함하면 동어반복이 된다. */}
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              그 행동을 한 사람과 안 한 사람의 점수를 비교해요. <b>그 행동으로 받은 가점은 빼고</b> 비교합니다 —
+              투표하면 4점이 붙으니, 그걸 포함하면 “투표한 사람이 점수가 높다”는 당연한 말이 되거든요.
+              참석·체류·인텐트만으로 비교해야 “투표한 사람은 원래 더 오래 봤다”를 알 수 있어요.
+            </p>
+          </div>
+          <div className="space-y-2">
+            {lift.map((l) => {
+              const diff = l.withAvg - l.withoutAvg;
+              return (
+                <div key={l.action} className="flex items-center gap-3 rounded-xl border border-border p-2.5 text-[11px]">
+                  <span className="w-16 shrink-0 font-medium">{l.action}</span>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">{n(l.withCount)}명</span>
+                  <span className="flex-1 tabular-nums">
+                    <b className={l.reliable ? "" : "text-muted-foreground/60"}>{n(l.withAvg)}점</b>
+                    <span className="text-muted-foreground">{` vs 안 한 사람 ${n(l.withoutAvg)}점`}</span>
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-1.5 py-0.5 font-semibold tabular-nums ${
+                      diff > 0 ? "bg-green-500/10 text-green-600 dark:text-green-400" : diff < 0 ? "bg-secondary text-muted-foreground" : "bg-secondary text-muted-foreground"
+                    }`}
+                  >
+                    {diff > 0 ? `+${n(diff)}` : n(diff)}
+                  </span>
+                  {!l.reliable && <span className="shrink-0 text-muted-foreground/60">표본 부족</span>}
+                </div>
+              );
+            })}
+          </div>
+        </SectionCard>
+      )}
+    </>
+  );
 }
 
 const SHARE_SURFACE_LABEL: Record<string, string> = {
@@ -1179,6 +1426,12 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
         </SectionCard>
       )}
 
+      {/* 리드 분석 — 점수를 결정에 쓸 수 있는 축(분포·구성·업종·직함·행동)으로 쪼갠다.
+          방송 전에는 점수가 전부 0 이라 업종·직함 구성만 남긴다. */}
+      {data.leadAnalysis && (
+        <LeadAnalysisSection la={data.leadAnalysis} showScore={scoring.phase !== "before"} />
+      )}
+
       {/* 입소문 — 시청자가 직접 퍼뜨린 결과. 아무도 공유하지 않았으면 섹션을 숨긴다
           (빈 껍데기를 보여주지 않는다 — 공개 면의 이중 게이트 원칙과 같다). */}
       {data.wordOfMouth && data.wordOfMouth.shares > 0 && (
@@ -1219,7 +1472,10 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
                   <th className="py-2 pr-3 text-right font-medium">등록</th>
                   {hasVisits && <th className="py-2 pr-3 text-right font-medium">등록률</th>}
                   <th className="py-2 pr-3 text-right font-medium">입장</th>
-                  <th className="py-2 text-right font-medium">입장률</th>
+                  <th className="py-2 pr-3 text-right font-medium">입장률</th>
+                  {/* 리드 품질 — 등록 수만으로는 "많이 왔다" 만 알 수 있다. 그 리드가 좋았는지는 여기서 답한다. */}
+                  <th className="py-2 pr-3 text-right font-medium" title="입장자 평균 참여 점수">평균 점수</th>
+                  <th className="py-2 text-right font-medium" title="입장자 중 핫(65점 이상) 비율">핫 비율</th>
                 </tr>
               </thead>
               <tbody>
@@ -1238,7 +1494,30 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
                       </td>
                     )}
                     <td className="py-2 pr-3 text-right tabular-nums">{n(row.entered)}</td>
-                    <td className="py-2 text-right tabular-nums text-muted-foreground">{row.entryRate}%</td>
+                    <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">{row.entryRate}%</td>
+                    {/* 표본이 작은 채널(13명 등)의 평균은 노이즈다 — 흐리게 + 사유를 title 로 밝힌다.
+                        입장자가 없으면 평균이 0 이 아니라 **없음**이라 — 로 쓴다. */}
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      {row.entered ? (
+                        <span
+                          className={row.scoreReliable ? "" : "text-muted-foreground/50"}
+                          title={row.scoreReliable ? `입장 ${n(row.entered)}명의 평균` : `등록 ${n(row.registered)}명 — 표본이 작아 평균을 믿기 어려워요`}
+                        >
+                          {n(row.avgScore ?? 0)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground/40" title="입장자가 없어 평균을 낼 수 없어요">—</span>
+                      )}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">
+                      {row.entered ? (
+                        <span className={(row.hot ?? 0) > 0 ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}>
+                          {row.hotRate ?? 0}%
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground/40">—</span>
+                      )}
+                    </td>
                   </motion.tr>
                 ))}
               </tbody>

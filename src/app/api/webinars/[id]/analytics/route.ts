@@ -11,6 +11,15 @@ import { prisma } from "@/lib/prisma";
 import { assembleWebinarEngagement } from "@/lib/webinar-scoring";
 import { campaignJoinKey, normalizeUtmKey } from "@/lib/attribution-normalize";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
+import {
+  actionLift,
+  facetBy,
+  facetByRole,
+  MIN_RELIABLE_SAMPLE,
+  scoreComposition,
+  scoreHistogram,
+  summarizeFacet,
+} from "@/lib/webinar-lead-facets";
 
 function pct(part: number, total: number) {
   if (!total) return 0;
@@ -111,8 +120,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   for (const row of regByGroup) ensure(row.utmSource, row.utmMedium).registered += row._count._all;
   for (const row of enteredByGroup) ensure(row.utmSource, row.utmMedium).entered += row._count._all;
 
-  const utmBreakdown = Array.from(merged.values())
+  const utmChannels = Array.from(merged.values())
     .map((row) => ({
+      // 품질 열을 붙일 때 쓸 접힌 키 — 표시용 라벨과 분리해 둔다(라벨은 "(direct)" 로 바뀐다).
+      key: groupKey(row.source, row.medium),
       source: row.source || "(direct)",
       medium: row.medium || "(none)",
       visits: row.visits,
@@ -215,8 +226,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   ).slice(0, 20);
 
   // ── 참여 스코어링 + 인터랙션 아카이브 — 기존 모델 집계만(신규 수집 없음) ──
-  const [engagement, pollRows, qaByStatus, qaTop, chatAgg, reminderCount, ctaAgg] = await Promise.all([
+  const [engagement, facetRows, pollRows, qaByStatus, qaTop, chatAgg, reminderCount, ctaAgg] = await Promise.all([
     assembleWebinarEngagement(id, { liveStartAt: webinar.liveStartAt, liveEndAt: webinar.liveEndAt, broadcastEndedAt: webinar.broadcastEndedAt }),
+    /* 리드 분석 축 — 업종·직함·채널. 등록 폼이 받아 두고도 명단에만 있던 값이다.
+       짧은 문자열 4개만 읽는다(262행이면 수십 KB) — 점수는 아래에서 id 로 붙인다. */
+    prisma.webinarRegistration.findMany({
+      where: { webinarId: id },
+      select: { id: true, industry: true, jobTitle: true, utmSource: true, utmMedium: true },
+    }),
     prisma.webinarPoll.findMany({
       where: { webinarId: id },
       orderBy: { createdAt: "asc" },
@@ -293,6 +310,62 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   /* 노쇼지만 마케팅 동의한 리드 — 리타겟 대상. 점수는 5점 콜드라 상위 참여자 목록에 절대
      안 나오는데, 웨비나 다음 액션(재초대·다시보기 안내)에서 제일 큰 덩어리다. */
   const retargetCount = engagement.rows.filter((r) => !r.entered && r.agreeMarketing).length;
+
+  /* ── 리드 분석 — 점수를 "결정에 쓸 수 있는 축" 으로 쪼갠다 ──
+     세그먼트 4칸만으로는 다음 웨비나를 어떻게 바꿀지 알 수 없다. 규칙은 webinar-lead-facets 에
+     모아 두고(테스트로 묶임) 여기서는 조립만 한다. */
+  const scoreById = new Map(engagement.rows.map((r) => [r.registrationId, r]));
+  const facetScored = facetRows
+    .map((f) => {
+      const s = scoreById.get(f.id);
+      return s
+        ? { entered: s.entered, score: s.score, segment: s.segment, breakdown: s.breakdown, jobTitle: f.jobTitle, industry: f.industry ?? "", channel: groupKey(f.utmSource, f.utmMedium), interactions: s }
+        : null;
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+
+  /* 채널별 품질 — 기존 유입 표에 열 두 개로 붙인다(새 카드를 만들지 않는다).
+     등록 수만 보면 meta 173명이 압도적이지만, 그 리드가 좋았는지는 평균 점수가 답한다. */
+  const byChannel = new Map<string, typeof facetScored>();
+  for (const r of facetScored) {
+    const bag = byChannel.get(r.channel);
+    if (bag) bag.push(r);
+    else byChannel.set(r.channel, [r]);
+  }
+  // 채널은 접기지 않고 전부 남긴다(표가 이미 채널을 다 보여준다) — 평균·신뢰 기준만 공유한다.
+  const channelQuality = new Map([...byChannel].map(([key, rows]) => [key, summarizeFacet(key, rows)]));
+  const utmBreakdown = utmChannels.map(({ key, ...row }) => {
+    const q = channelQuality.get(key);
+    return {
+      ...row,
+      avgScore: q?.avgScore ?? 0,
+      hot: q?.hot ?? 0,
+      hotRate: pct(q?.hot ?? 0, q?.entered ?? 0),
+      /** false 면 화면이 평균을 흐리게 표시한다 — 13명 채널의 평균은 노이즈다 */
+      scoreReliable: q?.reliable ?? false,
+    };
+  });
+
+  const leadAnalysis = {
+    /** 입장자 점수 분포(10점 구간) — 세그먼트 4칸으로는 "60점 벽" 이 안 보인다 */
+    histogram: scoreHistogram(facetScored),
+    /** 전체 점수가 어디서 왔나 — "체류는 좋았는데 상호작용이 0" 을 한 줄로 */
+    composition: scoreComposition(facetScored),
+    /** 업종 — K-뷰티/K-푸드처럼 이미 깔끔한 값이라 원문 상위 5개 + 기타 */
+    byIndustry: facetBy(facetScored, (r) => r.industry, { limit: 5 }),
+    /** 직함 — 자유 입력을 결재선 기준으로 묶는다(대표/대표이사/CEO 가 갈리지 않게) */
+    byRole: facetByRole(facetScored),
+    /** 행동별 리프트 — 행동 점수를 뺀 값으로 비교한다(그 함수 주석 참고) */
+    lift: actionLift(facetScored, [
+      { action: "투표", did: (r) => r.interactions.pollVotes > 0 },
+      { action: "채팅", did: (r) => r.interactions.chat > 0 },
+      { action: "질문", did: (r) => r.interactions.qaAsks > 0 },
+      { action: "질문 추천", did: (r) => r.interactions.qaUpvotes > 0 },
+      { action: "CTA 클릭", did: (r) => r.interactions.ctaClicks > 0 },
+      { action: "공유", did: (r) => r.interactions.shares > 0 },
+    ]),
+    minReliableSample: MIN_RELIABLE_SAMPLE,
+  };
 
   /* ── 입소문(추천 링크) ──
      공유 → 클릭 → 등록 3단 퍼널과 상위 추천인. 예전에는 공유 버튼이 맨 URL 을 복사해서
@@ -435,6 +508,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         registered: Number(r.registered) || 0,
       })),
     },
+    leadAnalysis,
     hasVisitData: visits > 0,
     generatedAt: new Date().toISOString(),
   });
