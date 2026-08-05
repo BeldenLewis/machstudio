@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimitAsync } from "@/lib/ratelimit";
 import { normalizeUtmKey } from "@/lib/attribution-normalize";
+import { normalizeShareCode } from "@/lib/webinar-share";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -70,6 +71,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   }
 
   const now = new Date();
+
+  /* 추천 링크(`?ref=`)로 들어온 방문 — 같은 비콘에 얹는다. 별도 비콘을 만들면 요청이 두 배가 되고
+     "새 폴러 금지" 규약과도 어긋난다. 코드가 이 웨비나의 것이 아니면(오래된 링크·오타) 무시한다. */
+  const refCode = normalizeShareCode(body?.ref);
+  if (refCode) {
+    const owner = await prisma.webinarRegistration.findFirst({
+      where: { webinarId: webinar.id, shareCode: refCode },
+      select: { id: true },
+    });
+    if (owner) {
+      await prisma.webinarShareClick
+        .upsert({
+          where: { webinarId_shareCode_date: { webinarId: webinar.id, shareCode: refCode, date: kstDate(now) } },
+          update: { clicks: { increment: 1 } },
+          create: { webinarId: webinar.id, shareCode: refCode, date: kstDate(now), clicks: 1 },
+        })
+        .catch(() => {});
+    }
+  }
+
   await prisma.webinarVisitStat
     .upsert({
       where: {

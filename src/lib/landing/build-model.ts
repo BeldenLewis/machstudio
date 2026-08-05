@@ -12,6 +12,7 @@ import { DEFAULT_LANDING_AUDIENCE_TITLE,
   DEFAULT_LANDING_HIGHLIGHTS_TITLE, normalizeLandingPageConfig, safeHttpUrl } from "@/lib/webinar-config";
 import { isRealSession } from "@/lib/webinar-sessions";
 import { UTM_QUERY_KEYS } from "@/lib/attribution-normalize";
+import { readShareCode, SHARE_QUERY_KEY } from "@/lib/webinar-share";
 
 /** CTA 링크에 이어 붙일 파라미터 — 수집이 읽는 6종과 같아야 한다(정본: attribution-normalize). */
 const UTM_FORWARD_KEYS = UTM_QUERY_KEYS;
@@ -47,6 +48,11 @@ function currentUtmQuery(): string {
       const value = from.get(key);
       if (value) out.set(key, value);
     }
+    /* 추천 코드(`?ref=`)도 같이 넘긴다 — 랜딩으로 온 추천 링크에서 CTA 를 누르면 라이브
+       페이지에서 등록이 일어나는데, 여기서 코드를 버리면 그 등록이 추천인에 연결되지 않는다
+       (utm 을 버려서 캠페인 성과가 끊겼던 것과 똑같은 결함). */
+    const ref = readShareCode(window.location.search);
+    if (ref) out.set(SHARE_QUERY_KEY, ref);
     return out.toString();
   } catch {
     return "";

@@ -25,6 +25,7 @@ import {
 import { MultiChoiceField, SingleChoiceField } from "@/components/webinar/choice-fields";
 import { readStatusRefresh } from "../status-refresh";
 import { buildUtmEnvelope, sendVisitBeacon } from "@/lib/attribution-client";
+import { buildShareUrl, normalizeShareCode, readShareCode, type ShareChannel, type ShareSurface } from "@/lib/webinar-share";
 import { PUBLIC_REGISTRATION_FORM_CSS } from "@/lib/webinar-public-form-css";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
@@ -178,6 +179,9 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
   const [notifyError, setNotifyError] = useState("");
   const [notifyPending, setNotifyPending] = useState(false);
   const [registrationId, setRegistrationId] = useState<string | null>(null);
+  /* 이 등록자의 추천 코드 — 공유 버튼이 링크에 붙인다. 등록·입장확인 응답에서 미리 받아 두는
+     이유: 버튼 클릭 시점에 서버를 기다리면 사용자 제스처가 끊겨 공유 시트가 막힌다. */
+  const [shareCode, setShareCode] = useState<string | null>(null);
   // youtubeId 는 /info 로 공개하지 않고 verify 통과 시에만 받아 영상 게이팅
   const [videoId, setVideoId] = useState<string | null>(null);
   const [authMethod, setAuthMethod] = useState<AuthMethod>("phone");
@@ -267,18 +271,20 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     try {
       const raw = localStorage.getItem(`mach_reg_${slug}`);
       if (raw) {
-        const s = JSON.parse(raw) as { registrationId?: string; videoId?: string | null };
+        const s = JSON.parse(raw) as { registrationId?: string; videoId?: string | null; shareCode?: string | null };
         if (s.registrationId) setRegistrationId(s.registrationId);
         if (typeof s.videoId === "string") setVideoId(s.videoId);
+        // 새로고침해도 공유 버튼이 바로 동작해야 한다 — 코드를 다시 받으려면 입장 확인을 또 해야 한다.
+        if (typeof s.shareCode === "string") setShareCode(normalizeShareCode(s.shareCode) || null);
       }
     } catch { /* 스토리지 차단 무시 */ }
   }, [slug]);
   useEffect(() => {
     if (isPreviewUrl()) return;
     try {
-      if (registrationId) localStorage.setItem(`mach_reg_${slug}`, JSON.stringify({ registrationId, videoId }));
+      if (registrationId) localStorage.setItem(`mach_reg_${slug}`, JSON.stringify({ registrationId, videoId, shareCode }));
     } catch { /* 무시 */ }
-  }, [slug, registrationId, videoId]);
+  }, [slug, registrationId, videoId, shareCode]);
 
   const fetchWebinar = useCallback(async () => {
     try {
@@ -755,7 +761,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
       const res = await fetch(`/api/webinar/${slug}/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, customFields, _utm: buildUtmEnvelope() }),
+        // _ref: 추천 링크(`?ref=`)로 들어왔으면 그 코드를 함께 보내 추천인에 연결한다
+        body: JSON.stringify({ ...form, customFields, _utm: buildUtmEnvelope(), _ref: readShareCode(window.location.search) || undefined }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -767,6 +774,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         return;
       }
       setRegistrationId(data.registration.id);
+      if (typeof data.registration.shareCode === "string") setShareCode(normalizeShareCode(data.registration.shareCode) || null);
       if (typeof data.youtubeId === "string") setVideoId(data.youtubeId);
       setRegistered(true);
       setRegModalOpen(false); // 등록 완료 — 모달을 닫고 대기 화면(등록자용)으로 돌아간다
@@ -822,9 +830,12 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
         department?: string | null;
         jobTitle?: string | null;
         industry?: string | null;
+        shareCode?: string | null;
       };
 
       setRegistrationId(registration.id);
+      // 공유 버튼이 쓸 추천 코드 — 입장 확인에서 받아 둔다(클릭 시점에 서버를 기다리지 않게)
+      if (typeof registration.shareCode === "string") setShareCode(normalizeShareCode(registration.shareCode) || null);
       if (typeof data.youtubeId === "string") setVideoId(data.youtubeId);
       if (typeof data.reminderSubscribed === "boolean") setNotifySubscribed(data.reminderSubscribed);
       setForm((prev) => ({
@@ -994,17 +1005,40 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
     setTimeout(() => URL.revokeObjectURL(href), 0);
   };
 
-  const handleShare = async () => {
-    const url = typeof window !== "undefined" ? `${window.location.origin}/webinar/${slug}/live` : "";
+  /**
+   * 공유 — 링크에 **내 추천 코드**(`?ref=`)를 붙이고, 공유했다는 사실을 서버에 남긴다.
+   * 예전에는 추적 없는 맨 URL 을 복사해서 "누가 공유했나" 도 "그 공유로 몇 명이 왔나" 도
+   * 알 수 없었다(webinar-share.ts 주석 참고).
+   *
+   * 순서가 중요하다: URL 을 **먼저 동기적으로** 만들고 공유/복사한 뒤에 기록을 보낸다.
+   * 기록을 await 하면 사용자 제스처가 끊겨 iOS 사파리가 공유 시트·클립보드를 막는다.
+   * 그래서 추천 코드는 등록·입장확인 응답에서 미리 받아 두고(shareCode 상태), 기록은
+   * fire-and-forget 이다.
+   */
+  const recordShare = (surface: ShareSurface, channel: ShareChannel) => {
+    if (isPreviewUrl() || !registrationId || registrationId === "preview") return;
+    const payload = JSON.stringify({ registrationId, surface, channel });
+    try {
+      // sendBeacon 은 화면을 떠나도 전송이 보장된다(공유 후 앱으로 이동하는 모바일 경로)
+      if (navigator.sendBeacon?.(`/api/webinar/${slug}/share`, payload)) return;
+    } catch { /* 폴백으로 진행 */ }
+    void fetch(`/api/webinar/${slug}/share`, { method: "POST", body: payload, keepalive: true }).catch(() => {});
+  };
+
+  const handleShare = async (surface: ShareSurface = "live") => {
+    if (typeof window === "undefined") return;
+    const url = buildShareUrl(`${window.location.origin}/webinar/${slug}/live`, shareCode ?? "");
     try {
       if (typeof navigator !== "undefined" && navigator.share) {
         await navigator.share({ title: webinar?.name ?? "웨비나", url });
+        recordShare(surface, "native");
       } else if (typeof navigator !== "undefined" && navigator.clipboard) {
         await navigator.clipboard.writeText(url);
         setShareCopied(true);
         setTimeout(() => setShareCopied(false), 2000);
+        recordShare(surface, "copy");
       }
-    } catch { /* 공유 취소·미지원 무시 */ }
+    } catch { /* 공유 취소·미지원 무시 — 취소는 기록하지 않는다 */ }
   };
   /**
    * 무효 registrationId 탈출구 — 등록 건이 삭제되면(운영자가 테스트 등록 정리 등) localStorage
@@ -1249,6 +1283,9 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
           } : undefined}
           notifyState={{ subscribed: notifySubscribed, onToggle: handleNotifyToggle, error: notifyError, pending: notifyPending }}
           onReauth={previewMode ? undefined : handleReauth}
+          // 공유는 부모가 처리한다 — 추천 코드·기록은 등록자 컨텍스트를 아는 이쪽에만 있다
+          onShare={() => void handleShare("live")}
+          shareCopied={shareCopied}
         />
       ) : (
       <div>
@@ -1270,7 +1307,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
               registrantCount={registrantCount}
               hasCalendar
               onCalendar={downloadCalendar}
-              onShare={handleShare}
+              onShare={() => void handleShare("waiting")}
               shareCopied={shareCopied}
               // 알림 구독은 등록 이메일이 필요하다 — 미등록자에겐 버튼을 숨기고(누르면 항상 실패) 등록 CTA 로 유도
               onNotify={hasRegistration ? handleNotifyToggle : undefined}
@@ -1484,7 +1521,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             viewerCount={viewerCount ?? undefined}
             hasCalendar
             onCalendar={downloadCalendar}
-            onShare={handleShare}
+            onShare={() => void handleShare("waiting")}
             shareCopied={shareCopied}
             // 이 화면 진입 시 registrationId 는 항상 null(인증 전) — 버튼을 넘기면 누르는 즉시
             // "이메일이 없어 알림을 받을 수 없어요" 가 뜬다. 대기 화면(PreLiveWaiting)과 같은 기준.
@@ -1516,7 +1553,7 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
             onReplay={hasRegistration ? handleNotifyToggle : undefined}
             replayRequested={notifySubscribed}
             replayPending={notifyPending}
-            onShare={handleShare}
+            onShare={() => void handleShare("ended")}
             shareCopied={shareCopied}
           />
         )}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useChartColors } from "@/components/ui/use-chart-colors";
 import { motion } from "framer-motion";
-import { Download, Loader2, RefreshCw, BarChart3, MessageSquare, HelpCircle, Users, Trash2 } from "lucide-react";
+import { Download, Loader2, RefreshCw, BarChart3, MessageSquare, HelpCircle, Users, Trash2, RotateCcw, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatKst, formatKstDateTime } from "@/lib/datetime";
 import { useUndoableDelete } from "@/components/ui/use-undoable-delete";
@@ -93,13 +93,34 @@ interface TopEngaged {
   qaUpvotes: number;
   ctaClicks: number;
   agreeMarketing: boolean;
+  breakdown: { attend: number; watch: number; interact: number; interactRaw: number; intent: number; evaluatedMinutes: number };
 }
 
 interface Scoring {
   total: number;
   liveMinutes: number;
+  scheduledMinutes: number;
+  /** before = 아직 방송 전. 이때 세그먼트는 전원 노쇼라 의미가 없어 리드 품질을 대신 보여준다 */
+  phase: "before" | "live" | "ended";
   distribution: { hot: number; warm: number; cold: number; noShow: number };
   top: TopEngaged[];
+  /** 노쇼지만 마케팅 동의 — 리타겟 대상 */
+  retargetCount: number;
+  leadQuality: { consented: number; withEmail: number; withPhone: number; withCompany: number };
+}
+
+/** 입소문(추천 링크) — 공유 → 클릭 → 등록. 아무도 공유하지 않으면 섹션 자체를 숨긴다. */
+interface WordOfMouth {
+  /** 공유 버튼을 누른 사람 수 */
+  sharers: number;
+  /** 총 공유 횟수(한 사람이 여러 면에서 공유하면 각각) */
+  shares: number;
+  /** 추천 링크로 들어온 방문 */
+  clicks: number;
+  /** 추천 링크로 실제 등록한 사람 수 */
+  registered: number;
+  bySurface: { surface: string; count: number }[];
+  top: { name: string; company: string | null; shares: number; clicks: number; registered: number }[];
 }
 
 interface AnalyticsData {
@@ -109,6 +130,7 @@ interface AnalyticsData {
   registrationTrend: { date: string; count: number }[];
   interactions: Interactions;
   scoring: Scoring;
+  wordOfMouth?: WordOfMouth;
   hasVisitData: boolean;
   /** 광고비 합산 기간 — 캠페인 표 캡션이 밝힌다(스키마상 웨비나 단위로 스코핑할 수 없어서). */
   costScope?: { from: string; to: string };
@@ -566,6 +588,140 @@ const SEG_BADGE: Record<"hot" | "warm" | "cold", string> = {
   warm: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   cold: "bg-secondary text-muted-foreground",
 };
+/** 세그먼트 정의 — 라벨만 있으면 "핫이 뭔데?" 를 알 수 없었다. 카드 본문에도 경계를 적어둔다. */
+const SEG_HINT: Record<"hot" | "warm" | "cold" | "noShow", string> = {
+  hot: "65점 이상 — 끝까지 보면서 행동(투표·질문·CTA)이나 마케팅 동의가 있는 리드",
+  warm: "30~64점 — 참석했지만 반응이 적거나 중간에 이탈",
+  cold: "30점 미만 — 잠깐 들렀다 나간 경우",
+  noShow: "등록했지만 입장하지 않음",
+};
+
+/** 점수 배지 title — 마우스를 올리면 네 덩어리 합이 보인다. */
+function scoreBreakdownText(t: TopEngaged): string {
+  const b = t.breakdown;
+  const capped = b.interactRaw > b.interact ? ` (원점수 ${b.interactRaw}, 30점에서 멈춤)` : "";
+  return `참석 ${b.attend} + 체류 ${b.watch} (${t.watchMinutes}/${b.evaluatedMinutes}분) + 행동 ${b.interact}${capped} + 인텐트 ${b.intent} = ${t.score}점`;
+}
+
+const SHARE_SURFACE_LABEL: Record<string, string> = {
+  waiting: "대기 화면",
+  live: "시청 화면",
+  ended: "종료 화면",
+  landing: "랜딩 페이지",
+};
+
+/**
+ * 입소문 — 시청자가 자기 추천 링크로 퍼뜨린 결과.
+ *
+ * 세 숫자가 한 줄로 읽혀야 한다: 공유한 사람 → 그 링크로 들어온 방문 → 실제 등록.
+ * 상위 추천인은 "누구에게 고맙다고 해야 하는가" 이자, 다음 웨비나에 먼저 알릴 명단이다.
+ */
+function WordOfMouthSection({ wom }: { wom: WordOfMouth }) {
+  const steps = [
+    { label: "공유한 사람", value: wom.sharers, sub: `공유 ${n(wom.shares)}회` },
+    { label: "추천 링크 방문", value: wom.clicks, sub: wom.sharers ? `1명당 ${(wom.clicks / wom.sharers).toFixed(1)}명` : "" },
+    { label: "추천으로 등록", value: wom.registered, sub: wom.clicks ? `전환 ${pct(wom.registered, wom.clicks)}%` : "" },
+  ];
+  return (
+    <SectionCard>
+      <div className="mb-4">
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold"><Share2 className="h-4 w-4 text-violet-500" /> 입소문</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          시청자가 공유 버튼으로 직접 퍼뜨린 결과예요. 공유 링크에는 각자의 추천 코드가 붙어 있어서 누가 몇 명을 데려왔는지 이어져요.
+        </p>
+      </div>
+
+      <div className="mb-5 grid grid-cols-3 gap-3">
+        {steps.map((s) => (
+          <div key={s.label} className="rounded-xl bg-secondary/60 p-3">
+            <div className="text-[11px] text-muted-foreground">{s.label}</div>
+            <div className="mt-0.5 text-xl font-semibold tabular-nums">{n(s.value)}</div>
+            {s.sub && <div className="mt-0.5 text-[10.5px] text-muted-foreground tabular-nums">{s.sub}</div>}
+          </div>
+        ))}
+      </div>
+
+      {wom.bySurface.length > 0 && (
+        <div className="mb-5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+          <span>어디서 공유했나</span>
+          {wom.bySurface.map((s) => (
+            <span key={s.surface}>
+              {SHARE_SURFACE_LABEL[s.surface] ?? s.surface} <b className="tabular-nums text-foreground">{n(s.count)}</b>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {wom.top.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs font-semibold text-muted-foreground">가장 많이 데려온 사람</p>
+          <div className="space-y-1.5">
+            {wom.top.map((t, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-xl border border-border p-2.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-sm font-bold tabular-nums text-violet-600 dark:text-violet-400">
+                  {n(t.registered)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-1.5 text-xs font-medium">
+                    <span className="truncate">{t.name}</span>
+                    {t.company && <span className="truncate text-muted-foreground">· {t.company}</span>}
+                  </p>
+                  <p className="mt-0.5 text-[10.5px] text-muted-foreground tabular-nums">
+                    공유 {n(t.shares)}회 · 링크 방문 {n(t.clicks)} · 등록 {n(t.registered)}명
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+/**
+ * 방송 전 화면 — 세그먼트 막대 대신 "지금 확보한 리드로 할 수 있는 일".
+ * 이 자리에 세그먼트를 그리면 입장이 0 이라 **노쇼 100%** 가 되고, 아직 열리지도 않은
+ * 웨비나가 실패한 것처럼 보인다(실측: 등록 254명 웨비나가 노쇼 254 · 100%).
+ */
+function LeadQualityBeforeLive({ total, q }: { total: number; q: Scoring["leadQuality"] }) {
+  if (total === 0) return <p className="text-xs text-muted-foreground">아직 등록자가 없어요.</p>;
+  const items = [
+    { label: "마케팅 수신 동의", value: q.consented, hint: "다음 웨비나 초대·소식 발송이 가능한 리드" },
+    { label: "이메일 확보", value: q.withEmail, hint: "리마인더 메일을 받을 수 있는 등록자" },
+    { label: "연락처 확보", value: q.withPhone, hint: "문자·전화 팔로업이 가능한 등록자" },
+    { label: "회사 기입", value: q.withCompany, hint: "B2B 리드 판별에 쓰는 값" },
+  ];
+  return (
+    <div>
+      <div className="mb-4 flex items-baseline gap-2">
+        <span className="text-2xl font-bold tabular-nums">{n(total)}</span>
+        <span className="text-xs text-muted-foreground">명 등록</span>
+      </div>
+      <div className="space-y-3">
+        {items.map((it) => (
+          <div key={it.label} title={it.hint}>
+            <div className="mb-1 flex items-baseline justify-between text-[11px]">
+              <span className="text-muted-foreground">{it.label}</span>
+              <span className="font-medium tabular-nums">{n(it.value)}명 · {pct(it.value, total)}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-secondary">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${pct(it.value, total)}%` }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                className="h-full rounded-full bg-violet-500"
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-[10.5px] leading-relaxed text-muted-foreground">
+        방송이 시작되면 참석·체류·인터랙션을 합성한 참여 점수와 핫·웜·콜드 세그먼트가 여기 표시돼요.
+      </p>
+    </div>
+  );
+}
 
 export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
   const colors = useChartColors();
@@ -899,53 +1055,105 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
       {/* 설문 결과 — 자체 설문이 있을 때만 표시 */}
       <SurveyResultsSection webinarId={webinarId} />
 
-      {/* 리드 스코어링 */}
+      {/* 리드 스코어링 — 방송 전에는 세그먼트가 전원 노쇼라 의미가 없어 리드 품질을 대신 보여준다 */}
       <SectionCard>
         <div className="mb-4">
-          <h3 className="flex items-center gap-1.5 text-sm font-semibold"><Users className="h-4 w-4 text-violet-500" /> 리드 스코어링</h3>
-          <p className="mt-1 text-xs text-muted-foreground">참석·체류·인터랙션·마케팅 동의를 합성한 0~100 참여 점수 · 내보내기 CSV에 점수·세그먼트가 포함돼요.</p>
+          <h3 className="flex items-center gap-1.5 text-sm font-semibold"><Users className="h-4 w-4 text-violet-500" /> {scoring.phase === "before" ? "확보한 리드" : "리드 스코어링"}</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {scoring.phase === "before"
+              ? "아직 방송 전이라 참여 점수를 매길 수 없어요. 지금 확보한 리드로 할 수 있는 일을 보여드려요."
+              : "참석·체류·인터랙션·마케팅 동의를 합성한 0~100 참여 점수 · 내보내기 CSV에 점수·세그먼트가 포함돼요."}
+          </p>
         </div>
-        <div className="mb-5">
-          <div className="mb-2 flex h-2.5 overflow-hidden rounded-full bg-secondary">
-            {SEG_BAR.map((s) => {
-              const c = scoring.distribution[s.key];
-              return c > 0 ? <div key={s.key} style={{ width: `${pct(c, scoring.total)}%`, background: s.color }} /> : null;
-            })}
-          </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
-            {SEG_BAR.map((s) => (
-              <span key={s.key} className="inline-flex items-center gap-1.5 text-muted-foreground">
-                <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
-                {s.label} <b className="tabular-nums text-foreground">{n(scoring.distribution[s.key])}</b> · {pct(scoring.distribution[s.key], scoring.total)}%
-              </span>
-            ))}
-          </div>
-        </div>
-        {scoring.top.length === 0 ? (
-          <p className="text-xs text-muted-foreground">입장한 참여자가 없어 점수를 매길 대상이 없어요.</p>
+
+        {scoring.phase === "before" ? (
+          <LeadQualityBeforeLive total={scoring.total} q={scoring.leadQuality} />
         ) : (
-          <div>
-            <p className="mb-2 text-xs font-semibold text-muted-foreground">상위 참여자</p>
-            <div className="space-y-1.5">
-              {scoring.top.map((t, i) => (
-                <div key={i} className="flex items-center gap-3 rounded-xl border border-border p-2.5">
-                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold tabular-nums ${SEG_BADGE[t.segment]}`}>{t.score}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-1.5 text-xs font-medium">
-                      <span className="truncate">{t.name}</span>
-                      {t.company && <span className="truncate text-muted-foreground">· {t.company}</span>}
-                      {t.agreeMarketing && <span className="shrink-0 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-green-600 dark:text-green-400">동의</span>}
-                    </p>
-                    <p className="mt-0.5 text-[10.5px] text-muted-foreground tabular-nums">
-                      체류 {n(t.watchMinutes)}분 · 채팅 {n(t.chat)} · 투표 {n(t.pollVotes)} · Q&A {n(t.qaAsks)}{t.qaUpvotes ? ` · 추천 ${n(t.qaUpvotes)}` : ""}{t.ctaClicks ? ` · CTA ${n(t.ctaClicks)}` : ""}
-                    </p>
-                  </div>
-                </div>
-              ))}
+          <>
+            <div className="mb-2">
+              <div className="mb-2 flex h-2.5 overflow-hidden rounded-full bg-secondary">
+                {SEG_BAR.map((s) => {
+                  const c = scoring.distribution[s.key];
+                  return c > 0 ? <div key={s.key} style={{ width: `${pct(c, scoring.total)}%`, background: s.color }} /> : null;
+                })}
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+                {SEG_BAR.map((s) => (
+                  <span key={s.key} className="inline-flex items-center gap-1.5 text-muted-foreground" title={SEG_HINT[s.key]}>
+                    <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
+                    {s.label} <b className="tabular-nums text-foreground">{n(scoring.distribution[s.key])}</b> · {pct(scoring.distribution[s.key], scoring.total)}%
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
+
+            {/* 점수 기준을 화면에 밝힌다 — "핫이 뭔데?" 를 툴팁으로만 두면 아무도 안 본다.
+                방송 중이면 분모가 계속 자라므로 그 사실도 함께 알린다(같은 사람의 점수가 올라간다). */}
+            <p className="mb-5 text-[10.5px] leading-relaxed text-muted-foreground">
+              핫 65점↑ · 웜 30점↑ · 콜드 30점 미만.{" "}
+              {scoring.phase === "live"
+                ? `방송이 진행 중이라 지금까지 흐른 ${n(scoring.liveMinutes)}분을 기준으로 계산해요 — 방송이 길어지면 점수도 함께 올라가요.`
+                : scoring.liveMinutes < scoring.scheduledMinutes
+                  ? `실제 방송 ${n(scoring.liveMinutes)}분 기준(예정 ${n(scoring.scheduledMinutes)}분)으로 계산했어요.`
+                  : `방송 ${n(scoring.liveMinutes)}분 기준으로 계산했어요.`}
+            </p>
+
+            {scoring.retargetCount > 0 && (
+              /* 노쇼 + 마케팅 동의 — 5점 콜드라 상위 참여자에는 절대 안 나오는데, 웨비나 다음 액션에서
+                 제일 큰 덩어리다. 여기서 숫자만 알리고 실제 명단은 등록자 탭 필터로 넘긴다. */
+              <div className="mb-5 flex items-start gap-2.5 rounded-xl bg-secondary/60 p-3">
+                <RotateCcw className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-500" />
+                <p className="text-[11px] leading-relaxed">
+                  <b className="tabular-nums">{n(scoring.retargetCount)}명</b>은 오지 않았지만 마케팅 정보 수신에 동의했어요 — 다시보기 안내나 다음 웨비나 초대를 보낼 수 있는 리드예요.
+                  <span className="text-muted-foreground"> 등록자 탭에서 세그먼트를 ‘노쇼’로 걸러 명단을 확인하세요.</span>
+                </p>
+              </div>
+            )}
+
+            {scoring.top.length === 0 ? (
+              <p className="text-xs text-muted-foreground">입장한 참여자가 없어 점수를 매길 대상이 없어요.</p>
+            ) : (
+              <div>
+                <p className="mb-2 text-xs font-semibold text-muted-foreground">상위 참여자</p>
+                <div className="space-y-1.5">
+                  {scoring.top.map((t, i) => (
+                    <div key={i} className="flex items-center gap-3 rounded-xl border border-border p-2.5">
+                      <span
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold tabular-nums ${SEG_BADGE[t.segment]}`}
+                        title={scoreBreakdownText(t)}
+                      >
+                        {t.score}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="flex items-center gap-1.5 text-xs font-medium">
+                          <span className="truncate">{t.name}</span>
+                          {t.company && <span className="truncate text-muted-foreground">· {t.company}</span>}
+                          {t.agreeMarketing && <span className="shrink-0 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-green-600 dark:text-green-400">동의</span>}
+                        </p>
+                        {/* 점수 근거를 한 줄로 — 숫자만 보고 CSV 와 대조해야 했던 자리 */}
+                        <p className="mt-0.5 text-[10.5px] text-muted-foreground tabular-nums">
+                          참석 {t.breakdown.attend} + 체류 {t.breakdown.watch} + 행동 {t.breakdown.interact}
+                          {t.breakdown.interactRaw > t.breakdown.interact && <span title="인터랙션 점수는 30점에서 멈춰요">{` (원점수 ${t.breakdown.interactRaw})`}</span>}
+                          {" "}+ 인텐트 {t.breakdown.intent}
+                        </p>
+                        <p className="mt-0.5 text-[10.5px] text-muted-foreground tabular-nums">
+                          체류 {n(t.watchMinutes)}/{n(t.breakdown.evaluatedMinutes)}분 · 채팅 {n(t.chat)} · 투표 {n(t.pollVotes)} · Q&A {n(t.qaAsks)}{t.qaUpvotes ? ` · 추천 ${n(t.qaUpvotes)}` : ""}{t.ctaClicks ? ` · CTA ${n(t.ctaClicks)}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </SectionCard>
+
+      {/* 입소문 — 시청자가 직접 퍼뜨린 결과. 아무도 공유하지 않았으면 섹션을 숨긴다
+          (빈 껍데기를 보여주지 않는다 — 공개 면의 이중 게이트 원칙과 같다). */}
+      {data.wordOfMouth && data.wordOfMouth.shares > 0 && (
+        <WordOfMouthSection wom={data.wordOfMouth} />
+      )}
 
       {/* 참가 퍼널 */}
       <SectionCard>

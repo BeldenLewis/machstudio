@@ -13,6 +13,7 @@ import {
   splitMultiValue,
 } from "@/lib/webinar-config";
 import { parseUtmEnvelope } from "@/lib/webinar-attribution";
+import { generateShareCode, normalizeShareCode } from "@/lib/webinar-share";
 
 const CORS_HEADERS = { "Access-Control-Allow-Origin": "*" };
 
@@ -186,6 +187,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       }
     : {};
   const userAgent = request.headers.get("user-agent")?.slice(0, 500) ?? null;
+
+  /* 추천 링크로 들어온 등록 — `?ref=` 코드를 폼이 함께 보낸다(_ref).
+     코드로 같은 웨비나의 추천인을 찾는다. 다른 웨비나의 코드나 없는 코드는 조용히 무시한다
+     (실패시키면 링크를 잘못 복사한 시청자가 등록 자체를 못 한다). */
+  const refCode = normalizeShareCode(body?._ref);
+  const referrer = refCode
+    ? await prisma.webinarRegistration.findFirst({
+        where: { webinarId: webinar.id, shareCode: refCode },
+        select: { id: true },
+      })
+    : null;
   // 등록 완료자에게 영상 ID 전달 (공개 /info 에서는 제거됨 — 라이브 페이지 signup→live 경로용)
   const videoId = typeof (webinar.config as Record<string, unknown>)?.youtubeId === "string"
     ? (webinar.config as Record<string, unknown>).youtubeId
@@ -225,29 +237,41 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   // DB 부분 유니크 인덱스(webinarId+phone / webinarId+lower(email))가 경쟁 조건을 막는다.
   // 위 findFirst 는 같은 순간의 동시 제출을 못 잡으므로(읽고-쓰기 사이 틈), P2002 를 중복으로 처리한다.
+  // 추천 코드는 등록 시점에 발급한다 — 공유 버튼이 클릭 순간 서버 응답을 기다리지 않게 한다
+  // (사용자 제스처가 끊기면 iOS 에서 공유 시트·클립보드 쓰기가 차단된다).
+  const createData = (shareCode: string) => ({
+    webinarId: webinar.id,
+    name: name.trim(),
+    phone: normalizedPhone,
+    email: normalizedEmail,
+    company: clean(company),
+    department: clean(department),
+    jobTitle: clean(jobTitle),
+    industry: clean(industry),
+    agreeMarketing: Boolean(agreeMarketing),
+    agreePrivacy: true, // 위에서 === true 를 강제했다
+    memo: Object.keys(memoPayload).length ? JSON.stringify(memoPayload, null, 2) : null,
+    ...utmData,
+    userAgent,
+    registeredStatus: statusInfo.status,
+    shareCode,
+    referredById: referrer?.id ?? null,
+  });
+
   let registration;
   try {
-    registration = await prisma.webinarRegistration.create({
-    data: {
-      webinarId: webinar.id,
-      name: name.trim(),
-      phone: normalizedPhone,
-      email: normalizedEmail,
-      company: clean(company),
-      department: clean(department),
-      jobTitle: clean(jobTitle),
-      industry: clean(industry),
-      agreeMarketing: Boolean(agreeMarketing),
-      agreePrivacy: true, // 위에서 === true 를 강제했다
-      memo: Object.keys(memoPayload).length ? JSON.stringify(memoPayload, null, 2) : null,
-      ...utmData,
-      userAgent,
-      registeredStatus: statusInfo.status,
-    },
-  });
+    registration = await prisma.webinarRegistration.create({ data: createData(generateShareCode()) });
   } catch (e) {
     const code = (e as { code?: string }).code;
-    if (code === "P2002") {
+    /* 추천 코드 충돌(58비트라 사실상 없지만 유니크 제약이 있으므로) — 한 번 다시 뽑는다.
+       이걸 구분하지 않으면 "이미 등록된 연락처예요" 라는 엉뚱한 오류가 나간다. */
+    const target = (e as { meta?: { target?: unknown } }).meta?.target;
+    const hitShareCode = Array.isArray(target)
+      ? target.includes("shareCode")
+      : typeof target === "string" && target.includes("shareCode");
+    if (code === "P2002" && hitShareCode) {
+      registration = await prisma.webinarRegistration.create({ data: createData(generateShareCode()) });
+    } else if (code === "P2002") {
       const dupField = normalizedPhone ? "연락처" : "이메일";
       return NextResponse.json(
         {
@@ -257,14 +281,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         },
         { status: 409, headers: CORS_HEADERS },
       );
+    } else {
+      throw e;
     }
-    throw e;
   }
 
-  return NextResponse.json({ registration: { id: registration.id, name: registration.name }, ...(videoId ? { youtubeId: videoId } : {}) }, {
-    status: 201,
-    headers: CORS_HEADERS,
-  });
+  return NextResponse.json(
+    {
+      // shareCode 는 이 등록자 본인에게만 준다 — 공유 버튼이 이 값으로 링크를 만든다.
+      registration: { id: registration.id, name: registration.name, shareCode: registration.shareCode },
+      ...(videoId ? { youtubeId: videoId } : {}),
+    },
+    { status: 201, headers: CORS_HEADERS },
+  );
 }
 
 export async function OPTIONS() {

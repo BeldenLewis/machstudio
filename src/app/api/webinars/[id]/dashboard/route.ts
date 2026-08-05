@@ -17,7 +17,7 @@ function minutesBetween(start: Date | null, end: Date) {
 async function authorize(webinarId: string, userId: string) {
   const webinar = await prisma.webinar.findUnique({
     where: { id: webinarId },
-    select: { id: true, workspaceId: true, liveStartAt: true, liveEndAt: true, signupDeadline: true, statusOverride: true, components: true, name: true },
+    select: { id: true, workspaceId: true, liveStartAt: true, liveEndAt: true, signupDeadline: true, statusOverride: true, broadcastEndedAt: true, components: true, name: true },
   });
   if (!webinar) return { webinar: null, membership: null };
 
@@ -125,7 +125,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   // statusOverride="live" 로 예정 시각 전에 강제 라이브 전환하면 하한을 liveStartAt 에 고정한
   // 기존 계산은 상한 구간이 음수(0 클램프)가 되어 체류가 전부 사라졌다.
   const earliestObservedAt = earliestEntry._min.enteredAt?.getTime() ?? null;
-  const capMinutes = resolveWatchCapMinutes(now.getTime(), webinar.liveStartAt.getTime(), webinar.liveEndAt.getTime(), earliestObservedAt);
+  // broadcastEndedAt(실제 방송 종료)이 찍혀 있으면 예정 종료보다 그쪽이 상한이다 — 방송이 끝난 뒤
+  // 탭만 열어둔 시청자의 체류가 예정 종료 시각까지 부풀어 평균을 끌어올리던 자리.
+  const capMinutes = resolveWatchCapMinutes(now.getTime(), webinar.liveStartAt.getTime(), webinar.liveEndAt.getTime(), earliestObservedAt, webinar.broadcastEndedAt?.getTime() ?? null);
 
   // EGRESS: 체류 통계는 전 행을 JS로 옮기지 않고 Postgres에서 집계 (avg/max/stay30/stay60)
   const stayStats = await prisma.$queryRaw<

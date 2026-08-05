@@ -1,0 +1,153 @@
+// @vitest-environment jsdom
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import AnalyticsTab from "../AnalyticsTab";
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+/**
+ * 분석 탭 리드 스코어링 — **화면이 오진하지 않는지**를 묶는다.
+ *
+ * 실제로 있었던 오진: 8/11 웨비나(등록 254명, 아직 방송 전)를 열면 세그먼트 막대가
+ * **"노쇼 254 · 100%"** 였다. 입장이 0 이니 전원 노쇼로 집계된 것인데, 열리지도 않은
+ * 웨비나가 실패한 것처럼 보였다. 그래서 방송 전에는 세그먼트 대신 "확보한 리드" 를 보여준다.
+ */
+
+const BASE = {
+  funnel: {
+    visits: 0, registered: 254, attended: 0, stay30: 0, stay60: 0,
+    avgStayMinutes: 0, maxStayMinutes: 0, attendRate: 0, stay30Rate: 0, stay60Rate: 0, regRate: 0,
+  },
+  utmBreakdown: [],
+  campaignBreakdown: [],
+  registrationTrend: [],
+  interactions: {
+    polls: [], qa: { total: 0, answered: 0, pending: 0, dismissed: 0, answerRate: 0, top: [] },
+    chat: { messages: 0, participants: 0 }, cta: { clicks: 0, clickers: 0 }, reminders: 0,
+  },
+  hasVisitData: false,
+  generatedAt: new Date("2026-08-05T02:00:00Z").toISOString(),
+};
+
+const SCORING_BEFORE = {
+  total: 254, liveMinutes: 1, scheduledMinutes: 120, phase: "before" as const,
+  distribution: { hot: 0, warm: 0, cold: 0, noShow: 254 },
+  top: [], retargetCount: 0,
+  leadQuality: { consented: 142, withEmail: 254, withPhone: 254, withCompany: 254 },
+};
+
+const BREAKDOWN = { attend: 25, watch: 22, interact: 0, interactRaw: 0, intent: 0, evaluatedMinutes: 75 };
+const SCORING_ENDED = {
+  total: 6, liveMinutes: 75, scheduledMinutes: 120, phase: "ended" as const,
+  distribution: { hot: 1, warm: 2, cold: 1, noShow: 2 },
+  top: [{
+    name: "참가1", company: "아웃컴", score: 47, segment: "warm" as const, watchMinutes: 75,
+    chat: 0, pollVotes: 0, qaAsks: 0, qaUpvotes: 0, ctaClicks: 0, agreeMarketing: false, breakdown: BREAKDOWN,
+  }],
+  retargetCount: 2,
+  leadQuality: { consented: 3, withEmail: 6, withPhone: 6, withCompany: 6 },
+};
+
+let host: HTMLDivElement | null = null;
+let root: Root | null = null;
+
+function mockFetch(scoring: unknown, extra: Record<string, unknown> = {}) {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    const body = url.includes("/analytics") && !url.includes("attendance-curve")
+      ? { ...BASE, scoring, ...extra }
+      : url.includes("attendance-curve")
+        ? { points: [], peak: 0, avg: 0 }
+        : { items: [] };
+    return { ok: true, json: async () => body } as Response;
+  }));
+}
+
+async function render() {
+  host = document.createElement("div");
+  document.body.appendChild(host);
+  root = createRoot(host);
+  await act(async () => { root?.render(<AnalyticsTab webinarId="w1" />); });
+  // 로딩 → 데이터 반영까지 마이크로태스크를 비운다
+  await act(async () => { await Promise.resolve(); });
+  return host.textContent ?? "";
+}
+
+beforeEach(() => {
+  // ResizeObserver·matchMedia 등 차트가 기대하는 브라우저 API 최소 스텁
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  if (!window.matchMedia) {
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
+  }
+});
+
+afterEach(() => {
+  act(() => root?.unmount());
+  host?.remove();
+  host = null; root = null;
+  vi.unstubAllGlobals();
+});
+
+describe("방송 전 — 세그먼트 대신 확보한 리드", () => {
+  it("'노쇼' 대신 지금 쓸 수 있는 숫자를 보여준다 — 등록 254명 중 마케팅 동의 142명(56%)", async () => {
+    mockFetch(SCORING_BEFORE);
+    const text = await render();
+    expect(text).toContain("확보한 리드");
+    expect(text).toContain("254");
+    expect(text).toContain("마케팅 수신 동의");
+    expect(text).toContain("142명 · 56%");
+    expect(text).not.toContain("노쇼");
+  });
+});
+
+describe("방송 후 — 세그먼트 + 점수 근거 + 리타겟", () => {
+  it("세그먼트 기준과 계산 기준 시간을 화면에 밝힌다", async () => {
+    mockFetch(SCORING_ENDED);
+    const text = await render();
+    expect(text).toContain("핫 65점↑");
+    // 예정 120분인데 실제 방송 75분 — 화면이 그 차이를 설명해야 한다
+    expect(text).toContain("실제 방송 75분 기준(예정 120분)");
+  });
+
+  it("점수를 네 덩어리로 분해해 보여준다 — 숫자만 보고 CSV 와 대조하지 않게", async () => {
+    mockFetch(SCORING_ENDED);
+    const text = await render();
+    expect(text).toContain("참석 25 + 체류 22 + 행동 0");
+    expect(text).toContain("체류 75/75분");
+  });
+
+  /** 노쇼 + 마케팅 동의는 5점 콜드라 상위 참여자에 절대 안 나오는데, 다음 액션의 제일 큰 덩어리다. */
+  it("노쇼지만 동의한 리드를 리타겟 대상으로 알린다", async () => {
+    mockFetch(SCORING_ENDED);
+    const text = await render();
+    expect(text).toContain("2명");
+    expect(text).toContain("마케팅 정보 수신에 동의했어요");
+  });
+});
+
+describe("입소문 섹션 — 데이터가 있을 때만 뜬다", () => {
+  const WOM = {
+    sharers: 3, shares: 5, clicks: 12, registered: 4,
+    bySurface: [{ surface: "waiting", count: 3 }, { surface: "live", count: 2 }],
+    top: [{ name: "참가1", company: "아웃컴", shares: 2, clicks: 7, registered: 3 }],
+  };
+
+  it("아무도 공유하지 않았으면 섹션을 그리지 않는다 — 빈 껍데기 금지", async () => {
+    mockFetch(SCORING_ENDED, { wordOfMouth: { ...WOM, sharers: 0, shares: 0, clicks: 0, registered: 0, top: [], bySurface: [] } });
+    const text = await render();
+    expect(text).not.toContain("입소문");
+  });
+
+  it("공유 → 클릭 → 등록 3단과 상위 추천인을 보여준다", async () => {
+    mockFetch(SCORING_ENDED, { wordOfMouth: WOM });
+    const text = await render();
+    expect(text).toContain("입소문");
+    expect(text).toContain("공유한 사람");
+    expect(text).toContain("추천 링크 방문");
+    expect(text).toContain("추천으로 등록");
+    expect(text).toContain("전환 33%"); // 4/12
+    expect(text).toContain("가장 많이 데려온 사람");
+    expect(text).toContain("대기 화면");
+  });
+});

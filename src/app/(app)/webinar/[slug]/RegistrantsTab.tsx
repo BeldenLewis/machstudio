@@ -47,9 +47,20 @@ type SortKey =
   | "lastPingAt"
   | "stayMinutes"
   | "submittedAt"
-  | "isActive";
+  | "isActive"
+  // 참여 점수 정렬 — DB 컬럼이 아니라 서버가 조립하는 값이다(라우트가 별도 경로로 처리).
+  | "score";
 type SortDir = "asc" | "desc";
 type DuplicateMode = "skip" | "include" | "update";
+
+/** 리드 세그먼트 — 참여 점수에서 파생. 명단에서 팔로업 대상을 좁히는 필터로 쓴다. */
+type SegmentKey = "hot" | "warm" | "cold" | "noShow";
+const SEGMENT_META: Record<SegmentKey, { label: string; cls: string; hint: string }> = {
+  hot: { label: "핫", cls: "bg-green-500/10 text-green-600 dark:text-green-400", hint: "65점 이상 — 끝까지 보면서 행동이나 마케팅 동의가 있는 리드" },
+  warm: { label: "웜", cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400", hint: "30~64점 — 참석했지만 반응이 적거나 중간에 이탈" },
+  cold: { label: "콜드", cls: "bg-secondary text-muted-foreground", hint: "30점 미만 — 잠깐 들렀다 나간 경우" },
+  noShow: { label: "노쇼", cls: "bg-secondary text-muted-foreground", hint: "등록했지만 입장하지 않음" },
+};
 
 interface Registration {
   id: string;
@@ -70,6 +81,10 @@ interface Registration {
   // isActive 는 heartbeat 가 세운 뒤 leave 이벤트가 안 오면(탭 강제종료 등) 영원히 true 로 남는다
   // — 서버가 최근성(5분 창)까지 반영해 계산해 준 값. 상태 열은 이 값으로 그린다.
   isLive?: boolean;
+  /** 참여 점수(0~100)와 세그먼트 — 서버가 조립해 행에 붙여 보낸다. */
+  score?: number;
+  segment?: SegmentKey;
+  scoreBreakdown?: { attend: number; watch: number; interact: number; interactRaw: number; intent: number; evaluatedMinutes: number } | null;
   submittedAt: string;
   enteredAt: string | null;
   lastPingAt: string | null;
@@ -152,6 +167,7 @@ const sortLabels: Record<SortKey, string> = {
   stayMinutes: "접속",
   submittedAt: "등록일",
   isActive: "상태",
+  score: "참여점수",
 };
 
 const headerAliases: Record<keyof RegistrationDraft, string[]> = {
@@ -359,7 +375,11 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
   const confirm = useConfirm();
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [total, setTotal] = useState(0);
-  const [stats, setStats] = useState<{ registered: number; entered: number; active: number; surveyResponded: number } | null>(null);
+  const [stats, setStats] = useState<{ registered: number; entered: number; active: number; surveyResponded: number; segments?: Record<SegmentKey, number> } | null>(null);
+  /* 점수 열·세그먼트 필터는 방송 전에 숨긴다 — 그 시점엔 전원이 노쇼라 열이 의미가 없다
+     (분석 탭 '확보한 리드' 와 같은 규칙). 서버가 phase 를 판정해 내려준다. */
+  const [scoringMeta, setScoringMeta] = useState<{ phase: "before" | "live" | "ended"; liveMinutes: number; scheduledMinutes: number } | null>(null);
+  const [segmentFilter, setSegmentFilter] = useState<SegmentKey | null>(null);
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -397,6 +417,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
         sortDir,
       });
       if (search) params.set("q", search);
+      if (segmentFilter) params.set("segment", segmentFilter);
       const res = await fetch(`/api/webinars/${webinarId}/registrations?${params}`);
       if (!res.ok) { setLoadError(true); return; }
       const data = await res.json();
@@ -422,6 +443,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
       setRegistrations(rows);
       setTotal(data.total ?? 0);
       if (data.stats) setStats(data.stats);
+      if (data.scoring) setScoringMeta(data.scoring);
       setSurveys(data.surveys ?? []);
       // 선택은 항상 현재 보이는 목록으로 한정 — 새로고침으로 사라진(다른 페이지로 밀린/삭제된) 행은
       // 선택에서 자동 제거해, 보이지 않는 행이 선택된 채 일괄 삭제되는 일을 막는다.
@@ -437,7 +459,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
     } finally {
       setIsLoading(false);
     }
-  }, [webinarId, page, pageSize, search, sortBy, sortDir]);
+  }, [webinarId, page, pageSize, search, sortBy, sortDir, segmentFilter]);
 
   // 일괄등록 모달을 닫으면 실패 행 목록 초기화 — 다음에 열 때 깨끗하게
   useEffect(() => { if (!showBulk) setBulkErrors([]); }, [showBulk]);
@@ -779,6 +801,17 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
 
   const inputClass = "w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400";
 
+  /* 방송 전에는 점수 열을 숨긴다 — 입장이 0 이라 전원 0점 노쇼가 되어 열이 오해만 만든다. */
+  const showScore = scoringMeta ? scoringMeta.phase !== "before" : false;
+  /** 점수 근거 툴팁 — 숫자만 보고 CSV 와 대조해야 했던 자리. */
+  const scoreTitle = (r: Registration) => {
+    const b = r.scoreBreakdown;
+    if (!b) return "참여 점수";
+    const capped = b.interactRaw > b.interact ? ` (원점수 ${b.interactRaw}, 30점에서 멈춤)` : "";
+    const stay = Math.floor((r.connectedSeconds ?? 0) / 60);
+    return `참석 ${b.attend} + 체류 ${b.watch} (${stay}/${b.evaluatedMinutes}분) + 행동 ${b.interact}${capped} + 인텐트 ${b.intent} = ${r.score ?? 0}점 · ${SEGMENT_META[r.segment ?? "noShow"].label}`;
+  };
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-5">
       <div>
@@ -815,6 +848,42 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
               <div className="mt-1 text-2xl font-semibold tabular-nums text-violet-600 dark:text-violet-400">{stats.surveyResponded.toLocaleString()}</div>
               <div className="mt-1.5 text-[11px] text-muted-foreground">참여율 {stats.registered > 0 ? Math.round((stats.surveyResponded / stats.registered) * 100) : 0}%</div>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* 세그먼트 필터 — 리드 스코어링이 분석 탭과 CSV 에만 있어서, 정작 팔로업하는 이 화면에서
+          "핫 리드만 보기" 가 불가능했다. 방송 전에는 전원 노쇼라 필터가 무의미해 숨긴다. */}
+      {scoringMeta && scoringMeta.phase !== "before" && stats?.segments && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-0.5 text-[11px] text-muted-foreground">리드 세그먼트</span>
+          <motion.button
+            whileTap={{ scale: 0.96 }}
+            transition={spring}
+            onClick={() => { setSegmentFilter(null); setPage(1); }}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${segmentFilter === null ? "bg-foreground text-background" : "border border-border hover:bg-secondary"}`}
+          >
+            전체 {stats.registered.toLocaleString()}
+          </motion.button>
+          {(Object.keys(SEGMENT_META) as SegmentKey[]).map((key) => {
+            const count = stats.segments![key] ?? 0;
+            const on = segmentFilter === key;
+            return (
+              <motion.button
+                key={key}
+                whileTap={{ scale: 0.96 }}
+                transition={spring}
+                onClick={() => { setSegmentFilter(on ? null : key); setPage(1); }}
+                title={SEGMENT_META[key].hint}
+                disabled={count === 0 && !on}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-40 ${on ? "bg-foreground text-background" : "border border-border hover:bg-secondary"}`}
+              >
+                {SEGMENT_META[key].label} {count.toLocaleString()}
+              </motion.button>
+            );
+          })}
+          {segmentFilter && (
+            <span className="text-[11px] text-muted-foreground">· {SEGMENT_META[segmentFilter].hint}</span>
           )}
         </div>
       )}
@@ -1385,6 +1454,12 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                       />
                     </th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="이름" sortKey="name" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
+                    {/* 참여점수 — 이름 바로 옆에 둔다. 누구부터 연락할지가 이 두 열로 읽혀야 한다. */}
+                    {showScore && (
+                      <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap" title="참석·체류·인터랙션·마케팅 동의를 합성한 0~100 점수">
+                        <SortHeader label="참여점수" sortKey="score" activeKey={sortBy} dir={sortDir} onSort={handleSort} />
+                      </th>
+                    )}
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="연락처" sortKey="phone" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="소속" sortKey="company" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><SortHeader label="직함" sortKey="jobTitle" activeKey={sortBy} dir={sortDir} onSort={handleSort} /></th>
@@ -1420,6 +1495,16 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                           {r.name}
                         </span>
                       </td>
+                      {showScore && (
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1.5" title={scoreTitle(r)}>
+                            <span className={`flex h-7 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold tabular-nums ${SEGMENT_META[r.segment ?? "noShow"].cls}`}>
+                              {r.score ?? 0}
+                            </span>
+                            <span className="text-[11px] text-muted-foreground">{SEGMENT_META[r.segment ?? "noShow"].label}</span>
+                          </span>
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                         <div>{r.phone ?? "-"}</div>
                         {r.email && <div className="text-xs">{r.email}</div>}

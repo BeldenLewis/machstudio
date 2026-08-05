@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeSurveyQuestions } from "@/lib/webinar-survey";
+import { assembleWebinarEngagement } from "@/lib/webinar-scoring";
+import { resolveWebinarStatus } from "@/lib/webinar-status";
 import { buildMemo, parseMemo } from "@/lib/webinar-memo";
 
 type DuplicateMode = "skip" | "include" | "update";
@@ -18,6 +20,10 @@ interface RegistrationInput {
   agreePrivacy?: boolean;
   memo?: string | null;
 }
+
+/** 세그먼트 필터 값 — 참여 점수에서 파생되므로 SQL 이 아니라 JS 에서 좁힌다(아래 주석 참고). */
+const SEGMENT_FILTERS = ["hot", "warm", "cold", "noShow"] as const;
+type SegmentFilter = (typeof SEGMENT_FILTERS)[number];
 
 const sortMap = {
   name: "name",
@@ -105,9 +111,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
   const pageSize = Math.min(200, Math.max(10, parseInt(searchParams.get("pageSize") ?? "50", 10)));
   const q = searchParams.get("q") ?? "";
-  const sortBy = searchParams.get("sortBy") as keyof typeof sortMap | null;
+  const sortByRaw = searchParams.get("sortBy");
+  const sortBy = sortByRaw as keyof typeof sortMap | null;
   const sortDir = searchParams.get("sortDir") === "asc" ? "asc" : "desc";
   const sortColumn = sortBy && sortMap[sortBy] ? sortMap[sortBy] : "submittedAt";
+
+  /* 참여 점수·세그먼트로 걸러고 정렬한다 — 리드 스코어링이 분석 탭과 CSV 에만 있어서,
+     정작 팔로업하는 화면(등록자 명단)에서는 누구부터 연락할지 정할 수 없었다.
+     점수는 체류·인터랙션을 JS 에서 합성하므로 SQL ORDER BY / WHERE 로 표현할 수 없다 →
+     검색 조건이 걸린 후보 id 만 먼저 뽑고, 점수로 좁혀 정렬한 뒤 그 페이지만 본문을 읽는다. */
+  const segmentParam = searchParams.get("segment");
+  const segmentFilter = (SEGMENT_FILTERS as readonly string[]).includes(segmentParam ?? "")
+    ? (segmentParam as SegmentFilter)
+    : null;
+  const sortByScore = sortByRaw === "score";
 
   const where = {
     webinarId: id,
@@ -131,12 +148,51 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const PRESENCE_WINDOW_MS = 5 * 60_000;
   const presenceSince = new Date(Date.now() - PRESENCE_WINDOW_MS);
 
+  const webinar = auth.webinar!;
+  const engagement = await assembleWebinarEngagement(id, webinar);
+  const scoreMap = new Map(engagement.rows.map((r) => [r.registrationId, r]));
+  const status = resolveWebinarStatus(webinar).status;
+  const phase: "before" | "live" | "ended" = status === "ended" ? "ended" : status === "live" ? "live" : "before";
+
+  /* 세그먼트 분포 — 필터 칩에 개수를 함께 보여준다. 점수를 이미 조립했으니 추가 쿼리는 없다. */
+  const segmentCounts = { hot: 0, warm: 0, cold: 0, noShow: 0 };
+  for (const r of engagement.rows) {
+    if (!r.entered) segmentCounts.noShow += 1;
+    else segmentCounts[r.segment] += 1;
+  }
+
+  /* 점수 기반 필터·정렬이 걸렸을 때만 id 스코프를 계산한다(평소 경로는 그대로 SQL 페이징).
+     후보는 id·submittedAt 만 읽어 전송량을 묶는다 — 본문은 잘라낸 페이지만 읽는다. */
+  let scopedIds: string[] | null = null;
+  if (segmentFilter || sortByScore) {
+    const candidates = await prisma.webinarRegistration.findMany({ where, select: { id: true, submittedAt: true } });
+    const picked = candidates.filter((c) => {
+      if (!segmentFilter) return true;
+      const s = scoreMap.get(c.id);
+      if (!s) return false;
+      return segmentFilter === "noShow" ? !s.entered : s.entered && s.segment === segmentFilter;
+    });
+    if (sortByScore) {
+      const dir = sortDir === "asc" ? 1 : -1;
+      // 동점은 최신 등록 우선 — 순서가 흔들리면 페이지를 넘길 때 같은 사람이 두 번 보인다.
+      picked.sort((a, b) => {
+        const diff = ((scoreMap.get(a.id)?.score ?? -1) - (scoreMap.get(b.id)?.score ?? -1)) * dir;
+        return diff !== 0 ? diff : b.submittedAt.getTime() - a.submittedAt.getTime();
+      });
+    } else {
+      picked.sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
+    }
+    scopedIds = picked.map((c) => c.id);
+  }
+  const pageIds = scopedIds ? scopedIds.slice((page - 1) * pageSize, page * pageSize) : null;
+
   const [registrations, total, registered, entered, active, surveys, surveyParticipants] = await Promise.all([
     prisma.webinarRegistration.findMany({
-      where,
-      orderBy: [{ [sortColumn]: sortDir }, { submittedAt: "desc" }],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
+      // 점수 스코프가 있으면 그 페이지 id 만 읽고 순서는 아래에서 되돌린다(IN 은 순서를 보장하지 않는다).
+      where: pageIds ? { webinarId: id, id: { in: pageIds } } : where,
+      ...(pageIds
+        ? {}
+        : { orderBy: [{ [sortColumn]: sortDir }, { submittedAt: "desc" }], skip: (page - 1) * pageSize, take: pageSize }),
       // UI(RegistrantsTab)가 쓰는 필드만 — journey JSON·userAgent·UTM 12컬럼 등 미사용 컬럼 전송 방지(페이지당 최대 200행).
       select: {
         id: true, name: true, phone: true, email: true, company: true, department: true,
@@ -148,7 +204,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         firstUtmSource: true, firstUtmMedium: true, firstUtmCampaign: true, referrer: true,
       },
     }),
-    prisma.webinarRegistration.count({ where }),
+    // 점수 스코프가 있으면 페이지네이션 총계도 그 개수여야 한다(SQL count 는 세그먼트를 모른다).
+    scopedIds ? Promise.resolve(scopedIds.length) : prisma.webinarRegistration.count({ where }),
     prisma.webinarRegistration.count({ where: { webinarId: id } }),
     prisma.webinarRegistration.count({ where: { webinarId: id, enteredAt: { not: null } } }),
     prisma.webinarRegistration.count({
@@ -171,15 +228,27 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }),
   ]);
 
+  // IN 절은 순서를 보장하지 않는다 — 점수 정렬로 잘라낸 페이지는 그 순서를 그대로 되돌린다.
+  const ordered = pageIds
+    ? pageIds.map((pid) => registrations.find((r) => r.id === pid)).filter((r): r is (typeof registrations)[number] => !!r)
+    : registrations;
+
   // 상태 열도 같은 최근성 기준을 쓰도록 행마다 isLive 를 함께 내려준다 — isActive 원본값만 보면
   // 방송이 끝난 뒤에도 계속 "시청 중"으로 표시된다(위 active 집계와 같은 함정).
-  const registrationsWithLiveFlag = registrations.map((r) => ({
-    ...r,
-    isLive: r.isActive && (
-      (r.presencePingAt !== null && r.presencePingAt >= presenceSince) ||
-      (r.lastPingAt !== null && r.lastPingAt >= presenceSince)
-    ),
-  }));
+  // 참여 점수·세그먼트·근거도 행에 붙인다 — 명단에서 바로 팔로업 순서를 정할 수 있게.
+  const registrationsWithLiveFlag = ordered.map((r) => {
+    const s = scoreMap.get(r.id);
+    return {
+      ...r,
+      isLive: r.isActive && (
+        (r.presencePingAt !== null && r.presencePingAt >= presenceSince) ||
+        (r.lastPingAt !== null && r.lastPingAt >= presenceSince)
+      ),
+      score: s?.score ?? 0,
+      segment: s ? (s.entered ? s.segment : "noShow") : "noShow",
+      scoreBreakdown: s?.breakdown ?? null,
+    };
+  });
 
   const registrationIds = registrations.map((registration) => registration.id);
   /* 설문 응답과 문의를 같은 방식으로 붙인다 — 현재 페이지 등록자분만. 문의는 1인 N건이라
@@ -204,7 +273,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   return NextResponse.json({
     registrations: registrationsWithLiveFlag,
     total,
-    stats: { registered, entered, active, surveyResponded: surveyParticipants.length },
+    stats: { registered, entered, active, surveyResponded: surveyParticipants.length, segments: segmentCounts },
+    /* 방송 전에는 전원이 노쇼로 잡히므로 화면이 점수 열·필터를 숨긴다(분석 탭과 같은 규칙).
+       liveMinutes 는 점수 분모로 실제 쓴 방송 경과 분 — 툴팁이 "체류 40/47분" 을 검산할 수 있게. */
+    scoring: { phase, liveMinutes: engagement.liveMinutes, scheduledMinutes: engagement.scheduledMinutes },
     surveys: surveys.map((survey) => ({
       ...survey,
       // 어드민 명단은 수집된 답변을 다 보여줘야 한다 — 제목이 비거나 선택지가 지워진
