@@ -74,6 +74,14 @@ async function render() {
   return host.textContent ?? "";
 }
 
+/** 제목이 들어 있는 카드의 부모(그리드) 를 찾는다 — jsdom 은 레이아웃을 계산하지 않으므로
+ *  좌표 대신 "같은 grid 컨테이너의 형제인가" 로 2열 배치를 검증한다. */
+function cardOf(title: string): HTMLElement | null {
+  const h = [...(host?.querySelectorAll("h3") ?? [])].find((el) => el.textContent?.includes(title));
+  // SectionCard 는 <section>(motion.section) 이다 — div 로 찾으면 카드 안쪽 헤더 div 가 잡힌다.
+  return (h?.closest("section.rounded-2xl") as HTMLElement | null) ?? null;
+}
+
 beforeEach(() => {
   // ResizeObserver·matchMedia 등 차트가 기대하는 브라우저 API 최소 스텁
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
@@ -123,6 +131,42 @@ describe("방송 후 — 세그먼트 + 점수 근거 + 리타겟", () => {
     const text = await render();
     expect(text).toContain("2명");
     expect(text).toContain("마케팅 정보 수신에 동의했어요");
+  });
+});
+
+/**
+ * 좌우 2열 — 전체 폭 카드로 한 줄씩 쌓으면 방송 전에도 막대 4개 + 막대 5개를 보려고
+ * 두 번 스크롤해야 했다. 리드 요약과 퍼널은 둘 다 "몇 명이 어디까지 왔나" 라 나란히 둔다.
+ */
+describe("리드 요약 + 참가 퍼널은 같은 2열 그리드에 나란히 있다", () => {
+  it("방송 전: 확보한 리드 | 참가 퍼널", async () => {
+    mockFetch(SCORING_BEFORE);
+    await render();
+    const lead = cardOf("확보한 리드");
+    const funnel = cardOf("참가 퍼널");
+    expect(lead, "확보한 리드 카드").toBeTruthy();
+    expect(funnel, "참가 퍼널 카드").toBeTruthy();
+    expect(lead!.parentElement).toBe(funnel!.parentElement);
+    expect(lead!.parentElement?.className).toContain("lg:grid-cols-2");
+  });
+
+  it("방송 후: 리드 스코어링 | 참가 퍼널 · 상위 참여자는 그리드 밖 전체 폭", async () => {
+    mockFetch(SCORING_ENDED);
+    await render();
+    const lead = cardOf("리드 스코어링");
+    const funnel = cardOf("참가 퍼널");
+    const top = cardOf("상위 참여자");
+    expect(lead!.parentElement).toBe(funnel!.parentElement);
+    expect(lead!.parentElement?.className).toContain("lg:grid-cols-2");
+    // 명단은 요약 아래 전체 폭 — 2열 그리드 안에 들어가면 좁아져 근거 줄이 깨진다
+    expect(top, "상위 참여자 카드").toBeTruthy();
+    expect(top!.parentElement).not.toBe(lead!.parentElement);
+  });
+
+  it("방송 전에는 상위 참여자 카드가 없다 — 점수를 매길 대상이 없다", async () => {
+    mockFetch(SCORING_BEFORE);
+    await render();
+    expect(cardOf("상위 참여자")).toBeNull();
   });
 });
 

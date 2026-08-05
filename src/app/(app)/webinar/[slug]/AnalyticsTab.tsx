@@ -1055,123 +1055,135 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
       {/* 설문 결과 — 자체 설문이 있을 때만 표시 */}
       <SurveyResultsSection webinarId={webinarId} />
 
-      {/* 리드 스코어링 — 방송 전에는 세그먼트가 전원 노쇼라 의미가 없어 리드 품질을 대신 보여준다 */}
-      <SectionCard>
-        <div className="mb-4">
-          <h3 className="flex items-center gap-1.5 text-sm font-semibold"><Users className="h-4 w-4 text-violet-500" /> {scoring.phase === "before" ? "확보한 리드" : "리드 스코어링"}</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {scoring.phase === "before"
-              ? "아직 방송 전이라 참여 점수를 매길 수 없어요. 지금 확보한 리드로 할 수 있는 일을 보여드려요."
-              : "참석·체류·인터랙션·마케팅 동의를 합성한 0~100 참여 점수 · 내보내기 CSV에 점수·세그먼트가 포함돼요."}
-          </p>
-        </div>
-
-        {scoring.phase === "before" ? (
-          <LeadQualityBeforeLive total={scoring.total} q={scoring.leadQuality} />
-        ) : (
-          <>
-            <div className="mb-2">
-              <div className="mb-2 flex h-2.5 overflow-hidden rounded-full bg-secondary">
-                {SEG_BAR.map((s) => {
-                  const c = scoring.distribution[s.key];
-                  return c > 0 ? <div key={s.key} style={{ width: `${pct(c, scoring.total)}%`, background: s.color }} /> : null;
-                })}
-              </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
-                {SEG_BAR.map((s) => (
-                  <span key={s.key} className="inline-flex items-center gap-1.5 text-muted-foreground" title={SEG_HINT[s.key]}>
-                    <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
-                    {s.label} <b className="tabular-nums text-foreground">{n(scoring.distribution[s.key])}</b> · {pct(scoring.distribution[s.key], scoring.total)}%
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* 점수 기준을 화면에 밝힌다 — "핫이 뭔데?" 를 툴팁으로만 두면 아무도 안 본다.
-                방송 중이면 분모가 계속 자라므로 그 사실도 함께 알린다(같은 사람의 점수가 올라간다). */}
-            <p className="mb-5 text-[10.5px] leading-relaxed text-muted-foreground">
-              핫 65점↑ · 웜 30점↑ · 콜드 30점 미만.{" "}
-              {scoring.phase === "live"
-                ? `방송이 진행 중이라 지금까지 흐른 ${n(scoring.liveMinutes)}분을 기준으로 계산해요 — 방송이 길어지면 점수도 함께 올라가요.`
-                : scoring.liveMinutes < scoring.scheduledMinutes
-                  ? `실제 방송 ${n(scoring.liveMinutes)}분 기준(예정 ${n(scoring.scheduledMinutes)}분)으로 계산했어요.`
-                  : `방송 ${n(scoring.liveMinutes)}분 기준으로 계산했어요.`}
+      {/* 리드 요약 + 참가 퍼널 — 좌우 2열.
+          둘 다 "몇 명이 어디까지 왔나" 를 읽는 카드라 나란히 둬야 한 화면에서 대조된다.
+          예전엔 전체 폭 카드로 한 줄씩 쌓여서, 방송 전에는 막대 4개 + 막대 5개를 보려고
+          두 번 스크롤해야 했다. 방송 후에는 상위 참여자 **명단**을 이 요약에서 떼어
+          아래 전체 폭 카드로 내린다(요약 먼저, 디테일은 아래로 — 읽는 영역 원칙). */}
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <SectionCard>
+          <div className="mb-4">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+              <Users className="h-4 w-4 text-violet-500" /> {scoring.phase === "before" ? "확보한 리드" : "리드 스코어링"}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {scoring.phase === "before"
+                ? "아직 방송 전이라 참여 점수를 매길 수 없어요. 지금 확보한 리드로 할 수 있는 일을 보여드려요."
+                : "참석·체류·인터랙션·마케팅 동의를 합성한 0~100 참여 점수 · 내보내기 CSV에 점수·세그먼트가 포함돼요."}
             </p>
+          </div>
 
-            {scoring.retargetCount > 0 && (
-              /* 노쇼 + 마케팅 동의 — 5점 콜드라 상위 참여자에는 절대 안 나오는데, 웨비나 다음 액션에서
-                 제일 큰 덩어리다. 여기서 숫자만 알리고 실제 명단은 등록자 탭 필터로 넘긴다. */
-              <div className="mb-5 flex items-start gap-2.5 rounded-xl bg-secondary/60 p-3">
-                <RotateCcw className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-500" />
-                <p className="text-[11px] leading-relaxed">
-                  <b className="tabular-nums">{n(scoring.retargetCount)}명</b>은 오지 않았지만 마케팅 정보 수신에 동의했어요 — 다시보기 안내나 다음 웨비나 초대를 보낼 수 있는 리드예요.
-                  <span className="text-muted-foreground"> 등록자 탭에서 세그먼트를 ‘노쇼’로 걸러 명단을 확인하세요.</span>
-                </p>
-              </div>
-            )}
-
-            {scoring.top.length === 0 ? (
-              <p className="text-xs text-muted-foreground">입장한 참여자가 없어 점수를 매길 대상이 없어요.</p>
-            ) : (
-              <div>
-                <p className="mb-2 text-xs font-semibold text-muted-foreground">상위 참여자</p>
-                <div className="space-y-1.5">
-                  {scoring.top.map((t, i) => (
-                    <div key={i} className="flex items-center gap-3 rounded-xl border border-border p-2.5">
-                      <span
-                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold tabular-nums ${SEG_BADGE[t.segment]}`}
-                        title={scoreBreakdownText(t)}
-                      >
-                        {t.score}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="flex items-center gap-1.5 text-xs font-medium">
-                          <span className="truncate">{t.name}</span>
-                          {t.company && <span className="truncate text-muted-foreground">· {t.company}</span>}
-                          {t.agreeMarketing && <span className="shrink-0 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-green-600 dark:text-green-400">동의</span>}
-                        </p>
-                        {/* 점수 근거를 한 줄로 — 숫자만 보고 CSV 와 대조해야 했던 자리 */}
-                        <p className="mt-0.5 text-[10.5px] text-muted-foreground tabular-nums">
-                          참석 {t.breakdown.attend} + 체류 {t.breakdown.watch} + 행동 {t.breakdown.interact}
-                          {t.breakdown.interactRaw > t.breakdown.interact && <span title="인터랙션 점수는 30점에서 멈춰요">{` (원점수 ${t.breakdown.interactRaw})`}</span>}
-                          {" "}+ 인텐트 {t.breakdown.intent}
-                        </p>
-                        <p className="mt-0.5 text-[10.5px] text-muted-foreground tabular-nums">
-                          체류 {n(t.watchMinutes)}/{n(t.breakdown.evaluatedMinutes)}분 · 채팅 {n(t.chat)} · 투표 {n(t.pollVotes)} · Q&A {n(t.qaAsks)}{t.qaUpvotes ? ` · 추천 ${n(t.qaUpvotes)}` : ""}{t.ctaClicks ? ` · CTA ${n(t.ctaClicks)}` : ""}
-                        </p>
-                      </div>
-                    </div>
+          {scoring.phase === "before" ? (
+            <LeadQualityBeforeLive total={scoring.total} q={scoring.leadQuality} />
+          ) : (
+            <>
+              <div className="mb-2">
+                <div className="mb-2 flex h-2.5 overflow-hidden rounded-full bg-secondary">
+                  {SEG_BAR.map((s) => {
+                    const c = scoring.distribution[s.key];
+                    return c > 0 ? <div key={s.key} style={{ width: `${pct(c, scoring.total)}%`, background: s.color }} /> : null;
+                  })}
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+                  {SEG_BAR.map((s) => (
+                    <span key={s.key} className="inline-flex items-center gap-1.5 text-muted-foreground" title={SEG_HINT[s.key]}>
+                      <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
+                      {s.label} <b className="tabular-nums text-foreground">{n(scoring.distribution[s.key])}</b> · {pct(scoring.distribution[s.key], scoring.total)}%
+                    </span>
                   ))}
                 </div>
               </div>
-            )}
-          </>
-        )}
-      </SectionCard>
+
+              {/* 점수 기준을 화면에 밝힌다 — "핫이 뭔데?" 를 툴팁으로만 두면 아무도 안 본다.
+                  방송 중이면 분모가 계속 자라므로 그 사실도 함께 알린다(같은 사람의 점수가 올라간다). */}
+              <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+                핫 65점↑ · 웜 30점↑ · 콜드 30점 미만.{" "}
+                {scoring.phase === "live"
+                  ? `방송이 진행 중이라 지금까지 흐른 ${n(scoring.liveMinutes)}분을 기준으로 계산해요 — 방송이 길어지면 점수도 함께 올라가요.`
+                  : scoring.liveMinutes < scoring.scheduledMinutes
+                    ? `실제 방송 ${n(scoring.liveMinutes)}분 기준(예정 ${n(scoring.scheduledMinutes)}분)으로 계산했어요.`
+                    : `방송 ${n(scoring.liveMinutes)}분 기준으로 계산했어요.`}
+              </p>
+
+              {scoring.retargetCount > 0 && (
+                /* 노쇼 + 마케팅 동의 — 5점 콜드라 상위 참여자에는 절대 안 나오는데, 웨비나 다음 액션에서
+                   제일 큰 덩어리다. 여기서 숫자만 알리고 실제 명단은 등록자 탭 필터로 넘긴다. */
+                <div className="mt-4 flex items-start gap-2.5 rounded-xl bg-secondary/60 p-3">
+                  <RotateCcw className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-500" />
+                  <p className="text-[11px] leading-relaxed">
+                    <b className="tabular-nums">{n(scoring.retargetCount)}명</b>은 오지 않았지만 마케팅 정보 수신에 동의했어요 — 다시보기 안내나 다음 웨비나 초대를 보낼 수 있는 리드예요.
+                    <span className="text-muted-foreground"> 등록자 탭에서 세그먼트를 ‘노쇼’로 걸러 명단을 확인하세요.</span>
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </SectionCard>
+
+        <SectionCard>
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold">참가 퍼널</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {hasVisits ? "방문 → 등록 → 입장 → 체류 단계별 전환" : "등록 → 입장 → 체류 (방문 데이터는 아임웹 부착 후 집계돼요)"}
+            </p>
+          </div>
+          <div className="space-y-3.5">
+            {hasVisits && <FunnelStep label="페이지 방문" value={funnel.visits} base={funnelBase} color="var(--chart-chat)" delay={0} />}
+            <FunnelStep label="사전 등록" value={funnel.registered} base={funnelBase} color="var(--chart-viewers)" delay={0.06} />
+            <FunnelStep label="실제 입장" value={funnel.attended} base={funnelBase} color="var(--chart-viewers)" delay={0.12} />
+            <FunnelStep label="30분 이상 체류" value={funnel.stay30} base={funnelBase} color="var(--chart-entered)" delay={0.18} />
+            <FunnelStep label="60분 이상 체류" value={funnel.stay60} base={funnelBase} color="var(--chart-entered)" delay={0.24} />
+          </div>
+        </SectionCard>
+      </div>
+
+      {/* 상위 참여자 — 위 요약에서 떼어낸 디테일. 명단이라 전체 폭이 읽기 편하다. */}
+      {scoring.phase !== "before" && (
+        <SectionCard>
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold">상위 참여자</h3>
+            <p className="mt-1 text-xs text-muted-foreground">참여 점수가 높은 순 · 전체 명단과 세그먼트 필터는 등록자 탭에 있어요.</p>
+          </div>
+          {scoring.top.length === 0 ? (
+            <p className="text-xs text-muted-foreground">입장한 참여자가 없어 점수를 매길 대상이 없어요.</p>
+          ) : (
+            <div className="grid gap-1.5 lg:grid-cols-2">
+              {scoring.top.map((t, i) => (
+                <div key={i} className="flex items-center gap-3 rounded-xl border border-border p-2.5">
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold tabular-nums ${SEG_BADGE[t.segment]}`}
+                    title={scoreBreakdownText(t)}
+                  >
+                    {t.score}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-1.5 text-xs font-medium">
+                      <span className="truncate">{t.name}</span>
+                      {t.company && <span className="truncate text-muted-foreground">· {t.company}</span>}
+                      {t.agreeMarketing && <span className="shrink-0 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-green-600 dark:text-green-400">동의</span>}
+                    </p>
+                    {/* 점수 근거를 한 줄로 — 숫자만 보고 CSV 와 대조해야 했던 자리 */}
+                    <p className="mt-0.5 text-[10.5px] text-muted-foreground tabular-nums">
+                      참석 {t.breakdown.attend} + 체류 {t.breakdown.watch} + 행동 {t.breakdown.interact}
+                      {t.breakdown.interactRaw > t.breakdown.interact && <span title="인터랙션 점수는 30점에서 멈춰요">{` (원점수 ${t.breakdown.interactRaw})`}</span>}
+                      {" "}+ 인텐트 {t.breakdown.intent}
+                    </p>
+                    <p className="mt-0.5 text-[10.5px] text-muted-foreground tabular-nums">
+                      체류 {n(t.watchMinutes)}/{n(t.breakdown.evaluatedMinutes)}분 · 채팅 {n(t.chat)} · 투표 {n(t.pollVotes)} · Q&A {n(t.qaAsks)}{t.qaUpvotes ? ` · 추천 ${n(t.qaUpvotes)}` : ""}{t.ctaClicks ? ` · CTA ${n(t.ctaClicks)}` : ""}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+      )}
 
       {/* 입소문 — 시청자가 직접 퍼뜨린 결과. 아무도 공유하지 않았으면 섹션을 숨긴다
           (빈 껍데기를 보여주지 않는다 — 공개 면의 이중 게이트 원칙과 같다). */}
       {data.wordOfMouth && data.wordOfMouth.shares > 0 && (
         <WordOfMouthSection wom={data.wordOfMouth} />
       )}
-
-      {/* 참가 퍼널 */}
-      <SectionCard>
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold">참가 퍼널</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {hasVisits ? "방문 → 등록 → 입장 → 체류 단계별 전환" : "등록 → 입장 → 체류 (방문 데이터는 아임웹 부착 후 집계돼요)"}
-          </p>
-        </div>
-        <div className="space-y-3.5">
-          {hasVisits && <FunnelStep label="페이지 방문" value={funnel.visits} base={funnelBase} color="var(--chart-chat)" delay={0} />}
-          <FunnelStep label="사전 등록" value={funnel.registered} base={funnelBase} color="var(--chart-viewers)" delay={0.06} />
-          <FunnelStep label="실제 입장" value={funnel.attended} base={funnelBase} color="var(--chart-viewers)" delay={0.12} />
-          <FunnelStep label="30분 이상 체류" value={funnel.stay30} base={funnelBase} color="var(--chart-entered)" delay={0.18} />
-          <FunnelStep label="60분 이상 체류" value={funnel.stay60} base={funnelBase} color="var(--chart-entered)" delay={0.24} />
-        </div>
-      </SectionCard>
-
       {/* 일자별 등록 추이 */}
       {trend.length > 0 && (
         <SectionCard>
