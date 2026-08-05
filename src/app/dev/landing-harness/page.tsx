@@ -33,11 +33,15 @@ type BgPreset = "light" | "dark" | "mix";
 /** ?bg=mix — 라이트와 다크를 번갈아 두어 경계와 지브라를 한 화면에서 본다. */
 function sectionBgFor(preset: BgPreset) {
   if (preset === "mix") {
+    /* faq 와 sponsors 를 둘 다 light 로 둔다 — FAQ 다음에 오는 지브라 교대(mount 가 FAQ 슬롯
+       뒤에서 손으로 이어 주는 자리)가 실제로 톤 차이를 만드는지 여기서 눈으로 본다. */
     return { hero: "dark", intro: "light", sessions: "dark", programs: "light",
-             audience: "dark", highlights: "light", join: "light", faq: "light" } as const;
+             audience: "dark", highlights: "light", join: "light", faq: "light",
+             sponsors: "light" } as const;
   }
   return { hero: preset, intro: preset, sessions: preset, programs: preset,
-           audience: preset, highlights: preset, join: preset, faq: preset } as const;
+           audience: preset, highlights: preset, join: preset, faq: preset,
+           sponsors: preset } as const;
 }
 
 const mockWebinar = (origin: string, bg: BgPreset, lightBg: string, darkBg: string): LandingWebinar => ({
@@ -92,6 +96,22 @@ const mockWebinar = (origin: string, bg: BgPreset, lightBg: string, darkBg: stri
           { category: "참가", question: "다시보기가 제공되나요?", answer: "종료 후 영상 링크를 이메일로 보내드립니다." },
           { category: "참가", question: "모바일에서도 볼 수 있나요?", answer: "네, 브라우저만 있으면 됩니다.\n앱 설치는 필요하지 않습니다." },
           { category: "등록", question: "등록을 취소할 수 있나요?", answer: "문의 메일로 알려주시면 처리해드립니다." },
+        ],
+      },
+      /**
+       * 최하단 로고 벽 — 한 화면에서 네 경우를 다 본다:
+       * 로고+링크 / 로고만 / **로고 없이 이름만**(글자 칩) / tier 없는 묶음.
+       * 로고가 흰 판 위에서 같은 슬롯에 정렬되는지, 다크 배경에서 사라지지 않는지가 확인 대상.
+       */
+      sponsors: {
+        enabled: true,
+        title: "",
+        items: [
+          { tier: "주최", name: "엑스포럼", logoUrl: `${origin}/next.svg`, url: "https://www.exporum.com" },
+          { tier: "주관", name: "머신스튜디오", logoUrl: `${origin}/vercel.svg`, url: "" },
+          { tier: "후원", name: "Northwind Partners", logoUrl: "", url: "https://example.com" },
+          { tier: "후원", name: "ACME Corp", logoUrl: `${origin}/next.svg`, url: "" },
+          { tier: "", name: "협력 미디어", logoUrl: "", url: "" },
         ],
       },
     },

@@ -5,13 +5,14 @@
 // 섹션은 "토글 ON + 실제 내용 있음"일 때만 공개 페이지에 노출된다(빈 껍데기 방지 — 읽기에서 걸러짐).
 
 import { useId, useRef, useState } from "react";
-import { ExternalLink, Clapperboard, Ban, Loader2, UploadCloud, Link2, Image as ImageIcon } from "lucide-react";
+import { ExternalLink, Clapperboard, Ban, Loader2, UploadCloud, Link2, Image as ImageIcon, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { Switch } from "@/components/ui/switch";
 import {
   normalizeLandingPageConfig,
+  safeHttpUrl,
   DEFAULT_LANDING_COLORS,
   LANDING_BG_SECTIONS,
   type LandingColors,
@@ -22,8 +23,10 @@ import {
   type LandingJoinStep,
   type LandingAudienceItem,
   type LandingProgramItem,
+  type LandingSponsorItem,
 } from "@/lib/webinar-config";
 import { LANDING_IMAGE_ACCEPT, LANDING_VIDEO_ACCEPT, validateLandingMedia } from "@/lib/webinar-landing-media";
+import { SESSION_LOGO_ACCEPT, SESSION_LOGO_MAX_LABEL, validateSessionLogo } from "@/lib/webinar-speaker-photo";
 import { FINISH, FIELD_CLS, JumpLink, Segmented } from "@/components/ui/primitives";
 import { EditableList, ROW_KEY, withRowKeys, stripRowKeys, type WithRowKey } from "@/components/ui/editable-list";
 import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
@@ -65,6 +68,8 @@ interface EditorState {
   highlights: { enabled: boolean; title: string; items: WithRowKey<LandingHighlightItem>[] };
   join: { enabled: boolean; steps: WithRowKey<LandingJoinStep>[] };
   faq: { enabled: boolean; items: WithRowKey<LandingFaqItem>[] };
+  /** 스폰서 — 최하단 로고 벽. 머리글은 행사마다 부르는 말이 달라 편집 가능하다. */
+  sponsors: { enabled: boolean; title: string; items: WithRowKey<LandingSponsorItem>[] };
 }
 
 function toEditorState(config: Record<string, unknown>): EditorState {
@@ -92,6 +97,7 @@ function toEditorState(config: Record<string, unknown>): EditorState {
     highlights: { ...lp.highlights, items: withRowKeys(lp.highlights.items) },
     join: { ...lp.join, steps: withRowKeys(lp.join.steps) },
     faq: { ...lp.faq, items: withRowKeys(lp.faq.items) },
+    sponsors: { ...lp.sponsors, items: withRowKeys(lp.sponsors.items) },
   };
 }
 
@@ -117,6 +123,7 @@ function toConfigPayload(s: EditorState) {
     highlights: { ...s.highlights, items: stripRowKeys(s.highlights.items) },
     join: { ...s.join, steps: stripRowKeys(s.join.steps) },
     faq: { ...s.faq, items: stripRowKeys(s.faq.items) },
+    sponsors: { ...s.sponsors, items: stripRowKeys(s.sponsors.items) },
   };
 }
 
@@ -203,6 +210,56 @@ function SectionCard({
 }
 
 
+/**
+ * URL 한 칸 — 스킴을 **입력 시점에 강제**한다.
+ *
+ * 왜 필요한가: normalizeLandingPageConfig 는 http(s) 가 아닌 URL 을 빈 값으로 만든다(파트너
+ * 사이트에 마운트되는 마크업이라 이 방어는 유지해야 한다). 그래서 운영자가 `www.acme.co.kr`
+ * 처럼 스킴 없이 적으면 그 값은 DB 에는 원문으로 남지만 **공개 페이지에서는 링크가 죽고**,
+ * 다음 리마운트 때 칸이 비면서 그 다음 자동저장이 빈 값을 영구 저장한다(실측 확인).
+ *
+ * 그래서 두 겹으로 막는다:
+ *  1) blur 에 https:// 를 붙여 **정상 입력을 그냥 통과시킨다** — AGENTS.md 의
+ *     "입력은 소스에서 정규화 — 안내 문구가 아니라 입력 시점에 강제".
+ *  2) 그래도 안 되는 값(공백 포함·잘못된 호스트 등)은 그 자리에서 인라인으로 알린다.
+ * (SessionsTab 의 연사 홈페이지 칸이 같은 이유로 같은 구조를 쓴다.)
+ */
+function UrlField({
+  label, value, onChange, placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  placeholder: string;
+}) {
+  const invalid = value.trim() !== "" && !safeHttpUrl(value);
+  return (
+    <div>
+      <input
+        aria-label={label}
+        type="url"
+        inputMode="url"
+        className={inputCls}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={(e) => {
+          const raw = e.target.value.trim();
+          // 스킴만 없는 값이면 붙여서 살린다. 이미 스킴이 있거나 빈 값이면 건드리지 않는다.
+          if (raw && !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw) && safeHttpUrl(`https://${raw}`)) {
+            onChange(`https://${raw}`);
+          }
+        }}
+        placeholder={placeholder}
+      />
+      {invalid && (
+        <p className="mt-1 text-[11px] leading-relaxed text-red-500">
+          https:// 로 시작하는 주소를 넣어주세요. 지금 값은 저장되지 않아요.
+        </p>
+      )}
+    </div>
+  );
+}
+
 const MEDIA_TYPES: { id: HeroMediaType; label: string; icon: typeof Ban }[] = [
   { id: "none", label: "없음", icon: Ban },
   { id: "image", label: "이미지", icon: ImageIcon },
@@ -231,8 +288,56 @@ export default function LandingPageTab({
   const [state, setState] = useState<EditorState>(() => toEditorState(webinar.config));
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /**
+   * 스폰서 로고 업로드 — 파일 입력은 **행마다 두지 않고 섹션에 하나만** 둔다.
+   * 어느 행이 눌렀는지는 ref 로 기억한다: 행이 드래그로 순서가 바뀌거나 지워져도 ROW_KEY 는
+   * 그대로라 응답이 늦게 와도 엉뚱한 행에 URL 이 꽂히지 않는다(인덱스로 기억하면 그 사고가 난다).
+   */
+  const sponsorFileRef = useRef<HTMLInputElement>(null);
+  const sponsorTargetKey = useRef<string | null>(null);
+  const [sponsorUploadingKey, setSponsorUploadingKey] = useState<string | null>(null);
 
   const patch = (updates: Partial<EditorState>) => setState((prev) => ({ ...prev, ...updates }));
+
+  /**
+   * 로고 업로드는 세션 로고 라우트를 그대로 쓴다 — 형식·한도·저장 경로(logos/)가 완전히 같고,
+   * 그 규칙은 webinar-speaker-photo.ts 한 곳이 소유한다. 네 번째 복제 라우트를 만들면
+   * 한쪽만 고쳐져 갈라진다(랜딩 미디어가 실제로 그렇게 5MB 로 갈라져 있다).
+   */
+  const uploadSponsorLogo = async (file: File, rowKey: string) => {
+    const validationError = validateSessionLogo(file);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+    setSponsorUploadingKey(rowKey);
+    try {
+      const body = new FormData();
+      body.set("file", file);
+      const res = await fetch(`/api/webinars/${webinar.id}/session-logo`, { method: "POST", body });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || typeof data?.url !== "string") {
+        toast.error(data?.error ?? "로고 업로드에 실패했어요.");
+        return;
+      }
+      setState((prev) => ({
+        ...prev,
+        sponsors: {
+          ...prev.sponsors,
+          items: prev.sponsors.items.map((it) => (it[ROW_KEY] === rowKey ? { ...it, logoUrl: data.url } : it)),
+        },
+      }));
+      toast.success("로고를 올렸어요");
+    } catch {
+      // catch 가 반드시 있어야 한다 — try/finally 뿐이면 네트워크 실패가 unhandled rejection 으로
+      // 사라지고 운영자는 "눌렀는데 아무 일도 없다" 만 본다(히어로 업로드와 같은 이유).
+      toast.error("업로드 중 문제가 생겼어요. 연결을 확인하고 다시 시도해주세요.");
+    } finally {
+      setSponsorUploadingKey(null);
+      sponsorTargetKey.current = null;
+      if (sponsorFileRef.current) sponsorFileRef.current.value = "";
+    }
+  };
 
   // 히어로 배경 파일 업로드 — 성공하면 URL 필드를 채우고 자동저장이 이어서 영속화한다
   const uploadHeroMedia = async (file: File) => {
@@ -288,7 +393,7 @@ export default function LandingPageTab({
    */
   const previewUrl = `/webinar/${webinar.slug}/landing?preview=1`;
 
-  const setRows = <K extends "audience" | "programs" | "highlights" | "faq">(key: K, items: EditorState[K]["items"]) =>
+  const setRows = <K extends "audience" | "programs" | "highlights" | "faq" | "sponsors">(key: K, items: EditorState[K]["items"]) =>
     setState((prev) => ({ ...prev, [key]: { ...prev[key], items } }));
 
   return (
@@ -706,6 +811,125 @@ export default function LandingPageTab({
                 </>
               )}
             />
+          </SectionCard>
+
+          {/* 스폰서 — 페이지 최하단 */}
+          <SectionCard
+            title="스폰서"
+            hint="페이지 맨 아래 로고 벽이에요. 구분(주최·주관·후원)을 적으면 같은 구분끼리 묶여서 나가요. 이름이 있는 항목만 노출돼요."
+            enabled={state.sponsors.enabled}
+            onToggle={(v) => patch({ sponsors: { ...state.sponsors, enabled: v } })}
+          >
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground" htmlFor="lp-sponsors-title">머리글</label>
+              <input
+                id="lp-sponsors-title"
+                className={inputCls}
+                value={state.sponsors.title}
+                onChange={(e) => patch({ sponsors: { ...state.sponsors, title: e.target.value } })}
+                placeholder="Sponsors (비우면 이 문구가 나가요)"
+              />
+            </div>
+            {/* 파일 입력은 섹션에 하나 — 어느 행이 눌렀는지는 sponsorTargetKey 가 기억한다. */}
+            <input
+              ref={sponsorFileRef}
+              type="file"
+              accept={SESSION_LOGO_ACCEPT}
+              className="sr-only"
+              onChange={(e) => {
+                const file = e.currentTarget.files?.[0];
+                const key = sponsorTargetKey.current;
+                if (file && key) void uploadSponsorLogo(file, key);
+              }}
+            />
+            <EditableList
+              listId="lp-sponsors" itemNoun="스폰서" reorderable
+              items={state.sponsors.items}
+              onChange={(next) =>
+                setState((prev) => ({
+                  ...prev,
+                  // 첫 행이 생기면 토글도 같이 켠다. 이 섹션만 기본 OFF 라(기존 웨비나에 거짓
+                  // 경고를 안 만들려고 — webinar-config.ts 주석), 안 켜 주면 "추가했는데 안 나온다"
+                  // 가 된다. 0 → 1 일 때만 — 일부러 끈 뒤 행을 고치는 것까지 되살리지 않는다.
+                  sponsors: {
+                    ...prev.sponsors,
+                    enabled: prev.sponsors.enabled || (prev.sponsors.items.length === 0 && next.length > 0),
+                    items: next,
+                  },
+                }))
+              }
+              rowKey={(r) => r[ROW_KEY]}
+              makeItem={() => ({ tier: "", name: "", logoUrl: "", url: "", [ROW_KEY]: crypto.randomUUID() })}
+              addLabel="스폰서 추가"
+              emptyState={<p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">아직 스폰서가 없어요. 아래에서 추가하면 페이지 맨 아래에 로고가 표시돼요.</p>}
+              renderRow={({ item, patch: p }) => {
+                const rowKey = item[ROW_KEY];
+                const busy = sponsorUploadingKey === rowKey;
+                return (
+                  <div className="flex items-stretch gap-2">
+                    {/* 로고 칸이 곧 업로드 버튼이다 — 별도 '파일 올리기' 버튼을 두면 행이 한 줄 더 길어지고,
+                        지금 무엇이 올라가 있는지와 바꾸는 자리가 떨어진다. 판은 흰색: 투명 PNG 로고가
+                        대부분이라 어두운 어드민 배경에서는 판 없이 보이지 않는다. */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sponsorTargetKey.current = rowKey;
+                        sponsorFileRef.current?.click();
+                      }}
+                      disabled={busy}
+                      title={`${item.name.trim() || "이 스폰서"} 로고 ${item.logoUrl ? "바꾸기" : "올리기"}`}
+                      className={`grid w-24 shrink-0 place-items-center rounded-lg bg-white p-1.5 transition-opacity hover:opacity-80 disabled:opacity-50 ${FINISH.hairlineOut}`}
+                    >
+                      {busy ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-neutral-500" />
+                      ) : item.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- 어드민 미리보기(임의 호스트 URL)
+                        <img
+                          src={transformedImageUrl(item.logoUrl, IMAGE_PRESETS.adminThumb)}
+                          alt={`${item.name.trim() || "스폰서"} 로고 미리보기`}
+                          className="h-9 w-full object-contain"
+                        />
+                      ) : (
+                        <span className="flex flex-col items-center gap-0.5 text-neutral-500">
+                          <ImagePlus className="h-4 w-4" />
+                          <span className="text-[10px] font-medium">로고</span>
+                        </span>
+                      )}
+                    </button>
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div className="flex gap-2">
+                        {/* 이름이 먼저다 — 이 값이 공개 노출을 가르고, 로고 이미지의 대체 텍스트도 된다.
+                            폭은 래퍼가 갖는다(inputCls 의 w-full 이 이긴다 — 위 프로그램 주석 참고). */}
+                        <input aria-label="스폰서 이름" className={inputCls} value={item.name} onChange={(e) => p({ name: e.target.value })} placeholder="이름 (필수 — 비우면 공개 페이지에 안 나와요)" />
+                        <div className="w-24 shrink-0">
+                          <input aria-label="스폰서 구분" className={inputCls} value={item.tier} onChange={(e) => p({ tier: e.target.value })} placeholder="구분" />
+                        </div>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {/* 로고 URL 을 칸으로 남겨 둔다 — 외부 이미지 붙여넣기와 **로고 지우기**가
+                            둘 다 이 칸 하나로 된다(비우면 이름 글자 칩으로 나간다). */}
+                        <UrlField
+                          label="스폰서 로고 URL"
+                          value={item.logoUrl}
+                          onChange={(logoUrl) => p({ logoUrl })}
+                          placeholder="로고 URL — https://… (비우면 이름만 나가요)"
+                        />
+                        <UrlField
+                          label="스폰서 홈페이지 링크"
+                          value={item.url}
+                          onChange={(url) => p({ url })}
+                          placeholder="홈페이지 링크 — https://… (선택)"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              }}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              JPG·PNG·WebP·GIF · 최대 {SESSION_LOGO_MAX_LABEL}. 여백을 잘라낸 투명 배경 PNG 가 가장 깔끔해요 —
+              공개 페이지에서는 어느 배경에서든 흰 판 위에 같은 크기로 올라갑니다.
+            </p>
           </SectionCard>
         </div>
       </div>

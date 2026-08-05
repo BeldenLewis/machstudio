@@ -837,6 +837,54 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 .lnd .faq-body { overflow: hidden; }
 .lnd .faq-item p { margin: 0; padding: 0 18px 20px; color: var(--body); font-size: 14.5px; white-space: pre-line; }
 
+/* ── 스폰서 (최하단 로고 벽) ──
+   판은 **어느 모드에서든 흰색**이다. 스폰서 로고는 대부분 투명 배경 + 진한 잉크라
+   var(--card) 를 쓰면 다크 모드에서 통째로 사라진다(세션 로고가 plate 를 쓰는 것과 같은 이유).
+   라이트 모드에서는 흰 판이 배경과 같은 색이라 그림자만 남고, 그게 실제 행사 페이지의
+   로고 벽 인상과도 맞는다.
+
+   슬롯을 **고정 크기**로 잡는 이유도 세션 로고와 같다: 폭을 auto 로 두면 원본 비율대로
+   칸이 제각각이 되어 로고들이 서로 다른 자리에서 시작·끝난다(들쭉날쭉). */
+.lnd .sponsor-group + .sponsor-group { margin-top: clamp(30px, 4vw, 46px); }
+.lnd .sponsor-tier {
+  margin: 0 0 16px; text-align: center;
+  font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--muted);
+  transition: color .8s ease;
+}
+.lnd .sponsor-grid {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 12px;
+  list-style: none; padding: 0; margin: 0;
+}
+.lnd .sponsor-item { display: block; }
+.lnd .sponsor-tile {
+  /* content-box 를 **명시**한다 — 랜딩은 남의 사이트에 직접 마운트되므로 호스트 리셋이
+     border-box 여도 슬롯이 148×44 로 같아야 한다(webinar-logo.ts 와 같은 근거). */
+  box-sizing: content-box;
+  display: grid; place-items: center;
+  width: 148px; height: 44px; padding: 14px 18px;
+  border-radius: 8px; background: #fff;
+  box-shadow: var(--card-shadow);
+  text-decoration: none;
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.lnd a.sponsor-tile:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(2, 8, 24, .22); }
+.lnd .sponsor-logo { display: block; width: 148px; height: 44px; object-fit: contain; object-position: center; }
+/* 글자 칩은 슬롯 높이를 **최소값**으로 쓴다 — 로고는 고정, 글자는 줄이 늘면 판이 자란다.
+   고정하면 긴 이름이 판 밖으로 새고, 하드코딩된 잉크색이 다크 배경 위에서 그대로 사라진다
+   (실측: "사단법인한국전시산업진흥회사무국" 이 184px 판에서 오른쪽 39px · 긴 영문명은 아래 26px). */
+.lnd .sponsor-tile.is-text { height: auto; min-height: 44px; }
+/* 로고가 없는 항목 — 글자 칩. 흰 판 위라 색은 배경 모드와 무관하게 고정한다. */
+.lnd .sponsor-name {
+  font-size: 15px; font-weight: 750; line-height: 1.35; letter-spacing: -.01em;
+  color: #1b2130; text-align: center;
+  /* keep-all 이 먼저다(한국어는 어절 단위로 끊는다). anywhere 는 **넘칠 때만** 개입한다 —
+     띄어쓰기 없는 긴 기관명은 keep-all 만으로는 끊을 자리가 없어 통째로 삐져나간다. */
+  word-break: keep-all; overflow-wrap: anywhere;
+  /* 자동 트랙이 슬롯보다 커지지 않게 — 이게 없으면 그리드 칸이 글자 폭까지 늘어난다. */
+  width: 100%;
+}
+
 /* ── 스크롤 리빌(transform 전용 — JS 미실행에서도 콘텐츠 가시) ── */
 .lnd .rv { transform: translateY(12px); transition: transform .5s cubic-bezier(.22, .7, .2, 1); }
 .lnd .rv.in { transform: translateY(0); }
@@ -869,6 +917,15 @@ ${sessionLogoCss(".lnd .schedule-logo")}
   .lnd .benefit-body h3 { font-size: 19px; }
   .lnd .faq-tabs { overflow-x: auto; justify-content: flex-start; padding-bottom: 4px; }
   .lnd .faq-tab { flex: 0 0 auto; }
+  /* 로고 슬롯을 줄인다 — 148px 를 유지하면 375px 폭에서 한 줄에 한 개밖에 안 들어가
+     로고 벽이 세로로 끝없이 늘어진다(2개/줄이 되게 잡은 값). */
+  .lnd .sponsor-grid { gap: 10px; }
+  .lnd .sponsor-tile { width: 118px; height: 36px; padding: 11px 14px; }
+  /* 데스크톱과 같은 규칙 — 글자 칩만 높이가 자란다(위 주석). 이 줄이 없으면 좁은 폭에서
+     줄이 더 자주 늘어나므로 오히려 여기서 더 필요하다. */
+  .lnd .sponsor-tile.is-text { height: auto; min-height: 36px; }
+  .lnd .sponsor-logo { width: 118px; height: 36px; }
+  .lnd .sponsor-name { font-size: 13.5px; }
 }
 
 @media (max-width: 410px) {

@@ -46,6 +46,12 @@ export const IMAGE_PRESETS = {
   modalPhoto: { width: 800, height: 1200, quality: 80 },
   modalAvatar: { width: 104, height: 104, quality: 80 },
   sessionLogo: { width: 480, height: 52, quality: 92 },
+  /**
+   * 랜딩 최하단 스폰서 로고 — 슬롯 148×44 의 레티나 2배.
+   * 세션 로고보다 큰 이유: 스폰서 벽은 로고가 주인공이라 슬롯 자체를 크게 잡았다
+   * (세션 로고는 한 줄 안에 곁들여지는 마크다). 글자 로고가 많아 품질은 92 로 같다.
+   */
+  sponsorLogo: { width: 296, height: 88, quality: 92 },
   /** 어드민 편집 화면의 작은 썸네일 — 운영자만 보므로 더 작게. */
   adminThumb: { width: 240, height: 240, quality: 78 },
   /** 어드민 히어로 미리보기(h-28 ≈ 112px 높이, 카드 폭) */

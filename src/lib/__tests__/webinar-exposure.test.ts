@@ -91,7 +91,7 @@ describe("랜딩 — 섹션을 끈 것과 켜 놓고 비운 것은 다르다", (
   });
 
   it("섹션을 끄면 off — 경고가 아니다", () => {
-    for (const key of ["intro", "audience", "programs", "highlights", "faq"]) {
+    for (const key of ["intro", "audience", "programs", "highlights", "faq", "sponsors"]) {
       expect(row(make({ config: cfg(key, false) }), `landing.${key}`).state, key).toBe("off");
     }
   });
@@ -100,6 +100,24 @@ describe("랜딩 — 섹션을 끈 것과 켜 놓고 비운 것은 다르다", (
     expect(row(make({ config: cfg("programs", true) }), "landing.programs").state).toBe("empty");
     expect(row(make({ config: cfg("faq", true) }), "landing.faq").state).toBe("empty");
     expect(row(make({ config: cfg("audience", true) }), "landing.audience").state).toBe("empty");
+    expect(row(make({ config: cfg("sponsors", true) }), "landing.sponsors").state).toBe("empty");
+  });
+
+  /**
+   * 스폰서는 랜딩 출시 **뒤에** 생긴 첫 섹션이다. 기본 ON 이면 이미 랜딩을 켜고 다 채워 둔
+   * 웨비나가 아무 조작도 안 했는데 "켰지만 항목이 없어요" 경고를 받는다(준비 상태 +1).
+   * 그건 이 표가 sectionOn/hasContent 를 가른 바로 그 이유다.
+   */
+  it("sponsors 키가 없는 기존 웨비나는 off — 새 경고를 만들지 않는다", () => {
+    const legacy = make({ config: { landingPage: { enabled: true, titleLines: ["제목"] } } });
+    expect(row(legacy, "landing.sponsors").state).toBe("off");
+    expect(row(legacy, "landing.sponsors").why).toBeNull();
+  });
+
+  /** 스폰서는 **이름**이 내용을 센다 — 로고만 있는 행은 정규화가 버린다(alt 가 비어 버리므로). */
+  it("스폰서는 이름이 있는 항목만 내용으로 센다", () => {
+    expect(row(make({ config: cfg("sponsors", true, [{ logoUrl: "https://cdn.io/a.png" }]) }), "landing.sponsors").state).toBe("empty");
+    expect(row(make({ config: cfg("sponsors", true, [{ name: "엑스포럼" }]) }), "landing.sponsors").state).toBe("on");
   });
 
   /**

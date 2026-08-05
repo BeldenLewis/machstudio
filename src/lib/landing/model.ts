@@ -18,6 +18,9 @@ export const TOC_DEF = [
   { id: "lnd-highlights", label: "Benefits" },
   { id: "lnd-join", label: "Join" },
   { id: "lnd-faq", label: "FAQ" },
+  /* 최하단. 읽으러 가는 섹션은 아니지만 목차에 넣는다 — 자기 로고가 어디 실렸는지
+     확인하러 오는 파트너에게는 이게 유일한 바로가기다(스크롤 끝까지 내려야 나온다). */
+  { id: "lnd-sponsors", label: "Sponsors" },
 ] as const;
 
 // 키컬러 위 텍스트 — 브랜드 요청으로 흰색 기본(라이브 페이지의 밝은 버튼 인상과 통일).

@@ -269,6 +269,7 @@ export function buildExposureReport(input: ExposureInput): ExposureReport {
   add(L("highlights", "하이라이트", lp.highlights.enabled, lm.showHighlights, "하이라이트를 켰지만 제목이 있는 항목이 없어요."));
   add(L("join", "참여 방법", lp.join.enabled, true, ""));
   add(L("faq", "FAQ", lp.faq.enabled, lm.showFaq, "FAQ를 켰지만 질문이 있는 항목이 없어요."));
+  add(L("sponsors", "스폰서", lp.sponsors.enabled, lm.showSponsors, "스폰서를 켰지만 이름이 있는 항목이 없어요."));
   // 참여 방법은 이중 게이트의 유일한 예외 — 입력하지 않아도 기본 3스텝이 주입된다.
   const join = rows.find((r) => r.id === "landing.join")!;
   if (join.state === "on" && !Array.isArray((((cfg.landingPage ?? {}) as Record<string, unknown>).join as Record<string, unknown> | undefined)?.steps)) {
