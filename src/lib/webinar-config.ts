@@ -554,7 +554,21 @@ export function normalizeLandingPageConfig(
       ),
     },
     sponsors: {
-      enabled: bool(sponsors.enabled, true),
+      /**
+       * 다른 섹션과 달리 **기본 OFF** 다. 이 섹션은 랜딩 기능이 출시된 **뒤에** 생겼기 때문이다.
+       *
+       * intro·audience·programs 등이 기본 ON 이어도 소급 경고가 없었던 이유: 그들이 나올 때는
+       * 랜딩을 켠 웨비나가 0개였고(landingPage.enabled 기본 false), 노출 점검 표는 랜딩이 꺼져
+       * 있으면 모든 랜딩 행을 off 로 본다. 스폰서는 다르다 — 이미 랜딩을 켜고 다 채워 둔 웨비나가
+       * 있고, 기본 ON 이면 그 웨비나들이 **아무 조작도 안 했는데** "스폰서를 켰지만 항목이
+       * 없어요" 라는 거짓 경고를 받는다(실측: 준비 상태 확인할 것 +1). 그건 이 표가 예전에
+       * 고친 바로 그 결함이다(webinar-exposure.ts 의 sectionOn/hasContent 분리 주석).
+       *
+       * 새 웨비나에서 "추가했는데 안 나온다" 가 되지 않도록, 편집기가 **첫 행을 추가할 때**
+       * 토글을 같이 켠다(LandingPageTab). 시청자 쪽 결론은 어느 기본값이든 같다 — 이중 게이트가
+       * 항목 1개 이상을 요구하므로 빈 섹션은 애초에 렌더되지 않는다.
+       */
+      enabled: bool(sponsors.enabled, false),
       title: str(sponsors.title),
       items: rows(
         sponsors.items,

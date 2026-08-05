@@ -242,9 +242,17 @@ function sponsorTile(item: LandingSponsorItem): HTMLElement {
       })
     : h("span", { class: "sponsor-name" }, item.name);
 
+  /**
+   * 글자 칩에는 전용 클래스를 준다 — 판이 **줄 수에 따라 자라야** 하기 때문이다.
+   * 로고 칸은 고정 크기라야 로고들이 같은 자리에서 시작·끝나지만(들쭉날쭉 방지), 글자는
+   * 고정하면 긴 이름이 흰 판 밖으로 새고 다크 배경 위에서 글자가 사라진다
+   * (실측: "사단법인한국전시산업진흥회사무국" 이 184px 판에서 오른쪽으로 39px 넘침).
+   * CSS `:has()` 대신 클래스로 가르는 이유 — 이 CSS 는 남의 사이트에서 실행된다.
+   */
+  const cls = item.logoUrl ? "sponsor-tile" : "sponsor-tile is-text";
   return item.url
-    ? h("a", { class: "sponsor-tile", href: item.url, target: "_blank", rel: "noopener noreferrer" }, inner)
-    : h("div", { class: "sponsor-tile" }, inner);
+    ? h("a", { class: cls, href: item.url, target: "_blank", rel: "noopener noreferrer" }, inner)
+    : h("div", { class: cls }, inner);
 }
 
 /**

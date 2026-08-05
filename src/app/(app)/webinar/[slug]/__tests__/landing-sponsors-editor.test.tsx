@@ -98,6 +98,73 @@ describe("행 = 항목, 열 = 속성 — 네 값이 모두 보이고 인라인�
   });
 });
 
+describe("URL 은 입력 시점에 강제한다", () => {
+  /**
+   * normalizeLandingPageConfig 가 http(s) 아닌 URL 을 빈 값으로 만든다(파트너 사이트에
+   * 마운트되는 마크업이라 이 방어는 유지해야 한다). 그래서 스킴 없이 적으면 **공개 페이지에서
+   * 링크가 죽고**, 다음 리마운트 때 칸이 비면서 그 다음 자동저장이 빈 값을 영구 저장한다.
+   * 실측으로 확인한 경로다 — 그래서 blur 에서 스킴을 붙여 정상 입력을 그냥 통과시킨다.
+   */
+  const blur = (input: HTMLInputElement, value: string) => {
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    // React 17+ 는 onBlur 를 루트에서 **focusout** 으로 위임받는다 — 네이티브 "blur" 는
+    // 버블링하지 않아 핸들러에 닿지 않는다(닿는 것처럼 보이면 그게 오히려 함정).
+    act(() => { input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })); });
+  };
+
+  it("스킴 없이 적으면 https:// 를 붙여 살린다", () => {
+    const el = render({ landingPage: { enabled: true, sponsors } });
+    const url = el.querySelectorAll<HTMLInputElement>('input[aria-label="스폰서 홈페이지 링크"]')[1];
+    blur(url, "www.acme.co.kr");
+    expect(
+      el.querySelectorAll<HTMLInputElement>('input[aria-label="스폰서 홈페이지 링크"]')[1].value,
+    ).toBe("https://www.acme.co.kr");
+  });
+
+  it("이미 스킴이 있으면 건드리지 않는다", () => {
+    const el = render({ landingPage: { enabled: true, sponsors } });
+    const url = el.querySelectorAll<HTMLInputElement>('input[aria-label="스폰서 홈페이지 링크"]')[1];
+    blur(url, "http://acme.co.kr");
+    expect(
+      el.querySelectorAll<HTMLInputElement>('input[aria-label="스폰서 홈페이지 링크"]')[1].value,
+    ).toBe("http://acme.co.kr");
+  });
+
+  it("붙여도 안 되는 값은 그 자리에서 인라인으로 알린다 — 저장 후 조용히 비면 이유를 알 수 없다", () => {
+    const el = render({ landingPage: { enabled: true, sponsors } });
+    const url = el.querySelectorAll<HTMLInputElement>('input[aria-label="스폰서 홈페이지 링크"]')[1];
+    blur(url, "javascript:alert(1)");
+    expect(el.textContent).toContain("지금 값은 저장되지 않아요");
+  });
+
+  it("정상 값에는 경고를 띄우지 않는다", () => {
+    const el = render({ landingPage: { enabled: true, sponsors } });
+    expect(el.textContent).not.toContain("지금 값은 저장되지 않아요");
+  });
+});
+
+describe("첫 스폰서를 추가하면 토글도 같이 켜진다", () => {
+  /** 이 섹션만 기본 OFF 라(기존 웨비나 거짓 경고 방지), 안 켜 주면 "추가했는데 안 나온다" 가 된다. */
+  it("0 → 1 일 때 표시가 켜진다", () => {
+    const el = render({ landingPage: { enabled: true } });
+    const toggle = [...el.querySelectorAll<HTMLElement>('[role="switch"], input[type="checkbox"]')]
+      .find((n) => (n.getAttribute("aria-label") ?? "").includes("스폰서"));
+    expect(toggle).toBeDefined();
+    expect(toggle!.getAttribute("aria-checked") ?? String((toggle as HTMLInputElement).checked)).toBe("false");
+
+    const add = [...el.querySelectorAll("button")].find((b) => b.textContent?.includes("스폰서 추가"));
+    act(() => { add!.click(); });
+
+    expect(rows(el)).toHaveLength(1);
+    const after = [...el.querySelectorAll<HTMLElement>('[role="switch"], input[type="checkbox"]')]
+      .find((n) => (n.getAttribute("aria-label") ?? "").includes("스폰서"));
+    expect(after!.getAttribute("aria-checked") ?? String((after as HTMLInputElement).checked)).toBe("true");
+  });
+});
+
 describe("업로드는 **누른 행**에 꽂힌다", () => {
   /** 파일 입력은 섹션에 하나. 대상은 ROW_KEY 로 기억하므로 목록이 바뀌어도 안 흔들린다. */
   it("두 번째 행에서 올린 로고가 두 번째 행에만 들어간다", async () => {

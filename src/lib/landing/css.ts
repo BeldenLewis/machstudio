@@ -870,10 +870,19 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 }
 .lnd a.sponsor-tile:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(2, 8, 24, .22); }
 .lnd .sponsor-logo { display: block; width: 148px; height: 44px; object-fit: contain; object-position: center; }
+/* 글자 칩은 슬롯 높이를 **최소값**으로 쓴다 — 로고는 고정, 글자는 줄이 늘면 판이 자란다.
+   고정하면 긴 이름이 판 밖으로 새고, 하드코딩된 잉크색이 다크 배경 위에서 그대로 사라진다
+   (실측: "사단법인한국전시산업진흥회사무국" 이 184px 판에서 오른쪽 39px · 긴 영문명은 아래 26px). */
+.lnd .sponsor-tile.is-text { height: auto; min-height: 44px; }
 /* 로고가 없는 항목 — 글자 칩. 흰 판 위라 색은 배경 모드와 무관하게 고정한다. */
 .lnd .sponsor-name {
   font-size: 15px; font-weight: 750; line-height: 1.35; letter-spacing: -.01em;
-  color: #1b2130; text-align: center; word-break: keep-all;
+  color: #1b2130; text-align: center;
+  /* keep-all 이 먼저다(한국어는 어절 단위로 끊는다). anywhere 는 **넘칠 때만** 개입한다 —
+     띄어쓰기 없는 긴 기관명은 keep-all 만으로는 끊을 자리가 없어 통째로 삐져나간다. */
+  word-break: keep-all; overflow-wrap: anywhere;
+  /* 자동 트랙이 슬롯보다 커지지 않게 — 이게 없으면 그리드 칸이 글자 폭까지 늘어난다. */
+  width: 100%;
 }
 
 /* ── 스크롤 리빌(transform 전용 — JS 미실행에서도 콘텐츠 가시) ── */
@@ -912,6 +921,9 @@ ${sessionLogoCss(".lnd .schedule-logo")}
      로고 벽이 세로로 끝없이 늘어진다(2개/줄이 되게 잡은 값). */
   .lnd .sponsor-grid { gap: 10px; }
   .lnd .sponsor-tile { width: 118px; height: 36px; padding: 11px 14px; }
+  /* 데스크톱과 같은 규칙 — 글자 칩만 높이가 자란다(위 주석). 이 줄이 없으면 좁은 폭에서
+     줄이 더 자주 늘어나므로 오히려 여기서 더 필요하다. */
+  .lnd .sponsor-tile.is-text { height: auto; min-height: 36px; }
   .lnd .sponsor-logo { width: 118px; height: 36px; }
   .lnd .sponsor-name { font-size: 13.5px; }
 }

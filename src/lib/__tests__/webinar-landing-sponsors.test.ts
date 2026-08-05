@@ -5,6 +5,7 @@ import { buildLandingModel } from "@/lib/landing/build-model";
 import { renderSponsors } from "@/lib/landing/view-sections";
 import { TOC_DEF } from "@/lib/landing/model";
 import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
+import { LANDING_CSS } from "@/lib/landing/css";
 import type { LandingWebinar } from "@/lib/landing/types";
 
 /**
@@ -33,8 +34,15 @@ const SPONSOR = (over: Record<string, unknown> = {}) => ({
 });
 
 describe("이중 게이트 — 토글 ON + 이름 있는 항목 ≥ 1", () => {
-  it("sponsors 키가 없는 옛 config 도 깨지지 않는다(기본 ON + 빈 목록 → 안 나감)", () => {
-    expect(lp({}).sponsors.enabled).toBe(true);
+  /**
+   * 이 섹션만 **기본 OFF** 다. 다른 섹션(intro·audience·programs…)은 랜딩 기능과 **함께**
+   * 나와서 그때는 랜딩을 켠 웨비나가 0개였고(랜딩이 꺼져 있으면 노출 표가 모든 랜딩 행을
+   * off 로 본다), 그래서 기본 ON 이어도 소급 경고를 만들 수 없었다. 스폰서는 이미 랜딩을
+   * 켜고 다 채워 둔 웨비나가 있는 상태에서 나오므로, 기본 ON 이면 그 웨비나들이 아무 조작도
+   * 안 했는데 "켰지만 항목이 없어요" 경고를 받는다.
+   */
+  it("sponsors 키가 없는 옛 config 는 기본 OFF — 기존 웨비나에 새 경고를 만들지 않는다", () => {
+    expect(lp({}).sponsors.enabled).toBe(false);
     expect(lp({}).sponsors.items).toEqual([]);
     expect(model({}).showSponsors).toBe(false);
   });
@@ -164,6 +172,20 @@ describe("렌더", () => {
     expect(el.querySelector(".sponsor-name")?.textContent).toBe("엑스포럼");
   });
 
+  /**
+   * 글자 칩은 판이 **자라야** 한다. 로고 칸처럼 높이를 고정하면 긴 기관명이 흰 판 밖으로
+   * 새고, 하드코딩된 잉크색(#1b2130)이 다크 배경 위에서 그대로 사라진다
+   * (실측: "사단법인한국전시산업진흥회사무국" 이 184px 판에서 오른쪽으로 39px).
+   * CSS `:has()` 대신 클래스로 가르는 이유 — 이 CSS 는 남의 사이트에서 실행된다.
+   */
+  it("로고 없는 칩만 is-text 를 받는다 — 판이 줄 수에 따라 자라게", () => {
+    const chip = render({ sponsors: { enabled: true, items: [SPONSOR({ name: "사단법인한국전시산업진흥회사무국" })] } })!;
+    expect(chip.querySelector(".sponsor-tile")!.className).toContain("is-text");
+
+    const withLogo = render({ sponsors: { enabled: true, items: [SPONSOR({ logoUrl: "https://cdn.io/a.png" })] } })!;
+    expect(withLogo.querySelector(".sponsor-tile")!.className).not.toContain("is-text");
+  });
+
   it("링크가 있으면 a, 없으면 div — 누를 수 없는 것을 링크처럼 보이게 하지 않는다", () => {
     const withLink = render({ sponsors: { enabled: true, items: [SPONSOR({ url: "https://x.io" })] } })!;
     const a = withLink.querySelector("a.sponsor-tile") as HTMLAnchorElement;
@@ -191,6 +213,24 @@ describe("렌더", () => {
     expect(el.id).toBe("x-lnd-sponsors");
     expect(el.getAttribute("aria-labelledby")).toBe("x-lnd-sponsors-title");
     expect(el.querySelector("h2")?.id).toBe("x-lnd-sponsors-title");
+  });
+});
+
+/**
+ * CSS 는 문자열이라 jsdom 이 계산해 주지 않는다 — 실측(실제 브라우저)으로 확인한 규칙이
+ * 번들에 **남아 있는지**만 여기서 고정한다. 이게 빠지면 긴 이름이 조용히 판 밖으로 샌다.
+ */
+describe("글자 칩 넘침 방지 규칙이 CSS 에 살아 있다", () => {
+  it("is-text 판은 높이 auto + min-height", () => {
+    expect(LANDING_CSS).toContain(".sponsor-tile.is-text { height: auto; min-height: 44px; }");
+    // 모바일에서 줄이 더 자주 늘어나므로 거기서 더 필요하다
+    expect(LANDING_CSS).toContain(".sponsor-tile.is-text { height: auto; min-height: 36px; }");
+  });
+
+  it("이름은 넘칠 때 끊기고, 자동 트랙이 슬롯보다 커지지 않는다", () => {
+    // keep-all 이 먼저(한국어 어절 단위), anywhere 는 넘칠 때만 개입
+    expect(LANDING_CSS).toContain("word-break: keep-all; overflow-wrap: anywhere;");
+    expect(LANDING_CSS).toMatch(/\.sponsor-name[\s\S]*?\{[^}]*width: 100%/);
   });
 });
 

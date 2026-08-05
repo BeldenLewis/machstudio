@@ -12,6 +12,7 @@ import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { Switch } from "@/components/ui/switch";
 import {
   normalizeLandingPageConfig,
+  safeHttpUrl,
   DEFAULT_LANDING_COLORS,
   LANDING_BG_SECTIONS,
   type LandingColors,
@@ -208,6 +209,56 @@ function SectionCard({
   );
 }
 
+
+/**
+ * URL 한 칸 — 스킴을 **입력 시점에 강제**한다.
+ *
+ * 왜 필요한가: normalizeLandingPageConfig 는 http(s) 가 아닌 URL 을 빈 값으로 만든다(파트너
+ * 사이트에 마운트되는 마크업이라 이 방어는 유지해야 한다). 그래서 운영자가 `www.acme.co.kr`
+ * 처럼 스킴 없이 적으면 그 값은 DB 에는 원문으로 남지만 **공개 페이지에서는 링크가 죽고**,
+ * 다음 리마운트 때 칸이 비면서 그 다음 자동저장이 빈 값을 영구 저장한다(실측 확인).
+ *
+ * 그래서 두 겹으로 막는다:
+ *  1) blur 에 https:// 를 붙여 **정상 입력을 그냥 통과시킨다** — AGENTS.md 의
+ *     "입력은 소스에서 정규화 — 안내 문구가 아니라 입력 시점에 강제".
+ *  2) 그래도 안 되는 값(공백 포함·잘못된 호스트 등)은 그 자리에서 인라인으로 알린다.
+ * (SessionsTab 의 연사 홈페이지 칸이 같은 이유로 같은 구조를 쓴다.)
+ */
+function UrlField({
+  label, value, onChange, placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  placeholder: string;
+}) {
+  const invalid = value.trim() !== "" && !safeHttpUrl(value);
+  return (
+    <div>
+      <input
+        aria-label={label}
+        type="url"
+        inputMode="url"
+        className={inputCls}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={(e) => {
+          const raw = e.target.value.trim();
+          // 스킴만 없는 값이면 붙여서 살린다. 이미 스킴이 있거나 빈 값이면 건드리지 않는다.
+          if (raw && !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw) && safeHttpUrl(`https://${raw}`)) {
+            onChange(`https://${raw}`);
+          }
+        }}
+        placeholder={placeholder}
+      />
+      {invalid && (
+        <p className="mt-1 text-[11px] leading-relaxed text-red-500">
+          https:// 로 시작하는 주소를 넣어주세요. 지금 값은 저장되지 않아요.
+        </p>
+      )}
+    </div>
+  );
+}
 
 const MEDIA_TYPES: { id: HeroMediaType; label: string; icon: typeof Ban }[] = [
   { id: "none", label: "없음", icon: Ban },
@@ -793,7 +844,20 @@ export default function LandingPageTab({
             />
             <EditableList
               listId="lp-sponsors" itemNoun="스폰서" reorderable
-              items={state.sponsors.items} onChange={(next) => setRows("sponsors", next)}
+              items={state.sponsors.items}
+              onChange={(next) =>
+                setState((prev) => ({
+                  ...prev,
+                  // 첫 행이 생기면 토글도 같이 켠다. 이 섹션만 기본 OFF 라(기존 웨비나에 거짓
+                  // 경고를 안 만들려고 — webinar-config.ts 주석), 안 켜 주면 "추가했는데 안 나온다"
+                  // 가 된다. 0 → 1 일 때만 — 일부러 끈 뒤 행을 고치는 것까지 되살리지 않는다.
+                  sponsors: {
+                    ...prev.sponsors,
+                    enabled: prev.sponsors.enabled || (prev.sponsors.items.length === 0 && next.length > 0),
+                    items: next,
+                  },
+                }))
+              }
               rowKey={(r) => r[ROW_KEY]}
               makeItem={() => ({ tier: "", name: "", logoUrl: "", url: "", [ROW_KEY]: crypto.randomUUID() })}
               addLabel="스폰서 추가"
@@ -844,8 +908,18 @@ export default function LandingPageTab({
                       <div className="grid gap-2 sm:grid-cols-2">
                         {/* 로고 URL 을 칸으로 남겨 둔다 — 외부 이미지 붙여넣기와 **로고 지우기**가
                             둘 다 이 칸 하나로 된다(비우면 이름 글자 칩으로 나간다). */}
-                        <input aria-label="스폰서 로고 URL" className={inputCls} value={item.logoUrl} onChange={(e) => p({ logoUrl: e.target.value })} placeholder="로고 URL (비우면 이름만 나가요)" />
-                        <input aria-label="스폰서 홈페이지 링크" className={inputCls} value={item.url} onChange={(e) => p({ url: e.target.value })} placeholder="홈페이지 링크 (선택)" />
+                        <UrlField
+                          label="스폰서 로고 URL"
+                          value={item.logoUrl}
+                          onChange={(logoUrl) => p({ logoUrl })}
+                          placeholder="로고 URL — https://… (비우면 이름만 나가요)"
+                        />
+                        <UrlField
+                          label="스폰서 홈페이지 링크"
+                          value={item.url}
+                          onChange={(url) => p({ url })}
+                          placeholder="홈페이지 링크 — https://… (선택)"
+                        />
                       </div>
                     </div>
                   </div>
