@@ -7,6 +7,7 @@ import { buildStkCss } from "./LiveContentStk";
 import { formatKst } from "@/lib/datetime";
 import { safeHttpUrl, type LivePageConfig } from "@/lib/webinar-config";
 import { buildSessionNumbering, cleanSessionText, isPauseSession, parseSpeaker, sessionHasSpeaker, sessionKicker } from "@/lib/webinar-sessions";
+import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
 
 /**
  * 등록 완료 ~ 라이브 오픈 전 대기 화면.
@@ -466,7 +467,7 @@ export default function PreLiveWaiting({
                           <div className="plw-who">
                             {/* 아바타 이니셜은 이름에서 — 소속만 있는 세션에서는 그리지 않는다(빈 원 방지). */}
                             {Boolean(sp.name) && (
-                              <span className="av">{sn.speakerPhotoUrl ? <img src={sn.speakerPhotoUrl} alt={sp.name} /> : sp.name[0]}</span>
+                              <span className="av">{sn.speakerPhotoUrl ? <img src={transformedImageUrl(sn.speakerPhotoUrl, IMAGE_PRESETS.modalAvatar)} alt={sp.name} /> : sp.name[0]}</span>
                             )}
                             <small className="who">
                               {Boolean(sp.name) && <b>{sp.name}</b>}

@@ -20,6 +20,7 @@ import { renderSessions, renderTimetable, createSessionDialog } from "./view-ses
 import { attachAccordion, attachReveal, attachAccentZone, attachTocSpy, attachTocVisibility } from "./effects";
 import { acquireLayer, createTocLayer, releaseLayer, lockScroll, unlockScroll, trapFocus } from "./overlay";
 import type { LandingSession, LandingWebinar } from "./types";
+import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
 
 const STYLE_ID = "lnd-css";
 const FONT_ID = "lnd-font";
@@ -115,7 +116,11 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   const m = buildLandingModel(webinar, { uid, embedded, isPreview, origin: opts.origin });
 
   // 장식 링을 안 그리는 대신(첫 화면 교체 방지) 이미지가 최대한 빨리 오게 한다.
-  if (m.lp.heroMedia?.type === "image" && m.lp.heroMedia.url) preloadHeroImage(m.lp.heroMedia.url);
+  // preload 는 렌더와 **똑같은 URL** 이어야 한다 — 파라미터가 다르면 브라우저가 별개 리소스로
+  // 보고 같은 이미지를 두 번 받는다(egress 2배 + preload 경고).
+  if (m.lp.heroMedia?.type === "image" && m.lp.heroMedia.url) {
+    preloadHeroImage(transformedImageUrl(m.lp.heroMedia.url, IMAGE_PRESETS.heroBackground));
+  }
 
   const root = h("div", {
     class: `lnd${embedded ? " embedded" : ""}`,

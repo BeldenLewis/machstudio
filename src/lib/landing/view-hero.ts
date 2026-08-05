@@ -14,6 +14,7 @@
 import { safeHttpUrl } from "@/lib/webinar-config";
 import { cx, h, svg } from "./h";
 import type { LandingModel } from "./types";
+import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
 
 /**
  * h() 의 href 검증(safeHttpUrl)은 "절대 http(s) URL" 만 통과시킨다. 랜딩 링크는
@@ -100,7 +101,7 @@ export function renderHero(m: LandingModel): HTMLElement {
       ? media.type === "video"
         ? renderHeroVideo(media.url)
         : // 외부 임의 호스트 이미지(어드민 입력 URL) — normalize 단계에서 http(s) 만 통과
-          h("img", { src: media.url, alt: "", loading: "eager", fetchpriority: "high" })
+          h("img", { src: transformedImageUrl(media.url, IMAGE_PRESETS.heroBackground), alt: "", loading: "eager", fetchpriority: "high" })
       : null,
   );
 

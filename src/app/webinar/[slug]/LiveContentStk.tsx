@@ -14,6 +14,7 @@ import { formatKst, kstDateString } from "@/lib/datetime";
 import { buildSessionNumbering, cleanSessionText, isPauseSession, isRealSession, parseSpeaker, sessionHasSpeaker, sessionTypeLabel } from "@/lib/webinar-sessions";
 import SurveyForm, { SURVEY_FORM_CSS, clearSurveyDraft } from "./SurveyForm";
 import { formatSurveyOpensAt, type SurveyAnswers, type SurveyQuestion } from "@/lib/webinar-survey";
+import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -661,7 +662,7 @@ export default function LiveContentStk({
               <div className="lv-hosts">
                 <span className="lv-host">
                   <span className="av">
-                    {focus?.speakerPhotoUrl ? <img src={focus.speakerPhotoUrl} alt={focusSpeaker} /> : focusSpeaker.charAt(0)}
+                    {focus?.speakerPhotoUrl ? <img src={transformedImageUrl(focus.speakerPhotoUrl, IMAGE_PRESETS.modalAvatar)} alt={focusSpeaker} /> : focusSpeaker.charAt(0)}
                   </span>
                   {focusSpeaker}
                 </span>
