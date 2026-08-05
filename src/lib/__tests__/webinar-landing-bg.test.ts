@@ -64,7 +64,7 @@ describe("섹션 모드", () => {
 
   it("편집 UI 목록 순서가 랜딩 렌더 순서와 같다", () => {
     expect(LANDING_BG_SECTIONS.map((s) => s.key)).toEqual([
-      "hero", "intro", "sessions", "programs", "audience", "highlights", "join", "faq",
+      "hero", "intro", "sessions", "programs", "audience", "highlights", "join", "faq", "sponsors",
     ]);
   });
 
@@ -132,22 +132,22 @@ describe("기존 필드를 건드리지 않는다", () => {
   });
 });
 
-describe("혜택 배경 — 나중에 생긴 칸의 기본값", () => {
+describe.each(["highlights", "sponsors"] as const)("%s 배경 — 나중에 생긴 칸의 기본값", (key) => {
   /**
    * 이 칸이 없던 웨비나에 전역 기본값("전부 다크")을 주면 나머지가 화이트인 페이지에서
-   * 혜택만 검은 띠가 된다. 바로 아래 이웃인 FAQ 를 따르게 해서 색 경계를 자연스럽게 만든다.
+   * 이 섹션만 검은 띠가 된다. FAQ 이웃(혜택은 위, 스폰서는 아래)을 따르게 해서 경계를 자연스럽게.
    */
   it("저장값이 없으면 FAQ 를 따른다", () => {
-    expect(lp({ sectionBg: { faq: "light" } }).sectionBg.highlights).toBe("light");
-    expect(lp({ sectionBg: { faq: "dark" } }).sectionBg.highlights).toBe("dark");
+    expect(lp({ sectionBg: { faq: "light" } }).sectionBg[key]).toBe("light");
+    expect(lp({ sectionBg: { faq: "dark" } }).sectionBg[key]).toBe("dark");
   });
 
   it("직접 고른 값이 FAQ 를 이긴다", () => {
-    expect(lp({ sectionBg: { faq: "light", highlights: "dark" } }).sectionBg.highlights).toBe("dark");
-    expect(lp({ sectionBg: { faq: "dark", highlights: "light" } }).sectionBg.highlights).toBe("light");
+    expect(lp({ sectionBg: { faq: "light", [key]: "dark" } }).sectionBg[key]).toBe("dark");
+    expect(lp({ sectionBg: { faq: "dark", [key]: "light" } }).sectionBg[key]).toBe("light");
   });
 
   it("둘 다 없으면 전역 기본(다크)", () => {
-    expect(lp({}).sectionBg.highlights).toBe("dark");
+    expect(lp({}).sectionBg[key]).toBe("dark");
   });
 });

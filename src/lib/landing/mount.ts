@@ -15,7 +15,7 @@ import { LANDING_CSS } from "./css";
 import { buildLandingModel } from "./build-model";
 import { h, clearNode } from "./h";
 import { renderHero, renderToc, scrollToSectionIn } from "./view-hero";
-import { renderIntro, renderAudience, renderPrograms, renderHighlights, renderJoin, renderFaq } from "./view-sections";
+import { renderIntro, renderAudience, renderPrograms, renderHighlights, renderJoin, renderFaq, renderSponsors } from "./view-sections";
 import { renderSessions, renderTimetable, createSessionDialog } from "./view-sessions";
 import { attachAccordion, attachReveal, attachAccentZone, attachTocSpy, attachTocVisibility } from "./effects";
 import { acquireLayer, createTocLayer, releaseLayer, lockScroll, unlockScroll, trapFocus } from "./overlay";
@@ -305,6 +305,22 @@ export function mountLanding(opts: MountLandingOptions): LandingHandle {
   };
   paintFaq();
   body.appendChild(faqSlot);
+  /**
+   * FAQ 는 슬롯 안에서 직접 칠하므로 지브라 상태(prevMode/runIndex)가 자동으로 넘어가지 않는다.
+   * 여기서 손으로 이어 준다 — 안 하면 바로 아래 스폰서가 FAQ 를 못 보고 Join 까지의 흐름만
+   * 이어받아, FAQ 와 같은 모드인데도 띠가 안 생겨 두 섹션이 한 덩어리로 붙어 보인다.
+   */
+  if (faqSlot.firstChild) {
+    if (faqMode === prevMode) runIndex += 1;
+    else {
+      runIndex = 0;
+      prevMode = faqMode;
+    }
+  }
+
+  // 스폰서는 최하단 — FAQ 다음이 페이지의 끝이다.
+  const sponsors = renderSponsors(m);
+  if (sponsors) body.appendChild(paintBg(sponsors, "sponsors"));
 
   // 목차는 body 직계 전용 레이어로 포털한다. 지금 아임웹에는 fixed 를 가로채는 조상이 없지만
   // (실측: transform/filter/contain 조상 0개), 호스트가 섹션 애니메이션을 켜면 조상에 transform 이

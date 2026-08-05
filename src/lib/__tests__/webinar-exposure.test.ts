@@ -91,7 +91,7 @@ describe("랜딩 — 섹션을 끈 것과 켜 놓고 비운 것은 다르다", (
   });
 
   it("섹션을 끄면 off — 경고가 아니다", () => {
-    for (const key of ["intro", "audience", "programs", "highlights", "faq"]) {
+    for (const key of ["intro", "audience", "programs", "highlights", "faq", "sponsors"]) {
       expect(row(make({ config: cfg(key, false) }), `landing.${key}`).state, key).toBe("off");
     }
   });
@@ -100,6 +100,13 @@ describe("랜딩 — 섹션을 끈 것과 켜 놓고 비운 것은 다르다", (
     expect(row(make({ config: cfg("programs", true) }), "landing.programs").state).toBe("empty");
     expect(row(make({ config: cfg("faq", true) }), "landing.faq").state).toBe("empty");
     expect(row(make({ config: cfg("audience", true) }), "landing.audience").state).toBe("empty");
+    expect(row(make({ config: cfg("sponsors", true) }), "landing.sponsors").state).toBe("empty");
+  });
+
+  /** 스폰서는 **이름**이 내용을 센다 — 로고만 있는 행은 정규화가 버린다(alt 가 비어 버리므로). */
+  it("스폰서는 이름이 있는 항목만 내용으로 센다", () => {
+    expect(row(make({ config: cfg("sponsors", true, [{ logoUrl: "https://cdn.io/a.png" }]) }), "landing.sponsors").state).toBe("empty");
+    expect(row(make({ config: cfg("sponsors", true, [{ name: "엑스포럼" }]) }), "landing.sponsors").state).toBe("on");
   });
 
   /**

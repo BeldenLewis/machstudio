@@ -1,5 +1,5 @@
 /**
- * 랜딩 본문 섹션 뷰 — intro(about) / programs / highlights / join / faq.
+ * 랜딩 본문 섹션 뷰 — intro(about) / programs / highlights / join / faq / sponsors.
  *
  * 원본 `app/webinar/[slug]/landing/page.tsx` 의 JSX 를 클래스명·DOM 구조·속성·텍스트
  * 1:1 로 옮긴 것이다(시각 회귀 0 이 목표). 파생·조건 판단은 전부 LandingModel 에서 끝났다고
@@ -16,7 +16,9 @@
  */
 
 import { h } from "./h";
+import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
 import type { LandingModel } from "./types";
+import type { LandingSponsorItem } from "@/lib/webinar-config";
 
 /** FAQ 는 제어형 — 활성 탭 상태는 통합자가 보관하고, 여기엔 값과 콜백만 내려온다. */
 export interface FaqViewCtx {
@@ -218,6 +220,58 @@ export function renderFaq(m: LandingModel, ctx: FaqViewCtx): HTMLElement | null 
             h("div", { class: "faq-body", "data-acc-body": "" }, h("p", null, item.answer)),
           ),
         ),
+    ),
+  );
+}
+
+/**
+ * 스폰서 한 칸. 링크가 있으면 <a>, 없으면 <div> — 누를 수 없는 것을 링크처럼 보이게 하지 않는다.
+ *
+ * 로고가 없으면 **이름을 글자 칩으로** 그린다. 로고를 아직 못 받은 파트너를 먼저 올릴 수 있고,
+ * 빈 껍데기가 아니라 실제 크레딧이라 "빈 섹션 금지" 규약에도 어긋나지 않는다.
+ */
+function sponsorTile(item: LandingSponsorItem): HTMLElement {
+  const inner = item.logoUrl
+    ? h("img", {
+        class: "sponsor-logo",
+        src: transformedImageUrl(item.logoUrl, IMAGE_PRESETS.sponsorLogo),
+        // 이름이 곧 alt 다 — 스폰서 벽에서 로고만 보이면 스크린리더에는 아무것도 안 남는다.
+        alt: item.name,
+        loading: "lazy",
+        decoding: "async",
+      })
+    : h("span", { class: "sponsor-name" }, item.name);
+
+  return item.url
+    ? h("a", { class: "sponsor-tile", href: item.url, target: "_blank", rel: "noopener noreferrer" }, inner)
+    : h("div", { class: "sponsor-tile" }, inner);
+}
+
+/**
+ * SPONSORS — 페이지 최하단 로고 벽.
+ *
+ * 마지막 자리라 **설득이 아니라 확인**의 면이다: 카피 없이 로고만, 묶음(주최·주관·후원)은
+ * 작은 라벨로. 묶기·순서는 모델에서 끝났고(sponsorGroups) 여기서는 그리기만 한다.
+ */
+export function renderSponsors(m: LandingModel): HTMLElement | null {
+  if (!m.showSponsors) return null;
+  const titleId = m.sectionId("lnd-sponsors-title");
+  return h(
+    "section",
+    { class: "section sponsors", id: m.sectionId("lnd-sponsors"), "aria-labelledby": titleId },
+    h("h2", { class: "section-title rv", id: titleId }, m.sponsorsTitle),
+    m.sponsorGroups.map((group) =>
+      h(
+        "div",
+        { class: "sponsor-group rv" },
+        group.tier && h("p", { class: "sponsor-tier" }, group.tier),
+        h(
+          "ul",
+          // 라벨이 있으면 그 묶음이 무엇인지 목록에도 붙인다(라벨 없는 묶음은 생략).
+          { class: "sponsor-grid", ...(group.tier ? { "aria-label": group.tier } : {}) },
+          group.items.map((item) => h("li", { class: "sponsor-item" }, sponsorTile(item))),
+        ),
+      ),
     ),
   );
 }

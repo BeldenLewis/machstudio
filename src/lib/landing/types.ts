@@ -53,6 +53,16 @@ export interface LandingTocItem {
 }
 
 /**
+ * 스폰서 한 묶음 — 같은 tier(주최·주관·후원 …)끼리 모은 결과.
+ * 묶음 나누기는 모델에서 끝난다(뷰는 그리기만) — tier 가 전부 비어 있으면 라벨 없는 한 묶음.
+ */
+export interface LandingSponsorGroup {
+  /** 묶음 라벨. 빈 문자열이면 라벨을 그리지 않는다. */
+  tier: string;
+  items: import("@/lib/webinar-config").LandingSponsorItem[];
+}
+
+/**
  * 렌더 직전까지 모든 파생을 끝낸 모델. 뷰 함수는 여기서만 값을 읽는다
  * (뷰에 조건 분기가 흩어지지 않게 — 단독/미리보기/임베드가 같은 결론을 보게 하려는 목적).
  */
@@ -89,6 +99,11 @@ export interface LandingModel {
   showHighlights: boolean;
   showJoin: boolean;
   showFaq: boolean;
+  showSponsors: boolean;
+  /** 스폰서 섹션 머리글 — 비면 기본 문구가 들어간 값. */
+  sponsorsTitle: string;
+  /** tier 로 묶은 스폰서. 등장 순서 유지(운영자가 끈 드래그 순서가 곧 노출 순서). */
+  sponsorGroups: LandingSponsorGroup[];
   /** 세션 카드 클릭 시 상세 팝업 사용 여부. */
   detailPopup: boolean;
   /** 임베드로 마운트된 경우 true — 링크 target, 랜드마크 태그 선택에 쓴다. */

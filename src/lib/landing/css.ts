@@ -837,6 +837,45 @@ ${sessionLogoCss(".lnd .schedule-logo")}
 .lnd .faq-body { overflow: hidden; }
 .lnd .faq-item p { margin: 0; padding: 0 18px 20px; color: var(--body); font-size: 14.5px; white-space: pre-line; }
 
+/* ── 스폰서 (최하단 로고 벽) ──
+   판은 **어느 모드에서든 흰색**이다. 스폰서 로고는 대부분 투명 배경 + 진한 잉크라
+   var(--card) 를 쓰면 다크 모드에서 통째로 사라진다(세션 로고가 plate 를 쓰는 것과 같은 이유).
+   라이트 모드에서는 흰 판이 배경과 같은 색이라 그림자만 남고, 그게 실제 행사 페이지의
+   로고 벽 인상과도 맞는다.
+
+   슬롯을 **고정 크기**로 잡는 이유도 세션 로고와 같다: 폭을 auto 로 두면 원본 비율대로
+   칸이 제각각이 되어 로고들이 서로 다른 자리에서 시작·끝난다(들쭉날쭉). */
+.lnd .sponsor-group + .sponsor-group { margin-top: clamp(30px, 4vw, 46px); }
+.lnd .sponsor-tier {
+  margin: 0 0 16px; text-align: center;
+  font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--muted);
+  transition: color .8s ease;
+}
+.lnd .sponsor-grid {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 12px;
+  list-style: none; padding: 0; margin: 0;
+}
+.lnd .sponsor-item { display: block; }
+.lnd .sponsor-tile {
+  /* content-box 를 **명시**한다 — 랜딩은 남의 사이트에 직접 마운트되므로 호스트 리셋이
+     border-box 여도 슬롯이 148×44 로 같아야 한다(webinar-logo.ts 와 같은 근거). */
+  box-sizing: content-box;
+  display: grid; place-items: center;
+  width: 148px; height: 44px; padding: 14px 18px;
+  border-radius: 8px; background: #fff;
+  box-shadow: var(--card-shadow);
+  text-decoration: none;
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.lnd a.sponsor-tile:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(2, 8, 24, .22); }
+.lnd .sponsor-logo { display: block; width: 148px; height: 44px; object-fit: contain; object-position: center; }
+/* 로고가 없는 항목 — 글자 칩. 흰 판 위라 색은 배경 모드와 무관하게 고정한다. */
+.lnd .sponsor-name {
+  font-size: 15px; font-weight: 750; line-height: 1.35; letter-spacing: -.01em;
+  color: #1b2130; text-align: center; word-break: keep-all;
+}
+
 /* ── 스크롤 리빌(transform 전용 — JS 미실행에서도 콘텐츠 가시) ── */
 .lnd .rv { transform: translateY(12px); transition: transform .5s cubic-bezier(.22, .7, .2, 1); }
 .lnd .rv.in { transform: translateY(0); }
@@ -869,6 +908,12 @@ ${sessionLogoCss(".lnd .schedule-logo")}
   .lnd .benefit-body h3 { font-size: 19px; }
   .lnd .faq-tabs { overflow-x: auto; justify-content: flex-start; padding-bottom: 4px; }
   .lnd .faq-tab { flex: 0 0 auto; }
+  /* 로고 슬롯을 줄인다 — 148px 를 유지하면 375px 폭에서 한 줄에 한 개밖에 안 들어가
+     로고 벽이 세로로 끝없이 늘어진다(2개/줄이 되게 잡은 값). */
+  .lnd .sponsor-grid { gap: 10px; }
+  .lnd .sponsor-tile { width: 118px; height: 36px; padding: 11px 14px; }
+  .lnd .sponsor-logo { width: 118px; height: 36px; }
+  .lnd .sponsor-name { font-size: 13.5px; }
 }
 
 @media (max-width: 410px) {

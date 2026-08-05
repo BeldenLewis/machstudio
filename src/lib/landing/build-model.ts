@@ -9,7 +9,8 @@
 
 import { formatKst } from "@/lib/datetime";
 import { DEFAULT_LANDING_AUDIENCE_TITLE,
-  DEFAULT_LANDING_HIGHLIGHTS_TITLE, normalizeLandingPageConfig, safeHttpUrl } from "@/lib/webinar-config";
+  DEFAULT_LANDING_HIGHLIGHTS_TITLE, DEFAULT_LANDING_SPONSORS_TITLE,
+  normalizeLandingPageConfig, safeHttpUrl } from "@/lib/webinar-config";
 import { isRealSession } from "@/lib/webinar-sessions";
 import { UTM_QUERY_KEYS } from "@/lib/attribution-normalize";
 import { readShareCode, SHARE_QUERY_KEY } from "@/lib/webinar-share";
@@ -17,7 +18,9 @@ import { readShareCode, SHARE_QUERY_KEY } from "@/lib/webinar-share";
 /** CTA 링크에 이어 붙일 파라미터 — 수집이 읽는 6종과 같아야 한다(정본: attribution-normalize). */
 const UTM_FORWARD_KEYS = UTM_QUERY_KEYS;
 import { SAFE_HEX, TOC_DEF, onPrimaryFor } from "./model";
-import type { LandingModel, LandingSession, LandingStatusInfo, LandingTocItem, LandingWebinar } from "./types";
+import type {
+  LandingModel, LandingSession, LandingSponsorGroup, LandingStatusInfo, LandingTocItem, LandingWebinar,
+} from "./types";
 
 export interface BuildLandingModelOptions {
   /** 인스턴스 고유 접두 — 한 페이지에 랜딩이 둘 이상 붙어도 DOM id 가 안 부딪히게. */
@@ -143,6 +146,20 @@ export function buildLandingModel(webinar: LandingWebinar, opts: BuildLandingMod
   const showHighlights = lp.highlights.enabled && lp.highlights.items.length > 0;
   const showJoin = lp.join.enabled && lp.join.steps.length > 0;
   const showFaq = lp.faq.enabled && lp.faq.items.length > 0;
+  const showSponsors = lp.sponsors.enabled && lp.sponsors.items.length > 0;
+  const sponsorsTitle = lp.sponsors.title.trim() || DEFAULT_LANDING_SPONSORS_TITLE;
+  /**
+   * tier 로 묶되 **등장 순서**를 유지한다(FAQ 카테고리와 같은 규칙).
+   * 알파벳·가나다 정렬을 쓰면 "후원" 이 "주최" 앞에 오는 식으로 사실이 뒤집힌다 —
+   * 순서는 운영자가 드래그로 정한 그대로가 정답이다. tier 가 빈 항목들도 한 묶음이 된다.
+   */
+  const sponsorGroups: LandingSponsorGroup[] = [];
+  for (const item of lp.sponsors.items) {
+    const tier = item.tier.trim();
+    const group = sponsorGroups.find((g) => g.tier === tier);
+    if (group) group.items.push(item);
+    else sponsorGroups.push({ tier, items: [item] });
+  }
 
   // 목차 노출 조건은 TOC_DEF 의 원래 id(=섹션 base)로 판단하고, 실제 id 는 uid 접두를 붙여 내보낸다.
   const visible: Record<string, boolean> = {
@@ -154,6 +171,7 @@ export function buildLandingModel(webinar: LandingWebinar, opts: BuildLandingMod
     "lnd-highlights": showHighlights,
     "lnd-join": showJoin,
     "lnd-faq": showFaq,
+    "lnd-sponsors": showSponsors,
   };
   // id 는 **base**(uid 접두 전) 그대로 싣는다. 접두는 뷰(renderToc)가 m.sectionId 로 한 번만 붙인다.
   // 여기서 미리 붙이면 뷰에서 두 번 붙어 앵커·스크롤·aria-current 가 전부 죽는다.
@@ -195,6 +213,9 @@ export function buildLandingModel(webinar: LandingWebinar, opts: BuildLandingMod
     showHighlights,
     showJoin,
     showFaq,
+    showSponsors,
+    sponsorsTitle,
+    sponsorGroups,
     detailPopup,
     embedded,
     isPreview,

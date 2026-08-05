@@ -311,6 +311,19 @@ export interface LandingAudienceItem { icon: string; title: string; description:
 export interface LandingHighlightItem { title: string; description: string }
 export interface LandingJoinStep { title: string; description: string }
 export interface LandingFaqItem { category: string; question: string; answer: string }
+/**
+ * 스폰서 한 줄 — 페이지 **최하단**의 로고 벽에 들어간다.
+ *
+ * · name  : 필수. 공개 노출을 가르는 값이고, 로고 이미지의 alt 이기도 하다(로고만 있고
+ *           이름이 없으면 스크린리더에는 아무것도 남지 않는다).
+ * · logoUrl: 선택. 비면 이름을 글자 칩으로 그린다 — 로고를 아직 못 받은 파트너도
+ *            먼저 올릴 수 있고, 빈 껍데기가 아니라 실제 크레딧이라 이중 게이트에 어긋나지 않는다.
+ * · url   : 선택. 파트너 홈페이지. http(s)만 통과한다(safeHttpUrl).
+ * · tier  : 선택. "주최"·"주관"·"후원" 처럼 **묶음 라벨**이다. 한국 행사 페이지는 이 구분이
+ *           로고 자체보다 중요할 때가 많다(주최와 후원을 같은 줄에 섞으면 사실이 틀려진다).
+ *           비우면 라벨 없는 한 덩어리 — 구분이 필요 없는 페이지는 안 써도 된다.
+ */
+export interface LandingSponsorItem { tier: string; name: string; logoUrl: string; url: string }
 export type LandingHeroMedia = { type: "image" | "video"; url: string } | null;
 
 /** 섹션 배경 모드. 섹션마다 라이트/다크를 따로 고른다. */
@@ -335,6 +348,9 @@ export const LANDING_BG_SECTIONS = [
   { key: "highlights", label: "혜택", note: "" },
   { key: "join", label: "How to Join", note: "" },
   { key: "faq", label: "FAQ", note: "" },
+  /* 최하단 — FAQ 아래가 끝이다. 로고 벽은 어느 모드에서도 흰 판 위에 그려지므로
+     여기 값은 판 **주변** 여백의 색이다. */
+  { key: "sponsors", label: "스폰서", note: "로고는 어느 모드에서든 흰 판 위에 올라갑니다" },
 ] as const;
 
 export type LandingBgSectionKey = (typeof LANDING_BG_SECTIONS)[number]["key"];
@@ -352,8 +368,16 @@ export const DEFAULT_LANDING_COLORS: LandingColors = { lightBg: "#f6f8ff", darkB
 /** 기본은 전부 다크 — 이 기능이 들어오기 전과 같은 외관이어야 한다. */
 export const DEFAULT_LANDING_SECTION_BG: LandingSectionBgMap = {
   hero: "dark", intro: "dark", sessions: "dark", programs: "dark",
-  audience: "dark", highlights: "dark", join: "dark", faq: "dark",
+  audience: "dark", highlights: "dark", join: "dark", faq: "dark", sponsors: "dark",
 };
+
+/**
+ * 배경 칸이 **나중에 생긴** 섹션들 — 기존 웨비나에는 저장값이 없다.
+ * 전역 기본값("전부 다크")으로 떨어지면 나머지가 화이트인 페이지에서 이 섹션만 검은 띠가 된다.
+ * 저장값이 없을 때는 FAQ 를 따른다 — 둘 다 FAQ 의 이웃이라 색 경계가 자연스럽고,
+ * 운영자가 칸을 직접 고르면 그 값이 이긴다.
+ */
+const BG_FOLLOWS_FAQ: ReadonlySet<string> = new Set(["highlights", "sponsors"]);
 
 /** 6자리 hex 만 통과 — 공개 페이지 CSS 에 그대로 들어가는 값이라 문자열을 믿지 않는다. */
 const LANDING_HEX = /^#[0-9a-fA-F]{6}$/;
@@ -390,12 +414,25 @@ export interface LandingPageConfig {
   highlights: { enabled: boolean; title: string; items: LandingHighlightItem[] };
   join: { enabled: boolean; steps: LandingJoinStep[] };
   faq: { enabled: boolean; items: LandingFaqItem[] };
+  /**
+   * 스폰서 — 페이지 최하단의 로고 벽. 머리글은 편집 가능하고(후원사·주최 및 후원 등
+   * 행사마다 부르는 말이 다르다) 비우면 DEFAULT_LANDING_SPONSORS_TITLE 이 나간다.
+   */
+  sponsors: { enabled: boolean; title: string; items: LandingSponsorItem[] };
 }
 
 /** 이런 분들께 추천합니다 — 머리글 기본 문구. 어드민이 비우면 이 값이 나간다. */
 export const DEFAULT_LANDING_AUDIENCE_TITLE = "이런 분들께 추천합니다";
 /** 혜택 섹션 기본 머리글. 비우면 이 값이 나간다(저장 시점 값이 굳지 않게). */
 export const DEFAULT_LANDING_HIGHLIGHTS_TITLE = "참여하면 얻어가는 것";
+/**
+ * 스폰서 섹션 기본 머리글.
+ *
+ * audience·highlights 와 달리 **영문 라벨**이다 — 그 둘의 머리글은 설득 카피지만
+ * 이건 분류 라벨이고, 한국 행사에서 실제 구분(주최·주관·후원)은 항목별 tier 가 진다.
+ * 다르게 부르는 페이지는 이 값을 그냥 덮어쓰면 된다.
+ */
+export const DEFAULT_LANDING_SPONSORS_TITLE = "Sponsors";
 
 /** 온라인 웨비나 공통 참여 절차 — 사실 기반 기본값(어드민이 자유 수정) */
 export const DEFAULT_LANDING_JOIN_STEPS: LandingJoinStep[] = [
@@ -450,6 +487,7 @@ export function normalizeLandingPageConfig(
   const highlights = obj(lp.highlights);
   const join = obj(lp.join);
   const faq = obj(lp.faq);
+  const sponsors = obj(lp.sponsors);
 
   return {
     enabled: bool(lp.enabled, false),
@@ -464,13 +502,8 @@ export function normalizeLandingPageConfig(
       darkBg: hex(colors.darkBg, DEFAULT_LANDING_COLORS.darkBg),
     },
     sectionBg: LANDING_BG_SECTIONS.reduce((acc, s) => {
-      /**
-       * 혜택은 배경 칸이 **나중에 생겼다.** 그래서 기존 웨비나에는 저장값이 없고, 전역 기본값
-       * ("전부 다크")으로 떨어지면 나머지가 화이트인 페이지에서 **이 섹션만 검은 띠**가 된다.
-       * 저장값이 없을 때는 FAQ 를 따른다 — 바로 아래 이웃이라 색 경계가 자연스럽고,
-       * 운영자가 이 칸을 직접 고르면 그 값이 이긴다.
-       */
-      const fallback = s.key === "highlights" && sectionBg.highlights === undefined
+      // 나중에 생긴 칸(혜택·스폰서)은 저장값이 없으면 FAQ 를 따른다 — BG_FOLLOWS_FAQ 주석 참고.
+      const fallback = BG_FOLLOWS_FAQ.has(s.key) && sectionBg[s.key] === undefined
         ? (sectionBg.faq === "light" ? "light" : DEFAULT_LANDING_SECTION_BG.faq)
         : DEFAULT_LANDING_SECTION_BG[s.key];
       acc[s.key] = sectionBg[s.key] === "light" ? "light" : fallback;
@@ -518,6 +551,18 @@ export function normalizeLandingPageConfig(
         faq.items,
         (r) => ({ category: str(r.category).trim() || "일반", question: str(r.question), answer: str(r.answer) }),
         (r) => r.question.trim() !== "",
+      ),
+    },
+    sponsors: {
+      enabled: bool(sponsors.enabled, true),
+      title: str(sponsors.title),
+      items: rows(
+        sponsors.items,
+        // 두 URL 은 공개 페이지 마크업에 그대로 들어간다(로고 src · 링크 href) →
+        // 다른 URL 값(히어로 미디어·연사 홈페이지)과 같이 http(s) 만 통과시킨다.
+        (r) => ({ tier: str(r.tier), name: str(r.name), logoUrl: safeHttpUrl(r.logoUrl), url: safeHttpUrl(r.url) }),
+        // 이름이 공개 노출을 가른다 — 로고만 있고 이름이 없으면 alt 가 비어 스크린리더에 안 남는다.
+        (r) => r.name.trim() !== "",
       ),
     },
   };
