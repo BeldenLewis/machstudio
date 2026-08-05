@@ -26,6 +26,7 @@ import {
 import { LANDING_IMAGE_ACCEPT, LANDING_VIDEO_ACCEPT, validateLandingMedia } from "@/lib/webinar-landing-media";
 import { FINISH, FIELD_CLS, JumpLink, Segmented } from "@/components/ui/primitives";
 import { EditableList, ROW_KEY, withRowKeys, stripRowKeys, type WithRowKey } from "@/components/ui/editable-list";
+import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
 
 // 입력 값은 프리미티브 한 곳에서 온다 — 예전엔 탭마다 로컬 선언이라 값이 3종으로 갈렸다.
 const inputCls = FIELD_CLS;
@@ -481,7 +482,7 @@ export default function LandingPageTab({
                     <video src={state.heroMediaUrl} className="h-28 w-full object-cover" muted loop autoPlay playsInline />
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element -- 어드민 미리보기(임의 호스트 URL)
-                    <img src={state.heroMediaUrl} alt="배경 미리보기" className="h-28 w-full object-cover" />
+                    <img src={transformedImageUrl(state.heroMediaUrl, IMAGE_PRESETS.adminHeroPreview)} alt="배경 미리보기" className="h-28 w-full object-cover" />
                   )}
                 </div>
               )}

@@ -26,6 +26,7 @@ import {
 } from "@/lib/webinar-sessions";
 import { btnCls, FIELD_CLS, FINISH, R, Segmented } from "@/components/ui/primitives";
 import { normalizeSpeakerLinks, parseSpeakerLink, SPEAKER_LINKS_MAX } from "@/lib/webinar-speaker-links";
+import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
 
 /**
  * 이 목록을 EditableList(골격)로 이관하지 않는다 — 판정 근거를 남긴다.
@@ -899,7 +900,7 @@ export default function SessionsTab({
                     // 외부 URL 도 허용하므로 next/image 도메인 제한을 적용하지 않는다
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={session.speakerPhotoUrl}
+                      src={transformedImageUrl(session.speakerPhotoUrl, IMAGE_PRESETS.adminThumb)}
                       alt={`${cleanSessionText(session.speaker) || "연사"} 사진`}
                       title="연사 사진 — 랜딩 세션 카드·상세 팝업과 라이브 아젠다에 표시돼요"
                       className={`h-9 w-9 shrink-0 rounded-full object-cover ${FINISH.hairlineOut}`}
@@ -910,7 +911,7 @@ export default function SessionsTab({
                   {session.logoUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={session.logoUrl}
+                      src={transformedImageUrl(session.logoUrl, IMAGE_PRESETS.sessionLogo)}
                       alt={`${session.title || "세션"} 로고`}
                       title="로고 — 랜딩 타임테이블·라이브 아젠다에 표시돼요"
                       className={`h-9 w-14 shrink-0 rounded-md bg-white object-contain p-1 ${FINISH.hairlineOut}`}

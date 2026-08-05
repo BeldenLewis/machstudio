@@ -17,6 +17,7 @@ import { safeHttpUrl } from "@/lib/webinar-config";
 import { cx, h, svg } from "./h";
 import { parseSpeaker } from "./model";
 import type { LandingModel, LandingSession } from "./types";
+import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
 
 /** 카드/모달에서 반복되는 "→" 화살표. */
 function arrowIcon(): SVGElement {
@@ -90,7 +91,7 @@ function sessionCardInner(m: LandingModel, session: LandingSession): (Node | fal
   const sp = parseSpeaker(session.speaker, session.speakerCompany);
   return [
     Boolean(session.speakerPhotoUrl) &&
-      h("img", { class: "session-photo", src: session.speakerPhotoUrl, alt: "", loading: "lazy" }),
+      h("img", { class: "session-photo", src: transformedImageUrl(session.speakerPhotoUrl, IMAGE_PRESETS.sessionCardPhoto), alt: "", loading: "lazy" }),
     h(
       "div",
       { class: "session-card-body" },
@@ -216,7 +217,7 @@ export function renderTimetable(m: LandingModel): HTMLElement | null {
             { class: "schedule-detail-in" },
             Boolean(row.description) && h("p", { class: "schedule-desc" }, row.description),
             Boolean(row.logoUrl) &&
-              h("img", { class: "schedule-logo", src: row.logoUrl, alt: "", loading: "lazy" }),
+              h("img", { class: "schedule-logo", src: transformedImageUrl(row.logoUrl, IMAGE_PRESETS.sessionLogo), alt: "", loading: "lazy" }),
           ),
         );
 
@@ -302,7 +303,7 @@ export function createSessionDialog(
       h(
         "div",
         { class: "lnd-modal-photo" },
-        h("img", { src: photo, alt: sp.name || session.title }),
+        h("img", { src: transformedImageUrl(photo, IMAGE_PRESETS.modalPhoto), alt: sp.name || session.title }),
         Boolean(sp.name || sp.company) &&
           h(
             "div",
@@ -328,7 +329,7 @@ export function createSessionDialog(
               h(
                 "span",
                 { class: "lnd-modal-avatar", "aria-hidden": "true" },
-                photo ? h("img", { src: photo, alt: "" }) : sp.name.trim().charAt(0) || "·",
+                photo ? h("img", { src: transformedImageUrl(photo, IMAGE_PRESETS.modalAvatar), alt: "" }) : sp.name.trim().charAt(0) || "·",
               ),
             hasSpeakerInfo &&
               h(
@@ -340,7 +341,7 @@ export function createSessionDialog(
             /* 로고는 이 줄의 **오른쪽 끝**(margin-left:auto). 이름·소속과 같은 줄에 두면
                "누가 · 어디" 가 한눈에 읽히고, 제목 아래에 두었을 때처럼 본문 흐름을 끊지 않는다. */
             Boolean(session.logoUrl) &&
-              h("img", { class: "lnd-modal-logo", src: session.logoUrl, alt: "", loading: "lazy" }),
+              h("img", { class: "lnd-modal-logo", src: transformedImageUrl(session.logoUrl, IMAGE_PRESETS.sessionLogo), alt: "", loading: "lazy" }),
           ),
           Boolean(session.speakerBio) &&
             h(
