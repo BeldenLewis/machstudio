@@ -20,6 +20,7 @@ import {
   normalizeUtmText,
   readUtmFromSearch,
 } from "./attribution-normalize";
+import { readShareCode } from "./webinar-share";
 
 /** 로더(attribution-core)가 쓰는 localStorage 키 — 값을 읽기만 한다(쓰지 않는다). */
 const UTM_FIRST_KEY = "mach_utm_first";
@@ -157,7 +158,14 @@ export function sendVisitBeacon(slug: string): void {
       // 스토리지가 막힌 브라우저에서는 중복 집계를 감수하고 보낸다 — 0 보다 낫다.
     }
     const channel = resolveCurrentChannel();
-    const payload = JSON.stringify({ utmSource: channel.utmSource, utmMedium: channel.utmMedium });
+    /* 추천 링크(`?ref=`)로 들어왔으면 같은 비콘에 얹는다 — 별도 비콘을 만들면 요청이 두 배가 되고
+       "새 폴러 금지" 규약과도 어긋난다. 서버가 코드 소유자를 확인한 뒤 클릭으로 집계한다. */
+    const ref = readShareCode(window.location.search);
+    const payload = JSON.stringify({
+      utmSource: channel.utmSource,
+      utmMedium: channel.utmMedium,
+      ...(ref ? { ref } : {}),
+    });
     const url = `/api/webinar/${encodeURIComponent(slug)}/visit`;
     // 순수 문자열 = simple request. sendBeacon 은 preflight 를 못 하므로 JSON Blob 을 쓰지 않는다.
     if (navigator.sendBeacon) navigator.sendBeacon(url, payload);

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useChartColors } from "@/components/ui/use-chart-colors";
 import { motion } from "framer-motion";
-import { Download, Loader2, RefreshCw, BarChart3, MessageSquare, HelpCircle, Users, Trash2 } from "lucide-react";
+import { Download, Loader2, RefreshCw, BarChart3, MessageSquare, HelpCircle, Users, Trash2, RotateCcw, Share2, Target } from "lucide-react";
 import { toast } from "sonner";
 import { formatKst, formatKstDateTime } from "@/lib/datetime";
 import { useUndoableDelete } from "@/components/ui/use-undoable-delete";
@@ -46,6 +46,12 @@ interface UtmRow {
   entered: number;
   regRate: number;
   entryRate: number;
+  /* 리드 품질 — 등록 수만 보면 meta 173명이 압도적이지만, 그 리드가 좋았는지는 평균 점수가 답한다.
+     scoreReliable=false 면(표본 20명 미만) 평균을 흐리게 표시한다 — 13명 채널의 평균은 노이즈다. */
+  avgScore?: number;
+  hot?: number;
+  hotRate?: number;
+  scoreReliable?: boolean;
 }
 
 interface CampaignRow {
@@ -93,13 +99,80 @@ interface TopEngaged {
   qaUpvotes: number;
   ctaClicks: number;
   agreeMarketing: boolean;
+  breakdown: { attend: number; watch: number; interact: number; interactRaw: number; intent: number; evaluatedMinutes: number };
 }
 
 interface Scoring {
   total: number;
   liveMinutes: number;
+  scheduledMinutes: number;
+  /** before = 아직 방송 전. 이때 세그먼트는 전원 노쇼라 의미가 없어 리드 품질을 대신 보여준다 */
+  phase: "before" | "live" | "ended";
   distribution: { hot: number; warm: number; cold: number; noShow: number };
   top: TopEngaged[];
+  /** 노쇼지만 마케팅 동의 — 리타겟 대상 */
+  retargetCount: number;
+  leadQuality: { consented: number; withEmail: number; withPhone: number; withCompany: number };
+}
+
+/**
+ * 성과 퍼널 — 등록 → 시청 → 설문 응답 → 상담 희망 → 그중 마케팅 동의.
+ *
+ * 마케팅 동의를 마지막 단계로 두지 않은 이유: 등록 시점에 체크하는 값이라 시청보다 먼저
+ * 일어나고, 실측에서 `등록 257 → 시청 0 → 동의 142` 로 마지막이 앞 단계보다 커졌다.
+ * 마지막은 "상담 희망 중 마케팅도 동의한 사람" = 바로 영업하고 마케팅도 보낼 수 있는 리드다.
+ */
+interface PerformanceFunnel {
+  visits: number;
+  registered: number;
+  entered: number;
+  surveyResponded: number;
+  goalReached: number;
+  goalWithMarketing: number;
+  stay30: number;
+  stay60: number;
+  /** 설문에서 성과 선택지를 지정했나 — false 면 마지막 두 단계 대신 안내를 띄운다 */
+  goalConfigured: boolean;
+  goalQuestionTitles: string[];
+  /** 마케팅 동의 전수(노쇼 포함) — 퍼널 축이 아니라 별도 숫자 */
+  marketingConsented: number;
+  /** 등록자와 연결되지 않아 퍼널에서 제외된 익명 설문 응답 */
+  unlinkedSurveyResponses: number;
+}
+
+/** 세분화 축 한 줄 — 업종·직함·채널이 같은 모양을 쓴다(webinar-lead-facets.FacetRow). */
+interface FacetRow {
+  label: string;
+  total: number;
+  entered: number;
+  avgScore: number;
+  hot: number;
+  /** false 면 평균을 흐리게 + "표본 부족" 으로 표시한다 */
+  reliable: boolean;
+}
+
+/** 리드 분석 — 점수를 결정에 쓸 수 있는 축으로 쪼갠 결과. */
+interface LeadAnalysis {
+  histogram: { from: number; to: number; count: number }[];
+  composition: { attend: number; watch: number; interact: number; intent: number; total: number };
+  byIndustry: FacetRow[];
+  byRole: FacetRow[];
+  lift: { action: string; withCount: number; withAvg: number; withoutAvg: number; reliable: boolean }[];
+  minReliableSample: number;
+}
+
+/** 입소문(추천 링크) — 공유 → 클릭 → 등록. 아무도 공유하지 않으면 섹션 자체를 숨긴다. */
+interface WordOfMouth {
+  /** 공유 버튼을 누른 사람 수 */
+  sharers: number;
+  /** 총 공유 횟수(한 사람이 여러 면에서 공유하면 각각) */
+  shares: number;
+  /** 추천 링크로 들어온 방문 */
+  clicks: number;
+  /** 추천 링크로 실제 등록한 사람 수 */
+  registered: number;
+  bySurface: { surface: string; count: number }[];
+  top: { name: string; company: string | null; shares: number; clicks: number; registered: number }[];
 }
 
 interface AnalyticsData {
@@ -109,6 +182,9 @@ interface AnalyticsData {
   registrationTrend: { date: string; count: number }[];
   interactions: Interactions;
   scoring: Scoring;
+  performanceFunnel?: PerformanceFunnel;
+  leadAnalysis?: LeadAnalysis;
+  wordOfMouth?: WordOfMouth;
   hasVisitData: boolean;
   /** 광고비 합산 기간 — 캠페인 표 캡션이 밝힌다(스키마상 웨비나 단위로 스코핑할 수 없어서). */
   costScope?: { from: string; to: string };
@@ -549,6 +625,126 @@ function FunnelStep({ label, value, base, color, delay = 0 }: { label: string; v
   );
 }
 
+/**
+ * 성과 퍼널 한 단계.
+ *
+ * 두 비율을 함께 보여준다:
+ *   · **직전 단계 대비**(굵게) — 어디서 사람이 빠졌는지. 사장님이 요청한 "넘어갈 때 전환율".
+ *   · 전체(등록) 대비(작게) — 규모 감각. 막대 길이도 이 값이다.
+ * 하나만 보여주면 "시청 56%" 가 등록 대비인지 방문 대비인지 매번 헷갈린다.
+ */
+function PerfStep({
+  label, value, prev, base, color, hint, delay = 0, emphasis = false,
+}: {
+  label: string; value: number; prev: number | null; base: number;
+  color: string; hint?: string; delay?: number; emphasis?: boolean;
+}) {
+  const width = base ? Math.min(100, Math.max(value > 0 ? 3 : 0, Math.round((value / base) * 100))) : 0;
+  const stepRate = prev === null ? null : pct(value, prev);
+  return (
+    <div>
+      <div className="mb-1.5 flex items-baseline justify-between gap-3 text-xs">
+        <span className={emphasis ? "font-semibold" : "text-muted-foreground"} title={hint}>
+          {label}
+          {hint && <span className="ml-1 cursor-help text-muted-foreground/50">ⓘ</span>}
+        </span>
+        <span className="shrink-0 tabular-nums">
+          <b className={emphasis ? "text-violet-600 dark:text-violet-400" : ""}>{n(value)}명</b>
+          {stepRate !== null && (
+            <span className="ml-1.5 text-muted-foreground" title="직전 단계 대비 전환율">
+              <b className="text-foreground">{stepRate}%</b>
+              <span className="text-muted-foreground/60">{` · 전체 ${pct(value, base)}%`}</span>
+            </span>
+          )}
+        </span>
+      </div>
+      <div className="h-2.5 overflow-hidden rounded-full bg-secondary">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${width}%` }}
+          transition={{ duration: 0.5, ease: "easeOut", delay }}
+          className="h-full rounded-full"
+          style={{ backgroundColor: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 성과 퍼널 본문 — 등록 → 시청 → 설문 응답 → 상담 희망 → 그중 마케팅 동의.
+ *
+ * 체류(30분↑·60분↑)는 단계가 아니라 **보조 줄**이다: 성과로 가는 경로가 아니라 시청의 질이고,
+ * 단계로 넣으면 6줄이 되어 막대가 짧아진다.
+ *
+ * 성과 문항이 지정되지 않았으면 마지막 두 단계 대신 안내를 띄운다 — 0명 막대를 그리면
+ * "아무도 상담을 원하지 않았다" 로 읽히는데, 실제로는 **세는 기준이 없는 것**이다.
+ */
+function PerformanceFunnelBody({ perf }: { perf: PerformanceFunnel }) {
+  const base = Math.max(perf.registered, 1);
+  const hasVisits = perf.visits > 0;
+  return (
+    <>
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold">성과 퍼널</h3>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          {hasVisits ? "방문 → 등록 → 시청 → 설문 → 상담 희망" : "등록 → 시청 → 설문 → 상담 희망"} 단계별 전환 ·
+          굵은 %는 <b>직전 단계 대비</b>예요.
+        </p>
+      </div>
+
+      <div className="space-y-3.5">
+        {hasVisits && (
+          <PerfStep label="페이지 방문" value={perf.visits} prev={null} base={Math.max(perf.visits, base)} color="var(--chart-chat)" delay={0}
+            hint="임베드 위젯이 붙은 면과 자체 랜딩·라이브 페이지에서만 집계돼요" />
+        )}
+        <PerfStep label="사전 등록" value={perf.registered} prev={hasVisits ? perf.visits : null} base={hasVisits ? Math.max(perf.visits, base) : base} color="var(--chart-viewers)" delay={0.06} />
+        <PerfStep label="실제 시청" value={perf.entered} prev={perf.registered} base={base} color="var(--chart-viewers)" delay={0.12} />
+        <PerfStep label="설문 응답" value={perf.surveyResponded} prev={perf.entered} base={base} color="var(--chart-entered)" delay={0.18}
+          hint="여기서 크게 빠지면 설문 노출·유도 문제예요(상담 의사와는 다른 문제)" />
+        {perf.goalConfigured ? (
+          <>
+            <PerfStep label="상담 희망" value={perf.goalReached} prev={perf.surveyResponded} base={base} color="#f59e0b" delay={0.24}
+              hint={perf.goalQuestionTitles.length ? `성과로 지정된 문항: ${perf.goalQuestionTitles.join(" · ")}` : undefined} />
+            <PerfStep label="상담 희망 + 마케팅 동의" value={perf.goalWithMarketing} prev={perf.goalReached} base={base} color="#8b5cf6" delay={0.3} emphasis
+              hint="바로 연락하고 마케팅도 보낼 수 있는 리드 — 이 웨비나의 최종 성과예요" />
+          </>
+        ) : (
+          /* 0명 막대를 그리면 "아무도 상담을 원하지 않았다" 로 읽힌다 — 실제로는 기준이 없는 것이다. */
+          <div className="flex items-start gap-2.5 rounded-xl bg-secondary/60 p-3">
+            <Target className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-500" />
+            <p className="text-[11px] leading-relaxed">
+              <b>상담 희망 단계는 아직 셀 수 없어요.</b>{" "}
+              <span className="text-muted-foreground">
+                설문 탭에서 객관식 문항의 선택지를 <b>‘성과로 셀 선택지’</b>로 지정하면(예: “네, 상담을 희망합니다”)
+                여기에 상담 희망 전환율과 최종 성과가 표시돼요.
+              </span>
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* 보조 줄 — 체류의 질과 퍼널에서 빠진 값들. 단계가 아니라 각주다. */}
+      <div className="mt-4 space-y-1.5 border-t border-dashed border-border pt-3 text-[10.5px] leading-relaxed text-muted-foreground">
+        <p className="tabular-nums">
+          체류 30분↑ <b className="text-foreground">{n(perf.stay30)}명</b> · 60분↑ <b className="text-foreground">{n(perf.stay60)}명</b>
+          {perf.entered > 0 && <span>{` (시청자의 ${pct(perf.stay30, perf.entered)}% · ${pct(perf.stay60, perf.entered)}%)`}</span>}
+        </p>
+        <p className="tabular-nums">
+          마케팅 수신 동의 <b className="text-foreground">{n(perf.marketingConsented)}명</b>
+          <span> — 등록 시점에 받는 값이라 퍼널 단계가 아니에요(노쇼도 포함).</span>
+        </p>
+        {perf.unlinkedSurveyResponses > 0 && (
+          <p className="tabular-nums">
+            익명 설문 응답 <b className="text-foreground">{n(perf.unlinkedSurveyResponses)}건</b>
+            <span> — 등록자와 연결되지 않아 퍼널에서 제외했어요(공유 링크로 응답한 경우).</span>
+          </p>
+        )}
+      </div>
+    </>
+  );
+}
+
 const QA_STATUS: Record<string, { label: string; cls: string }> = {
   answered: { label: "답변", cls: "bg-green-500/10 text-green-600 dark:text-green-400" },
   pending: { label: "대기", cls: "bg-secondary text-muted-foreground" },
@@ -566,6 +762,359 @@ const SEG_BADGE: Record<"hot" | "warm" | "cold", string> = {
   warm: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   cold: "bg-secondary text-muted-foreground",
 };
+/** 세그먼트 정의 — 라벨만 있으면 "핫이 뭔데?" 를 알 수 없었다. 카드 본문에도 경계를 적어둔다. */
+const SEG_HINT: Record<"hot" | "warm" | "cold" | "noShow", string> = {
+  hot: "65점 이상 — 끝까지 보면서 행동(투표·질문·CTA)이나 마케팅 동의가 있는 리드",
+  warm: "30~64점 — 참석했지만 반응이 적거나 중간에 이탈",
+  cold: "30점 미만 — 잠깐 들렀다 나간 경우",
+  noShow: "등록했지만 입장하지 않음",
+};
+
+/** 점수 배지 title — 마우스를 올리면 네 덩어리 합이 보인다. */
+function scoreBreakdownText(t: TopEngaged): string {
+  const b = t.breakdown;
+  const capped = b.interactRaw > b.interact ? ` (원점수 ${b.interactRaw}, 30점에서 멈춤)` : "";
+  return `참석 ${b.attend} + 체류 ${b.watch} (${t.watchMinutes}/${b.evaluatedMinutes}분) + 행동 ${b.interact}${capped} + 인텐트 ${b.intent} = ${t.score}점`;
+}
+
+/** 점수 구성 네 덩어리의 색 — 세그먼트 색과 겹치지 않게 별도 계열을 쓴다. */
+const COMPOSITION_PARTS = [
+  { key: "attend" as const, label: "참석", color: "var(--chart-viewers)", hint: "입장하면 고정 25점" },
+  { key: "watch" as const, label: "체류", color: "var(--chart-entered)", hint: "방송 경과 대비 시청 비율 · 최대 35점" },
+  { key: "interact" as const, label: "행동", color: "#f59e0b", hint: "채팅·투표·질문·CTA·공유 · 최대 30점" },
+  { key: "intent" as const, label: "인텐트", color: "#8b5cf6", hint: "마케팅 수신 동의 10점" },
+];
+
+/**
+ * 세분화 표 한 덩어리 — 업종·직함이 같은 모양을 쓴다.
+ *
+ * 등록 수(막대)와 평균 점수를 한 줄에 붙인다: "많이 왔는가" 와 "잘 왔는가" 는 다른 질문이고,
+ * 둘을 같이 봐야 다음 웨비나의 타깃을 정할 수 있다.
+ * 방송 전에는 평균·핫이 전부 0 이라 구성(등록 수)만 보여준다.
+ */
+function FacetTable({ rows, showScore, minSample }: { rows: FacetRow[]; showScore: boolean; minSample: number }) {
+  if (rows.length === 0) return <p className="text-xs text-muted-foreground">아직 집계할 값이 없어요.</p>;
+  const max = Math.max(...rows.map((r) => r.total), 1);
+  return (
+    <div className="space-y-2.5">
+      {rows.map((r) => (
+        <div key={r.label}>
+          <div className="mb-1 flex items-baseline justify-between gap-2 text-[11px]">
+            <span className="min-w-0 flex-1 truncate" title={r.label}>{r.label}</span>
+            <span className="shrink-0 tabular-nums text-muted-foreground">
+              {n(r.total)}명
+              {showScore && (
+                <>
+                  {" · "}
+                  <b
+                    className={r.reliable ? "text-foreground" : "text-muted-foreground/60"}
+                    title={r.reliable ? `입장 ${n(r.entered)}명의 평균` : `표본 ${n(r.total)}명 — ${n(minSample)}명 미만이라 평균을 믿기 어려워요`}
+                  >
+                    평균 {n(r.avgScore)}점
+                  </b>
+                  {r.hot > 0 && <span className="text-green-600 dark:text-green-400">{` · 핫 ${n(r.hot)}`}</span>}
+                  {!r.reliable && <span className="text-muted-foreground/60">{" · 표본 부족"}</span>}
+                </>
+              )}
+            </span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${pct(r.total, max)}%` }}
+              transition={{ duration: 0.45, ease: "easeOut" }}
+              className="h-full rounded-full bg-violet-500"
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 리드 분석 패널 — 세그먼트 4칸으로는 **다음 웨비나를 어떻게 바꿀지** 알 수 없다.
+ *
+ * 네 덩어리를 2열로 깐다:
+ *   분포(경계가 맞나) | 점수 구성(무엇이 점수를 만들었나)
+ *   업종별            | 직함별
+ * 행동 리프트는 그 행동을 한 사람이 있을 때만 아래 전체 폭으로.
+ *
+ * 방송 전에는 점수가 전부 0 이므로 업종·직함 **구성**만 남긴다 —
+ * "우리 리드가 어느 업종·직급으로 채워졌나" 는 그때도 쓸 수 있는 정보다.
+ */
+function LeadAnalysisSection({ la, showScore }: { la: LeadAnalysis; showScore: boolean }) {
+  const comp = la.composition;
+  const hist = la.histogram;
+  const histMax = Math.max(...hist.map((b) => b.count), 1);
+  const scored = hist.reduce((s, b) => s + b.count, 0);
+  // 그 행동을 한 사람이 아무도 없는 줄은 뺀다 — 0 vs 0 비교는 화면만 채운다.
+  const lift = la.lift.filter((l) => l.withCount > 0);
+
+  return (
+    <>
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        {showScore && (
+          <SectionCard>
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold">점수 분포</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                입장자 {n(scored)}명의 10점 구간 분포 · 세그먼트 4칸으로는 안 보이는 쏠림을 확인해요.
+              </p>
+            </div>
+            {scored === 0 ? (
+              <p className="text-xs text-muted-foreground">입장한 참여자가 없어요.</p>
+            ) : (
+              <>
+                <div className="flex h-28 items-end gap-1">
+                  {hist.map((b) => (
+                    <div key={b.from} className="flex flex-1 flex-col items-center gap-1" title={`${b.from}~${b.to}점 · ${n(b.count)}명`}>
+                      <span className="text-[9px] tabular-nums text-muted-foreground">{b.count || ""}</span>
+                      <motion.div
+                        initial={{ height: 0 }}
+                        animate={{ height: `${Math.max(b.count ? 4 : 0, pct(b.count, histMax))}%` }}
+                        transition={{ duration: 0.45, ease: "easeOut" }}
+                        // 핫 경계(65점)를 넘는 칸은 초록 — 경계가 어디인지 막대에서 바로 읽히게
+                        className={`w-full rounded-t ${b.from >= 60 ? "bg-green-500/70" : "bg-violet-500/60"}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-1 flex gap-1 text-[9px] tabular-nums text-muted-foreground">
+                  {hist.map((b) => (
+                    <span key={b.from} className="flex-1 text-center">{b.from}</span>
+                  ))}
+                </div>
+                <p className="mt-3 text-[10.5px] leading-relaxed text-muted-foreground">
+                  60~69 칸에 사람이 뭉쳐 있으면 <b>끝까지 봤지만 아무 행동도 하지 않은 시청자</b>가 많다는 뜻이에요 —
+                  다음 웨비나에 투표·질문 유도를 넣을 근거가 돼요.
+                </p>
+              </>
+            )}
+          </SectionCard>
+        )}
+
+        {showScore && (
+          <SectionCard>
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold">점수 구성</h3>
+              <p className="mt-1 text-xs text-muted-foreground">입장자 점수 총합이 어디서 왔는지 — 이번 웨비나의 성격이 한 줄로 보여요.</p>
+            </div>
+            {comp.total === 0 ? (
+              <p className="text-xs text-muted-foreground">입장한 참여자가 없어요.</p>
+            ) : (
+              <>
+                <div className="mb-3 flex h-2.5 overflow-hidden rounded-full bg-secondary">
+                  {COMPOSITION_PARTS.map((p) =>
+                    comp[p.key] > 0 ? <div key={p.key} style={{ width: `${pct(comp[p.key], comp.total)}%`, background: p.color }} /> : null,
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  {COMPOSITION_PARTS.map((p) => (
+                    <div key={p.key} className="flex items-baseline justify-between text-[11px]" title={p.hint}>
+                      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                        <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
+                        {p.label}
+                      </span>
+                      <span className="tabular-nums">
+                        <b>{pct(comp[p.key], comp.total)}%</b>
+                        <span className="text-muted-foreground">{` · ${n(comp[p.key])}점`}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {comp.interact === 0 && (
+                  <p className="mt-3 text-[10.5px] leading-relaxed text-muted-foreground">
+                    <b>행동 기여도가 0</b> 이에요 — 아무도 채팅·투표·질문·CTA를 남기지 않았어요. 시청은 했지만 참여는 없던 웨비나예요.
+                  </p>
+                )}
+              </>
+            )}
+          </SectionCard>
+        )}
+
+        <SectionCard>
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold">업종별 리드</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {showScore ? "어느 업종이 실제로 관심이 있었는지 — 다음 웨비나 주제·타깃의 근거예요." : "등록 폼의 업종 구성이에요. 방송이 끝나면 업종별 평균 점수도 함께 보여드려요."}
+            </p>
+          </div>
+          <FacetTable rows={la.byIndustry} showScore={showScore} minSample={la.minReliableSample} />
+        </SectionCard>
+
+        <SectionCard>
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold">직함별 리드</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {showScore
+                ? "결정권자가 실제로 끝까지 봤는지 — 영업 우선순위와 콘텐츠 난이도의 근거예요."
+                : "직함을 결재선 기준으로 묶었어요(대표·대표이사·CEO가 갈리지 않게)."}
+            </p>
+          </div>
+          <FacetTable rows={la.byRole} showScore={showScore} minSample={la.minReliableSample} />
+        </SectionCard>
+      </div>
+
+      {showScore && lift.length > 0 && (
+        <SectionCard>
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold">행동한 사람은 원래 더 열심이었나</h3>
+            {/* 이 카드의 정직성이 여기 달렸다 — 행동 가점을 포함하면 동어반복이 된다. */}
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              그 행동을 한 사람과 안 한 사람의 점수를 비교해요. <b>그 행동으로 받은 가점은 빼고</b> 비교합니다 —
+              투표하면 4점이 붙으니, 그걸 포함하면 “투표한 사람이 점수가 높다”는 당연한 말이 되거든요.
+              참석·체류·인텐트만으로 비교해야 “투표한 사람은 원래 더 오래 봤다”를 알 수 있어요.
+            </p>
+          </div>
+          <div className="space-y-2">
+            {lift.map((l) => {
+              const diff = l.withAvg - l.withoutAvg;
+              return (
+                <div key={l.action} className="flex items-center gap-3 rounded-xl border border-border p-2.5 text-[11px]">
+                  <span className="w-16 shrink-0 font-medium">{l.action}</span>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">{n(l.withCount)}명</span>
+                  <span className="flex-1 tabular-nums">
+                    <b className={l.reliable ? "" : "text-muted-foreground/60"}>{n(l.withAvg)}점</b>
+                    <span className="text-muted-foreground">{` vs 안 한 사람 ${n(l.withoutAvg)}점`}</span>
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-1.5 py-0.5 font-semibold tabular-nums ${
+                      diff > 0 ? "bg-green-500/10 text-green-600 dark:text-green-400" : diff < 0 ? "bg-secondary text-muted-foreground" : "bg-secondary text-muted-foreground"
+                    }`}
+                  >
+                    {diff > 0 ? `+${n(diff)}` : n(diff)}
+                  </span>
+                  {!l.reliable && <span className="shrink-0 text-muted-foreground/60">표본 부족</span>}
+                </div>
+              );
+            })}
+          </div>
+        </SectionCard>
+      )}
+    </>
+  );
+}
+
+const SHARE_SURFACE_LABEL: Record<string, string> = {
+  waiting: "대기 화면",
+  live: "시청 화면",
+  ended: "종료 화면",
+  landing: "랜딩 페이지",
+};
+
+/**
+ * 입소문 — 시청자가 자기 추천 링크로 퍼뜨린 결과.
+ *
+ * 세 숫자가 한 줄로 읽혀야 한다: 공유한 사람 → 그 링크로 들어온 방문 → 실제 등록.
+ * 상위 추천인은 "누구에게 고맙다고 해야 하는가" 이자, 다음 웨비나에 먼저 알릴 명단이다.
+ */
+function WordOfMouthSection({ wom }: { wom: WordOfMouth }) {
+  const steps = [
+    { label: "공유한 사람", value: wom.sharers, sub: `공유 ${n(wom.shares)}회` },
+    { label: "추천 링크 방문", value: wom.clicks, sub: wom.sharers ? `1명당 ${(wom.clicks / wom.sharers).toFixed(1)}명` : "" },
+    { label: "추천으로 등록", value: wom.registered, sub: wom.clicks ? `전환 ${pct(wom.registered, wom.clicks)}%` : "" },
+  ];
+  return (
+    <SectionCard>
+      <div className="mb-4">
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold"><Share2 className="h-4 w-4 text-violet-500" /> 입소문</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          시청자가 공유 버튼으로 직접 퍼뜨린 결과예요. 공유 링크에는 각자의 추천 코드가 붙어 있어서 누가 몇 명을 데려왔는지 이어져요.
+        </p>
+      </div>
+
+      <div className="mb-5 grid grid-cols-3 gap-3">
+        {steps.map((s) => (
+          <div key={s.label} className="rounded-xl bg-secondary/60 p-3">
+            <div className="text-[11px] text-muted-foreground">{s.label}</div>
+            <div className="mt-0.5 text-xl font-semibold tabular-nums">{n(s.value)}</div>
+            {s.sub && <div className="mt-0.5 text-[10.5px] text-muted-foreground tabular-nums">{s.sub}</div>}
+          </div>
+        ))}
+      </div>
+
+      {wom.bySurface.length > 0 && (
+        <div className="mb-5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+          <span>어디서 공유했나</span>
+          {wom.bySurface.map((s) => (
+            <span key={s.surface}>
+              {SHARE_SURFACE_LABEL[s.surface] ?? s.surface} <b className="tabular-nums text-foreground">{n(s.count)}</b>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {wom.top.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs font-semibold text-muted-foreground">가장 많이 데려온 사람</p>
+          <div className="space-y-1.5">
+            {wom.top.map((t, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-xl border border-border p-2.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-sm font-bold tabular-nums text-violet-600 dark:text-violet-400">
+                  {n(t.registered)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-1.5 text-xs font-medium">
+                    <span className="truncate">{t.name}</span>
+                    {t.company && <span className="truncate text-muted-foreground">· {t.company}</span>}
+                  </p>
+                  <p className="mt-0.5 text-[10.5px] text-muted-foreground tabular-nums">
+                    공유 {n(t.shares)}회 · 링크 방문 {n(t.clicks)} · 등록 {n(t.registered)}명
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+/**
+ * 방송 전 화면 — 세그먼트 막대 대신 "지금 확보한 리드로 할 수 있는 일".
+ * 이 자리에 세그먼트를 그리면 입장이 0 이라 **노쇼 100%** 가 되고, 아직 열리지도 않은
+ * 웨비나가 실패한 것처럼 보인다(실측: 등록 254명 웨비나가 노쇼 254 · 100%).
+ */
+function LeadQualityBeforeLive({ total, q }: { total: number; q: Scoring["leadQuality"] }) {
+  if (total === 0) return <p className="text-xs text-muted-foreground">아직 등록자가 없어요.</p>;
+  const items = [
+    { label: "마케팅 수신 동의", value: q.consented, hint: "다음 웨비나 초대·소식 발송이 가능한 리드" },
+    { label: "이메일 확보", value: q.withEmail, hint: "리마인더 메일을 받을 수 있는 등록자" },
+    { label: "연락처 확보", value: q.withPhone, hint: "문자·전화 팔로업이 가능한 등록자" },
+    { label: "회사 기입", value: q.withCompany, hint: "B2B 리드 판별에 쓰는 값" },
+  ];
+  return (
+    <div>
+      <div className="mb-4 flex items-baseline gap-2">
+        <span className="text-2xl font-bold tabular-nums">{n(total)}</span>
+        <span className="text-xs text-muted-foreground">명 등록</span>
+      </div>
+      <div className="space-y-3">
+        {items.map((it) => (
+          <div key={it.label} title={it.hint}>
+            <div className="mb-1 flex items-baseline justify-between text-[11px]">
+              <span className="text-muted-foreground">{it.label}</span>
+              <span className="font-medium tabular-nums">{n(it.value)}명 · {pct(it.value, total)}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-secondary">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${pct(it.value, total)}%` }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                className="h-full rounded-full bg-violet-500"
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-[10.5px] leading-relaxed text-muted-foreground">
+        방송이 시작되면 참석·체류·인터랙션을 합성한 참여 점수와 핫·웜·콜드 세그먼트가 여기 표시돼요.
+      </p>
+    </div>
+  );
+}
 
 export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
   const colors = useChartColors();
@@ -694,6 +1243,8 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
   }
 
   const { funnel, interactions, scoring } = data;
+  /* 성과 퍼널 — 서버가 안 내려주는 옛 응답(캐시된 탭 등)에서는 기존 참가 퍼널로 폴백한다. */
+  const perf = data.performanceFunnel;
   const utm = data.utmBreakdown ?? [];
   const campaigns = data.campaignBreakdown ?? [];
   const trend = data.registrationTrend ?? [];
@@ -899,71 +1450,146 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
       {/* 설문 결과 — 자체 설문이 있을 때만 표시 */}
       <SurveyResultsSection webinarId={webinarId} />
 
-      {/* 리드 스코어링 */}
-      <SectionCard>
-        <div className="mb-4">
-          <h3 className="flex items-center gap-1.5 text-sm font-semibold"><Users className="h-4 w-4 text-violet-500" /> 리드 스코어링</h3>
-          <p className="mt-1 text-xs text-muted-foreground">참석·체류·인터랙션·마케팅 동의를 합성한 0~100 참여 점수 · 내보내기 CSV에 점수·세그먼트가 포함돼요.</p>
-        </div>
-        <div className="mb-5">
-          <div className="mb-2 flex h-2.5 overflow-hidden rounded-full bg-secondary">
-            {SEG_BAR.map((s) => {
-              const c = scoring.distribution[s.key];
-              return c > 0 ? <div key={s.key} style={{ width: `${pct(c, scoring.total)}%`, background: s.color }} /> : null;
-            })}
+      {/* 리드 요약 + 참가 퍼널 — 좌우 2열.
+          둘 다 "몇 명이 어디까지 왔나" 를 읽는 카드라 나란히 둬야 한 화면에서 대조된다.
+          예전엔 전체 폭 카드로 한 줄씩 쌓여서, 방송 전에는 막대 4개 + 막대 5개를 보려고
+          두 번 스크롤해야 했다. 방송 후에는 상위 참여자 **명단**을 이 요약에서 떼어
+          아래 전체 폭 카드로 내린다(요약 먼저, 디테일은 아래로 — 읽는 영역 원칙). */}
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <SectionCard>
+          <div className="mb-4">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+              <Users className="h-4 w-4 text-violet-500" /> {scoring.phase === "before" ? "확보한 리드" : "리드 스코어링"}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {scoring.phase === "before"
+                ? "아직 방송 전이라 참여 점수를 매길 수 없어요. 지금 확보한 리드로 할 수 있는 일을 보여드려요."
+                : "참석·체류·인터랙션·마케팅 동의를 합성한 0~100 참여 점수 · 내보내기 CSV에 점수·세그먼트가 포함돼요."}
+            </p>
           </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
-            {SEG_BAR.map((s) => (
-              <span key={s.key} className="inline-flex items-center gap-1.5 text-muted-foreground">
-                <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
-                {s.label} <b className="tabular-nums text-foreground">{n(scoring.distribution[s.key])}</b> · {pct(scoring.distribution[s.key], scoring.total)}%
-              </span>
-            ))}
+
+          {scoring.phase === "before" ? (
+            <LeadQualityBeforeLive total={scoring.total} q={scoring.leadQuality} />
+          ) : (
+            <>
+              <div className="mb-2">
+                <div className="mb-2 flex h-2.5 overflow-hidden rounded-full bg-secondary">
+                  {SEG_BAR.map((s) => {
+                    const c = scoring.distribution[s.key];
+                    return c > 0 ? <div key={s.key} style={{ width: `${pct(c, scoring.total)}%`, background: s.color }} /> : null;
+                  })}
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+                  {SEG_BAR.map((s) => (
+                    <span key={s.key} className="inline-flex items-center gap-1.5 text-muted-foreground" title={SEG_HINT[s.key]}>
+                      <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
+                      {s.label} <b className="tabular-nums text-foreground">{n(scoring.distribution[s.key])}</b> · {pct(scoring.distribution[s.key], scoring.total)}%
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* 점수 기준을 화면에 밝힌다 — "핫이 뭔데?" 를 툴팁으로만 두면 아무도 안 본다.
+                  방송 중이면 분모가 계속 자라므로 그 사실도 함께 알린다(같은 사람의 점수가 올라간다). */}
+              <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+                핫 65점↑ · 웜 30점↑ · 콜드 30점 미만.{" "}
+                {scoring.phase === "live"
+                  ? `방송이 진행 중이라 지금까지 흐른 ${n(scoring.liveMinutes)}분을 기준으로 계산해요 — 방송이 길어지면 점수도 함께 올라가요.`
+                  : scoring.liveMinutes < scoring.scheduledMinutes
+                    ? `실제 방송 ${n(scoring.liveMinutes)}분 기준(예정 ${n(scoring.scheduledMinutes)}분)으로 계산했어요.`
+                    : `방송 ${n(scoring.liveMinutes)}분 기준으로 계산했어요.`}
+              </p>
+
+              {scoring.retargetCount > 0 && (
+                /* 노쇼 + 마케팅 동의 — 5점 콜드라 상위 참여자에는 절대 안 나오는데, 웨비나 다음 액션에서
+                   제일 큰 덩어리다. 여기서 숫자만 알리고 실제 명단은 등록자 탭 필터로 넘긴다. */
+                <div className="mt-4 flex items-start gap-2.5 rounded-xl bg-secondary/60 p-3">
+                  <RotateCcw className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-500" />
+                  <p className="text-[11px] leading-relaxed">
+                    <b className="tabular-nums">{n(scoring.retargetCount)}명</b>은 오지 않았지만 마케팅 정보 수신에 동의했어요 — 다시보기 안내나 다음 웨비나 초대를 보낼 수 있는 리드예요.
+                    <span className="text-muted-foreground"> 등록자 탭에서 세그먼트를 ‘노쇼’로 걸러 명단을 확인하세요.</span>
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </SectionCard>
+
+        {/* 성과 퍼널 — '참가 퍼널' 을 대체한다. 시청까지가 아니라 **상담 희망까지** 가는 경로를 본다. */}
+        <SectionCard>
+          {perf ? <PerformanceFunnelBody perf={perf} /> : (
+            <>
+              <div className="mb-4">
+                <h3 className="text-sm font-semibold">참가 퍼널</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {hasVisits ? "방문 → 등록 → 입장 → 체류 단계별 전환" : "등록 → 입장 → 체류 (방문 데이터는 아임웹 부착 후 집계돼요)"}
+                </p>
+              </div>
+              <div className="space-y-3.5">
+                {hasVisits && <FunnelStep label="페이지 방문" value={funnel.visits} base={funnelBase} color="var(--chart-chat)" delay={0} />}
+                <FunnelStep label="사전 등록" value={funnel.registered} base={funnelBase} color="var(--chart-viewers)" delay={0.06} />
+                <FunnelStep label="실제 입장" value={funnel.attended} base={funnelBase} color="var(--chart-viewers)" delay={0.12} />
+                <FunnelStep label="30분 이상 체류" value={funnel.stay30} base={funnelBase} color="var(--chart-entered)" delay={0.18} />
+                <FunnelStep label="60분 이상 체류" value={funnel.stay60} base={funnelBase} color="var(--chart-entered)" delay={0.24} />
+              </div>
+            </>
+          )}
+        </SectionCard>
+      </div>
+
+      {/* 상위 참여자 — 위 요약에서 떼어낸 디테일. 명단이라 전체 폭이 읽기 편하다. */}
+      {scoring.phase !== "before" && (
+        <SectionCard>
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold">상위 참여자</h3>
+            <p className="mt-1 text-xs text-muted-foreground">참여 점수가 높은 순 · 전체 명단과 세그먼트 필터는 등록자 탭에 있어요.</p>
           </div>
-        </div>
-        {scoring.top.length === 0 ? (
-          <p className="text-xs text-muted-foreground">입장한 참여자가 없어 점수를 매길 대상이 없어요.</p>
-        ) : (
-          <div>
-            <p className="mb-2 text-xs font-semibold text-muted-foreground">상위 참여자</p>
-            <div className="space-y-1.5">
+          {scoring.top.length === 0 ? (
+            <p className="text-xs text-muted-foreground">입장한 참여자가 없어 점수를 매길 대상이 없어요.</p>
+          ) : (
+            <div className="grid gap-1.5 lg:grid-cols-2">
               {scoring.top.map((t, i) => (
                 <div key={i} className="flex items-center gap-3 rounded-xl border border-border p-2.5">
-                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold tabular-nums ${SEG_BADGE[t.segment]}`}>{t.score}</span>
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold tabular-nums ${SEG_BADGE[t.segment]}`}
+                    title={scoreBreakdownText(t)}
+                  >
+                    {t.score}
+                  </span>
                   <div className="min-w-0 flex-1">
                     <p className="flex items-center gap-1.5 text-xs font-medium">
                       <span className="truncate">{t.name}</span>
                       {t.company && <span className="truncate text-muted-foreground">· {t.company}</span>}
                       {t.agreeMarketing && <span className="shrink-0 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-green-600 dark:text-green-400">동의</span>}
                     </p>
+                    {/* 점수 근거를 한 줄로 — 숫자만 보고 CSV 와 대조해야 했던 자리 */}
                     <p className="mt-0.5 text-[10.5px] text-muted-foreground tabular-nums">
-                      체류 {n(t.watchMinutes)}분 · 채팅 {n(t.chat)} · 투표 {n(t.pollVotes)} · Q&A {n(t.qaAsks)}{t.qaUpvotes ? ` · 추천 ${n(t.qaUpvotes)}` : ""}{t.ctaClicks ? ` · CTA ${n(t.ctaClicks)}` : ""}
+                      참석 {t.breakdown.attend} + 체류 {t.breakdown.watch} + 행동 {t.breakdown.interact}
+                      {t.breakdown.interactRaw > t.breakdown.interact && <span title="인터랙션 점수는 30점에서 멈춰요">{` (원점수 ${t.breakdown.interactRaw})`}</span>}
+                      {" "}+ 인텐트 {t.breakdown.intent}
+                    </p>
+                    <p className="mt-0.5 text-[10.5px] text-muted-foreground tabular-nums">
+                      체류 {n(t.watchMinutes)}/{n(t.breakdown.evaluatedMinutes)}분 · 채팅 {n(t.chat)} · 투표 {n(t.pollVotes)} · Q&A {n(t.qaAsks)}{t.qaUpvotes ? ` · 추천 ${n(t.qaUpvotes)}` : ""}{t.ctaClicks ? ` · CTA ${n(t.ctaClicks)}` : ""}
                     </p>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
-        )}
-      </SectionCard>
+          )}
+        </SectionCard>
+      )}
 
-      {/* 참가 퍼널 */}
-      <SectionCard>
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold">참가 퍼널</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {hasVisits ? "방문 → 등록 → 입장 → 체류 단계별 전환" : "등록 → 입장 → 체류 (방문 데이터는 아임웹 부착 후 집계돼요)"}
-          </p>
-        </div>
-        <div className="space-y-3.5">
-          {hasVisits && <FunnelStep label="페이지 방문" value={funnel.visits} base={funnelBase} color="var(--chart-chat)" delay={0} />}
-          <FunnelStep label="사전 등록" value={funnel.registered} base={funnelBase} color="var(--chart-viewers)" delay={0.06} />
-          <FunnelStep label="실제 입장" value={funnel.attended} base={funnelBase} color="var(--chart-viewers)" delay={0.12} />
-          <FunnelStep label="30분 이상 체류" value={funnel.stay30} base={funnelBase} color="var(--chart-entered)" delay={0.18} />
-          <FunnelStep label="60분 이상 체류" value={funnel.stay60} base={funnelBase} color="var(--chart-entered)" delay={0.24} />
-        </div>
-      </SectionCard>
+      {/* 리드 분석 — 점수를 결정에 쓸 수 있는 축(분포·구성·업종·직함·행동)으로 쪼갠다.
+          방송 전에는 점수가 전부 0 이라 업종·직함 구성만 남긴다. */}
+      {data.leadAnalysis && (
+        <LeadAnalysisSection la={data.leadAnalysis} showScore={scoring.phase !== "before"} />
+      )}
 
+      {/* 입소문 — 시청자가 직접 퍼뜨린 결과. 아무도 공유하지 않았으면 섹션을 숨긴다
+          (빈 껍데기를 보여주지 않는다 — 공개 면의 이중 게이트 원칙과 같다). */}
+      {data.wordOfMouth && data.wordOfMouth.shares > 0 && (
+        <WordOfMouthSection wom={data.wordOfMouth} />
+      )}
       {/* 일자별 등록 추이 */}
       {trend.length > 0 && (
         <SectionCard>
@@ -999,7 +1625,10 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
                   <th className="py-2 pr-3 text-right font-medium">등록</th>
                   {hasVisits && <th className="py-2 pr-3 text-right font-medium">등록률</th>}
                   <th className="py-2 pr-3 text-right font-medium">입장</th>
-                  <th className="py-2 text-right font-medium">입장률</th>
+                  <th className="py-2 pr-3 text-right font-medium">입장률</th>
+                  {/* 리드 품질 — 등록 수만으로는 "많이 왔다" 만 알 수 있다. 그 리드가 좋았는지는 여기서 답한다. */}
+                  <th className="py-2 pr-3 text-right font-medium" title="입장자 평균 참여 점수">평균 점수</th>
+                  <th className="py-2 text-right font-medium" title="입장자 중 핫(65점 이상) 비율">핫 비율</th>
                 </tr>
               </thead>
               <tbody>
@@ -1018,7 +1647,30 @@ export default function AnalyticsTab({ webinarId }: { webinarId: string }) {
                       </td>
                     )}
                     <td className="py-2 pr-3 text-right tabular-nums">{n(row.entered)}</td>
-                    <td className="py-2 text-right tabular-nums text-muted-foreground">{row.entryRate}%</td>
+                    <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">{row.entryRate}%</td>
+                    {/* 표본이 작은 채널(13명 등)의 평균은 노이즈다 — 흐리게 + 사유를 title 로 밝힌다.
+                        입장자가 없으면 평균이 0 이 아니라 **없음**이라 — 로 쓴다. */}
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      {row.entered ? (
+                        <span
+                          className={row.scoreReliable ? "" : "text-muted-foreground/50"}
+                          title={row.scoreReliable ? `입장 ${n(row.entered)}명의 평균` : `등록 ${n(row.registered)}명 — 표본이 작아 평균을 믿기 어려워요`}
+                        >
+                          {n(row.avgScore ?? 0)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground/40" title="입장자가 없어 평균을 낼 수 없어요">—</span>
+                      )}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">
+                      {row.entered ? (
+                        <span className={(row.hot ?? 0) > 0 ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}>
+                          {row.hotRate ?? 0}%
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground/40">—</span>
+                      )}
+                    </td>
                   </motion.tr>
                 ))}
               </tbody>

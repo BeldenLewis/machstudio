@@ -13,6 +13,18 @@ export interface SurveyQuestion {
   options: string[]; // single/multiple 만 사용
   maxSelect?: number; // multiple 전용 — 최대 선택 개수(없으면 무제한)
   /**
+   * **성과로 셀 선택지.** 이 선택지를 고른 등록자를 성과 퍼널의 "상담 희망" 단계로 센다.
+   *
+   * 왜 자동 판정이 아니라 지정인가: 실제 설문에 상담을 언급하는 문항이 둘이었다 —
+   * "부스 참가 1:1 상담을 희망하시나요?" 와 "현재 단계는 어디에 가깝나요?"(마지막 선택지가
+   * '1:1 상담 희망'). 제목·선택지 문구로 추측하면 조용히 엉뚱한 문항을 세게 된다.
+   *
+   * single/multiple 문항에만 의미가 있고, **실제 존재하는 선택지 문구**만 남는다 —
+   * 선택지를 고쳐 쓰면 지정이 끊기므로 편집기가 그 사실을 알린다.
+   * 여러 문항에 지정하면 합집합(OR)이다: 어느 쪽이든 고르면 성과로 센다.
+   */
+  goalOptions?: string[];
+  /**
    * 보관된 문항 — 운영자가 편집기에서 지웠지만 **이미 수집된 답변이 있어** 정의를 남겨둔 것.
    * 답변은 WebinarSurveyResponse.answers 의 questionId 키로 저장되므로, 정의에서 문항이
    * 사라지면 분석·개별응답·CSV 가 그 열을 그리지 못해 수집된 답변이 조회 불가 상태가 된다.
@@ -57,6 +69,13 @@ export function normalizeSurveyQuestions(raw: unknown, opts?: { includeHidden?: 
         type === "multiple" && Number.isInteger(rawMax) && rawMax >= 1 && rawMax < options.length
           ? rawMax
           : undefined;
+      /* 성과 선택지 — 객관식에만, **현재 선택지 목록에 실제로 있는 문구만** 남긴다.
+         선택지를 고쳐 쓰면 옛 문구가 남아 아무도 만족하지 않는 조건이 되는데, 화면에는
+         "성과 문항 지정됨" 으로 보여 성과가 0 인 이유를 알 수 없게 된다. */
+      const goalOptions =
+        (type === "single" || type === "multiple") && Array.isArray(q.goalOptions)
+          ? [...new Set(q.goalOptions.map(String).filter((o) => options.includes(o)))]
+          : [];
       return {
         id: String(q.id ?? `q_${i}`),
         type,
@@ -64,6 +83,7 @@ export function normalizeSurveyQuestions(raw: unknown, opts?: { includeHidden?: 
         required: q.required === true,
         options,
         ...(maxSelect !== undefined ? { maxSelect } : {}),
+        ...(goalOptions.length ? { goalOptions } : {}),
         ...(q.retired === true ? { retired: true as const } : {}),
       };
     });
@@ -201,6 +221,34 @@ export function surveyAcceptingWhere(now: Date = new Date()) {
 }
 
 export type SurveyAnswers = Record<string, number | string | string[]>;
+
+/**
+ * 이 답변이 **성과(상담 희망)** 인가.
+ *
+ * 문항에 goalOptions 가 지정돼 있고, 답변이 그중 하나라도 포함하면 성과다.
+ * single 은 문자열 하나, multiple 은 배열 — 둘 다 받는다(옛 응답이 단일 문자열로 저장된
+ * 복수응답도 있어 관용한다). 별점·NPS·주관식은 성과 판정 대상이 아니다.
+ */
+export function isGoalAnswer(question: Pick<SurveyQuestion, "type" | "goalOptions">, answer: unknown): boolean {
+  const goals = question.goalOptions ?? [];
+  if (!goals.length) return false;
+  if (question.type !== "single" && question.type !== "multiple") return false;
+  const picked = Array.isArray(answer) ? answer.map(String) : answer == null ? [] : [String(answer)];
+  return picked.some((p) => goals.includes(p));
+}
+
+/**
+ * 이 응답(설문 하나의 전체 답변)이 성과인가 — 문항 중 하나라도 성과 선택지를 골랐으면 성과.
+ * 성과 문항이 여러 개면 합집합(OR)이다.
+ */
+export function responseHitsGoal(questions: SurveyQuestion[], answers: SurveyAnswers): boolean {
+  return questions.some((q) => isGoalAnswer(q, answers[q.id]));
+}
+
+/** 이 설문에 성과 문항이 지정돼 있나 — 화면이 "지정하면 전환율을 볼 수 있어요" 안내를 띄울 때 쓴다. */
+export function goalQuestions(questions: SurveyQuestion[]): SurveyQuestion[] {
+  return questions.filter((q) => (q.goalOptions ?? []).length > 0);
+}
 
 /**
  * 답변 한 칸을 사람이 읽는 문자열로.

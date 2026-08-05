@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimitAsync, rateLimitPeekAsync } from "@/lib/ratelimit";
 import { normalizePhone, normalizeEmail } from "@/lib/webinar-config";
+import { generateShareCode } from "@/lib/webinar-share";
 
 // found=false 전용 한도 — 미스만 기록해 5분에 5회 넘는 실패 조회를 차단 (명단 enumeration 방지).
 // 성공 조회는 미스 버킷에 기록하지 않으므로 정상 참가자의 오타 1~2회는 영향 없음.
@@ -69,10 +70,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       : { webinarId: webinar.id, email: { equals: normalizedValue, mode: "insensitive" as const } };
 
   // 입장 확인엔 이름만 있으면 충분 — PII(email/phone/company/department/jobTitle/industry) 미반환
+  // shareCode 는 본인 것이라 함께 준다: 공유 버튼이 클릭 순간 서버를 기다리지 않고 링크를 만든다.
   const registration = await prisma.webinarRegistration.findFirst({
     where,
-    select: { id: true, name: true },
+    select: { id: true, name: true, shareCode: true },
   });
+
+  /* 추천 코드 지연 발급 — 이 기능이 생기기 전에 등록한 사람은 코드가 없다. 입장 확인은 POST 라
+     여기서 한 번 채워도 안전하다(백필 마이그레이션 없이 자연히 메워진다). 충돌은 유니크 제약이
+     잡아주므로 실패하면 그냥 코드 없이 진행한다 — 공유 버튼이 없어질 뿐, 입장은 막지 않는다. */
+  if (registration && !registration.shareCode) {
+    try {
+      const issued = await prisma.webinarRegistration.update({
+        where: { id: registration.id },
+        data: { shareCode: generateShareCode() },
+        select: { shareCode: true },
+      });
+      registration.shareCode = issued.shareCode;
+    } catch {
+      /* 코드 발급 실패는 입장을 막지 않는다 */
+    }
+  }
 
   // 미스만 기록 — 다음 요청부터 peek 이 차단 판정에 사용
   if (!registration) {

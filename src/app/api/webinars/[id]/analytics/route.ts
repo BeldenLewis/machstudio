@@ -10,6 +10,17 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { assembleWebinarEngagement } from "@/lib/webinar-scoring";
 import { campaignJoinKey, normalizeUtmKey } from "@/lib/attribution-normalize";
+import { resolveWebinarStatus } from "@/lib/webinar-status";
+import {
+  actionLift,
+  facetBy,
+  facetByRole,
+  MIN_RELIABLE_SAMPLE,
+  scoreComposition,
+  scoreHistogram,
+  summarizeFacet,
+} from "@/lib/webinar-lead-facets";
+import { goalQuestions, normalizeSurveyQuestions, responseHitsGoal, type SurveyAnswers } from "@/lib/webinar-survey";
 
 function pct(part: number, total: number) {
   if (!total) return 0;
@@ -36,7 +47,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const webinar = await prisma.webinar.findUnique({
     where: { id },
-    select: { workspaceId: true, projectId: true, liveStartAt: true, liveEndAt: true, createdAt: true },
+    select: { workspaceId: true, projectId: true, liveStartAt: true, liveEndAt: true, signupDeadline: true, statusOverride: true, components: true, broadcastEndedAt: true, createdAt: true },
   });
   if (!webinar) return NextResponse.json({ error: "없는 웨비나예요" }, { status: 404 });
 
@@ -110,8 +121,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   for (const row of regByGroup) ensure(row.utmSource, row.utmMedium).registered += row._count._all;
   for (const row of enteredByGroup) ensure(row.utmSource, row.utmMedium).entered += row._count._all;
 
-  const utmBreakdown = Array.from(merged.values())
+  const utmChannels = Array.from(merged.values())
     .map((row) => ({
+      // 품질 열을 붙일 때 쓸 접힌 키 — 표시용 라벨과 분리해 둔다(라벨은 "(direct)" 로 바뀐다).
+      key: groupKey(row.source, row.medium),
       source: row.source || "(direct)",
       medium: row.medium || "(none)",
       visits: row.visits,
@@ -214,8 +227,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   ).slice(0, 20);
 
   // ── 참여 스코어링 + 인터랙션 아카이브 — 기존 모델 집계만(신규 수집 없음) ──
-  const [engagement, pollRows, qaByStatus, qaTop, chatAgg, reminderCount, ctaAgg] = await Promise.all([
-    assembleWebinarEngagement(id, { liveStartAt: webinar.liveStartAt, liveEndAt: webinar.liveEndAt }),
+  const [engagement, facetRows, pollRows, qaByStatus, qaTop, chatAgg, reminderCount, ctaAgg] = await Promise.all([
+    assembleWebinarEngagement(id, { liveStartAt: webinar.liveStartAt, liveEndAt: webinar.liveEndAt, broadcastEndedAt: webinar.broadcastEndedAt }),
+    /* 리드 분석 축 — 업종·직함·채널. 등록 폼이 받아 두고도 명단에만 있던 값이다.
+       짧은 문자열 4개만 읽는다(262행이면 수십 KB) — 점수는 아래에서 id 로 붙인다. */
+    prisma.webinarRegistration.findMany({
+      where: { webinarId: id },
+      select: { id: true, industry: true, jobTitle: true, utmSource: true, utmMedium: true },
+    }),
     prisma.webinarPoll.findMany({
       where: { webinarId: id },
       orderBy: { createdAt: "asc" },
@@ -278,7 +297,190 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       qaUpvotes: r.qaUpvotes,
       ctaClicks: r.ctaClicks,
       agreeMarketing: r.agreeMarketing,
+      // 점수 근거 — 화면 툴팁이 "참석25 + 체류22 + 행동0 + 인텐트0" 을 그대로 보여준다
+      breakdown: r.breakdown,
     }));
+
+  /* 웨비나가 아직 열리기 전에는 세그먼트가 의미를 갖지 않는다 — 입장이 0 이라 전원이 노쇼로
+     집계돼, 등록 254명인 8/11 웨비나가 분석 화면에서 **"노쇼 100%"** 로 보였다(실측).
+     그 시점에 운영자가 실제로 쓸 수 있는 숫자는 "지금 확보한 리드가 쓸 만한가" 다.
+     phase 를 실어 보내고 화면이 before / live·ended 를 갈라 쓴다. */
+  const { status } = resolveWebinarStatus(webinar);
+  const phase: "before" | "live" | "ended" = status === "ended" ? "ended" : status === "live" ? "live" : "before";
+
+  /* 노쇼지만 마케팅 동의한 리드 — 리타겟 대상. 점수는 5점 콜드라 상위 참여자 목록에 절대
+     안 나오는데, 웨비나 다음 액션(재초대·다시보기 안내)에서 제일 큰 덩어리다. */
+  const retargetCount = engagement.rows.filter((r) => !r.entered && r.agreeMarketing).length;
+
+  /* ── 성과 퍼널 — 등록 → 시청 → 설문 응답 → 상담 희망 → 그중 마케팅 동의 ──
+   *
+   * 왜 이 순서인가(사장님 원안에서 한 군데 고침): 마케팅 약관 동의는 **등록 시점**에 체크하는
+   * 값이라 시청보다 먼저 일어난다. 퍼널 마지막에 두면 실측에서 `등록 257 → 시청 0 → 동의 142`
+   * 로 마지막 단계가 앞 단계보다 커진다(부분집합이 아니다). 그래서 마지막을
+   * **"상담 희망 중 마케팅도 동의한 사람"** 으로 둔다 — 바로 영업하고 마케팅도 보낼 수 있는
+   * 완전 활용 가능 리드이고, 단조 감소가 성립한다. 동의 전수는 별도 숫자로 함께 내려보낸다.
+   *
+   * '설문 응답' 단계를 넣은 이유: 시청→상담 낙차의 원인이 둘인데(설문을 못 봤다 / 봤지만
+   * 상담을 원치 않는다) 그 둘은 완전히 다른 문제다(노출·유도 vs 오퍼·콘텐츠).
+   *
+   * 익명 응답(registrationId=null)은 등록자 부분집합이 아니라 퍼널에서 제외한다 — 그 사실은
+   * unlinkedSurveyResponses 로 함께 내려 화면이 밝힌다(조용히 빼면 숫자가 작아 보인다).
+   */
+  const [surveyDefs, surveyResponses, consentedEntered, unlinkedCount] = await Promise.all([
+    prisma.webinarSurvey.findMany({ where: { webinarId: id }, select: { id: true, title: true, questions: true } }),
+    prisma.webinarSurveyResponse.findMany({
+      where: { webinarId: id, registrationId: { not: null } },
+      select: { surveyId: true, registrationId: true, answers: true },
+    }),
+    prisma.webinarRegistration.count({ where: { webinarId: id, agreeMarketing: true } }),
+    prisma.webinarSurveyResponse.count({ where: { webinarId: id, registrationId: null } }),
+  ]);
+
+  // 보관 문항까지 포함해야 이미 수집된 답변의 성과 지정이 살아 있다(관리자 경로와 같은 규칙).
+  const questionsBySurvey = new Map(
+    surveyDefs.map((s) => [s.id, normalizeSurveyQuestions(s.questions, { includeHidden: true })]),
+  );
+  const goalQuestionTitles = surveyDefs.flatMap((s) =>
+    goalQuestions(questionsBySurvey.get(s.id) ?? []).map((q) => q.title || s.title),
+  );
+
+  /* 사람 단위 distinct — 한 사람이 설문 두 개에서 성과 선택지를 골라도 1명이다. */
+  const respondedIds = new Set<string>();
+  const goalIds = new Set<string>();
+  for (const r of surveyResponses) {
+    if (!r.registrationId) continue;
+    respondedIds.add(r.registrationId);
+    const qs = questionsBySurvey.get(r.surveyId);
+    if (qs && responseHitsGoal(qs, (r.answers ?? {}) as SurveyAnswers)) goalIds.add(r.registrationId);
+  }
+  // 마케팅 동의는 점수 조립에 이미 있다 — 같은 소스를 써야 등록자 탭·CSV 와 어긋나지 않는다.
+  const marketingIds = new Set(engagement.rows.filter((r) => r.agreeMarketing).map((r) => r.registrationId));
+  const goalWithMarketing = [...goalIds].filter((rid) => marketingIds.has(rid)).length;
+
+  const performanceFunnel = {
+    /** 방문은 임베드 비콘이 붙은 면에서만 집계된다 — 0 이면 화면이 단계를 숨긴다. */
+    visits,
+    registered: totalRegistered,
+    entered: attended,
+    surveyResponded: respondedIds.size,
+    goalReached: goalIds.size,
+    goalWithMarketing,
+    /** 체류는 퍼널 단계가 아니라 보조 줄로 — 성과로 가는 경로가 아니라 시청의 질이다. */
+    stay30,
+    stay60,
+    /** 성과 문항이 지정되지 않았으면 화면이 "설문에서 지정하면 볼 수 있어요" 로 안내한다. */
+    goalConfigured: goalQuestionTitles.length > 0,
+    goalQuestionTitles: goalQuestionTitles.slice(0, 3),
+    /** 마케팅 동의 전수(노쇼 포함) — 퍼널 축이 아니라 별도 숫자다. */
+    marketingConsented: consentedEntered,
+    /** 등록자와 연결되지 않은 익명 설문 응답 — 퍼널에서 제외된 건수 */
+    unlinkedSurveyResponses: unlinkedCount,
+  };
+
+  /* ── 리드 분석 — 점수를 "결정에 쓸 수 있는 축" 으로 쪼갠다 ──
+     세그먼트 4칸만으로는 다음 웨비나를 어떻게 바꿀지 알 수 없다. 규칙은 webinar-lead-facets 에
+     모아 두고(테스트로 묶임) 여기서는 조립만 한다. */
+  const scoreById = new Map(engagement.rows.map((r) => [r.registrationId, r]));
+  const facetScored = facetRows
+    .map((f) => {
+      const s = scoreById.get(f.id);
+      return s
+        ? { entered: s.entered, score: s.score, segment: s.segment, breakdown: s.breakdown, jobTitle: f.jobTitle, industry: f.industry ?? "", channel: groupKey(f.utmSource, f.utmMedium), interactions: s }
+        : null;
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+
+  /* 채널별 품질 — 기존 유입 표에 열 두 개로 붙인다(새 카드를 만들지 않는다).
+     등록 수만 보면 meta 173명이 압도적이지만, 그 리드가 좋았는지는 평균 점수가 답한다. */
+  const byChannel = new Map<string, typeof facetScored>();
+  for (const r of facetScored) {
+    const bag = byChannel.get(r.channel);
+    if (bag) bag.push(r);
+    else byChannel.set(r.channel, [r]);
+  }
+  // 채널은 접기지 않고 전부 남긴다(표가 이미 채널을 다 보여준다) — 평균·신뢰 기준만 공유한다.
+  const channelQuality = new Map([...byChannel].map(([key, rows]) => [key, summarizeFacet(key, rows)]));
+  const utmBreakdown = utmChannels.map(({ key, ...row }) => {
+    const q = channelQuality.get(key);
+    return {
+      ...row,
+      avgScore: q?.avgScore ?? 0,
+      hot: q?.hot ?? 0,
+      hotRate: pct(q?.hot ?? 0, q?.entered ?? 0),
+      /** false 면 화면이 평균을 흐리게 표시한다 — 13명 채널의 평균은 노이즈다 */
+      scoreReliable: q?.reliable ?? false,
+    };
+  });
+
+  const leadAnalysis = {
+    /** 입장자 점수 분포(10점 구간) — 세그먼트 4칸으로는 "60점 벽" 이 안 보인다 */
+    histogram: scoreHistogram(facetScored),
+    /** 전체 점수가 어디서 왔나 — "체류는 좋았는데 상호작용이 0" 을 한 줄로 */
+    composition: scoreComposition(facetScored),
+    /** 업종 — K-뷰티/K-푸드처럼 이미 깔끔한 값이라 원문 상위 5개 + 기타 */
+    byIndustry: facetBy(facetScored, (r) => r.industry, { limit: 5 }),
+    /** 직함 — 자유 입력을 결재선 기준으로 묶는다(대표/대표이사/CEO 가 갈리지 않게) */
+    byRole: facetByRole(facetScored),
+    /** 행동별 리프트 — 행동 점수를 뺀 값으로 비교한다(그 함수 주석 참고) */
+    lift: actionLift(facetScored, [
+      { action: "투표", did: (r) => r.interactions.pollVotes > 0 },
+      { action: "채팅", did: (r) => r.interactions.chat > 0 },
+      { action: "질문", did: (r) => r.interactions.qaAsks > 0 },
+      { action: "질문 추천", did: (r) => r.interactions.qaUpvotes > 0 },
+      { action: "CTA 클릭", did: (r) => r.interactions.ctaClicks > 0 },
+      { action: "공유", did: (r) => r.interactions.shares > 0 },
+    ]),
+    minReliableSample: MIN_RELIABLE_SAMPLE,
+  };
+
+  /* ── 입소문(추천 링크) ──
+     공유 → 클릭 → 등록 3단 퍼널과 상위 추천인. 예전에는 공유 버튼이 맨 URL 을 복사해서
+     "몇 명이 공유했나" 도 "그 공유로 몇 명이 왔나" 도 답할 수 없었다.
+     클릭은 shareCode 로 집계되므로 등록자와 조인해 사람 단위로 되돌린다. */
+  const [womTotals, womBySurface, topReferrers] = await Promise.all([
+    prisma.$queryRawUnsafe<{ sharers: number; shares: number; clicks: number; registered: number }[]>(
+      `SELECT (SELECT COUNT(DISTINCT "registrationId") FROM "WebinarShareEvent" WHERE "webinarId" = $1::text)::int AS "sharers",
+              (SELECT COUNT(*)                        FROM "WebinarShareEvent" WHERE "webinarId" = $1::text)::int AS "shares",
+              (SELECT COALESCE(SUM(clicks), 0)        FROM "WebinarShareClick" WHERE "webinarId" = $1::text)::int AS "clicks",
+              (SELECT COUNT(*) FROM "WebinarRegistration"
+                WHERE "webinarId" = $1::text AND "referredById" IS NOT NULL)::int                               AS "registered"`,
+      id,
+    ),
+    prisma.webinarShareEvent.groupBy({ by: ["surface"], where: { webinarId: id }, _count: { _all: true } }),
+    prisma.$queryRawUnsafe<
+      { name: string; company: string | null; shares: number; clicks: number; registered: number }[]
+    >(
+      `SELECT r.name,
+              r.company,
+              COALESCE(se.n, 0)::int  AS "shares",
+              COALESCE(sc.n, 0)::int  AS "clicks",
+              COALESCE(rf.n, 0)::int  AS "registered"
+         FROM "WebinarRegistration" r
+         LEFT JOIN (SELECT "registrationId" AS rid, COUNT(*) n FROM "WebinarShareEvent"
+                     WHERE "webinarId" = $1::text GROUP BY 1) se ON se.rid = r.id
+         LEFT JOIN (SELECT "shareCode" AS code, SUM(clicks) n FROM "WebinarShareClick"
+                     WHERE "webinarId" = $1::text GROUP BY 1) sc ON sc.code = r."shareCode"
+         LEFT JOIN (SELECT "referredById" AS rid, COUNT(*) n FROM "WebinarRegistration"
+                     WHERE "webinarId" = $1::text AND "referredById" IS NOT NULL GROUP BY 1) rf ON rf.rid = r.id
+        WHERE r."webinarId" = $1::text
+          AND (se.n > 0 OR sc.n > 0 OR rf.n > 0)
+        ORDER BY "registered" DESC, "clicks" DESC, "shares" DESC
+        LIMIT 8`,
+      id,
+    ),
+  ]);
+
+  /* 웨비나 전 리드 품질 — 폼 구성에 따라 비어 있을 수 있는 필드만 센다(이름은 필수라 제외). */
+  const [leadQualityRow] = await prisma.$queryRawUnsafe<
+    { consented: number; withEmail: number; withPhone: number; withCompany: number }[]
+  >(
+    `SELECT COUNT(*) FILTER (WHERE "agreeMarketing")::int                          AS "consented",
+            COUNT(*) FILTER (WHERE email   IS NOT NULL AND email   <> '')::int     AS "withEmail",
+            COUNT(*) FILTER (WHERE phone   IS NOT NULL AND phone   <> '')::int     AS "withPhone",
+            COUNT(*) FILTER (WHERE company IS NOT NULL AND company <> '')::int     AS "withCompany"
+       FROM "WebinarRegistration" WHERE "webinarId" = $1::text`,
+    id,
+  );
 
   const qaCount = { pending: 0, answered: 0, dismissed: 0 };
   for (const g of qaByStatus) {
@@ -341,10 +543,39 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     interactions,
     scoring: {
       total: engagement.rows.length,
+      /** 점수 분모로 실제 쓴 방송 경과 분 — 화면이 "방송 47분 기준" 처럼 밝힌다 */
       liveMinutes: engagement.liveMinutes,
+      /** 예정 길이. 분모와 다르면(방송 중·조기 종료) 화면이 그 이유를 설명한다 */
+      scheduledMinutes: engagement.scheduledMinutes,
+      phase,
       distribution,
       top: topEngaged,
+      retargetCount,
+      leadQuality: {
+        consented: Number(leadQualityRow?.consented) || 0,
+        withEmail: Number(leadQualityRow?.withEmail) || 0,
+        withPhone: Number(leadQualityRow?.withPhone) || 0,
+        withCompany: Number(leadQualityRow?.withCompany) || 0,
+      },
     },
+    /* 입소문 — 공유 N명 → 클릭 N → 등록 N. 아무도 공유하지 않았으면 화면이 섹션을 숨긴다
+       (config 토글 + 실제 데이터 이중 게이트와 같은 원칙: 빈 껍데기를 보여주지 않는다). */
+    wordOfMouth: {
+      sharers: Number(womTotals[0]?.sharers) || 0,
+      shares: Number(womTotals[0]?.shares) || 0,
+      clicks: Number(womTotals[0]?.clicks) || 0,
+      registered: Number(womTotals[0]?.registered) || 0,
+      bySurface: womBySurface.map((g) => ({ surface: g.surface, count: g._count._all })),
+      top: topReferrers.map((r) => ({
+        name: r.name,
+        company: r.company,
+        shares: Number(r.shares) || 0,
+        clicks: Number(r.clicks) || 0,
+        registered: Number(r.registered) || 0,
+      })),
+    },
+    performanceFunnel,
+    leadAnalysis,
     hasVisitData: visits > 0,
     generatedAt: new Date().toISOString(),
   });

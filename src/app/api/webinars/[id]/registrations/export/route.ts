@@ -40,7 +40,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   });
 
   // 참여 점수·세그먼트 — 명단과 함께 리드 퀄리티를 내보낸다(캡 적용 체류 기반)
-  const engagement = await assembleWebinarEngagement(id, { liveStartAt: webinar.liveStartAt, liveEndAt: webinar.liveEndAt });
+  const engagement = await assembleWebinarEngagement(id, { liveStartAt: webinar.liveStartAt, liveEndAt: webinar.liveEndAt, broadcastEndedAt: webinar.broadcastEndedAt });
   const scoreMap = new Map(engagement.rows.map((r) => [r.registrationId, r]));
 
   /**

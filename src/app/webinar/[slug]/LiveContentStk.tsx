@@ -406,6 +406,8 @@ export default function LiveContentStk({
   slug,
   registrationId,
   onReauth,
+  onShare,
+  shareCopied,
 }: {
   webinar: WebinarForLive;
   accent: string;
@@ -429,6 +431,11 @@ export default function LiveContentStk({
    * 되돌린다. 없으면(미리보기 하니스 등) 버튼 자체를 그리지 않는다.
    */
   onReauth?: () => void;
+  /* 공유는 부모(live/page.tsx)가 처리한다 — 추천 코드(`?ref=`)와 공유 기록은 등록자 컨텍스트를
+     아는 쪽에만 있다. 예전엔 이 컴포넌트가 자체 handleShare 로 맨 URL 을 복사해, 시청 화면에서
+     나간 공유는 추적에서 통째로 빠졌다. */
+  onShare?: () => void;
+  shareCopied?: boolean;
 }) {
   const css = useMemo(
     () => buildStkCss(accent || "#FE5816", text || "#f0f0f2", surface || "#121216") + WATCH_CSS + SURVEY_FORM_CSS,
@@ -582,26 +589,6 @@ export default function LiveContentStk({
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) el.scrollTop = el.scrollHeight;
   }, [tab, chat?.messages]);
 
-  const [shared, setShared] = useState(false);
-  const handleShare = async () => {
-    const url = typeof window !== "undefined" ? window.location.href : "";
-    const title = webinar.name;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title, url });
-        return;
-      }
-    } catch {
-      return; // 사용자가 공유 시트를 닫음
-    }
-    try {
-      await navigator.clipboard.writeText(url);
-      setShared(true);
-      setTimeout(() => setShared(false), 2000);
-    } catch {
-      /* 클립보드 차단 무시 */
-    }
-  };
 
   const [notifyOnLocal, setNotifyOnLocal] = useState(false);
   const notifyLabel = notify?.switchLabel?.trim() || "세션 시작 알림 받기";
@@ -633,9 +620,11 @@ export default function LiveContentStk({
               다른 정보로 다시 확인
             </button>
           )}
-          <motion.button whileTap={{ scale: 0.96 }} transition={spring} className="lv-share" onClick={handleShare}>
-            <Share2 />{shared ? "복사됨" : "공유"}
-          </motion.button>
+          {onShare && (
+            <motion.button whileTap={{ scale: 0.96 }} transition={spring} className="lv-share" onClick={onShare}>
+              <Share2 />{shareCopied ? "복사됨" : "공유"}
+            </motion.button>
+          )}
         </div>
 
         {/* 스테이지: 플레이어 + 메타 + 참여 독 */}

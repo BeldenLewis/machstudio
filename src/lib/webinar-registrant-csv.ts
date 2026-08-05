@@ -61,6 +61,10 @@ export interface CsvEngagement {
   watchMinutes: number;
   entered: boolean;
   segment: Segment;
+  /** 공유 버튼을 누른 횟수 */
+  shares: number;
+  /** 이 사람의 추천 링크로 실제 등록한 사람 수 */
+  referrals: number;
 }
 
 export interface RegistrantCsvInput {
@@ -161,6 +165,10 @@ export function buildRegistrantCsvColumns(input: RegistrantCsvInput): Column[] {
         return e ? (e.entered ? SEGMENT_LABEL[e.segment] : SEGMENT_LABEL.noShow) : "";
       },
     },
+    /* 입소문 — "누가 우리 웨비나를 퍼뜨렸나". 화면(분석 탭)은 상위 8명만 보여주므로
+       전수 명단은 이 두 열이 유일한 경로다. */
+    { header: "공유횟수", value: (r) => { const e = engagementByRegistrant.get(r.id); return e ? String(e.shares) : ""; } },
+    { header: "데려온등록자", value: (r) => { const e = engagementByRegistrant.get(r.id); return e ? String(e.referrals) : ""; } },
   ];
 }
 

@@ -513,6 +513,11 @@ model Webinar {
   theme            Json // { accentColor, bgColor, surfaceColor, textColor, font, borderRadius, bgEffect }
   config           Json // { youtubeId, calendarUrl, surveyUrl, etc. }
   statusOverride   String? // 수동 상태 오버라이드: "registration" | "live" | "ended" | null(일정 기반 자동)
+  // 실제로 방송을 끝낸 시각 — statusOverride 가 "ended" 로 넘어간 순간. 예정 종료(liveEndAt)와 다를 수 있다.
+  // 참여 점수의 분모(평가 기준 길이)와 체류 상한이 이 값을 쓴다: 120분 예정인데 50분만 송출하면
+  // 끝까지 본 시청자가 예정 길이 기준으로는 54점 웜에 갇힌다(실제 송출 기준 74점 핫). webinar-scoring 참고.
+  // "ended" 에서 벗어나면(재개) null 로 되돌린다.
+  broadcastEndedAt DateTime?
   components       Json? // 임베드 컴포넌트 설정 { heroButton, banner, formWidget, allowLiveRegistration, entryOpenBeforeMinutes, endedMode }
   // 채팅 모더레이션 — 전용 컬럼(components 블롭이 설정탭 저장으로 덮어써지는 것 방지). 천천히모드 초·금지어·차단 등록자.
   chatSlowSec      Int      @default(0)
@@ -538,6 +543,8 @@ model Webinar {
   attendanceSegments WebinarAttendanceSegment[]
   visitStats         WebinarVisitStat[]
   popupClicks        WebinarPopupClick[]
+  shareEvents        WebinarShareEvent[]
+  shareClicks        WebinarShareClick[]
   // slug 는 @unique 가 이미 인덱스를 만들므로 별도 @@index 불필요 (중복 제거)
 
   @@index([projectId, createdAt(sort: Desc)])
@@ -600,6 +607,11 @@ model WebinarRegistration {
   isActive       Boolean   @default(false)
   submittedAt    DateTime  @default(now())
 
+  // 입소문 추적 — 이 등록자의 추천 코드(공유 링크 `?ref=`)와, 누구의 추천으로 들어왔는지.
+  // registrationId 를 링크에 넣으면 사칭이 가능해 별도 코드를 쓴다(webinar-share.ts 주석 참고).
+  shareCode      String?   @unique
+  referredById   String?
+
   // UTM 어트리뷰션 (CollectRecord와 동일 구성 — attribution-core 공용화 대비)
   utmSource        String?
   utmMedium        String?
@@ -622,8 +634,13 @@ model WebinarRegistration {
 
   webinar            Webinar                    @relation(fields: [webinarId], references: [id], onDelete: Cascade)
   attendanceSegments WebinarAttendanceSegment[]
+  shareEvents        WebinarShareEvent[]
+  // 추천인이 삭제되면 추천 관계만 끊는다(데려온 등록자는 남는다) — Cascade 면 명단이 사라진다.
+  referredBy         WebinarRegistration?       @relation("WebinarReferral", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals          WebinarRegistration[]      @relation("WebinarReferral")
 
   @@index([webinarId, submittedAt(sort: Desc)])
+  @@index([webinarId, referredById])
   // 동시 제출로 인한 중복 행 방지 — NULL 은 제외(전화만/이메일만 등록 허용),
   // 이메일은 lower() 로 대소문자 무시. Prisma 가 부분/함수 인덱스를 표현하지 못해
   // 실제 인덱스는 SQL 로 생성했다: WebinarRegistration_webinarId_phone_key,
@@ -780,6 +797,37 @@ model WebinarAttendanceSegment {
 
 // 부착 페이지 방문 일별 집계 (seen 비콘이 upsert) — 퍼널의 "방문" 단계.
 // utmSource/Medium 은 NULL 대신 "" 를 쓴다 (Postgres unique 의 NULL distinct 회피).
+/// 공유 버튼을 누른 기록 — "누가 공유했나". 클릭당 1행(공유는 사람당 몇 번뿐이라 집계하지 않는다).
+model WebinarShareEvent {
+  id             String   @id @default(cuid())
+  webinarId      String
+  registrationId String
+  surface        String // waiting | live | ended | landing (webinar-share.SHARE_SURFACES)
+  channel        String // native(OS 공유 시트) | copy(링크 복사)
+  createdAt      DateTime @default(now())
+
+  webinar      Webinar             @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+  registration WebinarRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([webinarId, createdAt])
+  @@index([registrationId])
+}
+
+/// 추천 링크(`?ref=`)로 들어온 방문 — 일자별 집계. 방문마다 행을 만들면 공유 하나가 수천 행이 된다
+/// (WebinarVisitStat 과 같은 규약: date 는 KST 자정 기준).
+model WebinarShareClick {
+  id        String   @id @default(cuid())
+  webinarId String
+  shareCode String
+  date      DateTime // KST 자정 기준 일자
+  clicks    Int      @default(0)
+
+  webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+
+  @@unique([webinarId, shareCode, date])
+  @@index([webinarId, date])
+}
+
 model WebinarVisitStat {
   id        String   @id @default(cuid())
   webinarId String

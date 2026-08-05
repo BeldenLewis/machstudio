@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { motion } from "framer-motion";
 import {
   Plus, Trash2, GripVertical, Link2, Loader2, BarChart3,
-  Star, CircleDot, ListChecks, Gauge, AlignLeft, Copy, ChevronDown, ChevronRight, ArrowLeft, Info, X, Smartphone, CalendarClock, CircleCheckBig, ClipboardList, MousePointerClick,
+  Star, CircleDot, ListChecks, Gauge, AlignLeft, Copy, ChevronDown, ChevronRight, ArrowLeft, Info, X, Smartphone, CalendarClock, CircleCheckBig, ClipboardList, MousePointerClick, Target,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
@@ -150,10 +150,16 @@ function QuestionRow({
   const hasOptions = q.type === "single" || q.type === "multiple";
   const optionCount = countOptions(q);
 
-  // 옵션이 줄어 maxSelect 가 옵션수 이상이 되면 무제한과 같아진다 — 정규화 규칙·UI 표시와 어긋나지 않게 정리.
-  const clampMax = (options: string[], next: Partial<SurveyQuestion>) => {
-    const n = options.filter((o) => o.trim()).length;
-    if (q.maxSelect !== undefined && q.maxSelect >= n) next.maxSelect = undefined;
+  /* 선택지를 고치면 함께 정리해야 하는 파생값 두 개.
+     저장 시 정규화가 같은 일을 하지만, 편집 중 화면에는 옛 값이 남아 있어
+     "성과로 지정된 칩" 이 이미 없는 문구를 가리키는 상태가 보인다. */
+  const clampDerived = (options: string[], next: Partial<SurveyQuestion>) => {
+    const live = options.filter((o) => o.trim());
+    // 옵션이 줄어 maxSelect 가 옵션수 이상이 되면 무제한과 같아진다.
+    if (q.maxSelect !== undefined && q.maxSelect >= live.length) next.maxSelect = undefined;
+    // 성과 지정은 **지금 있는 문구**만 유지 — 문구를 고치면 그 지정은 풀린다(안내 문구로 알린다).
+    const goals = (q.goalOptions ?? []).filter((o) => live.includes(o));
+    if (goals.length !== (q.goalOptions ?? []).length) next.goalOptions = goals.length ? goals : undefined;
     return next;
   };
 
@@ -163,6 +169,8 @@ function QuestionRow({
     const next: Partial<SurveyQuestion> = { type: t };
     if ((t === "single" || t === "multiple") && optionCount === 0) next.options = ["", ""];
     if (t !== "multiple") next.maxSelect = undefined;
+    // 별점·NPS·주관식은 성과 판정 대상이 아니다 — 남겨두면 저장 때 조용히 사라진다.
+    if (t !== "single" && t !== "multiple") next.goalOptions = undefined;
     patch(next);
   };
 
@@ -221,14 +229,14 @@ function QuestionRow({
                * 얻는 것: 드래그·키보드 재정렬(선택지 순서는 응답 화면의 표시 순서인데
                * 바꾸는 방법이 문구를 다시 타이핑하는 것뿐이었다).
                *
-               * clampMax 는 여기 남는다 — 이건 설문에만 있는 파생값이고, 계산 근거가
+               * clampDerived 는 여기 남는다 — 이건 설문에만 있는 파생값이고, 계산 근거가
                * 배열 길이가 아니라 **비어 있지 않은 옵션 수**다. 그래서 골격의 onCountChange
                * (배열 길이)로는 못 맞춘다. 배열을 손에 든 onChange 에서 처리한다.
                */}
               <OptionRows
                 listId={`survey-q-${q.id}`}
                 value={q.options}
-                onChange={(options) => patch(clampMax(options, { options }))}
+                onChange={(options) => patch(clampDerived(options, { options }))}
                 markerShape={q.type === "multiple" ? "square" : "circle"}
                 ownerLabel="문항"
                 ownerTitle={q.title}
@@ -263,6 +271,53 @@ function QuestionRow({
                       {n}
                     </button>
                   ))}
+                </div>
+              )}
+
+              {/**
+               * 성과 선택지 — 이 선택지를 고른 사람을 **성과 퍼널의 "상담 희망"** 으로 센다.
+               *
+               * 왜 자동 판정이 아닌가: 실제 설문에 상담을 언급하는 문항이 둘이었다
+               * ("1:1 상담을 희망하시나요?" 와 "현재 단계는?" 의 마지막 선택지 '1:1 상담 희망').
+               * 제목·문구로 추측하면 조용히 엉뚱한 문항을 센다.
+               *
+               * 선택지를 고쳐 쓰면 지정이 자동으로 끊긴다(정규화가 없는 문구를 버린다) —
+               * 그게 "지정은 있는데 성과가 0" 보다 낫고, 그 사실을 아래 문구로 알린다.
+               */}
+              {optionCount >= 1 && (
+                <div className="mt-1 border-t border-dashed border-border pt-2.5">
+                  <div className="mb-1.5 flex items-center gap-1.5">
+                    <Target className="h-3 w-3 shrink-0 text-violet-500" />
+                    <span className="text-[11px] font-medium text-muted-foreground">성과로 셀 선택지</span>
+                    <span className="text-[10.5px] text-muted-foreground/70">— 분석의 성과 퍼널에서 &lsquo;상담 희망&rsquo; 으로 집계돼요</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {q.options.filter((o) => o.trim()).map((opt) => {
+                      const on = (q.goalOptions ?? []).includes(opt);
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => {
+                            const cur = q.goalOptions ?? [];
+                            const next = on ? cur.filter((o) => o !== opt) : [...cur, opt];
+                            patch({ goalOptions: next.length ? next : undefined });
+                          }}
+                          className={`h-6 max-w-full truncate px-2 text-[11px] font-medium transition-colors ${R.control} ${on ? SELECTED : `bg-background text-muted-foreground hover:text-foreground ${FINISH.s2}`}`}
+                          title={on ? `성과로 셈: ${opt}` : `성과로 세기: ${opt}`}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {(q.goalOptions ?? []).length > 0 && (
+                    <p className="mt-1.5 flex items-start gap-1.5 text-[10.5px] leading-relaxed text-muted-foreground">
+                      <Info className="mt-0.5 h-3 w-3 shrink-0" />
+                      선택지 문구를 고치면 이 지정이 풀려요 — 문구를 바꾼 뒤에는 다시 지정해주세요.
+                    </p>
+                  )}
                 </div>
               )}
             </div>

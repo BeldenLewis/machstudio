@@ -59,6 +59,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "잘못된 상태 값이에요" }, { status: 400 });
   }
 
+  /* 실제 방송 종료 시각 — "종료" 로 넘어간 순간을 한 번 찍는다.
+     참여 점수의 분모가 이 값을 쓴다(webinar-scoring.resolveEvaluationMinutes): 120분 예정인데
+     50분만 송출하면 예정 길이 기준으로는 끝까지 본 시청자도 웜에 갇힌다.
+     · 이미 "ended" 인데 또 "ended" 가 오면 첫 기록을 유지한다(설정 저장마다 시각이 밀리지 않게)
+     · "ended" 에서 벗어나면(재개·되돌리기) null 로 지운다 — 남겨두면 재개 후 분모가 과거에 멈춘다 */
+  const endedNow = statusOverride === "ended" && webinar.statusOverride !== "ended";
+  const endedCleared = statusOverride !== undefined && statusOverride !== "ended" && webinar.statusOverride === "ended";
+
   // 날짜 파싱·순서 규칙은 webinar-schedule 하나로 — 생성(POST /api/webinars)과 같은 규칙을 쓴다.
   const parseDate = parseWebinarDate;
 
@@ -130,6 +138,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           config: mergeJson(webinar.config, config && typeof config === "object" && !Array.isArray(config) ? sanitizeConfig(config as Record<string, unknown>) : config),
         }),
         ...(statusOverride !== undefined && { statusOverride }),
+        ...(endedNow && { broadcastEndedAt: new Date() }),
+        ...(endedCleared && { broadcastEndedAt: null }),
         ...(components !== undefined && { components: mergeJson(webinar.components, components) }),
       },
     });
