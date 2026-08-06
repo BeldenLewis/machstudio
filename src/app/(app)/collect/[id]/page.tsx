@@ -652,6 +652,27 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ fields: fields.map((f, i) => ({ ...f, sortOrder: i })) }),
       });
       if (!res.ok) { toast.error("저장 실패"); return; }
+
+      /**
+       * 저장 결과를 **source.fieldMappings 에도 반영한다.**
+       *
+       * 안 하면 필드를 추가·수정·삭제해도 수집 데이터 표의 컬럼이 새로고침 전까지 낡은 채다 —
+       * 표 헤더·셀·CSV 헤더·모달이 전부 fields 가 아니라 source.fieldMappings 에서 컬럼을
+       * 뽑기 때문(1206·1251·622·627행). 저장은 됐는데 화면이 안 바뀌니 운영자는 저장이
+       * 실패한 줄 안다.
+       *
+       * fetchSource() 를 부르지 않는 이유: 그 함수는 **모든 폼 상태를 서버 값으로 다시
+       * 씌운다**(웹훅·허용 Origin·성공 트리거·리다이렉트). 필드를 저장하는 순간 옆 탭에서
+       * 저장 안 한 편집이 조용히 사라진다. PUT 이 이미 서버가 다시 읽은 전체 목록을
+       * 돌려주므로 추가 요청도 필요 없다.
+       */
+      const data = await res.json().catch(() => null);
+      if (Array.isArray(data?.fields)) {
+        setSource((prev) => (prev ? { ...prev, fieldMappings: data.fields } : prev));
+        // 새로 추가한 행은 클라이언트 임시 id 를 들고 있다 — 서버 행으로 바꿔 다음 저장이 실제 id 를 보내게.
+        setFields(data.fields);
+      }
+
       toast.success("필드 설정이 저장됐어요");
       if (tab === "script") fetchScript();
     } finally {
