@@ -365,6 +365,29 @@ function defaultIsValidHttpUrl(value: string): boolean {
 /** 이미 스킴이 있는가 — `https:`·`mailto:`·`javascript:` 모두 여기서 true 다(붙이지 않는다). */
 const HAS_SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
 
+/**
+ * 이 문자열의 **호스트 자리가 도메인처럼 생겼는가.** `https://` 를 붙일지 결정하는 유일한 관문이다.
+ *
+ * 왜 파싱 결과를 믿으면 안 되는가: `new URL()` 은 호스트가 없어도 통과시킨다. 그래서
+ * "붙였을 때 파싱되면 붙인다" 는 규칙은 아래를 전부 **조용히 망가진 절대 URL로 바꿔 버린다** —
+ *   `/webinarlive`    → https://webinarlive/      (호스트 "webinarlive")
+ *   `/files/deck.pdf` → https://files/deck.pdf    (호스트 "files")
+ *   `999`             → https://0.0.3.231/        (숫자가 IP 로 해석된다)
+ *   `tally`           → https://tally/
+ * 게다가 이렇게 만들어진 값은 protocol 이 https 라 safeHttpUrl 검사도 통과하므로 **경고도 안 뜬다.**
+ * 실측 피해: 배포 탭 라이브 페이지 URL 에 `/webinarlive` 를 적으면 파트너 사이트의 입장 버튼이
+ * 죽은 호스트로 나간다(예전에는 라우트가 null 로 만들고 로더가 올바른 기본 URL 로 폴백했다).
+ *
+ * 그래서 **원문의 호스트 자리**를 본다 — 점이 있어야 하고(또는 localhost), 파싱 결과는 안 믿는다.
+ */
+function rawLooksLikeHost(raw: string): boolean {
+  // 경로·쿼리·프래그먼트를 떼고, userinfo(@) 뒤를 호스트로, 포트(:)를 뗀다.
+  const beforePath = raw.split(/[/?#]/)[0];
+  const host = (beforePath.split("@").pop() ?? "").split(":")[0];
+  if (host === "localhost") return true;
+  return host.includes(".") && !host.startsWith(".") && !host.endsWith(".");
+}
+
 export function UrlField({
   label,
   value,
@@ -413,8 +436,10 @@ export function UrlField({
           onChange={(e) => onChange(e.target.value)}
           onBlur={(e) => {
             const raw = e.target.value.trim();
-            // 스킴만 없는 값이면 붙여서 살린다. 이미 스킴이 있거나 빈 값이면 건드리지 않는다.
-            if (raw && !HAS_SCHEME.test(raw) && isValidHttpUrl(`https://${raw}`)) {
+            /* 스킴만 없는 **도메인** 이면 붙여서 살린다. 이미 스킴이 있거나, 호스트 자리가
+               도메인처럼 생기지 않았으면(내부 경로·숫자·한 단어) 건드리지 않는다 —
+               건드리면 뜻이 바뀐 URL 을 만들면서 경고도 안 뜬다(rawLooksLikeHost 주석). */
+            if (raw && !HAS_SCHEME.test(raw) && rawLooksLikeHost(raw) && isValidHttpUrl(`https://${raw}`)) {
               onChange(`https://${raw}`);
             }
           }}

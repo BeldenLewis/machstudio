@@ -456,6 +456,29 @@ export function isHttpUrl(value: unknown): boolean {
   return safeHttpUrl(value) !== "";
 }
 
+/**
+ * http(s) **또는 사이트 내부 경로**(`/files/deck.pdf`)를 통과시킨다.
+ *
+ * 어떤 칸이 이걸 쓰는가: 뷰어가 값을 **safeHttpUrl 로 걸러내지 않고 href 에 그대로 넣는** 칸들 —
+ * 종료 화면 자료 다운로드·다음 웨비나, 라이브 CTA 카드 버튼, 팝업 버튼. 그 면에서는 우리
+ * 도메인의 내부 경로가 실제로 동작하는 정상 값이라, http(s) 만 통과시키면 화면이 **거짓으로**
+ * "지금 값은 저장되지 않아요" 라고 말한다(저장도 되고 링크도 먹는다).
+ *
+ * 반대로 대기 CTA·히어로 배경·스폰서·연사 홈페이지·종료 설문 URL·배포 사이트 주소는
+ * 뷰어나 라우트가 safeHttpUrl 로 거르므로 isHttpUrl 을 써야 한다 — 그쪽에서 내부 경로를
+ * 통과시키면 저장 단계에서 조용히 버려지는 값을 화면이 승인하게 된다.
+ *
+ * `javascript:`·`data:` 는 여기서도 막힌다(스킴이 있고 http(s) 가 아니며 `/` 로 시작하지 않는다).
+ */
+export function isHttpUrlOrSitePath(value: unknown): boolean {
+  const raw = String(value ?? "").trim();
+  if (raw.startsWith("/")) {
+    // `//evil.com` 은 프로토콜 상대 URL 이라 외부로 나간다 — 내부 경로가 아니다.
+    return !raw.startsWith("//");
+  }
+  return isHttpUrl(raw);
+}
+
 // 공개 페이지에 들어가는 URL 은 http(s)만 — javascript: 등 스킴이 임베드된 외부 사이트에서 실행되는 것을 차단.
 export function safeHttpUrl(value: unknown): string {
   const url = String(value ?? "").trim();

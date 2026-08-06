@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { useAutosave, useExternalSync, diffPatch } from "@/components/ui/use-autosave";
 import { EditableList, ROW_KEY, withRowKeys, stripRowKeys, type WithRowKey } from "@/components/ui/editable-list";
 import {
-  normalizeLivePageConfig, isHttpUrl, DEFAULT_ENDED_TITLE, DEFAULT_ENDED_DESCRIPTION,
+  normalizeLivePageConfig, isHttpUrl, isHttpUrlOrSitePath, DEFAULT_ENDED_TITLE, DEFAULT_ENDED_DESCRIPTION,
   type LivePageConfig, type LiveResource, type LiveNextWebinar,
 } from "@/lib/webinar-config";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
@@ -766,7 +766,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                           </div>
                           {btn.action === "url" ? (
                             <>
-                              <UrlField label="버튼 연결 URL" placeholder="연결 URL (https://…)" value={btn.url} onChange={(url) => upd({ url })} isValidHttpUrl={isHttpUrl} />
+                              <UrlField label="버튼 연결 URL" placeholder="연결 URL (https://… 또는 /내부경로)" value={btn.url} onChange={(url) => upd({ url })} isValidHttpUrl={isHttpUrlOrSitePath} invalidMessage="https:// 로 시작하는 주소이거나, / 로 시작하는 사이트 내부 경로여야 해요." />
                               {btn.open === "modal" && (
                                 <p className="text-[11px] text-amber-600">일부 사이트는 페이지 안 임베드(모달)를 차단해요 — 모달이 비어 보이면 새 창으로 바꿔주세요.</p>
                               )}
@@ -1078,7 +1078,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                     <input aria-label="자료 제목" className={inputCls} placeholder="제목 (예: 발표자료)" value={item.title} onChange={(e) => patch({ title: e.target.value })} />
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <input aria-label="자료 설명" className={inputCls} placeholder="설명 (예: PDF · 4.2MB)" value={item.meta} onChange={(e) => patch({ meta: e.target.value })} />
-                      <UrlField label="자료 다운로드 URL" placeholder="다운로드 URL — https://…" value={item.url} onChange={(url) => patch({ url })} isValidHttpUrl={isHttpUrl} />
+                      <UrlField label="자료 다운로드 URL" placeholder="다운로드 URL — https://… 또는 /내부경로" value={item.url} onChange={(url) => patch({ url })} isValidHttpUrl={isHttpUrlOrSitePath} invalidMessage="https:// 로 시작하는 주소이거나, / 로 시작하는 사이트 내부 경로여야 해요." />
                     </div>
                     {/* 자료별 대가 — 만족도 설문을 낸 사람에게 발표자료를, 사전조사를 낸 사람에게
                         다음 행사 자료를 주는 식으로 자료마다 조건이 다른 게 실제 운영이다.
@@ -1115,7 +1115,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
               <input aria-label="다음 웨비나 제목" className={inputCls} placeholder="제목 (예: 미국 아마존 입점 A to Z)" value={nextWeb.title} onChange={(e) => setNextWeb((n) => ({ ...n, title: e.target.value }))} />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input aria-label="다음 웨비나 일시" className={inputCls} placeholder="일시 (예: 8월 21일 오후 2시)" value={nextWeb.when} onChange={(e) => setNextWeb((n) => ({ ...n, when: e.target.value }))} />
-                <UrlField label="다음 웨비나 사전등록 URL" placeholder="사전등록 URL — https://…" value={nextWeb.url} onChange={(url) => setNextWeb((n) => ({ ...n, url }))} isValidHttpUrl={isHttpUrl} />
+                <UrlField label="다음 웨비나 사전등록 URL" placeholder="사전등록 URL — https://… 또는 /내부경로" value={nextWeb.url} onChange={(url) => setNextWeb((n) => ({ ...n, url }))} isValidHttpUrl={isHttpUrlOrSitePath} invalidMessage="https:// 로 시작하는 주소이거나, / 로 시작하는 사이트 내부 경로여야 해요." />
               </div>
             </Blk>
           )}
