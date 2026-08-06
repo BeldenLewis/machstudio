@@ -83,11 +83,11 @@ interface Props {
   rangeLabel: string;
 }
 
-function formatNumber(value: number) {
+export function formatNumber(value: number) {
   return value.toLocaleString("ko-KR");
 }
 
-function formatPercent(value: number | null) {
+export function formatPercent(value: number | null) {
   if (value === null || Number.isNaN(value)) return "비교 데이터 없음";
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(1)}%`;
@@ -212,7 +212,7 @@ function DedupCard({ dedup }: { dedup: RealtimeReportData["dedup"] }) {
   );
 }
 
-function ChangeBadge({ rangeChange }: MetricChange) {
+export function ChangeBadge({ rangeChange }: MetricChange) {
   if (rangeChange === null) {
     return <span className="rounded-full bg-secondary px-2 py-1 text-xs text-muted-foreground">비교 준비 중</span>;
   }
