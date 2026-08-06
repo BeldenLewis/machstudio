@@ -40,6 +40,8 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { WEBINAR_STATUS_META } from "@/lib/webinar-status";
 import { surveyOpenState, type SurveyQuestion } from "@/lib/webinar-survey";
 import { formatKst } from "@/lib/datetime";
+import { isHttpUrlOrSitePath } from "@/lib/webinar-config";
+import { UrlField } from "@/components/ui/primitives";
 import { isPauseSession, isRealSession, sessionTypeLabel } from "@/lib/webinar-sessions";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
@@ -282,7 +284,9 @@ function PopupPanel({ webinarId }: { webinarId: string }) {
           {form.useTally ? (
             <input value={form.tallyFormId} onChange={(e) => setForm((f) => ({ ...f, tallyFormId: e.target.value }))} placeholder="Tally 폼 ID" className={inputCls} />
           ) : (
-            <input value={form.buttonUrl} onChange={(e) => setForm((f) => ({ ...f, buttonUrl: e.target.value }))} placeholder="버튼 URL" className={inputCls} />
+            /* 스킴 없이 적으면 시청자 화면의 버튼이 죽는다(값은 남고 링크만 안 먹는다) —
+               라이브 중에 발견되는 종류의 사고라 입력 시점에 막는다. */
+            <UrlField label="버튼 URL" value={form.buttonUrl} onChange={(buttonUrl) => setForm((f) => ({ ...f, buttonUrl }))} placeholder="버튼 URL — https://… 또는 /내부경로" isValidHttpUrl={isHttpUrlOrSitePath} invalidMessage="https:// 로 시작하는 주소이거나, / 로 시작하는 사이트 내부 경로여야 해요." />
           )}
         </div>
         <div className="flex items-center justify-between gap-2">

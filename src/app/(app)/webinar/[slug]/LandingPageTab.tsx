@@ -12,7 +12,7 @@ import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { Switch } from "@/components/ui/switch";
 import {
   normalizeLandingPageConfig,
-  safeHttpUrl,
+  isHttpUrl,
   DEFAULT_LANDING_COLORS,
   LANDING_BG_SECTIONS,
   type LandingColors,
@@ -27,7 +27,7 @@ import {
 } from "@/lib/webinar-config";
 import { LANDING_IMAGE_ACCEPT, LANDING_VIDEO_ACCEPT, validateLandingMedia } from "@/lib/webinar-landing-media";
 import { SESSION_LOGO_ACCEPT, SESSION_LOGO_MAX_LABEL, validateSessionLogo } from "@/lib/webinar-speaker-photo";
-import { FINISH, FIELD_CLS, JumpLink, Segmented } from "@/components/ui/primitives";
+import { FINISH, FIELD_CLS, JumpLink, Segmented, UrlField } from "@/components/ui/primitives";
 import { EditableList, ROW_KEY, withRowKeys, stripRowKeys, type WithRowKey } from "@/components/ui/editable-list";
 import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
 
@@ -209,56 +209,6 @@ function SectionCard({
   );
 }
 
-
-/**
- * URL 한 칸 — 스킴을 **입력 시점에 강제**한다.
- *
- * 왜 필요한가: normalizeLandingPageConfig 는 http(s) 가 아닌 URL 을 빈 값으로 만든다(파트너
- * 사이트에 마운트되는 마크업이라 이 방어는 유지해야 한다). 그래서 운영자가 `www.acme.co.kr`
- * 처럼 스킴 없이 적으면 그 값은 DB 에는 원문으로 남지만 **공개 페이지에서는 링크가 죽고**,
- * 다음 리마운트 때 칸이 비면서 그 다음 자동저장이 빈 값을 영구 저장한다(실측 확인).
- *
- * 그래서 두 겹으로 막는다:
- *  1) blur 에 https:// 를 붙여 **정상 입력을 그냥 통과시킨다** — AGENTS.md 의
- *     "입력은 소스에서 정규화 — 안내 문구가 아니라 입력 시점에 강제".
- *  2) 그래도 안 되는 값(공백 포함·잘못된 호스트 등)은 그 자리에서 인라인으로 알린다.
- * (SessionsTab 의 연사 홈페이지 칸이 같은 이유로 같은 구조를 쓴다.)
- */
-function UrlField({
-  label, value, onChange, placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (next: string) => void;
-  placeholder: string;
-}) {
-  const invalid = value.trim() !== "" && !safeHttpUrl(value);
-  return (
-    <div>
-      <input
-        aria-label={label}
-        type="url"
-        inputMode="url"
-        className={inputCls}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={(e) => {
-          const raw = e.target.value.trim();
-          // 스킴만 없는 값이면 붙여서 살린다. 이미 스킴이 있거나 빈 값이면 건드리지 않는다.
-          if (raw && !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw) && safeHttpUrl(`https://${raw}`)) {
-            onChange(`https://${raw}`);
-          }
-        }}
-        placeholder={placeholder}
-      />
-      {invalid && (
-        <p className="mt-1 text-[11px] leading-relaxed text-red-500">
-          https:// 로 시작하는 주소를 넣어주세요. 지금 값은 저장되지 않아요.
-        </p>
-      )}
-    </div>
-  );
-}
 
 const MEDIA_TYPES: { id: HeroMediaType; label: string; icon: typeof Ban }[] = [
   { id: "none", label: "없음", icon: Ban },
@@ -568,16 +518,18 @@ export default function LandingPageTab({
                         if (file) void uploadHeroMedia(file);
                       }}
                     />
-                    <div className="relative flex-1 min-w-[220px]">
-                      <Link2 className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                      <input
-                        aria-label="히어로 배경 미디어 URL"
-                        className={`${inputCls} pl-8`}
-                        value={state.heroMediaUrl}
-                        onChange={(e) => patch({ heroMediaUrl: e.target.value })}
-                        placeholder={state.heroMediaType === "video" ? "또는 URL 붙여넣기 (mp4)" : "또는 URL 붙여넣기 (jpg·png)"}
-                      />
-                    </div>
+                    {/* 스킴 없는 URL 은 정규화가 통째로 버린다(임베드 XSS 방어) — 그대로 두면
+                        배경이 조용히 안 나오고, 다음 리마운트 때 칸이 비면서 자동저장이 그 빈 값을
+                        영구 저장한다(실측). UrlField 가 blur 에 https:// 를 붙이고 안 되면 알린다. */}
+                    <UrlField
+                      label="히어로 배경 미디어 URL"
+                      value={state.heroMediaUrl}
+                      onChange={(heroMediaUrl) => patch({ heroMediaUrl })}
+                      placeholder={state.heroMediaType === "video" ? "또는 URL 붙여넣기 — https://… (mp4)" : "또는 URL 붙여넣기 — https://… (jpg·png)"}
+                      leadingIcon={<Link2 className="h-3.5 w-3.5" />}
+                      isValidHttpUrl={isHttpUrl}
+                      className="flex-1 min-w-[220px]"
+                    />
                   </>
                 )}
               </div>
@@ -778,7 +730,10 @@ export default function LandingPageTab({
               addLabel="단계 추가" emptyState={<p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">아직 단계이 없어요. 아래에서 추가하면 랜딩 페이지에 표시돼요.</p>}
               renderRow={({ item, index, patch: p }) => (
                 <>
-                  <input aria-label="참여 단계 제목" className={inputCls} value={item.title} onChange={(e) => p({ title: e.target.value })} placeholder={`Step ${index + 1} 제목`} />
+                  {/* 다른 목록과 같은 안내를 준다 — 제목이 비면 그 단계가 빠지고, 남은 단계가
+                      없으면 **참여 방법 섹션이 통째로 사라진다.** 이 칸만 안내가 없어서
+                      "다 지웠는데 왜 섹션이 없어졌는지" 알 길이 없었다. */}
+                  <input aria-label="참여 단계 제목" className={inputCls} value={item.title} onChange={(e) => p({ title: e.target.value })} placeholder={`Step ${index + 1} 제목 (필수 — 비우면 공개 페이지에 안 나와요)`} />
                   <textarea aria-label="참여 단계 설명" className={`${inputCls} resize-none`} rows={2} value={item.description} onChange={(e) => p({ description: e.target.value })} placeholder="설명" />
                 </>
               )}
@@ -913,12 +868,14 @@ export default function LandingPageTab({
                           value={item.logoUrl}
                           onChange={(logoUrl) => p({ logoUrl })}
                           placeholder="로고 URL — https://… (비우면 이름만 나가요)"
+                          isValidHttpUrl={isHttpUrl}
                         />
                         <UrlField
                           label="스폰서 홈페이지 링크"
                           value={item.url}
                           onChange={(url) => p({ url })}
                           placeholder="홈페이지 링크 — https://… (선택)"
+                          isValidHttpUrl={isHttpUrl}
                         />
                       </div>
                     </div>

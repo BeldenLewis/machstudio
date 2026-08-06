@@ -8,8 +8,8 @@
  */
 
 import { formatKst } from "@/lib/datetime";
-import { DEFAULT_LANDING_AUDIENCE_TITLE,
-  DEFAULT_LANDING_HIGHLIGHTS_TITLE, DEFAULT_LANDING_SPONSORS_TITLE,
+import { DEFAULT_LANDING_AUDIENCE_TITLE, DEFAULT_LANDING_CTA_LABEL,
+  DEFAULT_LANDING_HIGHLIGHTS_TITLE, DEFAULT_LANDING_SPONSORS_TITLE, DEFAULT_LANDING_VENUE,
   normalizeLandingPageConfig, safeHttpUrl } from "@/lib/webinar-config";
 import { isRealSession } from "@/lib/webinar-sessions";
 import { UTM_QUERY_KEYS } from "@/lib/attribution-normalize";
@@ -91,6 +91,8 @@ export function buildLandingModel(webinar: LandingWebinar, opts: BuildLandingMod
   const onPrimary = onPrimaryFor(accent);
 
   const brand = lp.brand.trim() || webinar.name;
+  // 일시 옆 라벨 — 폴백은 여기 한 번(정규화는 원문을 통과시킨다). webinar-config 주석 참고.
+  const venue = lp.venue.trim() || DEFAULT_LANDING_VENUE;
   const titleLines = lp.titleLines.length ? lp.titleLines : [webinar.name];
   const subtitle = lp.subtitle.trim() || (webinar.description ?? "").split("\n")[0] || "";
   // 24시간제는 formatKst 기본값이다(datetime.ts) — 여기서 다시 넘기면 규칙이 두 곳에 산다.
@@ -118,7 +120,7 @@ export function buildLandingModel(webinar: LandingWebinar, opts: BuildLandingMod
       : canEnter
         ? "웨비나 입장하기"
         : statusInfo.canRegister
-          ? lp.ctaLabel
+          ? (lp.ctaLabel.trim() || DEFAULT_LANDING_CTA_LABEL)
           : "사전등록이 마감되었어요";
 
   // 임베드는 호출자가 만든 임의의 객체를 넘길 수 있어 세션 배열 부재를 방어한다(파트너 문서에서 throw 금지).
@@ -193,6 +195,7 @@ export function buildLandingModel(webinar: LandingWebinar, opts: BuildLandingMod
     accent,
     onPrimary,
     brand,
+    venue,
     titleLines,
     subtitle,
     dateStr,

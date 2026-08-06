@@ -168,7 +168,7 @@ export function renderHero(m: LandingModel): HTMLElement {
         m.subtitle ? h("p", { class: "hero-subtitle" }, m.subtitle) : null,
       ),
       // 일시 + 장소는 한 문단 두 줄 — CSS white-space:pre-line 이 줄바꿈을 살린다
-      h("p", { class: "hero-meta" }, m.dateStr, "\n", m.lp.venue),
+      h("p", { class: "hero-meta" }, m.dateStr, "\n", m.venue),
       cta,
     ),
   );

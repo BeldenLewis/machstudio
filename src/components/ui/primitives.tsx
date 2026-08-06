@@ -331,6 +331,126 @@ export const FieldSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HT
   },
 );
 
+/**
+ * URL 한 칸 — **스킴을 입력 시점에 강제한다.**
+ *
+ * 왜 프리미티브인가: 어드민의 URL 칸이 열 곳이 넘는데 전부 맨 input 이었고, 뒤에서 그 값을
+ * 검사하는 코드가 **스킴 없는 값을 조용히 버린다.** 실측한 두 갈래 피해:
+ *
+ *  · **값이 파괴된다** — 종료 화면 설문 URL(config.surveyUrl)은 PATCH 라우트의 sanitizeConfig
+ *    가 http(s) 아닌 값을 null 로 만든다. 이미 저장돼 있던 정상 URL 도 운영자가 스킴 없이
+ *    다시 적는 순간 **같은 세션에서** 사라지고, 자동저장은 성공이라고 표시한다.
+ *    배포 탭 사이트 주소·사전등록 허용 Origin 도 각자 라우트에서 같은 일이 난다.
+ *  · **뷰어 링크가 죽는다** — 랜딩 히어로 배경, 종료 화면 자료·다음 웨비나, 라이브 CTA 버튼,
+ *    팝업 버튼, 세션 사진·로고. 값은 DB 에 남지만 공개 화면에서 링크·이미지가 안 나온다.
+ *
+ * 그래서 두 겹으로 막는다:
+ *  1) blur 에 `https://` 를 붙여 **정상 입력을 그냥 통과시킨다** — AGENTS.md 의
+ *     "입력은 소스에서 정규화 — 안내 문구가 아니라 입력 시점에 강제".
+ *  2) 그래도 안 되는 값은 그 자리에서 인라인으로 알린다 — "검증은 제출 전에, 필드 바로 아래".
+ *     저장 후 조용히 비워지면 왜 사라졌는지 알 수 없다.
+ *
+ * `isValidHttpUrl` 는 호출부가 넘긴다 — 이 파일은 프리미티브라 도메인 모듈(webinar-config)을
+ * import 하지 않는다. 넘기지 않으면 new URL() 기반 기본 판정을 쓴다.
+ */
+function defaultIsValidHttpUrl(value: string): boolean {
+  try {
+    const u = new URL(value.trim());
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/** 이미 스킴이 있는가 — `https:`·`mailto:`·`javascript:` 모두 여기서 true 다(붙이지 않는다). */
+const HAS_SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
+
+/**
+ * 이 문자열의 **호스트 자리가 도메인처럼 생겼는가.** `https://` 를 붙일지 결정하는 유일한 관문이다.
+ *
+ * 왜 파싱 결과를 믿으면 안 되는가: `new URL()` 은 호스트가 없어도 통과시킨다. 그래서
+ * "붙였을 때 파싱되면 붙인다" 는 규칙은 아래를 전부 **조용히 망가진 절대 URL로 바꿔 버린다** —
+ *   `/webinarlive`    → https://webinarlive/      (호스트 "webinarlive")
+ *   `/files/deck.pdf` → https://files/deck.pdf    (호스트 "files")
+ *   `999`             → https://0.0.3.231/        (숫자가 IP 로 해석된다)
+ *   `tally`           → https://tally/
+ * 게다가 이렇게 만들어진 값은 protocol 이 https 라 safeHttpUrl 검사도 통과하므로 **경고도 안 뜬다.**
+ * 실측 피해: 배포 탭 라이브 페이지 URL 에 `/webinarlive` 를 적으면 파트너 사이트의 입장 버튼이
+ * 죽은 호스트로 나간다(예전에는 라우트가 null 로 만들고 로더가 올바른 기본 URL 로 폴백했다).
+ *
+ * 그래서 **원문의 호스트 자리**를 본다 — 점이 있어야 하고(또는 localhost), 파싱 결과는 안 믿는다.
+ */
+function rawLooksLikeHost(raw: string): boolean {
+  // 경로·쿼리·프래그먼트를 떼고, userinfo(@) 뒤를 호스트로, 포트(:)를 뗀다.
+  const beforePath = raw.split(/[/?#]/)[0];
+  const host = (beforePath.split("@").pop() ?? "").split(":")[0];
+  if (host === "localhost") return true;
+  return host.includes(".") && !host.startsWith(".") && !host.endsWith(".");
+}
+
+export function UrlField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  id,
+  leadingIcon,
+  className,
+  isValidHttpUrl = defaultIsValidHttpUrl,
+  disabled,
+  invalidMessage = "https:// 로 시작하는 주소를 넣어주세요. 지금 값은 저장되지 않아요.",
+}: {
+  /** aria-label. 보이는 라벨이 따로 있으면 id 를 함께 넘겨 htmlFor 로 묶는다. */
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  placeholder: string;
+  id?: string;
+  /** 칸 안 왼쪽 아이콘(예: Link2). 넘기면 입력에 pl-8 이 붙는다. */
+  leadingIcon?: ReactNode;
+  className?: string;
+  isValidHttpUrl?: (value: string) => boolean;
+  disabled?: boolean;
+  invalidMessage?: string;
+}) {
+  const invalid = value.trim() !== "" && !isValidHttpUrl(value);
+  return (
+    <div className={className}>
+      {/* 아이콘의 기준은 **입력칸만** 감싼 이 상자다. 바깥 상자를 기준으로 잡으면 아래 경고
+          문구가 뜨는 순간 상자가 높아져 아이콘이 같이 내려간다(top-1/2 기준이 바뀌므로). */}
+      <div className="relative">
+        {leadingIcon && (
+          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
+            {leadingIcon}
+          </span>
+        )}
+        <input
+          id={id}
+          aria-label={label}
+          aria-invalid={invalid || undefined}
+          type="url"
+          inputMode="url"
+          disabled={disabled}
+          className={`${invalid ? FIELD_CLS_DANGER : FIELD_CLS} ${leadingIcon ? "pl-8" : ""}`}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={(e) => {
+            const raw = e.target.value.trim();
+            /* 스킴만 없는 **도메인** 이면 붙여서 살린다. 이미 스킴이 있거나, 호스트 자리가
+               도메인처럼 생기지 않았으면(내부 경로·숫자·한 단어) 건드리지 않는다 —
+               건드리면 뜻이 바뀐 URL 을 만들면서 경고도 안 뜬다(rawLooksLikeHost 주석). */
+            if (raw && !HAS_SCHEME.test(raw) && rawLooksLikeHost(raw) && isValidHttpUrl(`https://${raw}`)) {
+              onChange(`https://${raw}`);
+            }
+          }}
+          placeholder={placeholder}
+        />
+      </div>
+      {invalid && <p className="mt-1 text-[11px] leading-relaxed text-red-500">{invalidMessage}</p>}
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Btn / Chip / Segmented — 컨트롤
 // ─────────────────────────────────────────────────────────────────────────────
