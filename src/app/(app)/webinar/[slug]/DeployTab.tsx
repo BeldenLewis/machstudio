@@ -23,7 +23,8 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { getPublicAppOrigin } from "@/lib/app-url";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
-import { normalizeLandingPageConfig } from "@/lib/webinar-config";
+import { isHttpUrl, normalizeLandingPageConfig } from "@/lib/webinar-config";
+import { FIELD_CLS, UrlField } from "@/components/ui/primitives";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -425,13 +426,14 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="사이트 이름 (예: 스마트테크코리아)"
-                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400"
+                  className={FIELD_CLS}
                 />
-                <input
+                <UrlField
+                  label="사이트 주소"
                   value={newSiteUrl}
-                  onChange={(e) => setNewSiteUrl(e.target.value)}
+                  onChange={setNewSiteUrl}
                   placeholder="사이트 주소 (선택 — 예: https://smarttechkorea.com)"
-                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-violet-400"
+                  isValidHttpUrl={isHttpUrl}
                 />
                 <motion.button
                   whileTap={{ scale: 0.98 }}
@@ -503,11 +505,16 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
                 <div className="mt-3 space-y-1.5">
                   <p className="text-[11px] font-medium text-muted-foreground">라이브 페이지 URL (아임웹에 만든 라이브 전용 페이지 주소)</p>
                   <div className="flex items-center gap-2">
-                    <input
+                    {/* 이 값은 **라우트가 버린다** — PATCH /api/webinar-embed-sites/[id] 의 safeUrl 이
+                        http(s) 아닌 값을 null 로 만든다. 스킴 없이 적으면 저장했다고 생각한 주소가
+                        사라지고 아무 안내도 없었다(실측). */}
+                    <UrlField
+                      label="라이브 페이지 URL"
                       value={liveUrlDrafts[site.id] ?? site.livePageUrl ?? ""}
-                      onChange={(e) => setLiveUrlDrafts((prev) => ({ ...prev, [site.id]: e.target.value }))}
+                      onChange={(v) => setLiveUrlDrafts((prev) => ({ ...prev, [site.id]: v }))}
                       placeholder="https://example.com/webinarlive"
-                      className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none transition-colors focus:border-violet-400"
+                      isValidHttpUrl={isHttpUrl}
+                      className="min-w-0 flex-1"
                     />
                     <motion.button
                       whileTap={{ scale: 0.96 }}

@@ -433,6 +433,10 @@ export const DEFAULT_LANDING_HIGHLIGHTS_TITLE = "참여하면 얻어가는 것";
  * 다르게 부르는 페이지는 이 값을 그냥 덮어쓰면 된다.
  */
 export const DEFAULT_LANDING_SPONSORS_TITLE = "Sponsors";
+/** 일시 옆 라벨 기본값. 비우면 이 값이 나간다(저장 시점 값이 굳지 않게). */
+export const DEFAULT_LANDING_VENUE = "ONLINE LIVE";
+/** 히어로 등록 버튼 기본 문구. 비우면 이 값이 나간다. */
+export const DEFAULT_LANDING_CTA_LABEL = "사전 등록하기";
 
 /** 온라인 웨비나 공통 참여 절차 — 사실 기반 기본값(어드민이 자유 수정) */
 export const DEFAULT_LANDING_JOIN_STEPS: LandingJoinStep[] = [
@@ -440,6 +444,17 @@ export const DEFAULT_LANDING_JOIN_STEPS: LandingJoinStep[] = [
   { title: "입장 확인", description: "라이브 당일 등록한 연락처로\n본인 확인 후 바로 입장할 수 있어요." },
   { title: "라이브 시청", description: "실시간 Q&A와 채팅으로\n궁금한 점을 그 자리에서 해결하세요." },
 ];
+
+/**
+ * 이 값이 통과하는가 — **어드민 입력 검증이 이 함수를 쓴다.**
+ *
+ * safeHttpUrl 과 같은 규칙을 쓰는 게 핵심이다. 화면이 "괜찮다" 고 판정한 값이 저장 경로에서
+ * 버려지면(또는 그 반대면) 운영자는 원인을 알 수 없다 — 실측된 사고가 정확히 그것이었다.
+ * 판정을 복제하지 말고 이 함수를 부를 것.
+ */
+export function isHttpUrl(value: unknown): boolean {
+  return safeHttpUrl(value) !== "";
+}
 
 // 공개 페이지에 들어가는 URL 은 http(s)만 — javascript: 등 스킴이 임베드된 외부 사이트에서 실행되는 것을 차단.
 export function safeHttpUrl(value: unknown): string {
@@ -495,8 +510,12 @@ export function normalizeLandingPageConfig(
     brand: str(lp.brand),
     titleLines: Array.isArray(lp.titleLines) ? (lp.titleLines as unknown[]).map(String).filter((s) => s.trim() !== "") : [],
     subtitle: str(lp.subtitle),
-    venue: str(lp.venue) || "ONLINE LIVE",
-    ctaLabel: str(lp.ctaLabel) || "사전 등록하기",
+    /* 빈 값을 **그대로 통과**시킨다 — 폴백은 모델에서 한 번(audience·highlights 머리글과 같은 규칙).
+       예전엔 여기서 기본값을 채웠고, 그래서 운영자가 칸을 비우면 리마운트 때 기본 문구가 칸에
+       되살아나 다음 자동저장이 그 문구를 **DB 에 굳혔다**(실측). 굳으면 나중에 기본값을 고쳐도
+       그 웨비나엔 반영되지 않는다 — 이 파일이 종료 화면 문구에 대해 이미 적어 둔 규칙과 같다. */
+    venue: str(lp.venue),
+    ctaLabel: str(lp.ctaLabel),
     colors: {
       lightBg: hex(colors.lightBg, DEFAULT_LANDING_COLORS.lightBg),
       darkBg: hex(colors.darkBg, DEFAULT_LANDING_COLORS.darkBg),

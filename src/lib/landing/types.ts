@@ -74,6 +74,8 @@ export interface LandingModel {
   accent: string;
   onPrimary: string;
   brand: string;
+  /** 일시 옆 라벨 — 비면 기본 문구가 들어간 값(폴백은 모델에서 한 번). */
+  venue: string;
   titleLines: string[];
   subtitle: string;
   dateStr: string;

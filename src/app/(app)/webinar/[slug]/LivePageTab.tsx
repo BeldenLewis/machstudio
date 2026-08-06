@@ -7,14 +7,14 @@ import { toast } from "sonner";
 import { useAutosave, useExternalSync, diffPatch } from "@/components/ui/use-autosave";
 import { EditableList, ROW_KEY, withRowKeys, stripRowKeys, type WithRowKey } from "@/components/ui/editable-list";
 import {
-  normalizeLivePageConfig, safeHttpUrl, DEFAULT_ENDED_TITLE, DEFAULT_ENDED_DESCRIPTION,
+  normalizeLivePageConfig, isHttpUrl, DEFAULT_ENDED_TITLE, DEFAULT_ENDED_DESCRIPTION,
   type LivePageConfig, type LiveResource, type LiveNextWebinar,
 } from "@/lib/webinar-config";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { getYouTubeVideoId } from "@/lib/youtube";
 import { Switch } from "@/components/ui/switch";
 import { goesFor } from "@/lib/webinar-exposure";
-import { Blk, JumpLink, btnCls, FIELD_CLS, FIELD_CLS_DANGER, FINISH, R, SELECTED, Segmented } from "@/components/ui/primitives";
+import { Blk, JumpLink, btnCls, FIELD_CLS, FIELD_CLS_DANGER, FINISH, R, SELECTED, Segmented, UrlField } from "@/components/ui/primitives";
 
 /** 시청자에게 보이는 한 페이지의 네 순간. 어드민에서는 이 상태로 편집 대상을 고른다. */
 export type WatchState = "waiting" | "entry" | "live" | "ended";
@@ -211,7 +211,6 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
 
   // 라이브 페이지 화면(대기·입장·종료) 섹션 on/off + 자료·다음웨비나 데이터
   const [screens, setScreens] = useState(() => normalizeLivePageConfig(webinar.config));
-  const waitingFollowUpUrlInvalid = screens.waiting.followUp.ctaUrl.trim() !== "" && safeHttpUrl(screens.waiting.followUp.ctaUrl) === "";
   // 자료는 스키마에 id 가 없다 → 편집 중에만 클라이언트 키를 붙여 안정 키를 확보하고,
   // 저장 직전 stripRowKeys 로 떼어낸다(저장 형태는 그대로).
   const [resources, setResources] = useState<WithRowKey<LiveResource>[]>(
@@ -648,17 +647,15 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                 className={FIELD_CLS}
                 placeholder="예: 행사 안내 보기"
               />
-              <input
-                aria-label="대기 CTA 연결 URL"
-                type="url"
+              {/* 인라인 경고는 예전부터 있었다 — UrlField 로 옮기면서 **자동 https:// 붙이기**가
+                  더해진다(경고만으로는 운영자가 왜 안 되는지 알아도 손이 한 번 더 간다). */}
+              <UrlField
+                label="대기 CTA 연결 URL"
                 value={screens.waiting.followUp.ctaUrl}
-                onChange={(e) => setFollowUp({ ctaUrl: e.target.value })}
-                className={waitingFollowUpUrlInvalid ? FIELD_CLS_DANGER : FIELD_CLS}
+                onChange={(ctaUrl) => setFollowUp({ ctaUrl })}
                 placeholder="https://..."
+                isValidHttpUrl={isHttpUrl}
               />
-              {waitingFollowUpUrlInvalid && (
-                <p className="text-[11px] text-destructive">http:// 또는 https:// 주소를 입력해 주세요.</p>
-              )}
             </div>
           </Blk>
         </>
@@ -769,7 +766,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                           </div>
                           {btn.action === "url" ? (
                             <>
-                              <input aria-label="버튼 연결 URL" type="url" placeholder="연결 URL (https://…)" value={btn.url} onChange={(e) => upd({ url: e.target.value })} className={inputCls} />
+                              <UrlField label="버튼 연결 URL" placeholder="연결 URL (https://…)" value={btn.url} onChange={(url) => upd({ url })} isValidHttpUrl={isHttpUrl} />
                               {btn.open === "modal" && (
                                 <p className="text-[11px] text-amber-600">일부 사이트는 페이지 안 임베드(모달)를 차단해요 — 모달이 비어 보이면 새 창으로 바꿔주세요.</p>
                               )}
@@ -1037,8 +1034,18 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
               {surveyLink === "external" && (
                 <div className="space-y-1.5">
                   <label className="block text-xs text-muted-foreground" htmlFor="ended-survey-url">설문 URL</label>
-                  <input id="ended-survey-url" type="url" placeholder="https://tally.so/..." value={form.surveyUrl}
-                    onChange={(e) => setForm((f) => ({ ...f, surveyUrl: e.target.value }))} className={inputCls} />
+                  {/* 이 칸은 **서버가 값을 파괴한다** — PATCH 의 sanitizeConfig 가 http(s) 아닌
+                      surveyUrl 을 null 로 만든다. 그래서 이미 저장돼 있던 정상 URL 도 스킴 없이
+                      다시 적는 순간 같은 세션에서 사라지고, 자동저장은 성공이라고 표시했다(실측).
+                      아래 amber 안내는 "아직 안 넣었다" 로 읽혀 그 사고를 설명하지 못했다. */}
+                  <UrlField
+                    id="ended-survey-url"
+                    label="설문 URL"
+                    placeholder="https://tally.so/..."
+                    value={form.surveyUrl}
+                    onChange={(surveyUrl) => setForm((f) => ({ ...f, surveyUrl }))}
+                    isValidHttpUrl={isHttpUrl}
+                  />
                   {!form.surveyUrl.trim() && (
                     <p className="text-[11px] text-amber-600">URL 을 입력해야 버튼이 표시돼요.</p>
                   )}
@@ -1071,7 +1078,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
                     <input aria-label="자료 제목" className={inputCls} placeholder="제목 (예: 발표자료)" value={item.title} onChange={(e) => patch({ title: e.target.value })} />
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <input aria-label="자료 설명" className={inputCls} placeholder="설명 (예: PDF · 4.2MB)" value={item.meta} onChange={(e) => patch({ meta: e.target.value })} />
-                      <input aria-label="자료 다운로드 URL" className={inputCls} type="url" placeholder="다운로드 URL" value={item.url} onChange={(e) => patch({ url: e.target.value })} />
+                      <UrlField label="자료 다운로드 URL" placeholder="다운로드 URL — https://…" value={item.url} onChange={(url) => patch({ url })} isValidHttpUrl={isHttpUrl} />
                     </div>
                     {/* 자료별 대가 — 만족도 설문을 낸 사람에게 발표자료를, 사전조사를 낸 사람에게
                         다음 행사 자료를 주는 식으로 자료마다 조건이 다른 게 실제 운영이다.
@@ -1108,7 +1115,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
               <input aria-label="다음 웨비나 제목" className={inputCls} placeholder="제목 (예: 미국 아마존 입점 A to Z)" value={nextWeb.title} onChange={(e) => setNextWeb((n) => ({ ...n, title: e.target.value }))} />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input aria-label="다음 웨비나 일시" className={inputCls} placeholder="일시 (예: 8월 21일 오후 2시)" value={nextWeb.when} onChange={(e) => setNextWeb((n) => ({ ...n, when: e.target.value }))} />
-                <input aria-label="다음 웨비나 사전등록 URL" className={inputCls} type="url" placeholder="사전등록 URL" value={nextWeb.url} onChange={(e) => setNextWeb((n) => ({ ...n, url: e.target.value }))} />
+                <UrlField label="다음 웨비나 사전등록 URL" placeholder="사전등록 URL — https://…" value={nextWeb.url} onChange={(url) => setNextWeb((n) => ({ ...n, url }))} isValidHttpUrl={isHttpUrl} />
               </div>
             </Blk>
           )}

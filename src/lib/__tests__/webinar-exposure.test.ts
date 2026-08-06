@@ -114,6 +114,28 @@ describe("랜딩 — 섹션을 끈 것과 켜 놓고 비운 것은 다르다", (
     expect(row(legacy, "landing.sponsors").why).toBeNull();
   });
 
+  /**
+   * 참여 방법은 hasContent 가 `true` 로 못박혀 있었다. 그래서 제목 없는 단계만 남거나 단계를
+   * 다 지우면 **공개 페이지에서 섹션이 통째로 사라지는데** 이 표는 "on" 이라고 거짓 보고했다
+   * (아래 default 보정은 "steps 키가 아예 없다" 만 다룬다).
+   */
+  it("참여 방법도 제목이 있는 단계가 있어야 on — 예전엔 항상 on 이라 거짓말했다", () => {
+    // join 은 목록 키가 items 가 아니라 **steps** 다(cfg 헬퍼를 그대로 쓰면 steps 가 없어
+    // "기본 3단계 주입"(default) 경로로 새는데, 그건 다른 상태다).
+    const joinCfg = (steps: unknown[]) => ({
+      landingPage: { enabled: true, titleLines: ["제목"], join: { enabled: true, steps } },
+    });
+    expect(row(make({ config: joinCfg([{ title: "", description: "설명만" }]) }), "landing.join").state).toBe("empty");
+    expect(row(make({ config: joinCfg([]) }), "landing.join").state).toBe("empty");
+    expect(row(make({ config: joinCfg([{ title: "사전 등록" }]) }), "landing.join").state).toBe("on");
+  });
+
+  /** steps 키가 아예 없으면 기본 3단계가 주입된다 — 그건 empty 가 아니라 default 다. */
+  it("steps 키가 없으면 default — 기본 절차가 나간다", () => {
+    const r = make({ config: { landingPage: { enabled: true, titleLines: ["제목"] } } });
+    expect(row(r, "landing.join").state).toBe("default");
+  });
+
   /** 스폰서는 **이름**이 내용을 센다 — 로고만 있는 행은 정규화가 버린다(alt 가 비어 버리므로). */
   it("스폰서는 이름이 있는 항목만 내용으로 센다", () => {
     expect(row(make({ config: cfg("sponsors", true, [{ logoUrl: "https://cdn.io/a.png" }]) }), "landing.sponsors").state).toBe("empty");

@@ -112,9 +112,33 @@ describe("대기 안내 CTA 편집", () => {
       ctaUrl: "https://example.com/guide",
     });
 
+    /**
+     * 안전하지 않은 URL 은 그 자리에서 알린다. 문구·DOM 위치가 공용 UrlField 로 옮겨졌다 —
+     * 어드민의 URL 칸이 열 곳이 넘는데 전부 제각각이었고, 그중 몇은 아무 말도 없이 값을
+     * 버렸다(종료 설문 URL 은 서버가 null 로 만들었다). 그래서 판정·문구·자동 https:// 를
+     * 프리미티브 한 곳으로 모았다. 여기서는 **경고가 이 입력 옆에 뜬다**는 계약만 고정한다.
+     */
     act(() => changeInput(url!, "javascript:alert(1)"));
 
-    expect(url?.nextElementSibling?.textContent).toBe("http:// 또는 https:// 주소를 입력해 주세요.");
+    const warning = url!.closest("div")!.parentElement!.querySelector("p");
+    expect(warning?.textContent).toContain("https://");
+    expect(warning?.textContent).toContain("저장되지 않아요");
+  });
+
+  /** 스킴만 없는 값은 **경고 대신 살려서** 통과시킨다(입력 시점 정규화). */
+  it("스킴 없이 적은 주소는 blur 에 https:// 가 붙는다", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ surveys: [] }) }));
+    const editor = renderWaitingEditor();
+    const toggle = editor.querySelector<HTMLButtonElement>('[role="switch"][aria-label="안내 영역 표시"]');
+    act(() => {
+      toggle?.click();
+    });
+    const url = editor.querySelector<HTMLInputElement>('[aria-label="대기 CTA 연결 URL"]')!;
+    act(() => changeInput(url, "example.com/guide"));
+    // React 17+ 는 onBlur 를 루트에서 focusout 으로 위임받는다 — 네이티브 blur 는 버블링하지 않는다.
+    act(() => { url.dispatchEvent(new FocusEvent("focusout", { bubbles: true })); });
+    expect(editor.querySelector<HTMLInputElement>('[aria-label="대기 CTA 연결 URL"]')!.value)
+      .toBe("https://example.com/guide");
   });
 });
 

@@ -267,7 +267,15 @@ export function buildExposureReport(input: ExposureInput): ExposureReport {
   add(L("timetable", "타임테이블", true, lm.timetableRows.length > 0, "타임테이블에 표시할 세션이 없어요."));
   add(L("programs", "프로그램", lp.programs.enabled, lm.showPrograms, "프로그램을 켰지만 제목이 있는 항목이 없어요."));
   add(L("highlights", "하이라이트", lp.highlights.enabled, lm.showHighlights, "하이라이트를 켰지만 제목이 있는 항목이 없어요."));
-  add(L("join", "참여 방법", lp.join.enabled, true, ""));
+  /**
+   * hasContent 는 **lm.showJoin** 이다 — 예전엔 `true` 로 못박혀 있었다.
+   *
+   * 그래서 제목 없는 단계만 남거나 세 단계를 다 지우면, 공개 페이지에서 참여 방법 섹션이
+   * 통째로 사라지는데(정규화가 제목 없는 행을 버리고 showJoin 이 false 가 된다) 이 표는
+   * "on" 이라고 **거짓 보고**했다. 아래 default 보정은 "steps 키가 아예 없다"(=기본 3단계
+   * 주입) 만 다루므로 이 경우를 잡지 못한다.
+   */
+  add(L("join", "참여 방법", lp.join.enabled, lm.showJoin, "참여 방법을 켰지만 제목이 있는 단계가 없어요."));
   add(L("faq", "FAQ", lp.faq.enabled, lm.showFaq, "FAQ를 켰지만 질문이 있는 항목이 없어요."));
   add(L("sponsors", "스폰서", lp.sponsors.enabled, lm.showSponsors, "스폰서를 켰지만 이름이 있는 항목이 없어요."));
   // 참여 방법은 이중 게이트의 유일한 예외 — 입력하지 않아도 기본 3스텝이 주입된다.
