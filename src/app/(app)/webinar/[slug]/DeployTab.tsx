@@ -24,7 +24,8 @@ import { getPublicAppOrigin } from "@/lib/app-url";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
 import { isHttpUrl, normalizeLandingPageConfig } from "@/lib/webinar-config";
-import { FIELD_CLS, UrlField } from "@/components/ui/primitives";
+import { FIELD_CLS, FINISH, UrlField } from "@/components/ui/primitives";
+import { Switch } from "@/components/ui/switch";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -159,11 +160,20 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
   // 비워두면 웨비나 이름 기반 기본 문구가 나가므로, placeholder 로 그 기본값을 그대로 보여준다.
   const bannerTexts = ((components?.banner as Record<string, unknown> | undefined)?.textByStatus ??
     {}) as Record<string, string>;
+  /**
+   * 문구 4개와 캘린더 버튼 토글을 **한 상태로 묶는다** — 자동저장이 하나여야 하기 때문이다.
+   * 서버의 components 병합은 최상위 키 단위 얕은 병합(`{...base, ...incoming}`)이라,
+   * `components: { banner: { showCalendarButton } }` 만 따로 보내면 banner 객체가 통째로
+   * 교체돼 **textByStatus 4개가 지워진다.** 항상 함께 보낸다.
+   */
   const [bannerText, setBannerText] = useState({
     upcoming: bannerTexts.upcoming ?? "",
     registration: bannerTexts.registration ?? "",
     live: bannerTexts.live ?? "",
     ended: bannerTexts.ended ?? "",
+    // 로더는 `!== false` 로 읽는다(기본 표시) — 그 규약을 화면에서도 그대로 쓴다.
+    showCalendarButton:
+      ((components?.banner as Record<string, unknown> | undefined)?.showCalendarButton) !== false,
   });
   const { state: bannerSaveState, retry: bannerRetry } = useAutosave(bannerText, async (value) => {
     const res = await fetch(`/api/webinars/${webinarId}`, {
@@ -178,6 +188,7 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
               live: value.live.trim(),
               ended: value.ended.trim(),
             },
+            showCalendarButton: value.showCalendarButton,
           },
         },
       }),
@@ -385,6 +396,32 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
             </div>
           ))}
         </div>
+        {/* 캘린더 추가 버튼 — 배너에 두 번째 액션을 둘지. 주 행동(사전등록)과 나란히 서므로
+            행사에 따라 방해가 된다. PC 에서는 로더 CSS 가 이미 숨기므로(네이티브 캘린더 연동이
+            없어 실효가 낮다) 이 스위치가 실제로 가리는 곳은 모바일이다. */}
+        <label className={`mt-4 flex items-center justify-between gap-3 rounded-xl bg-secondary px-3 py-2.5 text-sm ${FINISH.s2}`}>
+          <span>
+            캘린더 추가 버튼
+            <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
+              배너에 &lsquo;캘린더 추가&rsquo;를 함께 보여줘요. PC 에서는 원래 표시되지 않아 실제로는 모바일에만 영향이 있어요.
+              {!bannerText.showCalendarButton && (
+                <>
+                  {" "}
+                  {/* 끈 순간에만 알린다 — 로더의 upcoming 분기에서는 이 버튼이 유일한 액션이라
+                      (webinar-loader-script.ts 의 주석) 끄면 그 상태 배너에 버튼이 0개가 된다. */}
+                  <b className="font-medium text-amber-600">
+                    &lsquo;시작 전&rsquo; 상태에서는 이 버튼이 유일한 액션이라, 그때 배너는 문구만 남아요.
+                  </b>
+                </>
+              )}
+            </span>
+          </span>
+          <Switch
+            checked={bannerText.showCalendarButton}
+            onChange={(v) => setBannerText((prev) => ({ ...prev, showCalendarButton: v }))}
+            label="캘린더 추가 버튼 표시"
+          />
+        </label>
         <p className="mt-2 text-[11px] text-muted-foreground">
           변경은 방문자에게 최대 1분 안에 반영돼요(로더가 설정을 60초 캐시).
         </p>
