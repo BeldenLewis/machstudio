@@ -206,39 +206,19 @@ const WATCH_CSS = `
 .stk-live .lv-top { display:flex; align-items:center; gap:14px; padding:10px 4px 18px; }
 .stk-live .lv-livepill { display:inline-flex; align-items:center; gap:7px; padding:5px 11px; border-radius:999px; background:color-mix(in srgb,var(--live) 14%,transparent); color:var(--live); font-weight:800; font-size:12px; letter-spacing:0.04em; }
 .stk-live .lv-livepill i { width:7px; height:7px; border-radius:50%; background:var(--live); animation:lvPulse 1.6s infinite; }
-.stk-live .lv-viewers { display:inline-flex; align-items:center; gap:5px; padding:5px 10px; border-radius:999px; background:color-mix(in srgb,var(--sub) 13%,transparent); color:var(--sub); font-weight:750; font-size:12px; font-variant-numeric:tabular-nums; flex:none; white-space:nowrap; }
+.stk-live .lv-viewers { display:inline-flex; align-items:center; gap:5px; padding:5px 10px; border-radius:999px; background:color-mix(in srgb,var(--sub) 13%,transparent); color:var(--sub); font-weight:750; font-size:12px; font-variant-numeric:tabular-nums; }
 .stk-live .lv-soonpill { display:inline-flex; align-items:center; gap:7px; padding:5px 11px; border-radius:999px; background:var(--key-dim); color:var(--key); border:1px solid var(--key-border); font-weight:800; font-size:12px; letter-spacing:0.04em; }
 @keyframes lvPulse { 0%,100%{ box-shadow:0 0 0 0 color-mix(in srgb,var(--live) 55%,transparent);} 60%{ box-shadow:0 0 0 6px transparent; } }
-/* 제목이 **줄어드는 유일한 항목**이다. min-width:0 이 없으면 flex 항목의 기본 min-width:auto 가
-   nowrap 텍스트의 실제 폭이 되어 절대 안 줄고, 대신 옆의 칩·버튼들이 짜부라진다(실측: 375px 에서
-   "15/명", "공/유", 재확인 3줄). ellipsis 는 min-width:0 이 있어야 실제로 동작한다. */
-.stk-live .lv-evname { min-width:0; flex:1 1 auto; font-weight:750; font-size:15px; letter-spacing:-0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--text); }
-/* 보조 액션은 한 덩어리다 — 오른쪽으로 밀되(margin-left:auto) 모바일에서 통째로 둘째 줄로 내린다. */
-.stk-live .lv-acts { flex:none; display:flex; align-items:center; gap:14px; margin-left:auto; }
-.stk-live .lv-share { flex:none; white-space:nowrap; display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 14px; border-radius:10px; background:var(--card); color:var(--muted); font:inherit; font-size:13px; font-weight:650; cursor:pointer; box-shadow:var(--btn-shadow); transition:color .15s ease, box-shadow .15s ease, transform .15s ease; }
+.stk-live .lv-evname { font-weight:750; font-size:15px; letter-spacing:-0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--text); }
+.stk-live .lv-sp { flex:1; }
+.stk-live .lv-share { display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 14px; border-radius:10px; background:var(--card); color:var(--muted); font:inherit; font-size:13px; font-weight:650; cursor:pointer; box-shadow:var(--btn-shadow); transition:color .15s ease, box-shadow .15s ease, transform .15s ease; }
 .stk-live .lv-share:hover { color:var(--text); box-shadow:var(--btn-shadow-hover); transform:translateY(-1px); }
 .stk-live .lv-share svg { width:15px; height:15px; }
 /* 재확인 — 무효 등록건(삭제됨)으로 갇힌 시청자의 탈출구. 눈에 띄되 공유 버튼보다 낮은 위계(항상
    쓰는 액션이 아니라서). 텍스트 버튼 + 밑줄로 "여기서 뭔가 바뀐다" 는 신호만 준다. */
-.stk-live .lv-reauth { flex:none; white-space:nowrap; display:inline-flex; align-items:center; background:none; border:0; padding:0 2px; height:34px; font:inherit; font-size:12.5px; font-weight:600; color:var(--sub); cursor:pointer; text-decoration:underline; text-underline-offset:3px; transition:color .15s ease; }
+.stk-live .lv-reauth { display:inline-flex; align-items:center; background:none; border:0; padding:0 2px; height:34px; font:inherit; font-size:12.5px; font-weight:600; color:var(--sub); cursor:pointer; text-decoration:underline; text-underline-offset:3px; transition:color .15s ease; }
 .stk-live .lv-reauth:hover { color:var(--muted); }
-/**
- * 모바일 상단바 — 보조 액션(재확인·공유)을 **둘째 줄로 내린다.**
- *
- * 375px 에서 한 줄에 다 넣으면 실측 합이 화면을 넘는다(LIVE 62 + 시청자 56 + 제목 + 재확인 111
- * + 공유 71 + 간격 56 ≈ 400). nowrap 만 걸면 가로 스크롤이 생기고, 안 걸면 글자가 세로로
- * 접힌다("15/명", "공/유", 재확인 3줄). 그래서 위계대로 자른다 —
- * 1줄: 상태(LIVE·시청자·제목) / 2줄: 보조 액션(오른쪽 정렬).
- * 시청 화면의 주 행동은 보는 것이고, 재확인·공유는 그다음이다(AGENTS.md 위계 규칙).
- */
-@media (max-width:720px) {
-  .stk-live .lv-top { flex-wrap:wrap; row-gap:10px; column-gap:10px; padding-bottom:14px; }
-  /* basis:auto 면 제목의 텍스트 실측 폭(339px)이 hypothetical size 가 되어 1줄에 못 들어가고
-     혼자 한 줄을 차지한다 — 줄바꿈 판정이 shrink 보다 먼저다. basis:0 이라야 1줄에 남아 말줄임된다. */
-  .stk-live .lv-evname { flex:1 1 0; }
-  .stk-live .lv-acts { flex:0 0 100%; justify-content:flex-end; margin-left:0; }
-  .stk-live .lv-reauth { min-height:44px; }
-}
+@media (max-width:720px) { .stk-live .lv-reauth { min-height:44px; } }
 /* 스테이지 — 기본 단일 컬럼(모바일), 941px↑에서만 2컬럼+배치 (경계 소수 픽셀 깨짐 방지) */
 .stk-live .lv-stage { display:grid; grid-template-columns:1fr; gap:16px; align-items:start; }
 @media (min-width:941px) {
@@ -634,18 +614,17 @@ export default function LiveContentStk({
             <span className="lv-viewers">👁 {viewerCount.toLocaleString()}명</span>
           )}
           <span className="lv-evname">{webinar.name}</span>
-          <div className="lv-acts">
-            {onReauth && (
-              <button type="button" className="lv-reauth" onClick={onReauth}>
-                다른 정보로 다시 확인
-              </button>
-            )}
-            {onShare && (
-              <motion.button whileTap={{ scale: 0.96 }} transition={spring} className="lv-share" onClick={onShare}>
-                <Share2 />{shareCopied ? "복사됨" : "공유"}
-              </motion.button>
-            )}
-          </div>
+          <span className="lv-sp" />
+          {onReauth && (
+            <button type="button" className="lv-reauth" onClick={onReauth}>
+              다른 정보로 다시 확인
+            </button>
+          )}
+          {onShare && (
+            <motion.button whileTap={{ scale: 0.96 }} transition={spring} className="lv-share" onClick={onShare}>
+              <Share2 />{shareCopied ? "복사됨" : "공유"}
+            </motion.button>
+          )}
         </div>
 
         {/* 스테이지: 플레이어 + 메타 + 참여 독 */}
