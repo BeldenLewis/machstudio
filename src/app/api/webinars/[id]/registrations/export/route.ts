@@ -6,6 +6,7 @@ import { normalizeRegistrationForm } from "@/lib/webinar-config";
 import { assembleWebinarEngagement } from "@/lib/webinar-scoring";
 import { normalizeSurveyQuestions, type SurveyAnswers } from "@/lib/webinar-survey";
 import { buildRegistrantCsvTable, serializeCsv, type CsvQAItem } from "@/lib/webinar-registrant-csv";
+import { buildSessionNumbering, resolveSessionRef } from "@/lib/webinar-sessions";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
@@ -56,7 +57,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
    * 등록자 스코프(webinarId + registrationId in 명단)로만 읽어 다른 웨비나가 섞이지 않게 한다.
    */
   const exportedIds = registrations.map((r) => r.id);
-  const [surveys, surveyResponses, qaItems, unlinkedSurveyCount, unlinkedQaCount] = await Promise.all([
+  const [surveys, surveyResponses, qaItems, unlinkedSurveyCount, unlinkedQaCount, qaSessions] = await Promise.all([
     prisma.webinarSurvey.findMany({
       where: { webinarId: id },
       orderBy: { createdAt: "asc" },
@@ -79,6 +80,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // 40건이라던데 파일엔 37건" 이 되므로, 응답 헤더로 알려 화면이 문구를 띄운다.
     prisma.webinarSurveyResponse.count({ where: { webinarId: id, registrationId: null } }),
     prisma.webinarQA.count({ where: { webinarId: id, registrationId: null } }),
+    // 문의의 세션 참조를 표시번호로 바꾸는 데 쓴다 — 아래 qaNumbering 참고.
+    prisma.webinarSession.findMany({ where: { webinarId: id }, select: { number: true, type: true } }),
   ]);
 
   // 어드민 파일은 수집된 답을 다 보여줘야 한다 — 보관(retired) 문항을 빼면 그 열이 사라져
@@ -97,12 +100,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     per.set(r.surveyId, (r.answers ?? {}) as SurveyAnswers);
   }
 
+  /* 문의의 sessionNumber 는 진행 순서 참조 키다 — 파일에 찍는 "세션 n" 은 표시번호여야 한다.
+     오프닝·휴식·클로징을 가리키면 null 이 되어 세션 표기 없이 나간다(resolveSessionRef). */
+  const qaNumbering = buildSessionNumbering(qaSessions);
   const qaByReg = new Map<string, CsvQAItem[]>();
   for (const q of qaItems) {
     if (!q.registrationId) continue;
+    const item: CsvQAItem = {
+      question: q.question,
+      status: q.status,
+      sessionNo: resolveSessionRef(qaNumbering, q.sessionNumber),
+      createdAt: q.createdAt,
+    };
     const list = qaByReg.get(q.registrationId);
-    if (list) list.push(q);
-    else qaByReg.set(q.registrationId, [q]);
+    if (list) list.push(item);
+    else qaByReg.set(q.registrationId, [item]);
   }
 
   // 커스텀 필드 컬럼 — 등록폼 정의 순서(시스템 필드 제외) 그대로 헤더에 편입

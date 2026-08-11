@@ -32,12 +32,14 @@ export function asQAStatus(status: string): QAStatus {
  * 다음 질문이 시작되는지 알 수 없다.
  */
 export function formatQAForCell(
-  items: { question: string; status: string; sessionNumber?: number | null; createdAt: Date | string }[],
+  // sessionNo 는 **표시번호**다(실제 세션만 1..N). 참조 키를 그대로 받으면 오프닝·휴식이 번호를
+  // 차지한 만큼 어긋난 값이 파일에 찍힌다 — 변환은 라우트에서 resolveSessionRef 로 끝낸다.
+  items: { question: string; status: string; sessionNo?: number | null; createdAt: Date | string }[],
 ): string {
   return items
     .map((item, i) => {
       const tags = [
-        item.sessionNumber ? `세션 ${item.sessionNumber}` : null,
+        item.sessionNo != null ? `세션 ${item.sessionNo}` : null,
         // 대기 중은 적지 않는다 — 대부분이 대기라서, 적으면 칸이 상태 표시로 뒤덮인다.
         asQAStatus(item.status) === "pending" ? null : qaStatusLabel(item.status),
       ].filter(Boolean);

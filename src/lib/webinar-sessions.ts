@@ -143,6 +143,26 @@ export function buildSessionNumbering(rows: readonly SessionLike[]): SessionNumb
 }
 
 /**
+ * 저장된 참조 키(WebinarQA.sessionNumber)를 **화면에 쓸 표시번호**로 바꾼다.
+ *
+ * null 을 돌려주는 경우가 셋이고 셋 다 "세션 배지를 그리지 않는다" 로 끝난다:
+ *  - 애초에 세션을 고르지 않은 질문(sessionNumber == null)
+ *  - 오프닝·Q&A·휴식·클로징을 가리키는 질문 — **이들은 세션이 아니다**
+ *  - 가리키던 행이 삭제된 질문
+ *
+ * 원본 번호로 폴백하지 않는 것이 이 함수의 요점이다. 폴백하면 진행 순서 원본이 그대로 새어
+ * 나가서, 세션 4개인 웨비나의 문의 목록에 "세션 5·6" 이 찍힌다(오프닝·휴식이 번호를 차지한 만큼
+ * 어긋난 값). 참조 키와 표시번호를 나눠 둔 이유가 파일 상단 "두 축" 설명에 있다.
+ */
+export function resolveSessionRef(
+  numbering: SessionNumbering,
+  sessionNumber: number | null | undefined,
+): number | null {
+  if (sessionNumber == null) return null;
+  return numbering.displayNumber(sessionNumber);
+}
+
+/**
  * 대기 화면 아젠다 한 행의 영문 종류 표기.
  *
  * 여기 있는 이유: 예전엔 호출부에서 `brk ? "Break" : qa ? "Q&A" : \`Session ${displayNumber ?? number}\``
