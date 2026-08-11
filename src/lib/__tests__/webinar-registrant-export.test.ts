@@ -94,8 +94,8 @@ describe("설문 열 이름 — 열이 사라지면 답변도 안 보인다", ()
 });
 
 describe("문의 한 칸 — 개수가 가변이라 열로 펴지 않는다", () => {
-  const item = (patch: Partial<{ question: string; status: string; sessionNumber: number | null }> = {}) => ({
-    question: "가격 정책이 궁금합니다", status: "pending", sessionNumber: null, createdAt: "2026-08-20T05:10:00.000Z", ...patch,
+  const item = (patch: Partial<{ question: string; status: string; sessionNo: number | null }> = {}) => ({
+    question: "가격 정책이 궁금합니다", status: "pending", sessionNo: null, createdAt: "2026-08-20T05:10:00.000Z", ...patch,
   });
 
   it("문의가 없으면 빈 문자열 — 개수 열의 0 과 짝이 맞는다", () => {
@@ -119,8 +119,18 @@ describe("문의 한 칸 — 개수가 가변이라 열로 펴지 않는다", ()
   });
 
   it("세션 번호가 있으면 함께 적는다 — 어느 세션에 대한 질문인지가 답변 준비에 필요하다", () => {
-    expect(formatQAForCell([item({ sessionNumber: 2, status: "answered" })]))
+    expect(formatQAForCell([item({ sessionNo: 2, status: "answered" })]))
       .toBe("1. [세션 2 · 답변 완료] 가격 정책이 궁금합니다");
+  });
+
+  /**
+   * 받는 값은 **표시번호**다(진행 순서 참조 키가 아니다). 오프닝·휴식·클로징을 가리키는 질문은
+   * 호출부에서 null 로 변환돼 오므로 세션 표기 없이 나가야 한다 — 실제 장애: 세션 4개인 웨비나의
+   * 파일에 "세션 5·6" 이 찍혔다(오프닝·휴식이 진행 순서 번호를 차지한 만큼 어긋난 값).
+   */
+  it("표시번호가 없으면 세션 표기를 아예 붙이지 않는다 — 오프닝·휴식·클로징은 세션이 아니다", () => {
+    expect(formatQAForCell([item({ sessionNo: null, status: "answered" })]))
+      .toBe("1. [답변 완료] 가격 정책이 궁금합니다");
   });
 
   it("앞뒤 공백은 떨어뜨린다 — 붙여넣은 질문의 빈 줄이 칸을 벌리지 않게", () => {
@@ -224,7 +234,7 @@ describe("값이 제 열에 들어간다", () => {
     surveys: [survey1, survey2],
     answersByRegistrant: answerMap({ r1: { s1: { q1: 5, q2: "최고" } } }),
     qaByRegistrant: new Map([["r1", [
-      { question: "가격 정책이요", status: "answered", sessionNumber: 2, createdAt: "2026-08-20T05:10:00.000Z" },
+      { question: "가격 정책이요", status: "answered", sessionNo: 2, createdAt: "2026-08-20T05:10:00.000Z" },
       { question: "자료 공유되나요", status: "pending", createdAt: "2026-08-20T05:20:00.000Z" },
     ] as CsvQAItem[]]]),
   }));

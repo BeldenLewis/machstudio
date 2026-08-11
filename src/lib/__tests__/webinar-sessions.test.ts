@@ -6,6 +6,7 @@ import {
   buildSessionNumbering,
   cleanSessionText,
   isRealSession,
+  resolveSessionRef,
   sessionHasSpeaker,
   sessionKicker,
   sessionTypeLabel,
@@ -142,6 +143,53 @@ describe("sessionKicker", () => {
   it("표시번호가 없으면 번호를 안 붙인다 — DB 원본 number 폴백이 중복 'Session 1' 을 만들었다", () => {
     expect(sessionKicker("session", null)).toBe("Session");
     expect(sessionKicker("keynote", null)).toBe("Session");
+  });
+});
+
+/**
+ * 2026-08-11 실제 웨비나(K-Brand LA) 구성을 그대로 태운다. 문의 목록·CSV 가 참조 키를 그대로
+ * 찍어서, 세션이 4개인데 "세션 5·6" 이 보였다 — 오프닝(1)·휴식(4)이 진행 순서 번호를 차지한 만큼
+ * 어긋난 값이다. 저장된 데이터는 정상이었고 표시만 틀렸다.
+ */
+describe("resolveSessionRef — 참조 키를 표시번호로 (오프닝·휴식·클로징은 세션이 아니다)", () => {
+  const REAL_AGENDA = [
+    { number: 1, type: "opening" },
+    { number: 2, type: "session" },
+    { number: 3, type: "session" },
+    { number: 4, type: "break" },
+    { number: 5, type: "session" },
+    { number: 6, type: "session" },
+    { number: 7, type: "closing" },
+  ];
+  const numbering = buildSessionNumbering(REAL_AGENDA);
+
+  it("실제 세션 4개는 1..4 로 다시 센다 — 참조 키 2·3·5·6 이 세션 1·2·3·4 가 된다", () => {
+    expect(numbering.realCount).toBe(4);
+    expect(resolveSessionRef(numbering, 2)).toBe(1);
+    expect(resolveSessionRef(numbering, 3)).toBe(2);
+    expect(resolveSessionRef(numbering, 5)).toBe(3);
+    expect(resolveSessionRef(numbering, 6)).toBe(4);
+  });
+
+  it("오프닝·휴식·클로징을 가리키면 null — 세션 배지를 그리지 않는다", () => {
+    expect(resolveSessionRef(numbering, 1)).toBeNull(); // 오프닝
+    expect(resolveSessionRef(numbering, 4)).toBeNull(); // 휴식
+    expect(resolveSessionRef(numbering, 7)).toBeNull(); // 클로징
+  });
+
+  it("세션 미지정·삭제된 행은 null — 원본 번호로 폴백하지 않는다", () => {
+    expect(resolveSessionRef(numbering, null)).toBeNull();
+    expect(resolveSessionRef(numbering, undefined)).toBeNull();
+    expect(resolveSessionRef(numbering, 99)).toBeNull(); // 가리키던 세션이 삭제됨
+  });
+
+  it("세션만 있는 웨비나는 참조 키와 표시번호가 같다 — 기존 웨비나 회귀 없음", () => {
+    const plain = buildSessionNumbering([
+      { number: 1, type: "session" },
+      { number: 2, type: "session" },
+    ]);
+    expect(resolveSessionRef(plain, 1)).toBe(1);
+    expect(resolveSessionRef(plain, 2)).toBe(2);
   });
 });
 

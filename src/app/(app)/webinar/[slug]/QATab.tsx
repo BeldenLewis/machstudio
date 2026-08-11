@@ -35,7 +35,8 @@ type QAStatus = "pending" | "answered" | "dismissed";
 interface QAItem {
   id: string;
   question: string;
-  sessionNumber: number | null;
+  /** 표시번호(실제 세션만 1..N). 오프닝·휴식·클로징을 가리키거나 미지정이면 null — 라우트가 변환해 준다. */
+  sessionNo: number | null;
   status: QAStatus;
   name: string | null;
   company: string | null;
@@ -247,7 +248,7 @@ export default function QATab({ webinarId, embedded = false, fillHeight = false,
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
                   {q.name && <span>{q.name}</span>}
                   {q.company && <span>· {q.company}</span>}
-                  {q.sessionNumber != null && <span>· 세션 {q.sessionNumber}</span>}
+                  {q.sessionNo != null && <span>· 세션 {q.sessionNo}</span>}
                   {q.onScreen && <span className="font-semibold text-green-600 dark:text-green-400">· 지금 답변 중</span>}
                   <span>· {formatKst(q.createdAt, { hour: "2-digit", minute: "2-digit" })}</span>
                 </div>

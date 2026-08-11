@@ -5,6 +5,7 @@ import { normalizeSurveyQuestions } from "@/lib/webinar-survey";
 import { assembleWebinarEngagement } from "@/lib/webinar-scoring";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
 import { buildMemo, parseMemo } from "@/lib/webinar-memo";
+import { buildSessionNumbering, resolveSessionRef } from "@/lib/webinar-sessions";
 
 type DuplicateMode = "skip" | "include" | "update";
 
@@ -254,7 +255,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   /* 설문 응답과 문의를 같은 방식으로 붙인다 — 현재 페이지 등록자분만. 문의는 1인 N건이라
      전량을 실으면 페이지당 전송량이 등록자 수와 무관하게 커진다.
      정렬은 오래된 순: 상세 패널이 "무엇을 먼저 물었나" 순서로 읽히게. */
-  const [surveyResponses, qaItems] = registrationIds.length
+  const [surveyResponses, qaRows, qaSessions] = registrationIds.length
     ? await Promise.all([
         prisma.webinarSurveyResponse.findMany({
           where: { webinarId: id, registrationId: { in: registrationIds } },
@@ -266,8 +267,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           orderBy: { createdAt: "asc" },
           select: { id: true, registrationId: true, question: true, status: true, sessionNumber: true, voteCount: true, createdAt: true },
         }),
+        prisma.webinarSession.findMany({ where: { webinarId: id }, select: { number: true, type: true } }),
       ])
-    : [[], []];
+    : [[], [], []];
+
+  /* 문의의 sessionNumber 는 진행 순서 참조 키다 — 상세 패널이 "세션 n" 으로 읽을 수 있게
+     표시번호로 바꿔 내려준다(오프닝·휴식·클로징이면 null → 배지 없음). 원본은 싣지 않는다. */
+  const qaNumbering = buildSessionNumbering(qaSessions);
+  const qaItems = qaRows.map(({ sessionNumber, ...rest }) => ({
+    ...rest,
+    sessionNo: resolveSessionRef(qaNumbering, sessionNumber),
+  }));
 
   // stats 는 검색 필터와 무관한 전체 집계(요약 카드용). total 은 검색 반영 페이지네이션용.
   return NextResponse.json({

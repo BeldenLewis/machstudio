@@ -112,7 +112,8 @@ interface QAItem {
   registrationId: string;
   question: string;
   status: string;
-  sessionNumber: number | null;
+  /** 표시번호(실제 세션만 1..N). 오프닝·휴식·클로징을 가리키거나 미지정이면 null — 라우트가 변환해 준다. */
+  sessionNo: number | null;
   voteCount: number;
   createdAt: string;
 }
@@ -1360,7 +1361,7 @@ export default function RegistrantsTab({ webinarId }: { webinarId: string }) {
                           >
                             {qaStatusLabel(item.status)}
                           </span>
-                          {item.sessionNumber ? <span>세션 {item.sessionNumber}</span> : null}
+                          {item.sessionNo != null ? <span>세션 {item.sessionNo}</span> : null}
                           {item.voteCount > 0 ? <span>추천 {item.voteCount}</span> : null}
                           <span className="ml-auto">{formatDate(item.createdAt)}</span>
                         </div>

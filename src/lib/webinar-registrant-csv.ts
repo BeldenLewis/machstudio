@@ -52,7 +52,11 @@ export interface CsvSurveyColumn {
 export interface CsvQAItem {
   question: string;
   status: string;
-  sessionNumber?: number | null;
+  /**
+   * 표시번호(실제 세션만 1..N) — DB 의 진행 순서 참조 키가 아니다.
+   * 호출부가 resolveSessionRef 로 변환해 넣는다. 오프닝·휴식·클로징이면 null(세션 표기 없음).
+   */
+  sessionNo?: number | null;
   createdAt: Date | string;
 }
 

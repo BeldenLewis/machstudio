@@ -19,6 +19,7 @@ import {
 import {
   DEFAULT_SESSION_TYPE,
   SESSION_TYPES,
+  buildSessionNumbering,
   cleanSessionText,
   isRealSession,
   sessionHasSpeaker,
@@ -618,6 +619,9 @@ export default function SessionsTab({
     ? (dragOrder.map((id) => visibleSessions.find((s) => s.id === id)).filter(Boolean) as WebinarSession[])
     : visibleSessions.sort((a, b) => a.number - b.number);
   const realSessionCount = sortedSessions.filter(isRealSession).length;
+  // 삭제 토스트가 "세션 n" 을 진행 순서 원본이 아니라 표시번호로 말하게 한다
+  // (오프닝·휴식이 앞에 있으면 4번째 세션의 number 는 6이다).
+  const sessionNumbering = buildSessionNumbering(sortedSessions);
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
@@ -739,9 +743,10 @@ export default function SessionsTab({
     if (editingId === session.id) setEditingId(null);
     undoableRemove({
       key: session.id,
-      // 세션이 아닌 행을 "세션 3" 이라고 부르지 않는다 — 유형 이름으로 말한다
+      // 세션이 아닌 행을 "세션 3" 이라고 부르지 않는다 — 유형 이름으로 말한다.
+      // 세션이면 진행 순서(number)가 아니라 화면에 보이는 표시번호로 말한다.
       message: isRealSession(session)
-        ? `세션 ${session.number}을(를) 삭제했어요`
+        ? `세션 ${sessionNumbering.displayNumber(session.number) ?? session.number}을(를) 삭제했어요`
         : `${sessionTypeLabel(session.type) ?? "항목"}을(를) 삭제했어요`,
       onOptimistic: () => setPendingDeleteIds((prev) => new Set(prev).add(session.id)),
       onUndo: () => setPendingDeleteIds((prev) => { const n = new Set(prev); n.delete(session.id); return n; }),
