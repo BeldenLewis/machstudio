@@ -908,6 +908,21 @@ ${sessionLogoCss(".lnd .schedule-logo")}
   .lnd .schedule-time { padding: 0 12px; font-size: 15px; }
   .lnd .schedule-content { padding: 10px 12px; }
   .lnd .schedule-name { font-size: 14px; }
+  /**
+   * 펼침 상세 — 모바일에서는 **로고를 빼고 본문이 폭을 다 쓴다.**
+   *
+   * 데스크톱은 "본문 | 로고" 2열(flex)인데 로고가 고정 120px 이다. 모바일 오버라이드가 없어서
+   * 375px 에서 본문에 남는 폭이 실측 157px 였다(375 − 40 여백 − 40 패딩 − 120 로고 − 18 gap).
+   * 거기에 word-break:keep-all 이 걸려 있어 5~6자마다 줄이 끊겼다("한국에서의 성공이 /
+   * 미국에서도 이어지기 위해 / …"). 좁은 화면에서 조직 마크는 읽는 데 기여하지 않으므로
+   * 본문에 폭을 준다.
+   *
+   * 여백도 같이 맞춘다: 상세는 margin 20 + padding 20 = 40px 들여쓰기였는데 바로 위 제목은
+   * 14px 다(.schedule-content). 로고를 빼도 제목과 어긋나 보이던 원인이 이것이다.
+   */
+  .lnd .schedule-detail-in { display: block; margin: 0 14px; padding: 2px 0 14px; }
+  .lnd .schedule-desc { margin-top: 10px; }
+  .lnd .schedule-logo { display: none; }
   .lnd .program-grid, .lnd .join-grid, .lnd .audience-list { grid-template-columns: 1fr; }
   /* 한 열로 접히면 좌우 간격은 의미가 없고 위아래만 남는다 — 줄 사이를 조금 벌린다. */
   .lnd .audience-list { row-gap: 16px; }

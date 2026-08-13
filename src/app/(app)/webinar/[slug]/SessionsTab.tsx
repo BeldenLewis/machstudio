@@ -19,13 +19,15 @@ import {
 import {
   DEFAULT_SESSION_TYPE,
   SESSION_TYPES,
+  buildSessionNumbering,
   cleanSessionText,
   isRealSession,
   sessionHasSpeaker,
   sessionTypeLabel,
 } from "@/lib/webinar-sessions";
-import { btnCls, FIELD_CLS, FINISH, R, Segmented } from "@/components/ui/primitives";
+import { btnCls, FIELD_CLS, FINISH, R, Segmented, UrlField } from "@/components/ui/primitives";
 import { normalizeSpeakerLinks, parseSpeakerLink, SPEAKER_LINKS_MAX } from "@/lib/webinar-speaker-links";
+import { isHttpUrl } from "@/lib/webinar-config";
 import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
 
 /**
@@ -268,10 +270,10 @@ function ImagePicker({
           }} />
         </div>
       ) : (
-        <input type="url" aria-label={`${noun} URL`} value={value}
-          onChange={(e) => onValueChange(e.target.value)}
-          placeholder={urlPlaceholder}
-          className={FIELD_CLS} />
+        /* 스킴 없이 붙여넣으면 공개 화면에서 이미지가 조용히 안 나온다(랜딩·대기·시청 전부
+           safeHttpUrl 로 거른다) — UrlField 가 blur 에 https:// 를 붙이고 안 되면 알린다. */
+        <UrlField label={`${noun} URL`} value={value} onChange={onValueChange}
+          placeholder={urlPlaceholder} isValidHttpUrl={isHttpUrl} />
       )}
     </>
   );
@@ -454,19 +456,18 @@ function SessionFormFields({
       {hasSpeaker && (
       <div className="col-span-12 sm:col-span-6">
         <label htmlFor={`${uid}-homepage`} className="text-xs text-muted-foreground mb-1 block">홈페이지 (선택)</label>
-        <input
+        {/* 검증은 제출 전에 그 자리에서 — 저장 후 조용히 비워지면 왜 사라졌는지 알 수 없다.
+            판정은 parseSpeakerLink(호스트까지 본다)이 소유한다 — UrlField 의 기본 판정을 쓰면
+            화면이 통과시킨 값이 저장 경로에서 버려질 수 있다. */}
+        <UrlField
           id={`${uid}-homepage`}
-          type="url"
-          inputMode="url"
+          label="홈페이지"
           value={form.speakerHomepage}
-          onChange={(e) => setForm((f) => ({ ...f, speakerHomepage: e.target.value }))}
+          onChange={(speakerHomepage) => setForm((f) => ({ ...f, speakerHomepage }))}
           placeholder="https://example.com"
-          className={FIELD_CLS}
+          isValidHttpUrl={(v) => !!parseSpeakerLink(v)}
         />
-        {/* 검증은 제출 전에 그 자리에서 — 저장 후 조용히 비워지면 왜 사라졌는지 알 수 없다. */}
-        {form.speakerHomepage.trim() && !parseSpeakerLink(form.speakerHomepage) ? (
-          <p className="mt-1 text-[11px] text-red-500">https:// 로 시작하는 주소를 넣어주세요. 지금 값은 저장되지 않아요.</p>
-        ) : (
+        {form.speakerHomepage.trim() && !parseSpeakerLink(form.speakerHomepage) ? null : (
           <p className="mt-1 text-[11px] text-muted-foreground">랜딩 상세 팝업의 &lsquo;홈페이지 바로가기&rsquo;로 표시돼요.</p>
         )}
       </div>
@@ -618,6 +619,9 @@ export default function SessionsTab({
     ? (dragOrder.map((id) => visibleSessions.find((s) => s.id === id)).filter(Boolean) as WebinarSession[])
     : visibleSessions.sort((a, b) => a.number - b.number);
   const realSessionCount = sortedSessions.filter(isRealSession).length;
+  // 삭제 토스트가 "세션 n" 을 진행 순서 원본이 아니라 표시번호로 말하게 한다
+  // (오프닝·휴식이 앞에 있으면 4번째 세션의 number 는 6이다).
+  const sessionNumbering = buildSessionNumbering(sortedSessions);
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
@@ -739,9 +743,10 @@ export default function SessionsTab({
     if (editingId === session.id) setEditingId(null);
     undoableRemove({
       key: session.id,
-      // 세션이 아닌 행을 "세션 3" 이라고 부르지 않는다 — 유형 이름으로 말한다
+      // 세션이 아닌 행을 "세션 3" 이라고 부르지 않는다 — 유형 이름으로 말한다.
+      // 세션이면 진행 순서(number)가 아니라 화면에 보이는 표시번호로 말한다.
       message: isRealSession(session)
-        ? `세션 ${session.number}을(를) 삭제했어요`
+        ? `세션 ${sessionNumbering.displayNumber(session.number) ?? session.number}을(를) 삭제했어요`
         : `${sessionTypeLabel(session.type) ?? "항목"}을(를) 삭제했어요`,
       onOptimistic: () => setPendingDeleteIds((prev) => new Set(prev).add(session.id)),
       onUndo: () => setPendingDeleteIds((prev) => { const n = new Set(prev); n.delete(session.id); return n; }),

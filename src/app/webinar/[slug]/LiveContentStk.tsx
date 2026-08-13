@@ -11,7 +11,7 @@ import { motion } from "framer-motion";
 import { getYouTubeVideoId } from "@/lib/youtube";
 import { CheckCircle2, Send, Share2 } from "lucide-react";
 import { formatKst, kstDateString } from "@/lib/datetime";
-import { buildSessionNumbering, cleanSessionText, isPauseSession, isRealSession, parseSpeaker, sessionHasSpeaker, sessionTypeLabel } from "@/lib/webinar-sessions";
+import { buildSessionNumbering, cleanSessionText, isPauseSession, isRealSession, parseSpeaker, resolveSessionRef, sessionHasSpeaker, sessionTypeLabel } from "@/lib/webinar-sessions";
 import SurveyForm, { SURVEY_FORM_CSS, clearSurveyDraft } from "./SurveyForm";
 import { formatSurveyOpensAt, type SurveyAnswers, type SurveyQuestion } from "@/lib/webinar-survey";
 import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
@@ -761,9 +761,12 @@ export default function LiveContentStk({
                               <p>{q.question}</p>
                               <div className="m">
                                 {q.name && <span>{q.name}</span>}
-                                {/* 저장값은 원본 number → 칩 라벨과 같은 표시 순번으로 변환해 보여준다 */}
-                                {q.sessionNumber != null && (
-                                  <span>· 세션 {numbering.displayNumber(q.sessionNumber) ?? q.sessionNumber}</span>
+                                {/* 저장값은 원본 number → 칩 라벨과 같은 표시 순번으로 변환해 보여준다.
+                                    변환이 안 되면(오프닝·휴식·클로징을 가리키거나 그 행이 삭제됨)
+                                    **원본으로 폴백하지 않고** 배지를 안 그린다 — 폴백하면 세션이 아닌
+                                    행의 진행 순서가 "세션 5" 로 새어 나간다(resolveSessionRef 주석). */}
+                                {resolveSessionRef(numbering, q.sessionNumber) != null && (
+                                  <span>· 세션 {resolveSessionRef(numbering, q.sessionNumber)}</span>
                                 )}
                                 {q.status === "answered" && <span className="lv-ans">답변 완료</span>}
                               </div>

@@ -128,7 +128,14 @@ describe("기존 필드를 건드리지 않는다", () => {
     expect(out.enabled).toBe(true);
     expect(out.venue).toBe("OFFLINE");
     expect(out.faq.enabled).toBe(false);
-    expect(out.ctaLabel).toBe("사전 등록하기");
+    /**
+     * 정규화는 **빈 값을 그대로 통과시킨다** — 폴백은 모델이 한 번 한다.
+     * 예전엔 여기서 "사전 등록하기" 를 채웠고, 그래서 운영자가 칸을 비우면 리마운트 때 그
+     * 문구가 칸에 되살아나 다음 자동저장이 기본값을 **DB 에 굳혔다**(실측). 굳으면 나중에
+     * 기본 문구를 고쳐도 그 웨비나엔 반영되지 않는다.
+     */
+    expect(out.ctaLabel).toBe("");
+    expect(lp({ ctaLabel: "지금 신청" }).ctaLabel).toBe("지금 신청");
   });
 });
 

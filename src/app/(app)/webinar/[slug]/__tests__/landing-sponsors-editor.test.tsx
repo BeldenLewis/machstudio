@@ -144,6 +144,29 @@ describe("URL 은 입력 시점에 강제한다", () => {
     const el = render({ landingPage: { enabled: true, sponsors } });
     expect(el.textContent).not.toContain("지금 값은 저장되지 않아요");
   });
+
+  /**
+   * 히어로 배경 미디어 칸도 **같은 결함**이었다 — 스폰서 칸을 고치면서 발견됐고,
+   * 실측으로 재현했다: heroMedia.url 이 "cdn.io/hero.jpg" 면 normalizeLandingPageConfig 가
+   * (keepEmptyRows 로도) heroMedia 를 통째로 null 로 만든다 → 배경이 조용히 안 나오고
+   * 리마운트 때 칸이 비면서 자동저장이 빈 값을 영구 저장한다.
+   */
+  it("히어로 배경 미디어 URL 도 같은 보호를 받는다", () => {
+    const el = render({ landingPage: { enabled: true, heroMedia: { type: "image", url: "https://cdn.io/a.png" } } });
+    const hero = el.querySelector<HTMLInputElement>('input[aria-label="히어로 배경 미디어 URL"]')!;
+    expect(hero.type).toBe("url");
+    blur(hero, "cdn.io/hero.jpg");
+    expect(
+      el.querySelector<HTMLInputElement>('input[aria-label="히어로 배경 미디어 URL"]')!.value,
+    ).toBe("https://cdn.io/hero.jpg");
+  });
+
+  it("히어로 칸도 못 살리는 값이면 인라인으로 알린다", () => {
+    const el = render({ landingPage: { enabled: true, heroMedia: { type: "image", url: "https://cdn.io/a.png" } } });
+    const hero = el.querySelector<HTMLInputElement>('input[aria-label="히어로 배경 미디어 URL"]')!;
+    blur(hero, "javascript:alert(1)");
+    expect(el.textContent).toContain("지금 값은 저장되지 않아요");
+  });
 });
 
 describe("첫 스폰서를 추가하면 토글도 같이 켜진다", () => {

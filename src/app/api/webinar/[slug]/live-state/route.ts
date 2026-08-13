@@ -10,7 +10,22 @@ const CORS = { "Access-Control-Allow-Origin": "*" };
 // 통합 라이브 상태 — 시청자가 폴링하던 여러 엔드포인트(공지·Q&A·채팅·투표·팝업·Tally·상태)를
 // 한 번의 요청으로 합쳐 egress/요청 수를 대폭 줄인다.
 // 쿼리: registrationId(있으면 Q&A 보드+채팅 게이팅), chat=1(채팅 탭 활성 시), chatAfter=<ISO>(증분)
-export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
+export async function GET(request: Request, ctx: { params: Promise<{ slug: string }> }) {
+  try {
+    return await liveState(request, ctx);
+  } catch (err) {
+    // DB 연결 고갈(EMAXCONN)·일시 장애 때 맨 500(빈 본문) 대신 503 — 2026-08-11 라이브 중
+    // 풀러 한도 초과로 이 라우트만 죽어 시청자 화면이 "영상이 연결되지 않았어요" 가 됐다.
+    // 뷰어 폴러는 !res.ok 면 이번 폴을 버리고 화면 값(youtubeId 포함)을 유지한 채 12초 뒤 재시도한다.
+    console.error("[live-state]", err);
+    return NextResponse.json(
+      { error: "일시적인 서버 혼잡이에요" },
+      { status: 503, headers: { ...CORS, "Retry-After": "12" } },
+    );
+  }
+}
+
+async function liveState(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const url = new URL(request.url);
   const registrationId = url.searchParams.get("registrationId");
@@ -51,8 +66,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     : null;
   const isViewer = viewer !== null;
 
-  // 동시 병렬 조회 — 필요할 때만 (Q&A/채팅은 게이팅)
-  const [announcements, qaRows, pollRow, popupRow, tallyRow, surveyRow, chatRows, pushedRow, pinnedRow] = await Promise.all([
+  // 실시간 동시 시청자 수 — 라이브 중에만(사회적 증거 배지). 어드민 대시보드의 presenceSince 와
+  // 같은 최근성 창(5분) — 최근성 필터가 없으면 leave 신호가 거의 안 오는 모바일에서 과대 편향된다.
+  const PRESENCE_WINDOW_MS = 5 * 60_000;
+  const presenceSince = new Date(Date.now() - PRESENCE_WINDOW_MS);
+
+  // 동시 병렬 조회 — 필요할 때만 (Q&A/채팅은 게이팅). 풀(max 2)이 알아서 큐잉하므로
+  // 여기 몇 개를 늘어놓든 인스턴스가 잡는 연결 수는 늘지 않는다 — src/lib/prisma.ts 참고.
+  const [announcements, qaRows, pollRow, popupRow, tallyRow, surveyRow, chatRows, pushedRow, pinnedRow, viewerCount] = await Promise.all([
     prisma.webinarAnnouncement.findMany({
       where: { webinarId: wid, isActive: true },
       orderBy: { createdAt: "desc" },
@@ -126,6 +147,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
           select: { id: true, name: true, message: true, isHost: true, createdAt: true },
         })
       : Promise.resolve(null),
+    statusInfo.status === "live"
+      ? prisma.webinarRegistration.count({
+          where: {
+            webinarId: wid,
+            isActive: true,
+            OR: [{ presencePingAt: { gte: presenceSince } }, { lastPingAt: { gte: presenceSince } }],
+          },
+        })
+      : Promise.resolve(null),
   ]);
 
   const answeredQA = qaRows
@@ -139,22 +169,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     : null;
   const pinnedMessage = pinnedRow
     ? { id: pinnedRow.id, name: pinnedRow.isHost ? pinnedRow.name : maskName(pinnedRow.name), message: pinnedRow.message, isHost: pinnedRow.isHost, createdAt: pinnedRow.createdAt }
-    : null;
-
-  // 실시간 동시 시청자 수 — 라이브 중에만(사회적 증거 배지).
-  // 주석은 "어드민과 동일 기준" 이었지만 실제로는 최근성 필터가 없어 isActive 가 한 번 서면
-  // leave 가 올 때까지 영원히 카운트됐다. 퇴장 신호는 pagehide/beforeunload 뿐이라 모바일에서
-  // 거의 오지 않아 수치가 한 방향(과대)으로 편향됐다 → 어드민 대시보드와 같은 최근성 창을 쓴다.
-  const PRESENCE_WINDOW_MS = 5 * 60_000; // 어드민 대시보드의 presenceSince 와 같은 창(5분)
-  const presenceSince = new Date(Date.now() - PRESENCE_WINDOW_MS);
-  const viewerCount = statusInfo.status === "live"
-    ? await prisma.webinarRegistration.count({
-        where: {
-          webinarId: wid,
-          isActive: true,
-          OR: [{ presencePingAt: { gte: presenceSince } }, { lastPingAt: { gte: presenceSince } }],
-        },
-      })
     : null;
 
   // 영상 동기화 — 유효 등록자에게만 현재 설정을 전달한다.
