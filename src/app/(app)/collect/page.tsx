@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Database, Globe, Loader2, ChevronRight, Users, Trash2, Upload, UserPlus, Edit3, Check, X } from "lucide-react";
+import { Plus, Database, Globe, Loader2, ChevronRight, Users, Trash2, Upload, UserPlus, Edit3, Check, X, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspace } from "@/contexts/workspace";
 import Link from "next/link";
 import ProjectMembersModal from "@/components/settings/ProjectMembersModal";
+import ProjectAnalyticsSettingsModal from "@/components/settings/ProjectAnalyticsSettingsModal";
 import ActiveToggle from "@/app/(app)/collect/_components/ActiveToggle";
 
 interface CollectSource {
@@ -28,6 +29,7 @@ export default function CollectPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [showMembers, setShowMembers] = useState(false);
+  const [showAnalyticsSettings, setShowAnalyticsSettings] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
@@ -152,6 +154,13 @@ export default function CollectPage() {
           >
             <UserPlus className="w-3.5 h-3.5" />프로젝트 권한
           </button>
+          <button
+            onClick={() => setShowAnalyticsSettings(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+            aria-label="분석 연동"
+          >
+            <BarChart3 className="w-3.5 h-3.5" />분석 연동
+          </button>
           <label className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors cursor-pointer">
             <Upload className="w-3.5 h-3.5" />백업 복구
             <input
@@ -200,6 +209,14 @@ export default function CollectPage() {
           projectName={currentProject.name}
           workspaceId={workspace.id}
           onClose={() => setShowMembers(false)}
+        />
+      )}
+
+      {showAnalyticsSettings && currentProject && (
+        <ProjectAnalyticsSettingsModal
+          projectId={currentProject.id}
+          projectName={currentProject.name}
+          onClose={() => setShowAnalyticsSettings(false)}
         />
       )}
 

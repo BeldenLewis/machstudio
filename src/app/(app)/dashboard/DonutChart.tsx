@@ -35,7 +35,7 @@ export default function DonutChart({ data, maxSlices = 4 }: DonutChartProps) {
   ];
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex max-w-xs items-center gap-4">
       <div className="h-[140px] w-[140px] shrink-0">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -60,11 +60,11 @@ export default function DonutChart({ data, maxSlices = 4 }: DonutChartProps) {
           </PieChart>
         </ResponsiveContainer>
       </div>
-      <ul className="min-w-0 flex-1 space-y-1.5">
+      <ul className="min-w-0 space-y-1.5">
         {slices.map((slice) => (
           <li key={slice.label} className="flex items-center gap-2 text-xs">
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
-            <span className="min-w-0 flex-1 truncate text-muted-foreground">{slice.label}</span>
+            <span className="min-w-0 truncate text-muted-foreground">{slice.label}</span>
             <span className="shrink-0 font-medium tabular-nums">{Math.round((slice.count / total) * 100)}%</span>
           </li>
         ))}

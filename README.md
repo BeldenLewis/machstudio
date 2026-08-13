@@ -18,9 +18,17 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 # Optional, defaults to the current request origin.
 SHORT_URL_BASE=https://go.example.com
+
+# Optional — GA4 Data API (요약 대시보드 퍼널: 홈페이지/사전등록 페이지 방문자).
+# 서비스 계정 JSON 키를 한 줄 문자열로. 미설정 시 퍼널 섹션은 조용히 숨겨진다.
+GA4_SERVICE_ACCOUNT_KEY={"type":"service_account",...}
 ```
 
 Point the short domain at the same deployment. Short links are served from `/r/{code}`.
+
+GA4 퍼널을 쓰려면, 위 서비스 계정 이메일(`...@...iam.gserviceaccount.com`)을 각 GA4 속성의
+Admin → Property Access Management에서 뷰어(Viewer)로 추가하고, 프로젝트별 GA4 속성 ID는
+사전등록(`/collect`) 페이지의 "분석 연동" 버튼에서 설정한다.
 
 First, run the development server:
 

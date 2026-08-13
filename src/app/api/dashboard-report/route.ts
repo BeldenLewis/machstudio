@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import type { RealtimeReportData } from "@/app/(app)/dashboard/RealtimeReport";
 import { normalizeUtmKey } from "@/lib/attribution-normalize";
+import { getGa4ActiveUsers } from "@/lib/ga4";
 
 // 결과 캐싱 (egress 절감): 동일 조건 조회를 짧게 캐시해 반복 DB 트래픽 제거.
 // 서버리스 인스턴스 단위 캐시 — 같은 인스턴스에 도달하는 반복/동시 조회에 효과.
@@ -125,6 +126,18 @@ function parseDate(value: string | undefined, fallback: Date) {
 function getKstDayStart(date: Date) {
   const kst = new Date(date.getTime() + KST_OFFSET);
   return new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate()) - KST_OFFSET);
+}
+
+function getKstYearStart(date: Date, yearOffset = 0) {
+  const kst = new Date(date.getTime() + KST_OFFSET);
+  return new Date(Date.UTC(kst.getUTCFullYear() + yearOffset, 0, 1) - KST_OFFSET);
+}
+
+/** 같은 달/일 기준으로 정확히 1년 전으로 이동 — 윤년 드리프트 없이 "작년 동기간"을 맞춘다. */
+function shiftYears(date: Date, years: number) {
+  const shifted = new Date(date.getTime());
+  shifted.setUTCFullYear(shifted.getUTCFullYear() + years);
+  return shifted;
 }
 
 function getUtmColumns(filters?: ReportFilters) {
@@ -688,6 +701,10 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
   const yesterdayStart = new Date(todayStart.getTime() - DAY_MS);
   const span = Math.max(to.getTime() - from.getTime(), DAY_MS);
   const previousFrom = new Date(from.getTime() - span);
+  const thisYearStart = getKstYearStart(now, 0);
+  const lastYearStart = getKstYearStart(now, -1);
+  const lastYearRangeFrom = shiftYears(from, -1);
+  const lastYearRangeTo = shiftYears(to, -1);
 
   const baseParams = { workspaceId, projectId, filters };
   const rangeWhere = buildWhere({ ...baseParams, from, to });
@@ -707,13 +724,17 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
   });
   const compositionKeys = resolveCompositionKeys(sourceFields);
 
-  const [yesterdayCount, todayCount, cumulativeCount, rangeCount, previousRangeCount, cumulativeBeforeRange, heatmapRecords, utmGroups, heatmapRows, cumulativeDailyRows, utmTrendRows] = await Promise.all([
+  const [yesterdayCount, todayCount, cumulativeCount, rangeCount, previousRangeCount, cumulativeBeforeRange, thisYearCumulativeCount, lastYearTotalCount, lastYearRangeCount, heatmapRecords, utmGroups, heatmapRows, cumulativeDailyRows, utmTrendRows] = await Promise.all([
     prisma.collectRecord.count({ where: buildWhere({ ...baseParams, from: yesterdayStart, lt: todayStart }) }),
     prisma.collectRecord.count({ where: buildWhere({ ...baseParams, from: todayStart, to: now }) }),
     prisma.collectRecord.count({ where: buildWhere(baseParams) }),
     prisma.collectRecord.count({ where: rangeWhere }),
     prisma.collectRecord.count({ where: buildWhere({ ...baseParams, from: previousFrom, lt: from }) }),
     prisma.collectRecord.count({ where: buildWhere({ ...baseParams, lt: from }) }),
+    // 작년 대비 지표 — 같은 프로젝트를 매년 재사용하므로(연도만 이름에서 바뀜) CollectRecord 자체에서 바로 계산 가능.
+    prisma.collectRecord.count({ where: buildWhere({ ...baseParams, from: thisYearStart, to: now }) }),
+    prisma.collectRecord.count({ where: buildWhere({ ...baseParams, from: lastYearStart, lt: thisYearStart }) }),
+    prisma.collectRecord.count({ where: buildWhere({ ...baseParams, from: lastYearRangeFrom, lt: lastYearRangeTo }) }),
     // composition / emailDomainTop / dedup 용 — data JSON 전체 대신 집계에 필요한 필드만 추출(egress 절감).
     // 매칭되는 필드가 없으면 빈 배열. jsonb_build_object 로 부분 data 객체를 재구성 → 기존 메모리 로직 그대로 동작.
     (() => {
@@ -874,6 +895,47 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
   const utmBySourceMedium = aggregateUtm((row) => [row.source, row.medium].filter(Boolean).join(" / "));
 
   const rangeChange = previousRangeCount > 0 ? ((rangeCount - previousRangeCount) / previousRangeCount) * 100 : null;
+  const goalProgressPercent = lastYearTotalCount > 0 ? (thisYearCumulativeCount / lastYearTotalCount) * 100 : null;
+  const lastYearRangeChange = lastYearRangeCount > 0 ? ((rangeCount - lastYearRangeCount) / lastYearRangeCount) * 100 : null;
+
+  // GA4 퍼널 — 사전등록 폼 자체엔 방문 추적이 없어서(collect-script.ts는 제출만 잡음), 이미 설치된
+  // GA4에서 방문자 수를 끌어온다. 속성 미설정이거나 조회 실패면 퍼널 전체를 숨긴다(부분 데이터로 오해 방지).
+  const funnel = project.ga4PropertyId
+    ? await (async () => {
+        const propertyId = project.ga4PropertyId!;
+        const pagePathPrefix = project.ga4RegistrationPagePath || null;
+        const [homepageVisitors, previousHomepageVisitors, registrationPageVisitors, previousRegistrationPageVisitors] = await Promise.all([
+          getGa4ActiveUsers({ propertyId, from, to }),
+          getGa4ActiveUsers({ propertyId, from: previousFrom, to: from }),
+          pagePathPrefix ? getGa4ActiveUsers({ propertyId, pagePathPrefix, from, to }) : Promise.resolve(null),
+          pagePathPrefix ? getGa4ActiveUsers({ propertyId, pagePathPrefix, from: previousFrom, to: from }) : Promise.resolve(null),
+        ]);
+        if (homepageVisitors === null) return null;
+        const homepageVisitorsChange =
+          previousHomepageVisitors && previousHomepageVisitors > 0
+            ? ((homepageVisitors - previousHomepageVisitors) / previousHomepageVisitors) * 100
+            : null;
+        const registrationPageVisitorsChange =
+          registrationPageVisitors !== null && previousRegistrationPageVisitors && previousRegistrationPageVisitors > 0
+            ? ((registrationPageVisitors - previousRegistrationPageVisitors) / previousRegistrationPageVisitors) * 100
+            : null;
+        return {
+          homepageVisitors,
+          homepageVisitorsChange,
+          registrationPageVisitors,
+          registrationPageVisitorsChange,
+          registrants: rangeCount,
+          homepageToPageRate:
+            registrationPageVisitors !== null && homepageVisitors > 0
+              ? (registrationPageVisitors / homepageVisitors) * 100
+              : null,
+          pageToRegistrantRate:
+            registrationPageVisitors !== null && registrationPageVisitors > 0
+              ? (rangeCount / registrationPageVisitors) * 100
+              : null,
+        };
+      })()
+    : null;
 
   // Anomaly detection
   const cumulativeTrend = buildCumulativeTrendFromRows(cumulativeDailyRows, from, to, cumulativeBeforeRange);
@@ -910,7 +972,13 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
       rangeCount,
       previousRangeCount,
       rangeChange,
+      thisYearCumulativeCount,
+      lastYearTotalCount,
+      goalProgressPercent,
+      lastYearRangeCount,
+      lastYearRangeChange,
     },
+    funnel,
     composition,
     emailDomainTop,
     emailDomainTotal,

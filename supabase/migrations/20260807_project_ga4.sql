@@ -1,0 +1,2 @@
+ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "ga4PropertyId" TEXT;
+ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "ga4RegistrationPagePath" TEXT;
