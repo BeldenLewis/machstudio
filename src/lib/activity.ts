@@ -103,7 +103,13 @@ export type ActivityAction =
   | "workspace.deleted"
   | "invitation.redeemed"
   | "invitation.accepted"
-  | "invitation.declined";
+  | "invitation.declined"
+  | "competition.created"
+  | "competition.updated"
+  | "competition.deleted"
+  | "competition.entry_updated"
+  | "competition.entry_deleted"
+  | "competition.preview_token_rotated";
 
 export async function logActivity(args: {
   workspaceId: string;
