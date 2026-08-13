@@ -1,6 +1,6 @@
 # 사전등록 · 현장운영 통합 플랫폼 설계
 
-작성일: 2026-08-10 · **v7 (2026-08-11 — 결정사항 반영, LA 9/1 일정 역산)** · 상태: 설계 확정, 개발 착수 대기
+작성일: 2026-08-10 · **v8 (2026-08-13 — 결정사항 반영, 수집 방식 선택·미리보기 링크 추가)** · 상태: 설계 확정, 개발 착수 대기
 
 ## 1. 배경
 
@@ -12,7 +12,7 @@
 
 ## 2. 일정 — 먼저 짚어야 할 것
 
-**파일럿은 Korea Expo LA, 사전등록 오픈 목표는 2026-09-01.** 오늘이 8월 11일이므로 **3주**다.
+**파일럿은 Korea Expo LA, 사전등록 오픈 목표는 2026-09-01.** 오늘이 8월 13일이므로 **약 2주 반**이다.
 
 ### 3주에 전부는 들어가지 않는다
 
@@ -61,17 +61,61 @@ Workspace (회사)
        └ CollectCheckIn (입장 기록) ← 일자별 (P4)
 ```
 
-**전시 하나 = CollectSource 하나.** 문항은 **전시마다 처음부터 커스텀**하는 것이 기본이다(복제는 나중에 옵션으로 추가). 전시별로 산업·유형·수집 항목이 달라 복제가 오히려 방해가 된다.
+**수집 소스 하나 = 폼 하나.** 문항은 **소스마다 처음부터 커스텀**하는 것이 기본이다(복제는 나중에 옵션).
 
-| 전시마다 다른 것 | 저장 위치 |
+> **이건 특정 전시용 기능이 아니다.** Korea Expo LA·파리, STK 같은 이름은 전부 예시일 뿐이다. **프로젝트를 새로 만들 때마다** 사전등록 화면에서 수집 소스를 추가하면 그 자리에서 이 방식을 고를 수 있어야 한다. 전시가 아닌 프로젝트(세미나·설문·자료 신청 등)에도 그대로 쓰인다. 코드에 특정 전시 전용 분기를 넣지 않는다.
+
+| 소스마다 다른 것 | 저장 위치 |
 |---|---|
 | 문항·분기·동의·검증·(다국어) 라벨 | `formConfig` |
 | 행사 개요·안내 블록 | `formConfig.eventInfo` / `.notices` |
 | 브랜드 색·로고 | `formConfig.theme` |
 | 완료 URL 형식 | `formConfig.completion.redirectUrlTemplate` |
 | 이메일 제목·본문·발신 | `emailConfig` |
-| 현장 운영(개최일·게이트·배지) | `venueConfig` (P4) |
+| 현장 운영(개최일·게이트·배지) | `venueConfig` |
 | 허용 도메인 / 폼 on-off | `allowedOrigins` / `isActive` (기존) |
+
+### 3.1 수집 소스는 두 방식 중 하나로 만든다
+
+기존 방식을 **대체하지 않는다.** 이미 외부 폼에 스크립트를 붙여 쓰는 소스가 살아 있으므로, 새 방식은 **선택지로 추가**된다.
+
+| 방식 | `mode` | 하는 일 | 쓰는 상황 |
+|---|---|---|---|
+| **연동형 (기존)** | `capture` | 외부 사이트의 **기존 폼**에 스크립트를 붙여 제출을 가로채 수집 | 아임웹·워드프레스 자체 폼을 이미 쓰고 있을 때 |
+| **빌더형 (신규)** | `builder` | machstudio에서 **폼을 직접 만들고** 코드블럭으로 렌더 | 폼까지 machstudio에서 관리하고 싶을 때 |
+
+**선택 시점은 "수집 소스 추가" 순간**이다. 지금 생성 폼은 이름·설명·사이트 URL만 받는다(`src/app/(app)/collect/page.tsx:27,51`). 여기 맨 위에 방식 선택 카드 2장을 넣는다.
+
+```
+┌ 수집 소스 추가 ──────────────────────────────┐
+│  어떻게 수집할까요?                           │
+│  ┌─────────────────┐ ┌─────────────────┐   │
+│  │ ▣ 연동형         │ │ ○ 빌더형         │   │
+│  │ 이미 있는 폼에   │ │ machstudio에서   │   │
+│  │ 스크립트를 붙여  │ │ 폼을 만들어      │   │
+│  │ 데이터만 수집    │ │ 코드블럭으로 삽입│   │
+│  └─────────────────┘ └─────────────────┘   │
+│  이름 [                              ]      │
+│  (연동형) 사이트 URL / 성공 문구 …           │
+│  (빌더형) → 만들면 바로 폼 빌더로 이동        │
+└──────────────────────────────────────────────┘
+```
+
+**저장은 명시적 컬럼으로.** `formConfig`가 비었는지로 유추하지 않는다 — 빌더형인데 아직 문항을 안 채운 상태와 구분되지 않는다.
+
+```prisma
+model CollectSource {
+  mode String @default("capture")   // "capture" | "builder"
+}
+```
+
+기본값이 `capture`라 **기존 소스는 전부 그대로 동작**한다(마이그레이션이 값을 채울 필요도 없다).
+
+**소스 상세 화면도 방식에 따라 갈린다**
+- `capture`: 지금의 스크립트 발급·필드 매핑·성공 문구 탭 (변경 없음)
+- `builder`: 폼 빌더·이메일·현장 탭
+
+**방식 전환**: 수집된 레코드가 0건일 때만 허용한다. 데이터가 쌓인 뒤 바꾸면 필드 키 체계가 달라져 기존 레코드와 새 레코드가 섞인다. 이미 데이터가 있으면 새 소스를 만들도록 안내한다.
 
 ## 4. 화면 구성 (온라인)
 
@@ -474,6 +518,9 @@ model CollectCheckIn {
 | 스냅샷을 스크립트에 실어 보내기 | `/w/l/{slug}` | `src/app/w/l/[slug]/route.ts` |
 | 제출 수집(API키·Origin·rate limit·webhook·UTM) | `/api/collect` | `src/app/api/collect/route.ts` |
 | rate limit | `rateLimit` | `src/lib/ratelimit.ts` |
+| **미리보기 부작용 가드** | `isPreviewUrl()` 패턴 | `src/app/webinar/[slug]/live/page.tsx:36,270` |
+| **공유 토큰 발급·재발급** | `analyticsShareToken`/`dashboardShareToken` | `prisma/schema.prisma:133-138` |
+| **미리보기=실물 동일 렌더 원칙** | `SetupPreview.tsx` 주석 | `webinar/[slug]/SetupPreview.tsx:12` |
 | **이메일 발송·배치** | `sendEmail`, `sendEmailBatch` | `src/lib/email.ts` |
 | CSV 가져오기·필드 매핑 | import 라우트, `FieldMapping` | `collect-sources/[id]/records/import/route.ts` |
 | 부분 유니크 인덱스 선례 | `WebinarRegistration` 주석 | `prisma/schema.prisma:646-649` |
@@ -486,9 +533,11 @@ model CollectCheckIn {
 
 ```prisma
 model CollectSource {
-  formConfig  Json?   // 문항·개요·안내·검증·동의·완료·등록확인
-  emailConfig Json?   // 발신·제목·본문·QR
-  venueConfig Json?   // 개최일·게이트·배지 (현장)
+  mode         String  @default("capture")  // "capture"(기존 연동형) | "builder"(신규) — §3.1
+  previewToken String? @unique              // 미리보기 링크 — §16.1
+  formConfig   Json?   // 문항·개요·안내·검증·동의·완료·등록확인
+  emailConfig  Json?   // 발신·제목·본문·QR
+  venueConfig  Json?   // 개최일·게이트·배지 (현장)
 }
 
 model CollectRecord {
@@ -507,9 +556,14 @@ model CollectCheckIn { /* §12.3 */ }
 ```
 
 ```sql
+-- 기본값 'capture' 라 기존 소스는 전부 그대로 동작한다
+ALTER TABLE "CollectSource" ADD COLUMN IF NOT EXISTS "mode" TEXT NOT NULL DEFAULT 'capture';
+ALTER TABLE "CollectSource" ADD COLUMN IF NOT EXISTS "previewToken" TEXT;
 ALTER TABLE "CollectSource" ADD COLUMN IF NOT EXISTS "formConfig"  JSONB;
 ALTER TABLE "CollectSource" ADD COLUMN IF NOT EXISTS "emailConfig" JSONB;
 ALTER TABLE "CollectSource" ADD COLUMN IF NOT EXISTS "venueConfig" JSONB;
+CREATE UNIQUE INDEX IF NOT EXISTS "CollectSource_previewToken_key"
+  ON "CollectSource"("previewToken");
 
 ALTER TABLE "CollectRecord" ADD COLUMN IF NOT EXISTS "registrationNo"  TEXT;
 ALTER TABLE "CollectRecord" ADD COLUMN IF NOT EXISTS "emailNormalized" TEXT;
@@ -555,12 +609,50 @@ CREATE INDEX IF NOT EXISTS "CollectRecord_sourceId_phoneE164_idx"
 └────────────────────────────────────────┴───────────────────┘
 [이메일] 발신·제목·본문·QR·테스트 발송
 [현장]   개최일·게이트·배지·명단 다운로드   (이후)
+
+상단 고정:  [ 미리보기 링크 복사 ]  [ 설치 코드 복사 ]
 ```
 
 - 항목·안내 블록 모두 **드래그로 순서 변경**. 분기는 폼당 하나.
 - 필드 카드·옵션 편집·드래그는 `RegistrationFormTab.tsx`에서 **컴포넌트를 추출해 공용화**한다(복사하면 두 벌이 갈라진다): `FieldCard`, `RegTypeMenu`, `REG_TYPE_META/ORDER`, `useRegPopover` → `src/components/form-builder/`, 웨비나 탭도 거기서 import.
-- 미리보기는 임베드 런타임과 **같은 렌더 함수**. 접수 창 상태(before/open/closed)를 토글해 미리 볼 수 있어야 한다 — 마감 화면을 마감 당일에 처음 보면 늦다.
+- 옆칸 미리보기는 임베드 런타임과 **같은 렌더 함수**. 접수 창 상태(before/open/closed)를 토글해 미리 볼 수 있어야 한다 — 마감 화면을 마감 당일에 처음 보면 늦다.
 - **테스트 발송** 버튼(실제 등록 없이 QR 메일 수신).
+
+### 16.1 미리보기 링크 — 실제 URL로 열어본다
+
+옆칸 미리보기만으로는 부족하다. **아임웹에 붙이기 전에** 실제 브라우저에서 열어 보고, 팀원·클라이언트에게 링크로 보내 확인받을 수 있어야 한다.
+
+```
+https://machstudio.vercel.app/p/{previewToken}
+```
+
+- `CollectSource.previewToken`(난수, 유니크)으로 접근한다. **소스 id를 그대로 노출하지 않는다** — 재발급으로 링크를 끊을 수 있어야 하기 때문이다.
+- 이 저장소에 **같은 패턴이 이미 있다**: `Project.analyticsShareToken` / `dashboardShareToken`(`prisma/schema.prisma:133-138`). 토큰 발급·재발급·on/off 흐름을 그대로 따른다.
+- 렌더는 **임베드와 동일한 런타임**을 쓴다. 미리보기 전용 렌더러를 따로 만들면 "미리보기와 실제가 다르다"가 반드시 생긴다(웨비나 `SetupPreview.tsx:12` 주석의 교훈).
+
+**부작용은 전부 막는다 — 이게 핵심이다.** 미리보기에서 누른 제출이 실제 등록이 되거나 광고 전환으로 잡히면 데이터가 오염된다.
+
+| 부작용 | 미리보기에서 |
+|---|---|
+| 등록 저장 | **저장하지 않는다.** 검증까지는 실제와 똑같이 돌리고 저장 직전에 멈춘 뒤 "미리보기라 저장되지 않았어요" 표시 |
+| 등록번호·QR | 화면 확인용 더미 번호로 렌더 |
+| 이메일 발송 | 보내지 않는다 |
+| dataLayer 이벤트 | 발화하지 않는다 |
+| 중복 확인 조회 | 허용(읽기 전용이라 안전) |
+
+이 저장소는 **`isPreviewUrl()` 가드 패턴**을 이미 쓴다 — 부작용을 내는 함수 첫 줄에서 `if (isPreviewUrl()) return;` 하는 방식(`src/app/webinar/[slug]/live/page.tsx:36,270`). AGENTS.md도 "새 부작용(추적·전송)은 isPreviewUrl 가드 필수"라고 못 박고 있다. **같은 규칙을 그대로 적용한다.**
+
+**미리보기 화면 상단에 배너를 고정**한다 — "미리보기입니다. 제출해도 저장되지 않습니다." 이게 없으면 담당자가 미리보기에서 등록하고 "왜 명단에 없냐"고 묻게 된다.
+
+**상태를 강제로 볼 수 있다** (쿼리 파라미터):
+
+| 파라미터 | 용도 |
+|---|---|
+| `?status=before\|open\|closed` | 접수 전·중·마감 화면을 지금 확인 |
+| `?lang=en` | 언어별 화면(다국어 도입 후) |
+| `?type=buyer` | 특정 유형 문항이 펼쳐진 상태 |
+
+**등록 확인 화면도 같은 방식**으로 미리 본다: `/p/{previewToken}/check`.
 
 ## 17. 임베드 런타임
 
@@ -632,7 +724,7 @@ GET  /t/{regNo}             티켓 페이지
 
 | 주차 | 내용 | 병행 |
 |---|---|---|
-| **W1 (8/11~)** | 스키마 + `collect-form-config.ts` + 폼 빌더 UI·미리보기 | — |
+| **W1 (8/13~)** | 스키마 + `collect-form-config.ts` + 폼 빌더 UI·미리보기 | — |
 | **W2 (8/18~)** | `/f/[id]` 런타임, 검증·중복(유니크 인덱스), 개요·안내 블록, dataLayer | 완료 페이지(`registration-complete`) 생성, GTM 태그 |
 | **W3 (8/25~)** | 등록번호·QR·완료 화면 QR·등록 확인, 스테이징 아임웹 검증 | 빌더에서 **LA 문항 입력**, 스캔 환경 테스트(§22) |
 | **8/29~31** | 예비일 — 버그·문구·실데이터 리허설 | 오픈 판단 |
@@ -648,6 +740,10 @@ GET  /t/{regNo}             티켓 페이지
 현장 기능 리허설은 **실제 기기로, 인터넷을 끊고** 수백 건을 연습한다. **종이 명단 폴백을 항상 준비**한다 — 시스템이 죽어도 입장은 진행돼야 한다.
 
 ## 22. 검증 계획
+
+**방식 선택(§3.1)**: 새 프로젝트에서 수집 소스를 추가할 때 두 방식이 다 보이는지, `capture`로 만들면 **기존 스크립트 흐름이 그대로**인지(회귀 방지 — 이게 제일 중요하다), `builder`로 만들면 폼 빌더로 이어지는지, 레코드가 있는 소스는 방식 전환이 막히는지.
+
+**미리보기 링크(§16.1)**: 링크로 열었을 때 임베드와 화면이 같은지, **제출해도 레코드가 생기지 않는지**, 이메일이 안 나가는지, dataLayer가 조용한지, `?status=`로 마감 화면이 보이는지, 토큰 재발급 시 옛 링크가 죽는지.
 
 **폼·블록**: 분기 펼침, 유형 변경 시 공통 입력 유지, 개요·안내 블록 on/off.
 
@@ -696,6 +792,9 @@ GET  /t/{regNo}             티켓 페이지
 | 완료 페이지 | `registration-complete` 계열 단일 페이지 + `?{type}`. GTM 태그는 운영팀이 직접 |
 | 전화 기본 국가 | **US** |
 | Resend 이메일 | **별도 요청 시 연동**. 그전까지 QR은 완료 화면 + 등록 확인으로 전달 |
+| 수집 소스 방식 | 기존 **연동형(capture)** 유지 + **빌더형(builder)** 추가. 소스 생성 시 선택 |
+| 적용 범위 | 특정 전시 전용 아님. **모든 프로젝트**의 수집 소스에서 선택 가능 |
+| 미리보기 | 옆칸 미리보기 + **공유 가능한 미리보기 링크**(`/p/{token}`), 부작용 전면 차단 |
 | 현장 등록 폼 | **사전등록과 동일**. 문항을 줄이지 않는다 |
 | 재입장 | 시스템 관리 안 함 (팔찌·목걸이) — 일자별 최초 입장만 기록 |
 | 현장 네트워크 | **없음** 전제. 오프라인 우선 설계 |
