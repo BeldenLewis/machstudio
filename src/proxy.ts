@@ -31,6 +31,9 @@ export async function proxy(request: NextRequest) {
     // 심사 화면·API — machstudio 계정이 없는 심사위원이 링크+비밀번호로 들어온다.
     pathname.startsWith("/j/") ||
     pathname.startsWith("/api/judge/") ||
+    // 발표 화면 — 무대 노트북은 machstudio 계정으로 로그인돼 있지 않다. 링크(showToken)가 열쇠다.
+    pathname.startsWith("/show/") ||
+    pathname.startsWith("/api/show/") ||
     pathname.startsWith("/api/public") ||
     pathname.startsWith("/api/shorten-url") ||
     pathname.startsWith("/api/health") ||

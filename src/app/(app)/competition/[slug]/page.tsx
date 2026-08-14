@@ -32,6 +32,9 @@ export interface CompetitionDetail {
   config: CompetitionConfig;
   maxEntriesPerApplicant: number;
   previewToken: string | null;
+  showToken: string | null;
+  showConfig: unknown;
+  resultPublishedAt: string | null;
 }
 
 const TABS = [
@@ -164,7 +167,7 @@ export default function CompetitionDetailPage({ params }: { params: Promise<{ sl
       {tab === "vote" && <VoteSettingsTab competition={competition} rounds={rounds} onRoundsChange={setRounds} />}
       {tab === "judges" && <JudgesTab competition={competition} rounds={rounds} onRoundsChange={setRounds} />}
       {tab === "tally" && <TallyTab competition={competition} rounds={rounds} />}
-      {tab === "awards" && <AwardsTab competition={competition} />}
+      {tab === "awards" && <AwardsTab competition={competition} patch={patch} />}
       {tab === "deploy" && <DeployTab competition={competition} patch={patch} />}
     </div>
   );

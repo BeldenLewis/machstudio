@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Award, ChevronDown, ChevronUp, Eye, EyeOff, Loader2, Plus, Trash2 } from "lucide-react";
+import { Award, ChevronDown, ChevronUp, Copy, ExternalLink, Eye, EyeOff, Loader2, MonitorPlay, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { InlineError } from "@/components/ui/inline-error";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { Switch } from "@/components/ui/switch";
 import { btnCls, FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 import { formatKst } from "@/lib/datetime";
+import { normalizeShowConfig, SHOW_MODES, type ShowConfig } from "@/lib/competition-show";
 import type { CompetitionDetail } from "./page";
 
 interface Candidate { id: string; entryNo: string; title: string; teamName: string | null }
@@ -20,7 +22,13 @@ interface AwardRow {
 
 const spring = { type: "spring", stiffness: 420, damping: 32 } as const;
 
-export default function AwardsTab({ competition }: { competition: CompetitionDetail }) {
+export default function AwardsTab({
+  competition,
+  patch,
+}: {
+  competition: CompetitionDetail;
+  patch: (body: Record<string, unknown>, successMessage?: string) => Promise<boolean>;
+}) {
   const [awards, setAwards] = useState<AwardRow[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [publishedAt, setPublishedAt] = useState<string | null>(null);
@@ -98,6 +106,8 @@ export default function AwardsTab({ competition }: { competition: CompetitionDet
       />
 
       <FinalOrderCard competition={competition} />
+
+      <ShowCard competition={competition} patch={patch} />
 
       <section className={`bg-background p-5 ${R.panel} ${FINISH.s1}`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -279,6 +289,163 @@ function ResultPublishCard({
       {dirty && (
         <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-400">
           저장하지 않은 변경이 있어요. 공개 상태는 <b>저장된 내용</b>을 기준으로 보여집니다.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function ShowCard({
+  competition, patch,
+}: {
+  competition: CompetitionDetail;
+  patch: (body: Record<string, unknown>, successMessage?: string) => Promise<boolean>;
+}) {
+  const confirm = useConfirm();
+  const [config, setConfig] = useState<ShowConfig>(() => normalizeShowConfig(competition.showConfig));
+  const [copied, setCopied] = useState(false);
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const showUrl = competition.showToken ? `${origin}/show/${competition.showToken}` : "";
+
+  const save = async (next: ShowConfig) => {
+    setConfig(next);
+    await patch({ showConfig: next });
+  };
+
+  return (
+    <section className={`bg-background p-5 ${R.panel} ${FINISH.s1}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+            <MonitorPlay className="h-4 w-4 text-violet-500" /> 발표 화면
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            무대 스크린에 띄우는 전체화면이에요. <b>자동으로 넘어가지 않고</b> 스페이스바나 →로 직접 넘깁니다.
+          </p>
+        </div>
+        <button
+          onClick={async () => {
+            const ok = await confirm({
+              title: competition.showToken ? "발표 링크를 새로 만들까요?" : "발표 링크를 만들까요?",
+              description: competition.showToken
+                ? "지금까지 공유한 링크는 즉시 열리지 않게 돼요."
+                : "이 링크를 아는 사람은 발표 전에도 결과를 볼 수 있어요. 무대 노트북에만 두세요.",
+              confirmLabel: competition.showToken ? "새로 만들기" : "만들기",
+            });
+            if (!ok) return;
+            await patch({ rotateShowToken: true }, "발표 링크를 발급했어요");
+          }}
+          className={`flex shrink-0 items-center gap-1 bg-secondary px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground ${R.control}`}
+        >
+          <RefreshCw className="h-3 w-3" /> {competition.showToken ? "새로 만들기" : "링크 만들기"}
+        </button>
+      </div>
+
+      <div className="mt-4 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+        {SHOW_MODES.map((m) => {
+          const active = config.mode === m.value;
+          return (
+            <button
+              key={m.value}
+              onClick={() => void save(normalizeShowConfig({ ...config, mode: m.value }))}
+              className={`p-3 text-left transition-colors ${R.surface} ${
+                active ? "bg-violet-500/10 ring-1 ring-violet-500/40" : "bg-secondary/40 hover:bg-secondary"
+              }`}
+            >
+              <span className={`text-xs font-semibold ${active ? "text-violet-600 dark:text-violet-400" : ""}`}>
+                {m.label}
+              </span>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{m.hint}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 space-y-2.5 border-t border-border pt-4">
+        <label className="flex items-center justify-between gap-3">
+          <span className="text-xs">
+            참가작 사진 함께 띄우기
+            <span className="ml-1.5 text-[11px] text-muted-foreground">스크린이 작으면 끄는 게 읽기 좋아요</span>
+          </span>
+          <Switch checked={config.showMedia} onChange={(v) => void save({ ...config, showMedia: v })} label="사진 띄우기" />
+        </label>
+        <label className="flex items-center justify-between gap-3">
+          <span className="text-xs">
+            점수 공개
+            <span className="ml-1.5 text-[11px] text-muted-foreground">
+              {config.mode === "bars" ? "바 레이스는 점수가 곧 연출이라 항상 켜져요" : "관객에게 종합 점수를 보여줍니다"}
+            </span>
+          </span>
+          <Switch
+            checked={config.showScores}
+            onChange={(v) => void save({ ...config, showScores: v })}
+            label="점수 공개"
+            disabled={config.mode === "bars"}
+          />
+        </label>
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-muted-foreground">화면 하단 문구 (선택)</span>
+          <input
+            value={config.footnote}
+            onChange={(e) => setConfig({ ...config, footnote: e.target.value })}
+            onBlur={() => void save(config)}
+            placeholder="예: 주최 코리아엑스포 · 후원 ○○"
+            className={`${FIELD_CLS} h-9`}
+          />
+        </label>
+      </div>
+
+      {showUrl ? (
+        <div className="mt-4 space-y-2 border-t border-border pt-4">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium">발표 링크</span>
+            <button
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(showUrl);
+                  setCopied(true);
+                  toast.success("복사했어요");
+                  setTimeout(() => setCopied(false), 1500);
+                } catch {
+                  toast.error("복사에 실패했어요");
+                }
+              }}
+              className={`flex items-center gap-1 bg-secondary px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground ${R.control}`}
+            >
+              {copied ? "복사됨" : <><Copy className="h-3 w-3" /> 복사</>}
+            </button>
+          </div>
+          <pre className={`overflow-x-auto bg-secondary/40 p-3 text-[11px] ${R.control}`}><code>{showUrl}</code></pre>
+          <div className="flex flex-wrap gap-1.5">
+            <a
+              href={showUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex items-center gap-1 bg-violet-500 px-3 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-violet-600 ${R.control}`}
+            >
+              <ExternalLink className="h-3 w-3" /> 발표 화면 열기
+            </a>
+            <a
+              href={`${showUrl}?rehearsal=1`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex items-center gap-1 bg-secondary px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground ${R.control}`}
+            >
+              리허설 (가짜 결과)
+            </a>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            무대에서: <b>스페이스바/→</b> 다음, <b>←</b> 이전, <b>F</b> 전체화면, <b>S</b> 비상 결과판.
+            한 번 열어 두면 네트워크가 끊겨도 연출은 계속 돌아가요.
+          </p>
+          <p className="text-[11px] text-amber-700 dark:text-amber-400">
+            리허설은 <b>가짜 결과</b>로 돕니다 — 연습 자리에 스태프만 있는 경우는 거의 없어서, 진짜 명단을 띄우면 그걸로 발표가 끝나요.
+          </p>
+        </div>
+      ) : (
+        <p className="mt-4 border-t border-border pt-4 text-xs text-muted-foreground">
+          발표 링크가 아직 없어요. 위 &quot;링크 만들기&quot;를 눌러 발급하세요.
         </p>
       )}
     </section>

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { normalizeCompetitionConfig } from "@/lib/competition-config";
 import { isCompetitionPhaseOverride } from "@/lib/competition-status";
+import { normalizeShowConfig } from "@/lib/competition-show";
 
 /** 워크스페이스 멤버면 접근 가능 — 웨비나 라우트와 같은 기준. */
 async function authorize(competitionId: string, userId: string) {
@@ -109,6 +110,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   if (body.rotatePreviewToken === true) {
     data.previewToken = randomBytes(16).toString("base64url");
+  }
+  // 발표 화면 링크. 무대 노트북에 미리 열어 두는 링크라, 새면 결과가 새는 것과 같다 —
+  // 재발급으로 옛 링크를 즉시 죽일 수 있어야 한다.
+  if (body.rotateShowToken === true) {
+    data.showToken = randomBytes(16).toString("base64url");
+  }
+  if (body.showConfig !== undefined) {
+    data.showConfig = JSON.parse(JSON.stringify(normalizeShowConfig(body.showConfig)));
   }
 
   if (Object.keys(data).length === 0) return NextResponse.json({ error: "변경할 내용이 없어요" }, { status: 400 });
