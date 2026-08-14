@@ -1,0 +1,218 @@
+/**
+ * 발표 화면 — 16:9 대형 스크린 기준.
+ *
+ * 크기를 px 이 아니라 vmin 으로 잡는다. 무대 스크린은 1080p 부터 4K 까지 제각각이고,
+ * 노트북 미러링으로 나가는 경우도 있다. 화면이 커지면 글자도 같이 커져야 뒤에서 읽힌다.
+ */
+
+.stage {
+  --accent: #7c3aed;
+  --on-accent: #fff;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #0a0a0f;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  overflow: hidden;
+}
+
+/* 은은한 배경 — 순수 검정은 프로젝터에서 죽은 화면처럼 보인다. */
+.stage::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 62%);
+  pointer-events: none;
+}
+
+.stage-body {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4vmin 6vmin;
+  min-height: 0;
+}
+
+.stage-title { font-size: 3.2vmin; font-weight: 700; opacity: 0.65; margin: 0 0 1vmin; letter-spacing: 0.01em; }
+.stage-hint { font-size: 2.2vmin; opacity: 0.45; margin: 3vmin 0 0; }
+
+/* ── 상 이름 배지 ─────────────────────────────────────────── */
+.stage-award {
+  display: inline-flex;
+  align-items: center;
+  height: 7vmin;
+  padding: 0 4vmin;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 3.6vmin;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+/* ── 수상자 ───────────────────────────────────────────────── */
+.stage-winner { text-align: center; max-width: 88vw; }
+.stage-team { font-size: 9vmin; font-weight: 900; line-height: 1.15; margin: 3vmin 0 0; word-break: keep-all; }
+.stage-work { font-size: 4vmin; font-weight: 600; opacity: 0.8; margin: 1.6vmin 0 0; word-break: keep-all; }
+.stage-desc { font-size: 2.6vmin; opacity: 0.6; margin: 2vmin 0 0; white-space: pre-line; }
+.stage-media { margin: 3vmin auto 0; max-height: 34vh; border-radius: 1.6vmin; display: block; box-shadow: 0 2vmin 6vmin rgba(0, 0, 0, 0.5); }
+
+/* 카드 공개 — 뒤집기 */
+.stage-card { perspective: 1600px; width: min(76vw, 120vmin); height: 52vh; }
+.stage-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.75s cubic-bezier(0.4, 0.1, 0.2, 1);
+}
+.stage-card.is-open .stage-card-inner { transform: rotateY(180deg); }
+.stage-card-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  backface-visibility: hidden;
+  border-radius: 2.4vmin;
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: inset 0 0 0 0.25vmin rgba(255, 255, 255, 0.12), 0 3vmin 8vmin rgba(0, 0, 0, 0.45);
+  padding: 4vmin;
+}
+.stage-card-back { transform: rotateY(180deg); }
+
+/* ── 순위 역순 ────────────────────────────────────────────── */
+.stage-rank-no {
+  font-size: 16vmin;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--accent);
+  text-shadow: 0 0 6vmin color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.stage-rank-no.is-first { font-size: 22vmin; }
+
+/* ── 룰렛 ─────────────────────────────────────────────────── */
+.stage-roulette {
+  height: 26vh;
+  width: min(80vw, 130vmin);
+  overflow: hidden;
+  position: relative;
+  border-radius: 2vmin;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 0.25vmin rgba(255, 255, 255, 0.12);
+  -webkit-mask-image: linear-gradient(transparent, #000 22%, #000 78%, transparent);
+  mask-image: linear-gradient(transparent, #000 22%, #000 78%, transparent);
+}
+.stage-roulette-strip { position: absolute; inset-inline: 0; top: 0; will-change: transform; }
+.stage-roulette-item {
+  height: 26vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7vmin;
+  font-weight: 800;
+  word-break: keep-all;
+  padding: 0 4vmin;
+  text-align: center;
+}
+.stage-roulette.is-done { box-shadow: inset 0 0 0 0.4vmin var(--accent), 0 0 8vmin color-mix(in srgb, var(--accent) 40%, transparent); }
+
+/* ── 점수 바 레이스 ───────────────────────────────────────── */
+.stage-bars { width: min(86vw, 150vmin); display: flex; flex-direction: column; gap: 1.4vmin; }
+.stage-bar-row { display: flex; align-items: center; gap: 2vmin; transition: transform 0.8s cubic-bezier(0.3, 0, 0.2, 1); }
+.stage-bar-rank { flex: none; width: 5vmin; text-align: right; font-size: 3vmin; font-weight: 800; opacity: 0.5; font-variant-numeric: tabular-nums; }
+.stage-bar-name { flex: none; width: 26vmin; font-size: 2.7vmin; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage-bar-track { flex: 1; height: 4.4vmin; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.stage-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 65%, transparent), var(--accent));
+  transition: width 1.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.stage-bar-score { flex: none; width: 9vmin; font-size: 2.8vmin; font-weight: 800; font-variant-numeric: tabular-nums; }
+.stage-bar-row.is-top .stage-bar-name,
+.stage-bar-row.is-top .stage-bar-score { color: var(--accent); }
+
+/* ── 정적 결과판 ──────────────────────────────────────────── */
+.stage-static { width: min(88vw, 160vmin); display: grid; gap: 2vmin; grid-template-columns: repeat(auto-fit, minmax(38vmin, 1fr)); align-content: center; }
+.stage-static-item {
+  padding: 2.6vmin 3vmin;
+  border-radius: 1.8vmin;
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: inset 0 0 0 0.2vmin rgba(255, 255, 255, 0.1);
+}
+.stage-static-item.is-top { background: color-mix(in srgb, var(--accent) 20%, transparent); box-shadow: inset 0 0 0 0.3vmin var(--accent); grid-column: 1 / -1; }
+.stage-static-award { font-size: 2.4vmin; font-weight: 800; color: var(--accent); }
+.stage-static-item.is-top .stage-static-award { font-size: 3.2vmin; color: #fff; }
+.stage-static-team { font-size: 4vmin; font-weight: 800; margin: 0.6vmin 0 0; word-break: keep-all; }
+.stage-static-item.is-top .stage-static-team { font-size: 6.4vmin; }
+.stage-static-work { font-size: 2.3vmin; opacity: 0.7; margin: 0.4vmin 0 0; word-break: keep-all; }
+
+/* ── 운영자 바 (관객에게는 안 보이는 게 좋다 — 마우스를 올려야 나온다) ── */
+.stage-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2vmin;
+  padding: 1.2vmin 2.4vmin;
+  background: rgba(0, 0, 0, 0.55);
+  font-size: 1.7vmin;
+  opacity: 0;
+  transform: translateY(100%);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.stage:hover .stage-bar,
+.stage-bar:focus-within { opacity: 1; transform: translateY(0); }
+.stage-bar-actions { display: flex; gap: 1vmin; align-items: center; }
+.stage-btn {
+  border: 0;
+  border-radius: 0.9vmin;
+  padding: 1vmin 2vmin;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  transition: background 0.15s ease;
+}
+.stage-btn:hover { background: rgba(255, 255, 255, 0.24); }
+.stage-btn.is-key { background: var(--accent); color: var(--on-accent); }
+.stage-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.stage-progress { opacity: 0.6; font-variant-numeric: tabular-nums; }
+
+.stage-flag {
+  position: absolute;
+  top: 2vmin;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.9vmin 2.4vmin;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.92);
+  color: #1a1205;
+  font-size: 1.9vmin;
+  font-weight: 800;
+  z-index: 2;
+}
+
+.stage-foot { position: absolute; bottom: 6vmin; left: 0; right: 0; text-align: center; font-size: 2vmin; opacity: 0.45; }
+
+/* 등장 모션 — 절제해서 짧게. 장식이 아니라 시선을 옮기는 용도다. */
+@keyframes stage-rise {
+  from { opacity: 0; transform: translateY(4vmin) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+.stage-enter { animation: stage-rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-card-inner,
+  .stage-bar-row,
+  .stage-bar-fill { transition-duration: 0.01ms; }
+  .stage-enter { animation-duration: 0.01ms; }
+}
