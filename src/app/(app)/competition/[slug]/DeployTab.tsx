@@ -47,6 +47,8 @@ export default function DeployTab({ competition, patch }: Props) {
   const confirm = useConfirm();
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const snippet = `<script async src="${origin}/c/${competition.id}"></script>\n<div data-mach-competition></div>`;
+  const voteSnippet = `<script async src="${origin}/c/${competition.id}/vote"></script>\n<div data-mach-competition-vote></div>`;
+  const finalVoteSnippet = `<script async src="${origin}/c/${competition.id}/vote?round=final"></script>\n<div data-mach-competition-vote></div>`;
   const previewUrl = competition.previewToken ? `${origin}/cp/${competition.previewToken}` : "";
 
   const rotate = async () => {
@@ -72,6 +74,21 @@ export default function DeployTab({ competition, patch }: Props) {
             label="아임웹 코드블럭"
             value={snippet}
             hint="두 번째 줄(div)을 빠뜨려도 스크립트 자리에 자동으로 붙어요."
+          />
+        </div>
+      </section>
+
+      <section className={`bg-background p-5 ${R.panel} ${FINISH.s1}`}>
+        <h2 className="text-sm font-semibold">투표 화면 설치 코드</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          투표 탭(또는 별도 페이지)에 넣으세요. <b>노출</b>을 켠 참가작만 보이고, 투표 설정 탭에서 연 뒤에 투표가 됩니다.
+        </p>
+        <div className="mt-4 space-y-4">
+          <CopyRow label="예선 투표" value={voteSnippet} />
+          <CopyRow
+            label="본선 투표"
+            value={finalVoteSnippet}
+            hint="본선은 진출 확정된 참가작만 보여줘요."
           />
         </div>
       </section>

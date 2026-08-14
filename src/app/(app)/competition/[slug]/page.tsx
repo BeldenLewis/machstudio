@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowLeft, FileText, Loader2, Send, Share2, Trophy, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, FileText, Loader2, Send, Share2, Trophy, Users, Vote } from "lucide-react";
 import { toast } from "sonner";
 import { InlineError } from "@/components/ui/inline-error";
 import { COMPETITION_PHASE_META, resolveCompetitionStatus } from "@/lib/competition-status";
@@ -13,6 +13,8 @@ import NoticePageTab from "./NoticePageTab";
 import EntryFormTab from "./EntryFormTab";
 import EntriesTab from "./EntriesTab";
 import DeployTab from "./DeployTab";
+import VoteSettingsTab, { type RoundDto } from "./VoteSettingsTab";
+import TallyTab from "./TallyTab";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -35,6 +37,8 @@ const TABS = [
   { id: "notice", label: "공고 페이지", icon: FileText },
   { id: "form", label: "신청 폼", icon: Send },
   { id: "entries", label: "참가작", icon: Users },
+  { id: "vote", label: "투표 설정", icon: Vote },
+  { id: "tally", label: "집계", icon: BarChart3 },
   { id: "deploy", label: "배포", icon: Share2 },
 ] as const;
 
@@ -44,6 +48,7 @@ export default function CompetitionDetailPage({ params }: { params: Promise<{ sl
   const { slug } = use(params);
   const [competition, setCompetition] = useState<CompetitionDetail | null>(null);
   const [entryCount, setEntryCount] = useState(0);
+  const [rounds, setRounds] = useState<RoundDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [tab, setTab] = useState<TabId>("basic");
@@ -57,6 +62,7 @@ export default function CompetitionDetailPage({ params }: { params: Promise<{ sl
       const data = await res.json();
       setCompetition(data.competition);
       setEntryCount(data.entryCount ?? 0);
+      setRounds(data.rounds ?? []);
     } catch {
       setLoadError(true);
     } finally {
@@ -151,6 +157,8 @@ export default function CompetitionDetailPage({ params }: { params: Promise<{ sl
       {tab === "notice" && <NoticePageTab competition={competition} patch={patch} />}
       {tab === "form" && <EntryFormTab competition={competition} patch={patch} />}
       {tab === "entries" && <EntriesTab competition={competition} onCountChange={setEntryCount} />}
+      {tab === "vote" && <VoteSettingsTab competition={competition} rounds={rounds} onRoundsChange={setRounds} />}
+      {tab === "tally" && <TallyTab competition={competition} rounds={rounds} />}
       {tab === "deploy" && <DeployTab competition={competition} patch={patch} />}
     </div>
   );

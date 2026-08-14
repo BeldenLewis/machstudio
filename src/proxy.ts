@@ -21,11 +21,11 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/cp/") || // 대회 미리보기 (토큰 링크)
     // 대회 공개 API — 신청 제출·이미지 업로드. **POST 로 한정한다**: 같은 /entries 경로의
     // GET 은 어드민 목록이라, 여기로 새면 세션 갱신을 건너뛰어 만료 직전 토큰이 401 이 된다.
-    (request.method === "POST" &&
+    ((request.method === "POST" || request.method === "OPTIONS") &&
       pathname.match(/^\/api\/competitions\/[^/]+\/(entries|entry-image)$/) !== null) ||
-    // preflight 는 메서드가 OPTIONS 라 위 조건에 안 걸린다 — 따로 통과시킨다.
-    (request.method === "OPTIONS" &&
-      pathname.match(/^\/api\/competitions\/[^/]+\/(entries|entry-image)$/) !== null) ||
+    // 투표는 GET(목록·내 표) / POST(투표) / DELETE(취소) 전부 공개다 — 어드민 전용 GET 이 없다.
+    // 집계(/tally)는 여기 없다: 운영자만 봐야 하므로 로그인 흐름을 그대로 탄다.
+    pathname.match(/^\/api\/competitions\/[^/]+\/votes$/) !== null ||
     pathname.startsWith("/api/public") ||
     pathname.startsWith("/api/shorten-url") ||
     pathname.startsWith("/api/health") ||
