@@ -64,7 +64,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     },
     select: {
       id: true, entryNo: true, title: true, teamName: true, summary: true,
-      media: true, sortOrder: true, submittedAt: true,
+      media: true, sortOrder: true, submittedAt: true, finalOrder: true,
     },
   });
 
@@ -93,7 +93,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     tally = Object.fromEntries(grouped.map((g) => [g.entryId, g._count._all]));
   }
 
-  const ordered = orderEntries(entries, round.entryOrder, voterKey || ip);
+  // 본선은 무대 진행 순서라 운영자가 정한 순서를 그대로 쓴다(라운드 설정의 표시 순서는 예선용).
+  const ordered = orderEntries(entries, round.kind === "final" ? "final" : round.entryOrder, voterKey || ip);
 
   return NextResponse.json(
     {

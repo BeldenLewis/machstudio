@@ -161,6 +161,18 @@ export default function ScoringPanel({
                     <span className="font-mono text-[11px] text-muted-foreground">{row.entryNo}</span>
                     <span className="truncate text-sm font-medium">{row.title}</span>
                     {row.teamName && <span className="truncate text-[11px] text-muted-foreground">{row.teamName}</span>}
+                    {row.tied && (
+                      <span
+                        className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                        title={
+                          kind === "final"
+                            ? "합산 점수가 같아요. 관람객 점수가 높은 팀을 앞에 뒀습니다."
+                            : "합산 점수가 같아요. 먼저 신청한 팀을 앞에 뒀습니다."
+                        }
+                      >
+                        동점
+                      </span>
+                    )}
                   </div>
                   {/* 계산 근거를 항상 같이 둔다 — 시상 결과에는 반드시 이의가 따라온다. */}
                   <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
@@ -199,7 +211,11 @@ export default function ScoringPanel({
       <p className="text-[11px] text-muted-foreground">
         <span className="mr-1 inline-block h-2 w-2 rounded-full bg-violet-500 align-middle" />대중
         <span className="mx-1 ml-2 inline-block h-2 w-2 rounded-full bg-sky-500 align-middle" />심사 —
-        각각 0~100으로 맞춘 뒤 비율만큼 더한 값이에요. 동점은 참가번호(접수 순서)가 빠른 쪽이 앞섭니다.
+        각각 0~100으로 맞춘 뒤 비율만큼 더한 값이에요.{" "}
+        {kind === "final"
+          ? "동점이면 관람객 점수가 높은 팀이 앞섭니다."
+            + " 그래도 같으면 참가 인원수·평균 나이 순으로 운영자가 정합니다(시스템은 판정하지 않아요)."
+          : "동점이면 먼저 신청한 팀이 앞섭니다."}
       </p>
 
       {kind === "prelim" && (

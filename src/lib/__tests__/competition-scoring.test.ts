@@ -108,7 +108,7 @@ describe("대중 + 심사 합산", () => {
     expect(noJudges.every((r) => r.judgeScore === 0 && r.judgeAverage === null)).toBe(true);
   });
 
-  it("동점은 참가번호(접수 순서)가 빠른 쪽이 앞선다", () => {
+  it("예선 동점은 참가번호(접수 순서)가 빠른 쪽이 앞선다", () => {
     const tied = combineScores({
       entries: ENTRIES,
       voteCounts: new Map([["e1", 4], ["e2", 4], ["e3", 4], ["e4", 4]]),
@@ -118,6 +118,65 @@ describe("대중 + 심사 합산", () => {
       judgeWeight: 0,
     });
     expect(tied.map((r) => r.entryNo)).toEqual(["1", "2", "3", "4"]);
+    expect(tied.every((r) => r.tied)).toBe(true);
+  });
+
+  describe("본선 동점 — 관람객 점수가 높은 팀이 앞선다", () => {
+    // 심사가 표 차이를 정확히 상쇄해 합산이 같아지는 상황.
+    // e3: 표 2 → public 50, 심사 90  → 70
+    // e1: 표 4 → public 100, 심사 40 → 70
+    const options = {
+      entries: [ENTRIES[0], ENTRIES[2]],
+      voteCounts: new Map([["e1", 4], ["e3", 2]]),
+      judgeScores: [
+        { entryId: "e1", judgeId: "A", total: 40, submitted: true },
+        { entryId: "e3", judgeId: "A", total: 90, submitted: true },
+      ],
+      criteriaMax: 100,
+      publicWeight: 50,
+      judgeWeight: 50,
+    };
+
+    it("본선은 관람객 점수로 가른다", () => {
+      const rows = combineScores({ ...options, tieBreak: "public" });
+      expect(rows.map((r) => [r.entryNo, r.combined, r.publicScore])).toEqual([
+        ["1", 70, 100],
+        ["3", 70, 50],
+      ]);
+    });
+
+    it("예선 규칙이었다면 참가번호 순이라 결과가 같을 수 있으니, 뒤집힌 경우로도 확인한다", () => {
+      // 참가번호가 큰 쪽(3번)이 표를 더 받은 상황 — 규칙이 실제로 다르게 동작하는지 본다.
+      const flipped = {
+        ...options,
+        voteCounts: new Map([["e1", 2], ["e3", 4]]),
+        judgeScores: [
+          { entryId: "e1", judgeId: "A", total: 90, submitted: true },
+          { entryId: "e3", judgeId: "A", total: 40, submitted: true },
+        ],
+      };
+      expect(combineScores({ ...flipped, tieBreak: "public" }).map((r) => r.entryNo)).toEqual(["3", "1"]);
+      expect(combineScores({ ...flipped, tieBreak: "entryNo" }).map((r) => r.entryNo)).toEqual(["1", "3"]);
+    });
+
+    it("관람객 점수까지 같으면 순위를 억지로 만들지 않고 동점으로 표시한다", () => {
+      const rows = combineScores({
+        entries: [ENTRIES[0], ENTRIES[1]],
+        voteCounts: new Map([["e1", 3], ["e2", 3]]),
+        judgeScores: [],
+        criteriaMax: 100,
+        publicWeight: 100,
+        judgeWeight: 0,
+        tieBreak: "public",
+      });
+      expect(rows.every((r) => r.tied)).toBe(true);
+      expect(rows[0].combined).toBe(rows[1].combined);
+    });
+
+    it("점수가 갈리면 동점 표시가 붙지 않는다", () => {
+      const rows = combineScores({ ...options, voteCounts: new Map([["e1", 4], ["e3", 1]]), tieBreak: "public" });
+      expect(rows.some((r) => r.tied)).toBe(false);
+    });
   });
 
   it("표가 하나도 없어도 0으로 나눈 NaN 이 나오지 않는다", () => {

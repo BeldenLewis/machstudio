@@ -16,6 +16,7 @@ import { normalizeCompetitionConfig } from "@/lib/competition-config";
 import { escapeHtml } from "@/lib/competition-render";
 import { resolveCompetitionStatus, type CompetitionPhase } from "@/lib/competition-status";
 import { COMPETITION_RUNTIME_JS } from "@/generated/competition-runtime";
+import { COMPETITION_RESULT_RUNTIME_JS } from "@/generated/competition-result-runtime";
 
 const PHASES: CompetitionPhase[] = ["upcoming", "recruiting", "prelim", "judging", "final", "announced", "closed"];
 
@@ -38,9 +39,32 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
     });
   }
 
+  const url = new URL(req.url);
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? url.origin;
+
+  // ?view=result — 발표 전에 결과 화면을 확인한다. 관람객에게는 아직 안 보이는 상태에서
+  // 운영자만 미리 본다(결과 API 가 previewToken 을 확인한다).
+  if (url.searchParams.get("view") === "result") {
+    return htmlResponse(`<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>${escapeHtml(competition.name)} — 결과 미리보기</title>
+<style>body{margin:0;background:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
+.mc-wrap{max-width:860px;margin:0 auto;padding:0 20px 60px}</style>
+</head>
+<body>
+<div class="mc-wrap"><div data-mach-competition-result></div></div>
+<script>${COMPETITION_RESULT_RUNTIME_JS}</script>
+<script>__msCompetitionResult.boot(${jsonForScript({ competitionId: competition.id, origin, previewToken: token })});</script>
+</body>
+</html>`);
+  }
+
   const status = resolveCompetitionStatus(competition);
   // ?phase= 로 접수 전·마감 화면을 지금 확인한다 — 마감 화면을 마감 당일에 처음 보면 늦다.
-  const url = new URL(req.url);
   const requested = url.searchParams.get("phase");
   const phase = requested && (PHASES as string[]).includes(requested) ? (requested as CompetitionPhase) : status.phase;
   const canApply = requested ? phase === "recruiting" : status.canApply;
@@ -48,7 +72,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
   const payload = {
     competitionId: competition.id,
     competitionName: competition.name,
-    origin: process.env.NEXT_PUBLIC_APP_URL ?? url.origin,
+    origin,
     phase,
     canApply,
     theme: competition.theme,
@@ -73,12 +97,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
 </body>
 </html>`;
 
+  return htmlResponse(html);
+}
+
+/** 미리보기는 편집 직후 바로 확인하는 화면이라 캐시하지 않는다. */
+function htmlResponse(html: string) {
   return new NextResponse(html, {
     status: 200,
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "X-Robots-Tag": "noindex",
-      // 편집 직후 바로 확인하는 화면이라 캐시하지 않는다.
       "Cache-Control": "no-store",
     },
   });

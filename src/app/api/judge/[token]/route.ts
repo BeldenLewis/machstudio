@@ -59,7 +59,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
       status: { not: "rejected" },
       ...(round.kind === "final" ? { advanced: true } : {}),
     },
-    orderBy: [{ sortOrder: "asc" }, { submittedAt: "asc" }],
+    // 본선은 운영자가 정한 무대 순서로, 예선은 목록 순서로 — 심사위원이 보는 순서가
+    // 실제 진행 순서와 어긋나면 현장에서 채점표를 잘못 찾는다.
+    orderBy:
+      round.kind === "final"
+        ? [{ finalOrder: "asc" }, { entryNo: "asc" }]
+        : [{ sortOrder: "asc" }, { submittedAt: "asc" }],
     select: {
       id: true, entryNo: true, title: true, teamName: true, summary: true, media: true,
     },

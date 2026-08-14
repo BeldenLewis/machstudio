@@ -26,6 +26,8 @@ export async function proxy(request: NextRequest) {
     // 투표는 GET(목록·내 표) / POST(투표) / DELETE(취소) 전부 공개다 — 어드민 전용 GET 이 없다.
     // 집계(/tally)는 여기 없다: 운영자만 봐야 하므로 로그인 흐름을 그대로 탄다.
     pathname.match(/^\/api\/competitions\/[^/]+\/votes$/) !== null ||
+    // 결과 발표는 관람객이 보는 공개 조회다. 발표 전에는 라우트가 스스로 빈 결과를 준다.
+    pathname.match(/^\/api\/competitions\/[^/]+\/result$/) !== null ||
     // 심사 화면·API — machstudio 계정이 없는 심사위원이 링크+비밀번호로 들어온다.
     pathname.startsWith("/j/") ||
     pathname.startsWith("/api/judge/") ||

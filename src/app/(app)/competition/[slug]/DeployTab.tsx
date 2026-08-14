@@ -49,6 +49,7 @@ export default function DeployTab({ competition, patch }: Props) {
   const snippet = `<script async src="${origin}/c/${competition.id}"></script>\n<div data-mach-competition></div>`;
   const voteSnippet = `<script async src="${origin}/c/${competition.id}/vote"></script>\n<div data-mach-competition-vote></div>`;
   const finalVoteSnippet = `<script async src="${origin}/c/${competition.id}/vote?round=final"></script>\n<div data-mach-competition-vote></div>`;
+  const resultSnippet = `<script async src="${origin}/c/${competition.id}/result"></script>\n<div data-mach-competition-result></div>`;
   const previewUrl = competition.previewToken ? `${origin}/cp/${competition.previewToken}` : "";
 
   const rotate = async () => {
@@ -94,6 +95,20 @@ export default function DeployTab({ competition, patch }: Props) {
       </section>
 
       <section className={`bg-background p-5 ${R.panel} ${FINISH.s1}`}>
+        <h2 className="text-sm font-semibold">결과 발표 설치 코드</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          미리 붙여 둬도 괜찮아요. <b>시상 · 결과</b> 탭에서 공개하기 전까지는 &quot;준비 중&quot;만 보입니다.
+        </p>
+        <div className="mt-4">
+          <CopyRow
+            label="결과 발표"
+            value={resultSnippet}
+            hint="공개 버튼을 누른 뒤 관람객이 새로고침하면 바로 수상작이 나와요."
+          />
+        </div>
+      </section>
+
+      <section className={`bg-background p-5 ${R.panel} ${FINISH.s1}`}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold">미리보기 링크</h2>
@@ -133,6 +148,14 @@ export default function DeployTab({ competition, patch }: Props) {
                   {phase === "recruiting" ? "접수 중" : phase === "upcoming" ? "접수 전" : "마감"} 화면
                 </a>
               ))}
+              <a
+                href={`${previewUrl}?view=result`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`flex items-center gap-1 bg-secondary px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground ${R.control}`}
+              >
+                결과 발표 화면
+              </a>
             </div>
           </div>
         ) : (

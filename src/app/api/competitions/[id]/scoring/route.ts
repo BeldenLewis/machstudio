@@ -64,6 +64,8 @@ async function computeRows(competitionId: string, round: { id: string; kind: str
     criteriaMax: criteriaMaxTotal(criteria),
     publicWeight: round.publicWeight,
     judgeWeight: round.judgeWeight,
+    // 예선은 먼저 신청한 팀, 본선은 관람객 점수가 높은 팀이 앞선다(확정 규칙).
+    tieBreak: round.kind === "final" ? "public" : "entryNo",
   });
 
   return { rows, criteria, judgeCount: judges.length };

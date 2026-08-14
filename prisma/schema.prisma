@@ -1019,6 +1019,10 @@ model Competition {
   previewToken String? @unique // 미리보기 링크 /cp/{token}
   showToken    String? @unique // 발표 화면 /show/{token}
 
+  // 결과 발표 페이지를 공개한 시각. null 이면 결과 임베드가 "준비 중"만 보여준다.
+  // 개별 수상의 revealedAt 과 다르다 — 이건 "결과 페이지 자체를 열었는가".
+  resultPublishedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1094,6 +1098,9 @@ model CompetitionEntry {
   isPublished Boolean @default(false) // 투표 노출 토글
   sortOrder   Int     @default(0)
   advanced    Boolean @default(false) // 본선 진출
+  // 본선 진행 순서. 예선 신청 순서와 무관하게 운영자가 다시 정한다(sortOrder 를 덮어쓰면
+  // 공고·예선 기록까지 뒤바뀐다). null 이면 참가번호 순으로 떨어진다.
+  finalOrder  Int?
 
   submittedAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -1106,6 +1113,7 @@ model CompetitionEntry {
   @@unique([competitionId, entryNo])
   @@index([competitionId, isPublished, sortOrder])
   @@index([competitionId, submittedAt])
+  @@index([competitionId, advanced, finalOrder])
 }
 
 /// 대중 투표. 상한의 최종 방어선은 레이트리미터가 아니라 아래 @@unique 다 —

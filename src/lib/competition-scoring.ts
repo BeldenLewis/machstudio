@@ -70,6 +70,12 @@ export interface CombinedRow {
   /** 최종 */
   combined: number;
   rank: number;
+  /**
+   * 합산 점수가 같은 참가작이 또 있는가.
+   * 규칙으로 갈린 뒤에도 **운영자에게는 동점이었다는 사실을 알려야 한다** — 남은 동점은
+   * 사람이 정책으로 고르기로 했기 때문이다(참가 인원수 → 평균 나이).
+   */
+  tied: boolean;
 }
 
 export interface CombineOptions {
@@ -87,12 +93,22 @@ export interface CombineOptions {
    * - "total": 전체 표 중 비중 (절대 평가)
    */
   publicBasis?: "top" | "total";
+  /**
+   * 동점 처리(확정 규칙).
+   * - "entryNo": 먼저 신청한 팀이 앞선다 — **예선**. 접수 순번이 참가번호다.
+   * - "public": 관람객 점수가 높은 팀이 앞선다 — **본선**. 본선은 신청 순서가 의미를 잃는다.
+   *
+   * 여기서도 갈리지 않으면 순위를 억지로 만들지 않고 `tied` 로 표시만 한다.
+   * 참가 인원수·평균 나이 같은 다음 기준은 신청 폼마다 있을 수도 없을 수도 있어서
+   * 시스템이 자동 판정하면 오히려 틀린 순위를 확정해 버린다.
+   */
+  tieBreak?: "entryNo" | "public";
 }
 
 export function combineScores(options: CombineOptions): CombinedRow[] {
   const {
     entries, voteCounts, judgeScores, judgeWeights,
-    criteriaMax, publicWeight, judgeWeight, publicBasis = "top",
+    criteriaMax, publicWeight, judgeWeight, publicBasis = "top", tieBreak = "entryNo",
   } = options;
 
   const totalVotes = Array.from(voteCounts.values()).reduce((sum, n) => sum + n, 0);
@@ -144,12 +160,23 @@ export function combineScores(options: CombineOptions): CombinedRow[] {
       judgeScore: round2(judgeScore),
       combined: round2(combined),
       rank: 0,
+      tied: false,
     };
   });
 
-  // 동점은 **먼저 신청한 팀이 앞선다**(확정 규칙). 참가번호가 접수 순번이므로 숫자 오름차순.
-  rows.sort((a, b) => b.combined - a.combined || Number(a.entryNo) - Number(b.entryNo));
+  const byEntryNo = (a: CombinedRow, b: CombinedRow) => Number(a.entryNo) - Number(b.entryNo);
+  rows.sort((a, b) => {
+    if (b.combined !== a.combined) return b.combined - a.combined;
+    // 본선: 관람객 점수가 높은 쪽. 예선처럼 접수 순번으로 가르면 본선에서는 근거가 없다.
+    if (tieBreak === "public" && b.publicScore !== a.publicScore) return b.publicScore - a.publicScore;
+    return byEntryNo(a, b);
+  });
   rows.forEach((row, index) => { row.rank = index + 1; });
+
+  // 합산까지 같았던 행은 전부 표시한다 — 규칙으로 갈렸어도 운영자는 알아야 한다.
+  for (const row of rows) {
+    row.tied = rows.some((other) => other !== row && other.combined === row.combined);
+  }
   return rows;
 }
 
