@@ -13,7 +13,7 @@ import type { CompetitionConfig } from "@/lib/competition-config";
 import {
   buildCompetitionCss,
   escapeHtml,
-  renderFormFieldsHtml,
+  renderFormModalHtml,
   renderNoticeHtml,
   type CompetitionTheme,
 } from "@/lib/competition-render";
@@ -111,15 +111,7 @@ function openForm(payload: BootPayload) {
   const form = document.createElement("form");
   form.className = "mc-modal";
   form.noValidate = true;
-  form.innerHTML = `
-    <div class="mc-modal-head">
-      <h3 class="mc-modal-title">${escapeHtml(payload.config.form.title || "참가 신청")}</h3>
-      <button type="button" class="mc-modal-close" aria-label="닫기">&times;</button>
-    </div>
-    <div class="mc-modal-body">
-      ${payload.config.form.description ? `<p class="mc-hint" style="margin-bottom:14px">${escapeHtml(payload.config.form.description)}</p>` : ""}
-      ${renderFormFieldsHtml(payload.config)}
-    </div>`;
+  form.innerHTML = renderFormModalHtml(payload.config);
 
   overlay.appendChild(form);
   document.body.appendChild(overlay);

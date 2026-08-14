@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 import { Switch } from "@/components/ui/switch";
 import type { CompetitionFieldType, CompetitionFormField } from "@/lib/competition-config";
+import FormPreview from "./FormPreview";
 import type { CompetitionDetail } from "./page";
 
 interface Props {
@@ -76,7 +77,8 @@ export default function EntryFormTab({ competition, patch }: Props) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="space-y-4">
       <section className={`bg-background p-5 ${R.panel} ${FINISH.s1}`}>
         <h2 className="text-sm font-semibold">폼 안내</h2>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -271,6 +273,12 @@ export default function EntryFormTab({ competition, patch }: Props) {
         >
           {saving ? "저장 중..." : "저장"}
         </motion.button>
+      </div>
+      </div>
+
+      {/* 편집 중인 값(form)을 그대로 넘긴다 — 저장 전에도 바뀌는 게 보여야 미리보기다. */}
+      <div className="xl:sticky xl:top-6 xl:self-start">
+        <FormPreview config={{ ...competition.config, form }} theme={competition.theme} />
       </div>
     </div>
   );

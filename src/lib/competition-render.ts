@@ -217,6 +217,25 @@ export function renderNoticeHtml({ config, competitionName, phase, canApply, pre
 </div>`.trim();
 }
 
+/**
+ * 신청 폼 팝업의 **껍데기**(제목·닫기·안내문 + 본문).
+ *
+ * 런타임과 어드민 미리보기가 이걸 같이 쓴다. 껍데기를 각자 만들면 제목 문구나 여백이
+ * 조용히 어긋나서 "미리보기에서는 괜찮았는데" 가 생긴다 — 공고 페이지에서 같은 이유로
+ * renderNoticeHtml 을 공유하고 있다.
+ */
+export function renderFormModalHtml(config: CompetitionConfig): string {
+  return `
+    <div class="mc-modal-head">
+      <h3 class="mc-modal-title">${escapeHtml(config.form.title || "참가 신청")}</h3>
+      <button type="button" class="mc-modal-close" aria-label="닫기">&times;</button>
+    </div>
+    <div class="mc-modal-body">
+      ${config.form.description ? `<p class="mc-hint" style="margin-bottom:14px">${escapeHtml(config.form.description)}</p>` : ""}
+      ${renderFormFieldsHtml(config)}
+    </div>`;
+}
+
 /** 신청 폼 본문(모달 안). 파일·YouTube 항목은 런타임이 이벤트를 붙일 수 있게 data 속성을 단다. */
 export function renderFormFieldsHtml(config: CompetitionConfig): string {
   const parts = config.form.fields
