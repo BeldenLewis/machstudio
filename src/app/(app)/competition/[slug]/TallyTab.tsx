@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { BarChart3, Loader2, RefreshCw, Users } from "lucide-react";
 import { InlineError } from "@/components/ui/inline-error";
 import { FINISH, R } from "@/components/ui/primitives";
+import ScoringPanel from "./ScoringPanel";
 import type { CompetitionDetail } from "./page";
 import type { RoundDto } from "./VoteSettingsTab";
 
@@ -27,6 +28,8 @@ interface TallyResponse {
 
 export default function TallyTab({ competition, rounds }: { competition: CompetitionDetail; rounds: RoundDto[] }) {
   const [kind, setKind] = useState<"prelim" | "final">("prelim");
+  /** 득표는 "얼마나 받았나", 종합은 "그래서 누가 올라가나" — 보는 목적이 달라 화면을 나눈다. */
+  const [view, setView] = useState<"votes" | "combined">("votes");
   const [data, setData] = useState<TallyResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -66,16 +69,24 @@ export default function TallyTab({ competition, rounds }: { competition: Competi
             </button>
           ))}
         </div>
-        <button
-          onClick={fetchTally}
-          className={`flex items-center gap-1 bg-secondary px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground ${R.control}`}
-        >
-          <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
-          새로고침
-        </button>
+        <div className="flex gap-1">
+          {([["votes", "득표"], ["combined", "종합 (대중+심사)"]] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setView(value)}
+              className={`px-3 py-1.5 text-xs transition-colors ${R.control} ${
+                view === value ? "bg-foreground text-background" : "bg-secondary text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {loading && !data ? (
+      {view === "combined" ? (
+        <ScoringPanel competition={competition} kind={kind} />
+      ) : loading && !data ? (
         <div className="flex h-40 items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
@@ -91,6 +102,16 @@ export default function TallyTab({ competition, rounds }: { competition: Competi
         </div>
       ) : (
         <>
+          <div className="flex justify-end">
+            <button
+              onClick={fetchTally}
+              className={`flex items-center gap-1 bg-secondary px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground ${R.control}`}
+            >
+              <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
+              새로고침
+            </button>
+          </div>
+
           <div className="grid gap-3 sm:grid-cols-3">
             <div className={`bg-background px-4 py-3 ${R.surface} ${FINISH.s2}`}>
               <p className="text-[11px] text-muted-foreground">총 투표 수</p>

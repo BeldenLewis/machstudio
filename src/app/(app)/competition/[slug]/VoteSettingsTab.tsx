@@ -25,6 +25,7 @@ export interface RoundDto {
   advanceCount: number | null;
   publicWeight: number;
   judgeWeight: number;
+  judgeCriteria: unknown;
 }
 
 const IDENTITY_META: Record<string, { label: string; hint: string; warn?: string }> = {

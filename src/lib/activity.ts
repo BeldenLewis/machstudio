@@ -109,7 +109,11 @@ export type ActivityAction =
   | "competition.deleted"
   | "competition.entry_updated"
   | "competition.entry_deleted"
-  | "competition.preview_token_rotated";
+  | "competition.preview_token_rotated"
+  | "competition.judge_created"
+  | "competition.judge_updated"
+  | "competition.judge_deleted"
+  | "competition.advanced";
 
 export async function logActivity(args: {
   workspaceId: string;

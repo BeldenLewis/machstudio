@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowLeft, BarChart3, FileText, Loader2, Send, Share2, Trophy, Users, Vote } from "lucide-react";
+import { ArrowLeft, BarChart3, FileText, Loader2, Scale, Send, Share2, Trophy, Users, Vote } from "lucide-react";
 import { toast } from "sonner";
 import { InlineError } from "@/components/ui/inline-error";
 import { COMPETITION_PHASE_META, resolveCompetitionStatus } from "@/lib/competition-status";
@@ -14,6 +14,7 @@ import EntryFormTab from "./EntryFormTab";
 import EntriesTab from "./EntriesTab";
 import DeployTab from "./DeployTab";
 import VoteSettingsTab, { type RoundDto } from "./VoteSettingsTab";
+import JudgesTab from "./JudgesTab";
 import TallyTab from "./TallyTab";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
@@ -38,6 +39,7 @@ const TABS = [
   { id: "form", label: "신청 폼", icon: Send },
   { id: "entries", label: "참가작", icon: Users },
   { id: "vote", label: "투표 설정", icon: Vote },
+  { id: "judges", label: "심사단", icon: Scale },
   { id: "tally", label: "집계", icon: BarChart3 },
   { id: "deploy", label: "배포", icon: Share2 },
 ] as const;
@@ -158,6 +160,7 @@ export default function CompetitionDetailPage({ params }: { params: Promise<{ sl
       {tab === "form" && <EntryFormTab competition={competition} patch={patch} />}
       {tab === "entries" && <EntriesTab competition={competition} onCountChange={setEntryCount} />}
       {tab === "vote" && <VoteSettingsTab competition={competition} rounds={rounds} onRoundsChange={setRounds} />}
+      {tab === "judges" && <JudgesTab competition={competition} rounds={rounds} onRoundsChange={setRounds} />}
       {tab === "tally" && <TallyTab competition={competition} rounds={rounds} />}
       {tab === "deploy" && <DeployTab competition={competition} patch={patch} />}
     </div>
