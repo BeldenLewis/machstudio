@@ -65,6 +65,10 @@ const EXPECTED = {
     purpose: "Tally 푸시 — 웨비나당 활성 1개",
     sql: `CREATE UNIQUE INDEX IF NOT EXISTS "WebinarTallyPush_webinarId_active_key" ON public."WebinarTallyPush" USING btree ("webinarId") WHERE "isActive"`,
   },
+  CollectRecord_sourceId_emailNormalized_key: {
+    purpose: "사전등록 중복 방지 — 수집 소스당 이메일(정규화)",
+    sql: `CREATE UNIQUE INDEX IF NOT EXISTS "CollectRecord_sourceId_emailNormalized_key" ON public."CollectRecord" USING btree ("sourceId", "emailNormalized") WHERE ("emailNormalized" IS NOT NULL)`,
+  },
 };
 
 const apply = process.argv.includes("--apply");

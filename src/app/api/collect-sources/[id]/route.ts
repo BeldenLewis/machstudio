@@ -104,7 +104,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
    */
   let nextMode: string | undefined;
   if (body.mode !== undefined) {
-    const requested = body.mode === "builder" ? "builder" : "capture";
+    /**
+     * 아는 값이 아니면 **400 으로 거절**한다. 예전엔 `=== "builder" ? … : "capture"` 로 뭉갰는데,
+     * 그러면 설정 폼이 상태를 통째로 되돌려 보내며 넣은 `mode: null` 같은 값이 "capture 로
+     * 바꿔 달라" 는 요청이 돼 버린다 — 레코드가 없으면 빌더 소스가 조용히 강등되고(폼 정의가
+     * 고아가 된다), 있으면 아래 409 가 나면서 **같은 PATCH 의 이름·오리진 수정까지 통째로
+     * 버려진다.** 웨비나 statusOverride 도 같은 이유로 값을 검사하고 400 을 낸다.
+     */
+    if (body.mode !== "builder" && body.mode !== "capture") {
+      return NextResponse.json({ error: "알 수 없는 수집 방식이에요" }, { status: 400 });
+    }
+    const requested = body.mode;
     if (requested !== result.source.mode) {
       const recordCount = await prisma.collectRecord.count({ where: { sourceId: id } });
       if (recordCount > 0) {
@@ -124,6 +134,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         mode: nextMode,
         // 빌더형이 되는데 토큰이 없으면 지금 발급한다(연동형으로 만들어진 소스를 전환한 경우).
         ...(nextMode === "builder" && !result.source.previewToken && { previewToken: randomBytes(24).toString("base64url") }),
+        // 연동형으로 돌아가면 미리보기 링크를 **끊는다.** 남겨 두면 빌더가 아닌 소스의 /p/{token}
+        // 이 계속 살아 있고, 나중에 다시 빌더로 바꿔도 옛 토큰이 재사용돼 "재발급으로 링크를
+        // 끊는다"(§16.1)는 토큰의 존재 이유가 무너진다.
+        ...(nextMode === "capture" && { previewToken: null }),
       }),
       ...(name !== undefined && { name }),
       ...(description !== undefined && { description: description || null }),

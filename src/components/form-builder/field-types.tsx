@@ -17,9 +17,16 @@
 import { useEffect, useRef, useState, type ElementType } from "react";
 import { AlignLeft, ListChecks, ListPlus, Mail, Phone, SquareCheck } from "lucide-react";
 import { FINISH, R } from "@/components/ui/primitives";
+import { CHOICE_FIELD_TYPES, type WebinarFieldType } from "@/lib/webinar-config";
 
-/** 두 빌더가 공유하는 형식. 늘릴 때는 여기 먼저 넣는다. */
-export type BuilderFieldType = "text" | "email" | "tel" | "select" | "multiple" | "checkbox";
+/**
+ * 두 빌더가 공유하는 형식.
+ *
+ * **새 유니온을 만들지 않고 기존 것을 재수출한다.** 같은 6개를 따로 적어 두면 일곱 번째 유형을
+ * 넣을 때 한쪽만 고쳐도 컴파일이 통과하고, 그러면 빌더는 새 유형을 보여 주는데 제출 라우트는
+ * 계속 거부한다(등록 경로가 조용히 갈린다).
+ */
+export type BuilderFieldType = WebinarFieldType;
 
 export const REG_TYPE_META: Record<BuilderFieldType, { label: string; desc: string; icon: ElementType }> = {
   text: { label: "텍스트", desc: "한 줄 입력", icon: AlignLeft },
@@ -33,8 +40,12 @@ export const REG_TYPE_META: Record<BuilderFieldType, { label: string; desc: stri
 // 선택형 둘(드롭다운·복수 선택)을 붙여 둔다 — 고를 때 비교하게 되는 짝이다.
 export const REG_TYPE_ORDER: BuilderFieldType[] = ["text", "email", "tel", "select", "multiple", "checkbox"];
 
-/** 선택지를 쓰는 유형 — 옵션 편집·기타 허용·최대 개수가 여기 걸린다. */
-export const CHOICE_TYPES: readonly BuilderFieldType[] = ["select", "multiple"];
+/**
+ * 선택지를 쓰는 유형 — 옵션 편집·기타 허용·최대 개수가 여기 걸린다.
+ * webinar-config 의 것을 **그대로 재수출**한다. 따로 적으면 편집기와 제출 라우트가 서로 다른
+ * 배열을 보게 되고, 그 어긋남은 타입으로도 테스트로도 안 잡힌다(양쪽이 각자 사본을 고정한다).
+ */
+export const CHOICE_TYPES = CHOICE_FIELD_TYPES;
 
 /** 바깥 클릭·Esc 로 닫히는 팝오버. 형식 메뉴가 쓰는 것과 같은 것을 빌더들이 나눠 쓴다. */
 export function useRegPopover() {

@@ -104,6 +104,82 @@ describe("normalizeCollectForm — 어떤 쓰레기가 와도 던지지 않는�
   });
 });
 
+/**
+ * 아래는 전부 **코드 리뷰가 실행으로 잡아낸 결함**들의 회귀 테스트다.
+ * 처음 작성분은 tsc·기존 테스트를 전부 통과했는데도 조용히 틀려 있었다.
+ */
+describe("리뷰가 잡은 결함 — 회귀 방지", () => {
+  it("필수 체크박스는 false 로 통과되지 않는다", () => {
+    const c = cfg({ fields: [{ key: "agree", type: "checkbox", required: true }], consent: { privacy: { enabled: false } } });
+    const run = (v: Record<string, unknown>) => validateSubmission(c, v, { ...deps, consent: {} }).map((i) => i.code);
+    // String(false) === "false" 라 "값이 있음" 으로 통과하던 자리 — 안 누른 동의가 서버까지 갔다.
+    expect(run({ agree: false })).toContain("required");
+    expect(run({ agree: 0 })).toContain("required");
+    expect(run({})).toContain("required");
+    expect(run({ agree: true })).toEqual([]);
+  });
+
+  it("localize 는 상속 속성을 라벨로 내주지 않는다 — 로케일은 뷰어가 정한다", () => {
+    const label = toLocalized("Name");
+    for (const evil of ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"]) {
+      expect(typeof localize(label, evil)).toBe("string");
+      expect(localize(label, evil)).toBe("Name"); // 기본 로케일로 폴백
+    }
+  });
+
+  it("원시 변환기가 망가진 객체에도 던지지 않는다", () => {
+    const evil = JSON.parse('{"toString":1,"valueOf":2}');
+    expect(() => normalizeCollectForm({ fields: [{ key: "a", label: { en: evil } }] })).not.toThrow();
+    const c = cfg({ fields: [{ key: "email", type: "email" }], consent: { privacy: { enabled: false } } });
+    expect(() => validateSubmission(c, { email: evil }, { ...deps, consent: {} })).not.toThrow();
+  });
+
+  it("분기는 어느 로케일 라벨로 골라도 같은 그룹을 찾는다", () => {
+    const c = cfg({
+      fields: [{ key: "type", type: "select", options: [{ en: "Buyer", ko: "바이어" }] }],
+      branch: { enabled: true, fieldKey: "type", groups: [{ value: "Buyer", fields: [{ key: "budget", required: true }] }] },
+      consent: { privacy: { enabled: false } },
+    });
+    // 한국어로 고른 사람도 분기 문항이 보여야 한다 — 예전엔 통째로 사라졌다.
+    expect(visibleFields(c, { type: "바이어" }).map((f) => f.key)).toEqual(["type", "budget"]);
+    expect(validateSubmission(c, { type: "바이어" }, { ...deps, consent: {} }).map((i) => i.code)).toContain("required");
+    // 채워 넣은 답이 unknown_key 로 거부되지 않는다
+    expect(validateSubmission(c, { type: "바이어", budget: "1억" }, { ...deps, consent: {} })).toEqual([]);
+  });
+
+  it("분기 항목이 공통 항목과 key 가 겹치면 하나만 남는다", () => {
+    const c = cfg({
+      fields: [{ key: "type", type: "select", options: ["buyer"] }, { key: "company" }],
+      branch: { enabled: true, fieldKey: "type", groups: [{ value: "buyer", fields: [{ key: "company", required: true }] }] },
+    });
+    const keys = visibleFields(c, { type: "buyer" }).map((f) => f.key);
+    expect(keys).toEqual([...new Set(keys)]);
+  });
+
+  it("기본 조회 항목을 고쳐도 모듈 상수가 오염되지 않는다", () => {
+    const before = [...EMPTY_FORM_CONFIG.lookup.fields];
+    const c = cfg({ lookup: { fields: [] } });
+    c.lookup.fields.push("email");
+    expect(EMPTY_FORM_CONFIG.lookup.fields).toEqual(before);
+    expect(cfg({}).lookup.fields).toEqual(before);
+  });
+
+  /** 이 저장소는 naive timestamp 로 이미 9시간 오진을 겪었다. */
+  it("오프셋 없는 시각은 거부한다 — 서버(UTC)와 브라우저(KST)가 갈린다", () => {
+    const w = (v: string) => cfg({ eventInfo: { registrationWindow: { closesAt: v } } }).eventInfo.registrationWindow.closesAt;
+    expect(w("2026-09-01T18:00")).toBeNull();      // datetime-local 이 내는 모양
+    expect(w("2026")).toBeNull();                   // 오타가 진짜 접수 창이 되던 값
+    expect(w("2026-09-01T18:00:00Z")).toBe("2026-09-01T18:00:00.000Z");
+    expect(w("2026-09-01T18:00:00+09:00")).toBe("2026-09-01T09:00:00.000Z");
+  });
+
+  it("완료 URL 은 http(s) 만 통과한다 — 공개 화면이 이 값으로 이동한다", () => {
+    const t = (v: string) => cfg({ completion: { redirectUrlTemplate: v } }).completion.redirectUrlTemplate;
+    expect(t("javascript:alert(1)")).toBe("");
+    expect(t("https://k-expo.org/done?type={type}")).toContain("k-expo.org");
+  });
+});
+
 describe("resolveRegistrationStatus — 서버도 같은 함수를 쓴다", () => {
   const win = (opensAt: string | null, closesAt: string | null) =>
     cfg({ eventInfo: { registrationWindow: { opensAt, closesAt } } });

@@ -8,6 +8,7 @@ import { useWorkspace } from "@/contexts/workspace";
 import Link from "next/link";
 import ProjectMembersModal from "@/components/settings/ProjectMembersModal";
 import ActiveToggle from "@/app/(app)/collect/_components/ActiveToggle";
+import { FINISH, R, SELECTED } from "@/components/ui/primitives";
 
 interface CollectSource {
   id: string;
@@ -223,33 +224,33 @@ export default function CollectPage() {
               */}
               <div>
                 <label className="text-xs text-muted-foreground mb-1.5 block">어떻게 수집할까요? *</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div role="radiogroup" aria-label="수집 방식" className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {([
                     { value: "capture", title: "연동형", desc: "이미 있는 폼에 스크립트를 붙여 데이터만 수집해요" },
                     { value: "builder", title: "빌더형", desc: "여기서 폼을 만들고 코드블럭으로 삽입해요" },
                   ] as const).map((opt) => {
                     const active = form.mode === opt.value;
                     return (
-                      <button
+                      <motion.button
                         key={opt.value}
                         type="button"
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => setForm((f) => ({ ...f, mode: opt.value }))}
-                        aria-pressed={active}
-                        className={`text-left p-3 rounded-xl transition-all ${
-                          active
-                            ? "bg-violet-500/10 shadow-[0_0_0_2px_rgb(139_92_246)] "
-                            : "bg-background shadow-sm hover:shadow-md"
+                        role="radio"
+                        aria-checked={active}
+                        className={`text-left p-3 ${R.surface} transition-shadow ${
+                          active ? SELECTED : `bg-background ${FINISH.s2} hover:shadow-md`
                         }`}
                       >
                         <span className="flex items-center gap-1.5 text-sm font-medium">
                           <span
                             aria-hidden
-                            className={`w-3.5 h-3.5 rounded-full shrink-0 ${active ? "bg-violet-500 shadow-[inset_0_0_0_3px_white]" : "shadow-[inset_0_0_0_1.5px_rgb(148_163_184)]"}`}
+                            className={`w-3.5 h-3.5 rounded-full shrink-0 ${active ? `bg-violet-500 ${FINISH.s2}` : `bg-transparent ${FINISH.s2}`}`}
                           />
                           {opt.title}
                         </span>
                         <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">{opt.desc}</span>
-                      </button>
+                      </motion.button>
                     );
                   })}
                 </div>

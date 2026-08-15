@@ -12,6 +12,9 @@
  * 모양, 손으로 고친 값이 전부 들어올 수 있다. 읽는 쪽에서 한 번 정규화해 **화면·검증이 항상
  * 같은 모양을 보게** 한다(웨비나 normalizeRegistrationForm 과 같은 계약).
  */
+// 항목 형식·URL 판정은 **웨비나 쪽 단일 출처를 그대로 쓴다.** 사본을 두면 유형을 하나 늘릴 때
+// 한쪽만 고쳐도 컴파일이 통과하고, 그 순간 빌더와 제출 경로가 서로 다른 목록을 보게 된다.
+import { FIELD_TYPES as WEBINAR_FIELD_TYPES, safeHttpUrl, type WebinarFieldType } from "@/lib/webinar-config";
 
 // ── 다국어 ────────────────────────────────────────────────────────────
 /**
@@ -34,7 +37,7 @@ export function toLocalized(value: unknown, locale: string = DEFAULT_LOCALE): Lo
   if (value && typeof value === "object" && !Array.isArray(value)) {
     const out: Localized = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      const s = String(v ?? "").trim();
+      const s = safeStr(v).trim();
       if (s) out[k] = s;
     }
     return out;
@@ -48,14 +51,20 @@ export function toLocalized(value: unknown, locale: string = DEFAULT_LOCALE): Lo
  */
 export function localize(value: Localized | undefined, locale = DEFAULT_LOCALE): string {
   if (!value) return "";
-  return value[locale] ?? value[DEFAULT_LOCALE] ?? Object.values(value)[0] ?? "";
+  // **자기 속성만** 본다. 로케일은 뷰어가 정하는 값이고(`?lang=`), 맵은 객체 리터럴이라
+  // Object.prototype 을 상속한다 — `?lang=constructor` 면 value["constructor"] 가 함수라서
+  // ?? 사슬을 통과해 **함수가 라벨로 반환된다**(React 가 "Functions are not valid as a
+  // React child" 로 죽거나 빈 라벨이 뜬다). 타입이 string 이라 컴파일도 잡아 주지 못한다.
+  const own = (k: string) => (Object.prototype.hasOwnProperty.call(value, k) ? value[k] : undefined);
+  const picked = own(locale) ?? own(DEFAULT_LOCALE) ?? Object.values(value)[0];
+  return typeof picked === "string" ? picked : "";
 }
 
 // ── 항목 ──────────────────────────────────────────────────────────────
 /** 웨비나 등록 폼과 **같은 유형 어휘**를 쓴다 — 빌더 컴포넌트를 공용화하기 위해서다. */
-export type CollectFieldType = "text" | "email" | "tel" | "select" | "checkbox" | "multiple";
+export type CollectFieldType = WebinarFieldType;
 
-const FIELD_TYPES: readonly CollectFieldType[] = ["text", "email", "tel", "select", "checkbox", "multiple"];
+const FIELD_TYPES: readonly CollectFieldType[] = WEBINAR_FIELD_TYPES;
 
 export interface CollectField {
   id: string;
@@ -233,6 +242,25 @@ function str(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+/**
+ * 값 하나를 문자열로. **던지지 않는다.**
+ *
+ * 맨 `String(v)` 는 JSON 이 `{"toString":1,"valueOf":2}` 처럼 호출 불가능한 원시 변환기를
+ * 들고 오면 `TypeError: Cannot convert object to primitive value` 를 던진다. 그러면
+ * 정규화는 폼을 통째로 못 그리게 만들고, 검증은 400 으로 거를 요청에 500 을 낸다 —
+ * 이 파일 머리말의 "어떤 입력이 와도 던지지 않는다" 가 바로 깨지는 지점이다.
+ */
+function safeStr(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value == null) return "";
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return String(value);
+  try {
+    return String(value);
+  } catch {
+    return "";
+  }
+}
+
 function normalizeFieldType(value: unknown): CollectFieldType {
   const t = String(value ?? "");
   return (FIELD_TYPES as readonly string[]).includes(t) ? (t as CollectFieldType) : "text";
@@ -312,10 +340,22 @@ function normalizeConsentItem(raw: unknown, locale: string, fallback: CollectCon
   };
 }
 
-/** ISO 문자열만 통과시킨다. 못 읽는 값은 null(= 그 방향 제한 없음)로 떨어뜨린다. */
+/**
+ * ISO 문자열만 통과시킨다. 못 읽는 값은 null(= 그 방향 제한 없음)로 떨어뜨린다.
+ *
+ * **오프셋이 없는 값은 거부한다.** `Date.parse("2026-09-01T18:00")` 은 실행 환경의 로컬
+ * 시간대로 해석된다 — 이 모듈은 서버(UTC)와 브라우저(KST)에서 **둘 다** 돌기 때문에 같은
+ * 저장값이 9시간 어긋난 순간으로 풀린다. 그러면 접수 창이 한쪽에선 열려 보이고 다른 쪽에선
+ * 마감이라 제출이 거부된다. `datetime-local` 입력이 바로 이 오프셋 없는 모양을 낸다.
+ *
+ * 느슨한 값("2026", "Dec 5")도 막는다 — Date.parse 는 그것들도 그럴싸한 시각으로 만들어
+ * 오타 하나가 진짜 접수 창이 돼 버린다(의도는 null = 제한 없음이다).
+ */
+const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
 function isoOrNull(value: unknown): string | null {
   const s = str(value);
-  if (!s) return null;
+  if (!s || !ISO_WITH_OFFSET.test(s)) return null;
   const t = Date.parse(s);
   return Number.isNaN(t) ? null : new Date(t).toISOString();
 }
@@ -340,9 +380,12 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
   const completionRaw = obj(c.completion);
   const lookupRaw = obj(c.lookup);
 
+  // 기본값은 **복사해서** 준다. 모듈 상수 배열을 그대로 돌려주면 호출부가 push/splice 하는
+  // 순간(조회 항목 토글이 딱 그 모양이다) 상수 자체가 오염돼, 웜 람다에서 뒤이어 정규화되는
+  // 다른 워크스페이스의 소스까지 바뀐 기본값을 물려받는다.
   const lookupFields = Array.isArray(lookupRaw.fields)
-    ? (lookupRaw.fields.map(String).filter((f) => f === "email" || f === "phone") as Array<"email" | "phone">)
-    : EMPTY_FORM_CONFIG.lookup.fields;
+    ? (lookupRaw.fields.map(safeStr).filter((f) => f === "email" || f === "phone") as Array<"email" | "phone">)
+    : [...EMPTY_FORM_CONFIG.lookup.fields];
 
   const override = str(c.statusOverride);
 
@@ -360,7 +403,7 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
     },
     eventInfo: {
       enabled: eventRaw.enabled === true,
-      eventDates: Array.isArray(eventRaw.eventDates) ? eventRaw.eventDates.map(String).filter(Boolean) : [],
+      eventDates: Array.isArray(eventRaw.eventDates) ? eventRaw.eventDates.map(safeStr).map((d) => d.trim()).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)) : [],
       openingHours: Array.isArray(eventRaw.openingHours)
         ? eventRaw.openingHours.map((h) => {
             const hr = obj(h);
@@ -389,13 +432,16 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
       marketing: normalizeConsentItem(consentRaw.marketing, locale, EMPTY_FORM_CONFIG.consent.marketing),
     },
     completion: {
-      redirectUrlTemplate: str(completionRaw.redirectUrlTemplate),
+      // 공개 완료 화면이 이 값으로 이동한다 — 저장소의 단일 URL 관문을 그대로 쓴다.
+      // 맨 trim 만 하면 javascript:/data: 가 살아남아 시청자 화면에 심어진다. 비면 "이동 안 함"
+      // 이라 안전한 쪽으로 닫힌다. {regNo} 같은 자리표시자는 경로·쿼리 문자로 문제없이 파싱된다.
+      redirectUrlTemplate: safeHttpUrl(str(completionRaw.redirectUrlTemplate)),
       showQr: completionRaw.showQr !== false,
     },
     lookup: {
       enabled: lookupRaw.enabled !== false,
       // 조회 항목이 하나도 없으면 열 수 없는 화면이 된다 — 기본으로 되돌린다.
-      fields: lookupFields.length ? lookupFields : EMPTY_FORM_CONFIG.lookup.fields,
+      fields: lookupFields.length ? [...new Set(lookupFields)] : [...EMPTY_FORM_CONFIG.lookup.fields],
       logic: lookupRaw.logic === "and" ? "and" : "or",
       showQr: lookupRaw.showQr !== false,
     },
@@ -450,12 +496,30 @@ export interface SubmissionIssue {
 export function visibleFields(config: CollectFormConfig, values: Record<string, unknown>): CollectField[] {
   const base = config.fields.filter((f) => f.enabled);
   if (!config.branch.enabled) return base;
-  const chosen = String(values[config.branch.fieldKey] ?? "");
-  const group = config.branch.groups.find((g) => g.value === chosen);
+  const chosen = safeStr(values[config.branch.fieldKey] ?? "");
+
+  /**
+   * 그룹 매칭은 **어느 로케일의 라벨로 골랐든** 같은 그룹을 찾아야 한다.
+   *
+   * group.value 는 평문 한 줄인데 선택지는 로케일 맵이다. 그대로 비교하면 한국어로 고른
+   * 사람의 값("바이어")이 group.value("Buyer")와 안 맞아 **분기 문항이 통째로 사라진다** —
+   * 선택지 검증(not_an_option)은 모든 로케일 라벨을 받아 주므로 제출은 통과하고, 필수 문항이
+   * 검증 없이 지나가거나 채워 넣은 답이 unknown_key 로 거부된다(둘 다 조용히 잘못된다).
+   * 그래서 고른 값이 속한 선택지를 먼저 찾아 그 **모든 번역**을 후보로 놓고 매칭한다.
+   */
+  const trigger = config.fields.find((f) => f.key === config.branch.fieldKey);
+  const picked = trigger?.options.find((o) => Object.values(o).includes(chosen));
+  const aliases = new Set<string>(picked ? Object.values(picked) : []);
+  aliases.add(chosen);
+  const group = config.branch.groups.find((g) => aliases.has(g.value));
   if (!group) return base;
+
   // 기준 항목 **바로 아래**에 끼워 넣는다 — 화면 순서와 검증 순서가 같아야 한다(§4).
   const at = base.findIndex((f) => f.key === config.branch.fieldKey);
-  const extra = group.fields.filter((f) => f.enabled);
+  // 공통 항목과 key 가 겹치는 그룹 항목은 버린다. 둘 다 그리면 입력칸 두 개가 같은 저장 키를
+  // 물고 서로를 덮어쓰고, 같은 오류가 두 번 표시된다(중복 key 를 거르는 이유와 같다).
+  const taken = new Set(base.map((f) => f.key));
+  const extra = group.fields.filter((f) => f.enabled && !taken.has(f.key));
   if (at < 0) return [...base, ...extra];
   return [...base.slice(0, at + 1), ...extra, ...base.slice(at + 1)];
 }
@@ -491,9 +555,19 @@ export function validateSubmission(
   }
 
   for (const f of fields) {
-    const raw = values[f.key];
-    const isEmptyArray = Array.isArray(raw) && raw.length === 0;
-    const empty = raw == null || String(raw).trim() === "" || isEmptyArray;
+    const raw = Object.prototype.hasOwnProperty.call(values, f.key) ? values[f.key] : undefined;
+
+    /**
+     * 체크박스는 **true 만 채워진 것**이다.
+     *
+     * 다른 유형과 같은 규칙(문자열로 바꿔 빈 문자열인가)을 쓰면 `String(false) === "false"` 라
+     * 안 누른 체크박스가 "값이 있음" 으로 통과한다 — 필수 동의·확인이 서버까지 무사히 지나가고
+     * data 에 false 가 정답처럼 저장된다. 아래 안내 블록 체크박스는 처음부터 `!== true` 였는데
+     * 겉모습이 같은 두 컨트롤의 규칙이 반대였다.
+     */
+    const empty = f.type === "checkbox"
+      ? raw !== true
+      : raw == null || safeStr(raw).trim() === "" || (Array.isArray(raw) && raw.length === 0);
 
     if (f.required && empty) {
       issues.push({ key: f.key, code: "required" });
@@ -501,10 +575,10 @@ export function validateSubmission(
     }
     if (empty) continue;
 
-    if (f.type === "email" && !deps.isValidEmail(String(raw).trim())) {
+    if (f.type === "email" && !deps.isValidEmail(safeStr(raw).trim())) {
       issues.push({ key: f.key, code: "invalid_email" });
     }
-    if (f.type === "tel" && !deps.isValidPhone(String(raw), config.validation.defaultCountry)) {
+    if (f.type === "tel" && !deps.isValidPhone(safeStr(raw).trim(), config.validation.defaultCountry)) {
       issues.push({ key: f.key, code: "invalid_phone" });
     }
     if (f.type === "multiple") {
@@ -513,12 +587,12 @@ export function validateSubmission(
       // allowOther 면 선택지 대조를 하지 않는다 — 하면 '기타' 자유 입력이 전부 막힌다.
       if (!f.allowOther && f.options.length) {
         const labels = new Set(f.options.flatMap((o) => Object.values(o)));
-        if (arr.some((v) => !labels.has(String(v)))) issues.push({ key: f.key, code: "not_an_option" });
+        if (arr.some((v) => !labels.has(safeStr(v)))) issues.push({ key: f.key, code: "not_an_option" });
       }
     }
     if (f.type === "select" && !f.allowOther && f.options.length) {
       const labels = new Set(f.options.flatMap((o) => Object.values(o)));
-      if (!labels.has(String(raw))) issues.push({ key: f.key, code: "not_an_option" });
+      if (!labels.has(safeStr(raw))) issues.push({ key: f.key, code: "not_an_option" });
     }
   }
 
