@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
+import { normalizeCollectForm } from "@/lib/collect-form-config";
 
 function normalizeOriginInput(s: unknown): string | null {
   if (typeof s !== "string") return null;
@@ -150,6 +151,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(normalizedAllowed !== undefined && { allowedOrigins: normalizedAllowed }),
       ...(normalizedFormPagePatterns !== undefined && { formPagePatterns: normalizedFormPagePatterns }),
       ...(normalizedDedupKeyFields !== undefined && { dedupKeyFields: normalizedDedupKeyFields }),
+      /**
+       * 폼 정의는 **정규화해서 저장한다.**
+       *
+       * 읽는 쪽도 정규화하지만(JSONB 라 어떤 값이든 들어올 수 있다), 쓸 때 한 번 걸러 두면
+       * 저장된 것 자체가 항상 같은 모양이 된다 — 빌더 자동저장의 중간 상태나 손으로 고친 값이
+       * DB 에 그대로 남지 않는다. 공개 폼은 매 요청 이걸 읽으므로 읽기 비용도 줄어든다.
+       */
+      ...(body.formConfig !== undefined && { formConfig: normalizeCollectForm(body.formConfig) as unknown as object }),
     },
     include: { fieldMappings: { orderBy: { sortOrder: "asc" } } },
   });
