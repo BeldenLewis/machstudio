@@ -11,7 +11,7 @@
  * 저장 표기가 제각각이면 `010-1234-5678` 로 찾는 사람이 자기 등록을 못 찾는다.
  * 그래서 조회 입력도 반드시 같은 함수를 거쳐 비교한다.
  */
-import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
+import { getCountries, parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 
 /**
  * 입력을 E.164 로. 못 읽으면 null — 호출부가 검증 실패로 다룬다.
@@ -21,10 +21,12 @@ import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js"
  * 붙여넣는 사람이 실제로 있다.
  */
 export function toE164(value: unknown, country: string): string | null {
-  const raw = String(value ?? "").trim();
-  if (!raw) return null;
-  const cc = /^[A-Za-z]{2}$/.test(country) ? (country.toUpperCase() as CountryCode) : undefined;
+  // 문자열화도 try 안이다. 밖에 두면 원시 변환기가 망가진 객체(JSON 으로 얼마든지 온다)에서
+  // TypeError 가 새어 나가 **등록 확인 조회가 500** 이 된다 — "못 읽으면 null" 계약이 깨진다.
   try {
+    const raw = typeof value === "string" ? value.trim() : String(value ?? "").trim();
+    if (!raw) return null;
+    const cc = /^[A-Za-z]{2}$/.test(country) ? (country.toUpperCase() as CountryCode) : undefined;
     const parsed = parsePhoneNumberFromString(raw, raw.startsWith("+") ? undefined : cc);
     // isValid() 까지 봐야 한다. 파싱만 되고 그 나라에 없는 번호대인 경우가 흔하다.
     return parsed?.isValid() ? parsed.number : null;
@@ -32,6 +34,22 @@ export function toE164(value: unknown, country: string): string | null {
     // 라이브러리가 던지는 경우까지 폼을 죽이지 않는다 — 검증 실패로만 다룬다.
     return null;
   }
+}
+
+/**
+ * 실제로 지원되는 국가 코드인가 — 빌더가 **입력 시점에** 걸러야 하는 판정.
+ *
+ * 모양만 보면(2글자 대문자) "UK" 가 통과한다. 영국은 ISO 로 GB 라서 toE164 가 전부 null 을
+ * 내고, 그러면 그 폼의 모든 전화 항목이 invalid_phone 이 되는데 화면엔 이유가 안 뜬다.
+ * 같은 부류: 그리스를 EL 로 쓰는 경우.
+ *
+ * 이 판정을 collect-form-config(순수 모듈)에 두지 않는 이유는 그쪽이 임베드 번들에 통째로
+ * 들어가기 때문이다 — 국가 메타데이터를 딸려 보내지 않으려고 여기 둔다.
+ */
+export function isSupportedCountry(code: unknown): boolean {
+  const c = String(code ?? "").toUpperCase();
+  if (!/^[A-Z]{2}$/.test(c)) return false;
+  return getCountries().includes(c as CountryCode);
 }
 
 /** 검증용. validateSubmission 에 주입한다(순수 모듈이 이 의존성을 안 갖게). */

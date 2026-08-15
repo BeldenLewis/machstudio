@@ -164,13 +164,73 @@ describe("리뷰가 잡은 결함 — 회귀 방지", () => {
     expect(cfg({}).lookup.fields).toEqual(before);
   });
 
-  /** 이 저장소는 naive timestamp 로 이미 9시간 오진을 겪었다. */
-  it("오프셋 없는 시각은 거부한다 — 서버(UTC)와 브라우저(KST)가 갈린다", () => {
+  /**
+   * 이 저장소는 naive timestamp 로 이미 9시간 오진을 겪었다.
+   *
+   * 처음엔 오프셋 없는 값을 **거부**했는데, 2차 리뷰가 그게 더 나쁜 실패라고 지적했다 —
+   * null 은 "제한 없음"이라 운영자가 입력한 마감이 조용히 무제한이 된다(화면엔 마감일이
+   * 그대로 보이는데 폼은 계속 받는다). 그래서 UTC 로 **결정적으로** 읽는다. 저장소의
+   * "naive timestamp = UTC" 규약과도 같다. 판정이 실행 환경에 의존하지 않는 게 핵심이다.
+   */
+  it("오프셋 없는 시각은 UTC 로 읽는다 — 서버·브라우저가 같은 결론을 낸다", () => {
     const w = (v: string) => cfg({ eventInfo: { registrationWindow: { closesAt: v } } }).eventInfo.registrationWindow.closesAt;
-    expect(w("2026-09-01T18:00")).toBeNull();      // datetime-local 이 내는 모양
-    expect(w("2026")).toBeNull();                   // 오타가 진짜 접수 창이 되던 값
+    expect(w("2026-09-01T18:00")).toBe("2026-09-01T18:00:00.000Z");      // datetime-local
+    expect(w("2026-09-01T18:00:00")).toBe("2026-09-01T18:00:00.000Z");
     expect(w("2026-09-01T18:00:00Z")).toBe("2026-09-01T18:00:00.000Z");
     expect(w("2026-09-01T18:00:00+09:00")).toBe("2026-09-01T09:00:00.000Z");
+    // 느슨한 값은 여전히 거부 — Date.parse 가 그럴싸한 시각을 만들어 오타가 접수 창이 된다.
+    expect(w("2026")).toBeNull();
+    expect(w("Dec 5")).toBeNull();
+  });
+
+  it("등록 확인은 꺼진 채로 시작한다 — 이메일만 알면 남의 QR 이 열리는 화면이다", () => {
+    expect(cfg({}).lookup.enabled).toBe(false);
+    expect(cfg({ lookup: { enabled: true } }).lookup.enabled).toBe(true);
+  });
+
+  it("분기 기준 항목의 '표시'를 끄면 분기도 꺼진다", () => {
+    const groups = [{ value: "buyer", fields: [{ key: "budget", required: true }] }];
+    const on = cfg({ fields: [{ key: "type", type: "select", options: ["buyer"] }], branch: { enabled: true, fieldKey: "type", groups } });
+    const off = cfg({ fields: [{ key: "type", type: "select", options: ["buyer"], enabled: false }], branch: { enabled: true, fieldKey: "type", groups } });
+    expect(on.branch.enabled).toBe(true);
+    expect(off.branch.enabled).toBe(false);
+    // 꺼졌으면 그룹 문항이 맨 뒤에 붙지도 않는다(§4 순서 계약)
+    expect(visibleFields(off, { type: "buyer" }).map((f) => f.key)).toEqual([]);
+  });
+
+  it("항목 key 는 안내 체크박스 접두를 쓸 수 없다 — 필수 동의 우회 경로였다", () => {
+    const c = cfg({
+      fields: [{ key: "notice_portrait", type: "checkbox" }, { key: "email", type: "email" }],
+      notices: [{ id: "portrait", mode: "checkbox-required" }],
+    });
+    expect(c.fields.map((f) => f.key)).toEqual(["email"]);
+  });
+
+  it("안내 id 가 겹치면 하나만 남는다", () => {
+    const c = cfg({ notices: [{ id: "x", mode: "checkbox-required" }, { id: "x", mode: "notice" }] });
+    expect(c.notices).toHaveLength(1);
+  });
+
+  it("완료 화면·이메일에 놓인 안내는 필수 체크를 요구하지 않는다 — 누를 컨트롤이 없다", () => {
+    const c = cfg({
+      fields: [{ key: "email", type: "email" }],
+      notices: [{ id: "p", mode: "checkbox-required", placement: "completion" }],
+      consent: { privacy: { enabled: false } },
+    });
+    expect(validateSubmission(c, { email: "a@b.co" }, { ...deps, consent: {} })).toEqual([]);
+  });
+
+  it("숫자 선택지가 사라지지 않는다 — 사라지면 선택지 대조가 꺼져 아무 값이나 통과했다", () => {
+    const c = cfg({ fields: [{ key: "year", type: "select", options: [2026, 2027] }], consent: { privacy: { enabled: false } } });
+    expect(c.fields[0].options.map((o) => localize(o))).toEqual(["2026", "2027"]);
+    expect(validateSubmission(c, { year: "아무거나" }, { ...deps, consent: {} }).map((i) => i.code)).toContain("not_an_option");
+  });
+
+  it("maxSelect 는 정수만 — webinar-config 와 판정을 맞춘다", () => {
+    const base = { key: "m", type: "multiple", options: ["a", "b", "c"] };
+    expect(cfg({ fields: [{ ...base, maxSelect: 2 }] }).fields[0].maxSelect).toBe(2);
+    expect(cfg({ fields: [{ ...base, maxSelect: 2.7 }] }).fields[0].maxSelect).toBeUndefined();
+    expect(cfg({ fields: [{ ...base, maxSelect: true }] }).fields[0].maxSelect).toBeUndefined();
   });
 
   it("완료 URL 은 http(s) 만 통과한다 — 공개 화면이 이 값으로 이동한다", () => {

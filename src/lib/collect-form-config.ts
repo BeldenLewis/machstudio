@@ -30,8 +30,11 @@ export const DEFAULT_LOCALE = "en";
 export function toLocalized(value: unknown, locale: string = DEFAULT_LOCALE): Localized {
   // 문자열도 반드시 trim 한다 — 공백뿐인 값("  ")을 그냥 두면 truthy 라 살아남아서
   // 선택지 필터를 통과하고 공개 폼에 **빈 드롭다운 줄**이 생긴다(객체 분기와 규칙을 맞춘다).
-  if (typeof value === "string") {
-    const s = value.trim();
+  // 숫자·불리언도 라벨이 된다. 문자열만 받으면 JSON 의 `options: [2026, 2027]` 이 통째로
+  // 사라져 **선택지 0개짜리 select** 가 되고, 그러면 선택지 대조가 꺼져서 아무 값이나 통과한다
+  // (중첩 분기는 이미 safeStr 로 받고 있었다 — 두 갈래의 규칙이 달랐다).
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    const s = safeStr(value).trim();
     return s ? { [locale]: s } : {};
   }
   if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -227,7 +230,10 @@ export const EMPTY_FORM_CONFIG: CollectFormConfig = {
     marketing: { enabled: false, label: {}, body: {}, defaultChecked: false },
   },
   completion: { redirectUrlTemplate: "", showQr: true },
-  lookup: { enabled: true, fields: ["email", "phone"], logic: "or", showQr: true },
+  /* 등록 확인은 **꺼진 채로 시작한다.** 켜면 이메일 하나만 아는 사람에게 남의 QR 티켓을
+     보여 주는 화면이라, 운영자가 의식적으로 켜야 한다. 이 파일의 다른 토글도 전부 닫힘이 기본이다
+     (eventInfo.enabled, consent.marketing.enabled, branch.enabled). or/showQr 은 켠 뒤의 기본값. */
+  lookup: { enabled: false, fields: ["email", "phone"], logic: "or", showQr: true },
   submitLabel: {},
   defaultLocale: DEFAULT_LOCALE,
   statusOverride: null,
@@ -262,7 +268,7 @@ function safeStr(value: unknown): string {
 }
 
 function normalizeFieldType(value: unknown): CollectFieldType {
-  const t = String(value ?? "");
+  const t = safeStr(value);
   return (FIELD_TYPES as readonly string[]).includes(t) ? (t as CollectFieldType) : "text";
 }
 
@@ -274,9 +280,12 @@ function normalizeOptions(value: unknown, locale: string): Localized[] {
 
 function normalizeChoiceExtras(raw: Record<string, unknown>, optionCount: number) {
   const out: { maxSelect?: number; allowOther?: boolean } = {};
-  const max = Number(raw.maxSelect);
+  // 정수만 받는다 — webinar-config 의 같은 함수(Number.isInteger)와 판정을 맞춘다. 예전엔
+  // Number()+Math.floor 라 maxSelect: 2.7 이 한쪽에선 2, 다른 쪽에선 무제한이 됐고,
+  // Number(true) === 1 이라 true 하나가 3지선다를 1개 제한으로 바꿔 놓기도 했다.
+  const max = typeof raw.maxSelect === "number" ? raw.maxSelect : NaN;
   // 옵션 전체 이상이면 무제한과 같다 — 저장하지 않는다(웨비나 설문과 같은 계약).
-  if (Number.isFinite(max) && max >= 1 && max < optionCount) out.maxSelect = Math.floor(max);
+  if (Number.isInteger(max) && max >= 1 && max < optionCount) out.maxSelect = max;
   if (raw.allowOther === true) out.allowOther = true;
   return out;
 }
@@ -286,6 +295,9 @@ function normalizeField(raw: unknown, index: number, locale: string): CollectFie
   const key = str(r.key);
   // key 없는 항목은 저장할 자리가 없다 — 그리면 값이 어디에도 안 들어간다.
   if (!key) return null;
+  // `notice_` 는 안내 블록 체크박스의 예약 접두다. 운영자가 같은 key 의 항목을 만들면
+  // 그 항목에 체크한 것만으로 **법적 필수 동의(초상권 등)가 충족된 것처럼 통과한다.**
+  if (key.startsWith(NOTICE_KEY_PREFIX)) return null;
   const options = normalizeOptions(r.options, locale);
   return {
     id: str(r.id) || key || `field_${index}`,
@@ -319,7 +331,7 @@ function normalizeNotice(raw: unknown, index: number, locale: string): CollectNo
   const placement = str(r.placement) as NoticePlacement;
   const mode = str(r.mode) as NoticeMode;
   return {
-    id: str(r.id) || `notice_${index}`,
+    id: str(r.id) || `n${index}`,
     enabled: r.enabled !== false,
     placement: NOTICE_PLACEMENTS.includes(placement) ? placement : "top",
     title: toLocalized(r.title, locale),
@@ -352,12 +364,32 @@ function normalizeConsentItem(raw: unknown, locale: string, fallback: CollectCon
  * 오타 하나가 진짜 접수 창이 돼 버린다(의도는 null = 제한 없음이다).
  */
 const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+/** datetime-local 이 내는 모양 — 오프셋이 없다. */
+const NAIVE_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
 
 function isoOrNull(value: unknown): string | null {
   const s = str(value);
-  if (!s || !ISO_WITH_OFFSET.test(s)) return null;
-  const t = Date.parse(s);
-  return Number.isNaN(t) ? null : new Date(t).toISOString();
+  if (!s) return null;
+  if (ISO_WITH_OFFSET.test(s)) {
+    const t = Date.parse(s);
+    return Number.isNaN(t) ? null : new Date(t).toISOString();
+  }
+  /**
+   * 오프셋이 없으면 **UTC 로 읽는다.**
+   *
+   * 두 가지를 동시에 피해야 한다. `Date.parse` 에 그냥 넘기면 실행 환경의 로컬 시간대로
+   * 해석돼 서버(UTC)와 브라우저(KST)가 9시간 갈린다. 그렇다고 null(제한 없음)로 떨어뜨리면
+   * **운영자가 입력한 마감이 조용히 "무제한"이 된다** — 화면엔 마감일이 그대로 보이는데
+   * 폼은 계속 등록을 받는, 더 나쁜 실패다.
+   * 이 저장소는 이미 "naive timestamp 는 UTC" 규약을 웨비나 일정에서 쓰고 있으므로 그걸 따른다.
+   */
+  if (NAIVE_DATETIME.test(s)) {
+    const t = Date.parse(`${s.length === 16 ? `${s}:00` : s}Z`);
+    return Number.isNaN(t) ? null : new Date(t).toISOString();
+  }
+  // 그 외("2026", "Dec 5")는 거부한다 — Date.parse 가 그럴싸한 시각을 만들어 오타 하나가
+  // 진짜 접수 창이 돼 버린다.
+  return null;
 }
 
 /**
@@ -394,7 +426,10 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
     branch: {
       // 기준 항목이 실제로 존재할 때만 분기를 켠다 — 항목을 지웠는데 분기가 남으면
       // 렌더러가 없는 key 를 기다리며 유형 문항을 영영 안 그린다.
-      enabled: branchRaw.enabled === true && fields.some((f) => f.key === fieldKey),
+      // 기준 항목이 **켜져 있을 때만** 분기를 켠다. 지우는 것뿐 아니라 "표시" 를 끄는 것도
+      // 한 번의 토글이고, 끈 채로 분기가 살아 있으면 visibleFields 가 기준 항목을 못 찾아
+      // 그룹을 맨 뒤에 붙이고(§4 위반) 어떤 제출도 통과하지 못한다.
+      enabled: branchRaw.enabled === true && fields.some((f) => f.key === fieldKey && f.enabled),
       fieldKey,
       groups: branchGroups.map((g) => {
         const gr = obj(g);
@@ -419,9 +454,17 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
           })
         : [],
     },
-    notices: Array.isArray(c.notices) ? c.notices.map((n, i) => normalizeNotice(n, i, locale)) : [],
+    // id 가 겹치면 뒤엣것을 버린다 — 같은 값 키(notice_x)를 두 블록이 나눠 쓰면 하나만 체크해도
+    // 둘 다 충족되거나, 한 컨트롤에 오류가 두 번 붙는다(항목 key 중복을 거르는 이유와 같다).
+    notices: Array.isArray(c.notices)
+      ? c.notices.map((n, i) => normalizeNotice(n, i, locale))
+          .filter((n, i, all) => all.findIndex((o) => o.id === n.id) === i)
+      : [],
     validation: {
       // 대문자 2글자만 국가 코드로 인정한다 — 소문자·전체 이름이 들어오면 기본값으로.
+      // 여기선 모양만 본다. **실재하는 코드인지**(UK 는 없다 — 영국은 GB)는 국가 목록이 필요해
+      // collect-phone.isSupportedCountry 가 맡고, 빌더가 입력 시점에 거른다 —
+      // 이 모듈은 임베드 번들에 들어가므로 국가 메타데이터를 들이지 않는다.
       defaultCountry: /^[A-Za-z]{2}$/.test(str(validationRaw.defaultCountry))
         ? str(validationRaw.defaultCountry).toUpperCase()
         : EMPTY_FORM_CONFIG.validation.defaultCountry,
@@ -439,7 +482,7 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
       showQr: completionRaw.showQr !== false,
     },
     lookup: {
-      enabled: lookupRaw.enabled !== false,
+      enabled: lookupRaw.enabled === true,
       // 조회 항목이 하나도 없으면 열 수 없는 화면이 된다 — 기본으로 되돌린다.
       fields: lookupFields.length ? [...new Set(lookupFields)] : [...EMPTY_FORM_CONFIG.lookup.fields],
       logic: lookupRaw.logic === "and" ? "and" : "or",
@@ -481,9 +524,25 @@ export function resolveRegistrationStatus(
 }
 
 // ── 제출 검증 ─────────────────────────────────────────────────────────
+/**
+ * 안내 블록 체크박스가 values 에 실려 오는 키의 **예약 접두**.
+ * 항목 key 가 이걸로 시작하면 정규화에서 버린다(normalizeField) — 겹치면 그 항목에 체크한 것만으로
+ * 법적 필수 동의가 충족된 것처럼 통과한다.
+ */
+export const NOTICE_KEY_PREFIX = "notice_";
+
 /** 안내 블록 체크박스가 values 에 실려 오는 키. 렌더러·검증이 같은 규칙을 쓰게 한 곳에 둔다. */
 export function noticeValueKey(noticeId: string): string {
-  return `notice_${noticeId}`;
+  return `${NOTICE_KEY_PREFIX}${noticeId}`;
+}
+
+/**
+ * 이 배치의 안내가 **폼 위에 그려지는가.**
+ * completion·email 에 놓인 안내는 폼에 컨트롤이 없다 — 그런 블록에 필수 체크를 요구하면
+ * 누를 수 없는 동의를 요구하는 셈이라 어떤 제출도 통과하지 못하고, 오류를 붙일 필드도 없다.
+ */
+function isOnFormPlacement(placement: NoticePlacement): boolean {
+  return placement === "top" || placement === "above-consent" || placement === "bottom";
 }
 
 export interface SubmissionIssue {
@@ -600,10 +659,12 @@ export function validateSubmission(
     issues.push({ key: "consent_privacy", code: "consent_required" });
   }
   // 안내 블록 중 필수 체크로 승격된 것(파리의 초상권 등)도 같은 규칙으로 본다.
+  // **폼 위에 그려지는 배치만** — 완료 화면·이메일에 놓인 안내는 체크할 컨트롤이 없어서
+  // 요구해 봐야 누를 수 없는 동의가 되고, 그러면 어떤 제출도 통과하지 못한다.
   for (const n of config.notices) {
-    if (n.enabled && n.mode === "checkbox-required" && (values[`notice_${n.id}`] as unknown) !== true) {
-      issues.push({ key: `notice_${n.id}`, code: "consent_required" });
-    }
+    if (!n.enabled || n.mode !== "checkbox-required" || !isOnFormPlacement(n.placement)) continue;
+    const k = noticeValueKey(n.id);
+    if (values[k] !== true) issues.push({ key: k, code: "consent_required" });
   }
 
   return issues;
