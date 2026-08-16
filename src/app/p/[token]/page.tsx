@@ -11,8 +11,10 @@
  * 유출되면 재발급으로 끊는다(설정 탭의 "미리보기 링크 새로 발급").
  */
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getClientIp, rateLimitAsync } from "@/lib/ratelimit";
 import { normalizeCollectForm, type RegistrationStatus } from "@/lib/collect-form-config";
 import { CollectFormView, type CollectScreen } from "@/components/form-builder/CollectFormView";
 import { PreviewSwitcher } from "./PreviewSwitcher";
@@ -39,6 +41,31 @@ export default async function CollectFormPreviewPage({
 }: { params: Params; searchParams: Search }) {
   const { token } = await params;
   const sp = await searchParams;
+
+  /**
+   * 인증 없이 DB 를 때리는 경로다 — 토큰을 난사해도 매 요청이 쿼리 한 번이 된다.
+   * 이 저장소는 커넥션 풀 고갈로 실제 장애를 겪었으므로(웨비나 /live-state), 공개 경로에
+   * 새 구멍을 열 때는 한도부터 건다. 정상 사용(링크 열고 상태 몇 번 눌러 보기)에는 닿지 않는 값.
+   */
+  const h = await headers();
+  const ip = getClientIp(new Request("https://x", { headers: h }));
+  const { allowed } = await rateLimitAsync(`collect-preview:${ip}`, { limit: 60, windowMs: 60_000 });
+  /**
+   * 한도에 걸렸을 때 404 를 주면 안 된다 — 받은 사람은 "링크가 죽었다" 로 읽고 운영자에게
+   * 새 링크를 요청하며, 재발급은 **이미 나간 다른 링크까지 끊는다.** 사실대로 적는다.
+   */
+  if (!allowed) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-secondary/30 p-6">
+        <div className="max-w-xs rounded-2xl bg-background p-6 text-center shadow-sm">
+          <p className="text-sm font-semibold">잠시 후 다시 열어 주세요</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            짧은 시간에 너무 많이 열었어요. 링크는 그대로 살아 있습니다.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // 토큰 하나로만 찾는다 — 워크스페이스·레코드는 읽지 않는다(미리보기가 볼 이유가 없다).
   const source = token
