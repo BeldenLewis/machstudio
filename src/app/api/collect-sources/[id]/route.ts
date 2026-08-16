@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { randomBytes } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { collectColumnsFor } from "@/lib/collect-columns";
 import { logActivity } from "@/lib/activity";
 import { normalizeCollectForm } from "@/lib/collect-form-config";
 
@@ -46,8 +47,21 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       _count: { select: { records: true } },
     },
   });
+  if (!source) return NextResponse.json({ error: "소스를 찾을 수 없어요" }, { status: 404 });
 
-  return NextResponse.json({ source });
+  /**
+   * **빌더형은 열을 formConfig 에서 파생해 실어 보낸다.**
+   *
+   * 표 헤더·셀·CSV·상세 패널이 전부 `source.fieldMappings` 를 읽는데, 그 테이블은 연동형
+   * 전용이다(운영자가 '필드' 탭에서 채우는데 빌더형에는 그 탭이 없다). 그대로 두면 빌더형
+   * 소스는 등록이 아무리 쌓여도 표에 '시간'과 UTM 열만 보인다.
+   *
+   * 파생값을 같은 자리에 실으면 **소비처를 한 곳도 안 고치고** 동작한다. 연동형은 저장된
+   * 값을 그대로 통과시키므로 기존 화면(레코드 52,000건)은 한 글자도 바뀌지 않는다.
+   */
+  return NextResponse.json({
+    source: { ...source, fieldMappings: collectColumnsFor(source) },
+  });
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

@@ -84,6 +84,8 @@ interface CollectSource {
 interface CollectRecord {
   id: string;
   data: Record<string, string>;
+  /** 빌더형에만 있다 — 현장 입장의 열쇠이므로 목록에서 대조할 수 있어야 한다(§9.1·§12). */
+  registrationNo?: string | null;
   utmSource: string | null;
   utmMedium: string | null;
   utmCampaign: string | null;
@@ -1224,6 +1226,12 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                             시간 {sortIcon("createdAt")}
                           </button>
                         </th>
+                        {/* 등록번호는 빌더형에만 있고 시간 바로 뒤다 — 현장에서 스캔한 번호로 찾는다. */}
+                        {source.mode === "builder" && (
+                          <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">
+                            등록번호
+                          </th>
+                        )}
                         {source.fieldMappings.map((f) => {
                           const colWidth = f.type === "email" ? "max-w-[240px]"
                             : (f.type === "select" || f.type === "checkbox") ? "max-w-[80px]"
@@ -1269,6 +1277,11 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                             />
                           </td>
                           <td className={`px-4 py-3 text-xs text-muted-foreground whitespace-nowrap sticky left-10 z-[1] shadow-[1px_0_0_0_hsl(var(--border))] ${selectedIds.has(record.id) ? "bg-violet-500/5" : "bg-background group-hover:bg-secondary/30"}`}>{timeStr(record.createdAt)}</td>
+                          {source.mode === "builder" && (
+                            <td className="px-4 py-3 font-mono text-xs tabular-nums text-muted-foreground whitespace-nowrap">
+                              {record.registrationNo ?? "-"}
+                            </td>
+                          )}
                           {source.fieldMappings.map((f) => {
                             const colWidth = f.type === "email" ? "max-w-[240px]"
                               : (f.type === "select" || f.type === "checkbox") ? "max-w-[80px]"
