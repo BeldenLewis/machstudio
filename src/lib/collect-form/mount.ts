@@ -26,7 +26,7 @@ import {
   type RegistrationStatus,
   type SubmissionIssue,
 } from "@/lib/collect-form-config";
-import { isValidEmail } from "@/lib/webinar-config";
+import { isValidCollectEmail } from "@/lib/collect-email";
 // 로더가 심어 둔 first-touch UTM 을 그대로 쓴다 — 파트너 사이트를 먼저 거친 방문자의 정본이다.
 import { buildUtmEnvelope } from "@/lib/attribution-client";
 
@@ -528,7 +528,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     const mySeq = ++dupSeq;
     if (duplicate) { duplicate = false; duplicateKey = null; updateSubmitState(); }
     const value = raw.trim().toLowerCase();
-    if (!isValidEmail(value)) return;
+    if (!isValidCollectEmail(value)) return;
     if (config.validation.onDuplicate !== "block") return;
 
     dupTimer = setTimeout(() => {
@@ -665,7 +665,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
 
     const body = payloadValues();
     issues = validateSubmission(config, body, {
-      isValidEmail,
+      isValidEmail: isValidCollectEmail,
       // 전화 검증은 서버가 libphonenumber 로 한다 — 그 메타데이터를 번들에 넣으면
       // 임베드가 수백 KB 커진다(collect-phone.ts 주석). 여기서는 비어 있지 않은지만 본다.
       isValidPhone: (v) => v.trim().length > 0,

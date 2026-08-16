@@ -54,6 +54,7 @@ export function formSourceHash(root) {
     // (esbuild metafile 로 실측했다. 목록이 실제 입력보다 짧으면 검사는 초록인데
     //  커밋된 번들은 낡을 수 있다 — 그게 이 검사가 막으려던 바로 그 상황이다.)
     join(root, "src/lib/collect-form-config.ts"),
+    join(root, "src/lib/collect-email.ts"),
     join(root, "src/lib/dom/h.ts"),
     join(root, "src/lib/webinar-config.ts"),
     join(root, "src/lib/attribution-client.ts"),

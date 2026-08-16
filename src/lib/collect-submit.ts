@@ -10,7 +10,7 @@
  * 중복 판정만은 여기서 못 한다(DB 가 필요하다). 그건 라우트가 P2002 로 받는다 — 조회 후
  * INSERT 만으로는 동시 제출을 못 막기 때문에 **DB 제약이 최종 방어선**이다(설계 §6.2).
  */
-import { isValidEmail } from "@/lib/webinar-config";
+import { isValidCollectEmail, normalizeEmail } from "@/lib/collect-email";
 import { isValidPhoneForCountry, toE164 } from "@/lib/collect-phone";
 import { generateRegistrationNo } from "@/lib/collect-registration-no";
 import {
@@ -111,11 +111,12 @@ export function primaryFieldKey(
   return (filled ?? candidates[0]).key;
 }
 
-/** 이메일 정규화 — 중복 판정의 전제(설계 §6.2). trim + 소문자, 그 이상 조이지 않는다. */
-export function normalizeEmail(value: unknown): string | null {
-  const s = str(value).trim().toLowerCase();
-  return s || null;
-}
+/**
+ * 이메일 규칙은 `collect-email.ts` 한 곳에 있다 — 브라우저 런타임도 같은 함수를 써야
+ * 하는데 이 파일은 `node:crypto`(등록번호 발급)를 끌고 다녀 번들에 못 들어간다.
+ * 기존 호출부가 여기서 가져오고 있어 재수출한다.
+ */
+export { isValidCollectEmail, normalizeEmail } from "@/lib/collect-email";
 
 export function prepareBuilderSubmission(
   config: CollectFormConfig,
@@ -151,7 +152,7 @@ export function prepareBuilderSubmission(
     marketing: input.consent?.marketing === true,
   };
   const issues = validateSubmission(config, values, {
-    isValidEmail,
+    isValidEmail: isValidCollectEmail,
     isValidPhone: (v, country) => isValidPhoneForCountry(v, country),
     consent,
   });

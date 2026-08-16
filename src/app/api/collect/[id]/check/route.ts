@@ -11,8 +11,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getClientIp, rateLimitAsync } from "@/lib/ratelimit";
-import { isValidEmail } from "@/lib/webinar-config";
-import { normalizeEmail } from "@/lib/collect-submit";
+import { isValidCollectEmail, normalizeEmail } from "@/lib/collect-submit";
 
 const PREFLIGHT_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -92,7 +91,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const email = normalizeEmail(body.email);
   // 형식이 아니면 **소스를 조회하기도 전에** 끊는다 — 무효한 값으로 DB 를 두드리게 두면
   // 그게 곧 남용 경로다.
-  if (!email || !isValidEmail(email)) {
+  if (!email || !isValidCollectEmail(email)) {
     return NextResponse.json({ exists: false }, { headers: PREFLIGHT_HEADERS });
   }
 

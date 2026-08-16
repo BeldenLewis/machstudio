@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { normalizeCollectForm } from "@/lib/collect-form-config";
 import { isValidRegistrationNo } from "@/lib/collect-registration-no";
-import { normalizeEmail, prepareBuilderSubmission, primaryFieldKey } from "@/lib/collect-submit";
+import { isValidCollectEmail, normalizeEmail, prepareBuilderSubmission, primaryFieldKey } from "@/lib/collect-submit";
 
 /**
  * 저장 직전까지의 모든 판정 — 서버 라우트와 미리보기가 **같은 함수**를 탄다(설계 §19).
@@ -167,7 +167,54 @@ describe("대표 항목 고르기", () => {
   });
 });
 
+describe("이메일 유효성 — 설계 §6.2 의 '추가 차단'", () => {
+  /**
+   * **과잉 차단 회귀 방지가 먼저다.** §22 가 이 주소를 이름으로 지목한다 —
+   * 좁히려다 실제 고객 주소를 막으면 그 사람은 등록을 아예 못 한다.
+   */
+  it("실제로 쓰이는 주소를 막지 않는다", () => {
+    for (const ok of [
+      "john.doe+expo@company.co.uk",
+      "a@b.co",
+      "first.last@sub.domain.example",
+      "user_name-1@example.com",
+    ]) expect(isValidCollectEmail(ok)).toBe(true);
+  });
+
+  /** 이 셋은 RFC 위반이라 **발송 자체가 거부된다** — 통과시키면 그 사람은 QR 을 못 받는다. */
+  it("연속 점·로컬파트 시작/끝 점을 막는다", () => {
+    for (const bad of ["john..doe@company.com", ".john@company.com", "john.@company.com"]) {
+      expect(isValidCollectEmail(bad)).toBe(false);
+    }
+  });
+
+  /** 도메인의 점은 정상이다 — 로컬파트만 본다는 것을 못 박는다. */
+  it("도메인 쪽 점은 건드리지 않는다", () => {
+    expect(isValidCollectEmail("a@b.c.d.example")).toBe(true);
+  });
+
+  it("기존 형식·길이 규칙은 그대로다", () => {
+    expect(isValidCollectEmail("a@b")).toBe(false);
+    expect(isValidCollectEmail("no-at-sign")).toBe(false);
+    expect(isValidCollectEmail("a".repeat(320) + "@b.com")).toBe(false);
+  });
+});
+
 describe("normalizeEmail", () => {
+  /**
+   * 붙여넣기로 딸려 오는 제로폭 공백. 화면에서는 구분이 안 되고 `\s` 에도 안 잡혀
+   * trim 이 못 지운다 — 남으면 같은 사람이 같은 주소로 두 번 등록된다(키가 갈려
+   * 유니크 인덱스도 안 막는다). 의도적으로 붙이면 중복 차단을 우회할 수 있다.
+   */
+  it("보이지 않는 문자를 지운다", () => {
+    expect(normalizeEmail("ja\u200Bne@example.com")).toBe("jane@example.com");
+    expect(normalizeEmail("\uFEFFjane@example.com\u200D")).toBe("jane@example.com");
+  });
+
+  it("보이지 않는 문자뿐이면 없는 것으로 본다", () => {
+    expect(normalizeEmail("\u200B\uFEFF")).toBeNull();
+  });
+
   it("빈 값은 null — 이메일 항목이 없는 폼에서는 중복 차단이 걸리지 않는다", () => {
     expect(normalizeEmail("   ")).toBeNull();
     expect(normalizeEmail(undefined)).toBeNull();

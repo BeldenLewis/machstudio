@@ -8,8 +8,7 @@
  * 한다. 그 둘이 라우트 안에 섞여 있으면 "무엇을 노출하는가" 를 나중에 아무도 못 읽는다.
  */
 import { toE164 } from "@/lib/collect-phone";
-import { isValidEmail } from "@/lib/webinar-config";
-import { normalizeEmail } from "@/lib/collect-submit";
+import { isValidCollectEmail, normalizeEmail } from "@/lib/collect-submit";
 import type { CollectFormConfig, Localized } from "@/lib/collect-form-config";
 
 /** 조회 입력 — 설정에 따라 둘 중 하나만 쓰일 수도 있다. */
@@ -38,7 +37,7 @@ export function buildLookupCriteria(config: CollectFormConfig, input: LookupInpu
   const allowPhone = config.lookup.fields.includes("phone");
 
   const rawEmail = allowEmail ? normalizeEmail(input.email) : null;
-  const emailNormalized = rawEmail && isValidEmail(rawEmail) ? rawEmail : null;
+  const emailNormalized = rawEmail && isValidCollectEmail(rawEmail) ? rawEmail : null;
 
   const rawPhone = allowPhone ? String(input.phone ?? "").trim() : "";
   const phoneE164 = rawPhone ? toE164(rawPhone, config.validation.defaultCountry) : null;
