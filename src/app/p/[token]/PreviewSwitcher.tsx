@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 미리보기 상태 전환 — 상태·화면·언어를 **URL 로** 바꾼다.
+ * 미리보기 상태 전환 — 상태·유형·언어를 **URL 로** 바꾼다 (설계 §16.1).
  *
  * 컴포넌트 안 state 로 두지 않는 이유: 이 링크는 남에게 보내는 것이라 "마감 화면 좀 봐 주세요"
  * 가 링크 하나로 끝나야 한다(/p/{token}?status=closed). 상태가 URL 에 없으면 받은 사람이
@@ -16,16 +16,14 @@ const STATUS_TABS = [
   { value: "closed", label: "마감" },
 ] as const;
 
-const SCREEN_TABS = [
-  { value: "form", label: "등록 폼" },
-  { value: "done", label: "등록 완료" },
-] as const;
-
 export function PreviewSwitcher({
-  status, screen, lang, locales,
+  status, type, types, lang, locales,
 }: {
   status?: string;
-  screen: string;
+  /** 지금 펼쳐 둔 유형(?type=). */
+  type?: string;
+  /** 분기 그룹에 실제로 있는 유형 값들 — 없으면 유형 줄을 그리지 않는다. */
+  types: string[];
   lang: string;
   locales: string[];
 }) {
@@ -52,13 +50,17 @@ export function PreviewSwitcher({
           </button>
         ))}
       </div>
-      <div className="flex items-center gap-0.5">
-        {SCREEN_TABS.map((t) => (
-          <button key={t.value} type="button" onClick={() => go("screen", t.value === "form" ? "" : t.value)} className={tab(screen === t.value)}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+
+      {/* 유형 분기가 있을 때만 — 없는 폼에 빈 줄을 남기지 않는다. */}
+      {types.length > 0 && (
+        <div className="flex items-center gap-0.5">
+          <button type="button" onClick={() => go("type", "")} className={tab(!type)}>유형 없음</button>
+          {types.map((v) => (
+            <button key={v} type="button" onClick={() => go("type", v)} className={tab(type === v)}>{v}</button>
+          ))}
+        </div>
+      )}
+
       {/* 언어는 번역이 실제로 들어 있을 때만 고를 게 있다 — 하나뿐이면 굳이 보여 주지 않는다. */}
       {locales.length > 1 && (
         <div className="flex items-center gap-0.5">

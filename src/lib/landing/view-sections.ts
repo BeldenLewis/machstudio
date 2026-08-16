@@ -15,7 +15,7 @@
  * - 문자열 HTML 금지: 사용자 입력(제목/설명/질문/답변 등)은 전부 자식 텍스트노드로만 들어간다.
  */
 
-import { h } from "./h";
+import { h } from "@/lib/dom/h";
 import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
 import type { LandingModel } from "./types";
 import type { LandingSponsorItem } from "@/lib/webinar-config";

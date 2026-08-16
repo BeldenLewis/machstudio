@@ -13,31 +13,13 @@
  */
 
 import { build } from "esbuild";
-import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { landingSourceHash } from "./runtime-hash.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(root, "src/generated/landing-runtime.ts");
-
-/** 입력 소스 트리 해시 — esbuild 버전이 올라가도 무관하게 stale 을 판정한다. */
-function sourceHash() {
-  const files = [
-    join(root, "src/embed/landing-entry.ts"),
-    ...readdirSync(join(root, "src/lib/landing"))
-      .filter((f) => f.endsWith(".ts"))
-      .sort()
-      .map((f) => join(root, "src/lib/landing", f)),
-    join(root, "src/lib/webinar-config.ts"),
-    join(root, "src/lib/datetime.ts"),
-    // 랜딩 CSS 가 로고 규격을 여기서 가져온다 — 빠뜨리면 규격을 고쳐도 번들이 stale 로 안 잡힌다
-    join(root, "src/lib/webinar-logo.ts"),
-  ];
-  const hash = createHash("sha256");
-  for (const f of files) hash.update(readFileSync(f));
-  return "sha256:" + hash.digest("hex").slice(0, 32);
-}
 
 const result = await build({
   entryPoints: [join(root, "src/embed/landing-entry.ts")],
@@ -59,7 +41,7 @@ writeFileSync(
   OUT,
   `// 자동 생성 — 직접 고치지 마세요. \`node scripts/build-landing-runtime.mjs\` 로 재생성됩니다.\n` +
     `// 소스: src/embed/landing-entry.ts + src/lib/landing/*\n\n` +
-    `export const LANDING_RUNTIME_SRC_HASH = ${JSON.stringify(sourceHash())};\n\n` +
+    `export const LANDING_RUNTIME_SRC_HASH = ${JSON.stringify(landingSourceHash(root))};\n\n` +
     `export const LANDING_RUNTIME_JS = ${JSON.stringify(js)};\n`,
 );
 

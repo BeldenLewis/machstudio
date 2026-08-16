@@ -16,7 +16,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getClientIp, rateLimitAsync } from "@/lib/ratelimit";
 import { normalizeCollectForm, type RegistrationStatus } from "@/lib/collect-form-config";
-import { CollectFormView, type CollectScreen } from "@/components/form-builder/CollectFormView";
+import { CollectFormRuntime } from "@/components/form-builder/CollectFormRuntime";
 import { PreviewSwitcher } from "./PreviewSwitcher";
 
 // 운영자가 빌더에서 고치는 즉시 이 링크에 반영돼야 한다 — 캐시하면 "안 바뀌는데요" 가 된다.
@@ -34,7 +34,6 @@ function one(v: string | string[] | undefined): string {
 }
 
 const STATUSES: readonly RegistrationStatus[] = ["before", "open", "closed"];
-const SCREENS: readonly CollectScreen[] = ["form", "done"];
 
 export default async function CollectFormPreviewPage({
   params, searchParams,
@@ -81,16 +80,21 @@ export default async function CollectFormPreviewPage({
   const config = normalizeCollectForm(source.formConfig);
 
   const statusParam = one(sp.status);
-  const screenParam = one(sp.screen);
   const langParam = one(sp.lang);
+  /**
+   * `?type=buyer` — 특정 유형 문항이 펼쳐진 상태로 연다(설계 §16.1).
+   * 분기 선택지에 실제로 있는 값만 받는다. 아무 문자열이나 받으면 분기가 안 맞아
+   * "유형을 지정했는데 아무것도 안 펼쳐진다" 가 되고, 그게 설정 오류처럼 보인다.
+   */
+  const typeParam = one(sp.type);
 
   const forceStatus = STATUSES.includes(statusParam as RegistrationStatus)
     ? (statusParam as RegistrationStatus)
     : undefined;
-  const screen: CollectScreen = SCREENS.includes(screenParam as CollectScreen)
-    ? (screenParam as CollectScreen)
-    : "form";
   const lang = langParam || config.defaultLocale;
+
+  const branchValues = config.branch.enabled ? config.branch.groups.map((g) => g.value) : [];
+  const forceType = branchValues.includes(typeParam) ? typeParam : undefined;
 
   // 실제로 번역이 들어 있는 로케일만 고를 수 있게 — 빈 언어를 고르면 폴백 때문에
   // 아무것도 안 바뀐 것처럼 보인다.
@@ -107,12 +111,18 @@ export default async function CollectFormPreviewPage({
           <span className="rounded-full bg-violet-500/12 px-2 py-0.5 text-[10px] font-semibold text-violet-600">미리보기</span>
           <span className="min-w-0 flex-1 truncate text-xs font-medium">{source.name}</span>
         </div>
-        <PreviewSwitcher status={forceStatus} screen={screen} lang={lang} locales={locales} />
+        <PreviewSwitcher status={forceStatus} type={forceType} types={branchValues} lang={lang} locales={locales} />
       </header>
 
       <main className="mx-auto max-w-lg px-4 py-6">
         <div className="rounded-2xl bg-background p-5 shadow-sm">
-          <CollectFormView config={config} locale={lang} forceStatus={forceStatus} screen={screen} />
+          <CollectFormRuntime
+            config={config}
+            sourceId={source.id}
+            locale={lang}
+            forceStatus={forceStatus}
+            forceType={forceType}
+          />
         </div>
         <p className="mt-3 px-1 text-center text-[11px] leading-relaxed text-muted-foreground">
           실제 등록 화면과 같은 폼입니다. 여기서 제출해도 저장되지 않아요.

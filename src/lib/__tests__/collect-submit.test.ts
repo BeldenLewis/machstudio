@@ -1,0 +1,176 @@
+import { describe, expect, it } from "vitest";
+import { normalizeCollectForm } from "@/lib/collect-form-config";
+import { isValidRegistrationNo } from "@/lib/collect-registration-no";
+import { normalizeEmail, prepareBuilderSubmission, primaryFieldKey } from "@/lib/collect-submit";
+
+/**
+ * 저장 직전까지의 모든 판정 — 서버 라우트와 미리보기가 **같은 함수**를 탄다(설계 §19).
+ * DB 를 보지 않으므로 여기서 잡히는 것은 전부 순수한 규칙 위반이다.
+ */
+
+const OPEN = normalizeCollectForm({
+  fields: [
+    { id: "f1", key: "email", label: { en: "Email" }, type: "email", required: true, enabled: true },
+    { id: "f2", key: "phone", label: { en: "Phone" }, type: "tel", enabled: true },
+    {
+      id: "f3", key: "type", label: { en: "Type" }, type: "select", enabled: true,
+      options: [{ en: "General" }, { en: "Buyer" }],
+    },
+  ],
+  branch: {
+    enabled: true, fieldKey: "type",
+    groups: [{ value: "Buyer", fields: [{ id: "b1", key: "company", label: { en: "Company" }, type: "text", required: true, enabled: true }] }],
+  },
+  validation: { defaultCountry: "US" },
+  consent: { privacy: { enabled: true, label: { en: "Privacy" } } },
+});
+
+const NOW = new Date("2026-09-10T00:00:00Z");
+const ok = { email: "Jane@Example.COM ", phone: "2025550147" };
+const yes = { privacy: true };
+
+describe("접수 창", () => {
+  it("열려 있으면 통과한다", () => {
+    const r = prepareBuilderSubmission(OPEN, { values: ok, consent: yes }, NOW);
+    expect(r.ok).toBe(true);
+  });
+
+  /** 클라이언트만 막으면 마감 후 API 로 등록이 들어온다(설계 §5.1). */
+  it("마감 뒤에는 저장 준비 자체를 하지 않는다", () => {
+    const closed = normalizeCollectForm({
+      ...OPEN,
+      eventInfo: { enabled: true, registrationWindow: { closesAt: "2026-09-01T00:00:00Z" } },
+    });
+    const r = prepareBuilderSubmission(closed, { values: ok, consent: yes }, NOW);
+    expect(r).toMatchObject({ ok: false, code: "closed", status: "closed" });
+  });
+
+  it("수동 상태 전환이 시각을 이긴다", () => {
+    const forced = normalizeCollectForm({ ...OPEN, statusOverride: "closed" });
+    expect(prepareBuilderSubmission(forced, { values: ok, consent: yes }, NOW)).toMatchObject({ code: "closed" });
+  });
+});
+
+describe("검증", () => {
+  it("필수 동의가 없으면 거부한다", () => {
+    const r = prepareBuilderSubmission(OPEN, { values: ok }, NOW);
+    expect(r.ok).toBe(false);
+    if (!r.ok && r.code === "invalid") {
+      expect(r.issues.map((i) => i.code)).toContain("consent_required");
+    }
+  });
+
+  it("이메일 형식이 틀리면 거부한다", () => {
+    const r = prepareBuilderSubmission(OPEN, { values: { email: "not-an-email" }, consent: yes }, NOW);
+    expect(r.ok).toBe(false);
+    if (!r.ok && r.code === "invalid") {
+      expect(r.issues.map((i) => i.code)).toContain("invalid_email");
+    }
+  });
+
+  /**
+   * **서버도 같은 함정을 밟는다.** 런타임이 이미 걸러 보내지만, 서버가 원본 그대로 검증하면
+   * 분기를 되돌린 사람의 잔여 값이 unknown_key 로 잡혀 등록이 통째로 거부된다.
+   */
+  it("분기 밖에 남은 값은 조용히 떨어뜨린다 — 거부하지 않는다", () => {
+    const r = prepareBuilderSubmission(
+      OPEN,
+      { values: { ...ok, type: "General", company: "Acme" }, consent: yes },
+      NOW,
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.prepared.data).not.toHaveProperty("company");
+  });
+
+  it("분기 안이면 그 값을 지킨다", () => {
+    const r = prepareBuilderSubmission(
+      OPEN,
+      { values: { ...ok, type: "Buyer", company: "Acme" }, consent: yes },
+      NOW,
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.prepared.data.company).toBe("Acme");
+  });
+
+  it("분기 안에서 필수 문항이 비면 거부한다", () => {
+    const r = prepareBuilderSubmission(OPEN, { values: { ...ok, type: "Buyer" }, consent: yes }, NOW);
+    expect(r.ok).toBe(false);
+    if (!r.ok && r.code === "invalid") {
+      expect(r.issues).toContainEqual({ key: "company", code: "required" });
+    }
+  });
+});
+
+describe("정규화 컬럼", () => {
+  it("이메일은 trim + 소문자 — 중복 판정의 전제(§6.2)", () => {
+    const r = prepareBuilderSubmission(OPEN, { values: ok, consent: yes }, NOW);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.prepared.emailNormalized).toBe("jane@example.com");
+  });
+
+  it("전화는 E.164 한 형태로 — 표기가 제각각이면 등록 확인 조회가 안 맞는다(§6.3)", () => {
+    const r = prepareBuilderSubmission(OPEN, { values: ok, consent: yes }, NOW);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.prepared.phoneE164).toBe("+12025550147");
+  });
+
+  it("파싱 못 하는 번호는 null — 원문은 data 에 남는다", () => {
+    const r = prepareBuilderSubmission(OPEN, { values: { ...ok, phone: "1" }, consent: yes }, NOW);
+    // 형식 검증에서 먼저 걸린다(빈 값이 아니므로 tel 검증 대상).
+    expect(r.ok).toBe(false);
+  });
+
+  it("등록번호는 유효한 13자리로 발급된다", () => {
+    const r = prepareBuilderSubmission(OPEN, { values: ok, consent: yes }, NOW);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(isValidRegistrationNo(r.prepared.registrationNo)).toBe(true);
+  });
+
+  it("등록번호는 매번 다르다 — 순차면 규모가 노출되고 추측된다", () => {
+    const a = prepareBuilderSubmission(OPEN, { values: ok, consent: yes }, NOW);
+    const b = prepareBuilderSubmission(OPEN, { values: ok, consent: yes }, NOW);
+    if (a.ok && b.ok) expect(a.prepared.registrationNo).not.toBe(b.prepared.registrationNo);
+  });
+
+  it("동의는 data 와 분리해 실린다 — 항목 키와 섞이면 CSV 열이 뒤죽박죽이 된다", () => {
+    const r = prepareBuilderSubmission(OPEN, { values: ok, consent: { privacy: true, marketing: true } }, NOW);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.prepared.consent).toEqual({ privacy: true, marketing: true });
+      expect(r.prepared.data).not.toHaveProperty("privacy");
+    }
+  });
+
+  /** 아무 문자열이나 저장하면 언어별 재발송이 그 값으로 갈라져 보낼 수 없는 언어가 생긴다. */
+  it("로케일은 폼이 아는 것만 받는다", () => {
+    const r = prepareBuilderSubmission(OPEN, { values: ok, consent: yes, locale: "zz" }, NOW);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.prepared.locale).toBe("en");
+  });
+});
+
+describe("대표 항목 고르기", () => {
+  /** 규칙이 없으면 중복 차단이 폼 편집 순서에 따라 조용히 다른 항목에 걸린다. */
+  it("같은 유형이 여럿이면 보이는 순서에서 처음 것", () => {
+    const two = normalizeCollectForm({
+      fields: [
+        { id: "a", key: "work_email", type: "email", label: { en: "Work" }, enabled: true },
+        { id: "b", key: "alt_email", type: "email", label: { en: "Alt" }, enabled: true },
+      ],
+    });
+    expect(primaryFieldKey(two, {}, "email")).toBe("work_email");
+  });
+
+  it("해당 유형이 없으면 null", () => {
+    const none = normalizeCollectForm({ fields: [{ id: "a", key: "name", type: "text", label: { en: "N" }, enabled: true }] });
+    expect(primaryFieldKey(none, {}, "email")).toBeNull();
+  });
+});
+
+describe("normalizeEmail", () => {
+  it("빈 값은 null — 이메일 항목이 없는 폼에서는 중복 차단이 걸리지 않는다", () => {
+    expect(normalizeEmail("   ")).toBeNull();
+    expect(normalizeEmail(undefined)).toBeNull();
+    expect(normalizeEmail(null)).toBeNull();
+  });
+});

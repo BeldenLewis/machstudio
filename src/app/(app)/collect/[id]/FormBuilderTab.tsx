@@ -15,7 +15,7 @@ import { useAutosave } from "@/components/ui/use-autosave";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { btnCls, R, FINISH } from "@/components/ui/primitives";
 import { CollectFieldCard, keyFromLabel } from "@/components/form-builder/CollectFieldCard";
-import { CollectFormView } from "@/components/form-builder/CollectFormView";
+import { CollectFormRuntime } from "@/components/form-builder/CollectFormRuntime";
 import { CollectFormSections } from "@/components/form-builder/CollectFormSections";
 import {
   DEFAULT_LOCALE,
@@ -143,8 +143,9 @@ export default function FormBuilderTab({
           ))}
         </div>
         <div className={`${R.surface} bg-background p-4 ${FINISH.s2}`}>
-          <CollectFormView
+          <CollectFormRuntime
             config={config}
+            sourceId={sourceId}
             forceStatus={previewState === "auto" ? undefined : previewState}
           />
         </div>
