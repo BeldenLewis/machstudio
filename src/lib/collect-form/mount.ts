@@ -28,6 +28,7 @@ import {
 } from "@/lib/collect-form-config";
 import { isValidCollectEmail } from "@/lib/collect-email";
 import { COUNTRY_DIALS, flagEmoji, isKnownCountry } from "@/lib/collect-country";
+import { resolveRedirect } from "@/lib/collect-redirect";
 // 로더가 심어 둔 first-touch UTM 을 그대로 쓴다 — 파트너 사이트를 먼저 거친 방문자의 정본이다.
 import { buildUtmEnvelope } from "@/lib/attribution-client";
 
@@ -217,6 +218,8 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
   let banner: { tone: "warn" | "ok"; text: string } | null = null;
   let startedTracked = false;
   let dupTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 완료 페이지 이동 타이머 — destroy() 때 반드시 끈다(빌더 옆칸은 재마운트가 잦다). */
+  let redirectTimer: ReturnType<typeof setTimeout> | null = null;
   let dupSeq = 0;
   let destroyed = false;
 
@@ -766,7 +769,33 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
           visitor_type: visitorType,
           transaction_id: data.rid ?? data.registrationNo,
         });
+        /**
+         * 완료 화면을 **먼저** 그린다. 이동이 설정돼 있어도 그렇다 — 이동은 1초 뒤이고,
+         * 그 사이에 폼이 그대로 남아 있으면 "제출이 안 됐나" 하고 한 번 더 누른다.
+         */
         render();
+
+        /**
+         * 완료 페이지로 이동(설계 §8 "URL 조건으로 전환을 잡는 경우 — 권장").
+         *
+         * 미리보기는 이동하지 않는다(§16.1 "제출해도 아무 일이 없다"). 운영자가 옆칸
+         * 미리보기에서 제출했다가 화면이 통째로 다른 사이트로 넘어가면 편집 중이던
+         * 폼을 잃는다.
+         *
+         * 1초 기다리는 이유: dataLayer 에 방금 넣은 `generate_lead` 를 GTM 이 처리할
+         * 시간을 준다. 이동이 즉시면 태그가 발화 전에 페이지가 사라진다. 연동형
+         * 스크립트도 같은 이유로 같은 값을 쓴다(collect-script.ts).
+         */
+        if (!preview && config.completion.redirectUrlTemplate) {
+          const target = resolveRedirect(config.completion.redirectUrlTemplate, {
+            type: visitorType,
+            regNo: data.registrationNo,
+            rid: data.rid,
+            lang,
+          });
+          // 이동할 수 없는 주소면 그냥 안 간다 — 등록은 이미 성공했고, 완료 카드가 떠 있다.
+          if (target) redirectTimer = setTimeout(() => { window.location.href = target; }, 1000);
+        }
         return;
       }
       if (res.status === 409) {
@@ -997,6 +1026,8 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
       destroyed = true;
       if (dupTimer) clearTimeout(dupTimer);
       if (boundaryTimer) clearTimeout(boundaryTimer);
+      // 이동 예약을 안 끄면 빌더 옆칸을 다시 마운트한 뒤에도 1초 뒤 화면이 넘어간다.
+      if (redirectTimer) clearTimeout(redirectTimer);
       if (root.parentNode) root.parentNode.removeChild(root);
     },
   };

@@ -285,6 +285,82 @@ describe("제출", () => {
     });
   });
 
+  /**
+   * 완료 페이지 이동(§8). 빌더가 "완료 페이지 주소" 를 받아 두고도 런타임이 한 번도
+   * 이동하지 않던 구간이다 — URL 조건으로 걸어 둔 전환이 통째로 0 으로 나온다.
+   */
+  describe("완료 페이지 이동", () => {
+    const withRedirect = (template: string) => normalizeCollectForm({
+      fields: [{ id: "f1", key: "email", label: { en: "Email" }, type: "email", required: true, enabled: true }],
+      consent: { privacy: { enabled: true, label: { en: "Privacy" } } },
+      completion: { redirectUrlTemplate: template },
+    });
+
+    /**
+     * 실제 이동은 jsdom 이 수행하지 못하므로(navigation not implemented) **예약을 본다**.
+     * 확인하려는 것은 "언제·어디로 갈 예정인가" 이고, 그게 이 결함의 내용이다.
+     */
+    const scheduled = (): string[] => {
+      const calls = (globalThis.setTimeout as unknown as { mock?: { calls: unknown[][] } }).mock?.calls ?? [];
+      return calls
+        .filter((c) => c[1] === 1000)
+        .map((c) => {
+          const before = window.location.href;
+          let target = "";
+          // 콜백을 직접 돌려 어디로 가려 했는지 본다. jsdom 은 대입을 무시하고 경고만 남긴다.
+          try { (c[0] as () => void)(); } catch { /* jsdom navigation */ }
+          target = window.location.href !== before ? window.location.href : "(navigation attempted)";
+          return target;
+        });
+    };
+
+    const succeed = async (config: ReturnType<typeof normalizeCollectForm>) => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ registrationNo: "1234567890128", rid: "rid-1" }), { status: 201 }),
+      );
+      vi.spyOn(globalThis, "setTimeout");
+      mount({ config, preview: false });
+      fill('input[type="email"]', "a@b.com");
+      tickPrivacy();
+      submitBtn().click();
+      await flush();
+    };
+
+    it("완료 화면을 먼저 그리고, 1초 뒤 이동을 예약한다", async () => {
+      await succeed(withRedirect("https://x.test/done?rid={rid}"));
+      // 이동 전에 완료 카드가 떠 있어야 한다 — 폼이 남아 있으면 한 번 더 누른다.
+      expect(text()).toContain("You're registered");
+      expect(scheduled()).toHaveLength(1);
+    });
+
+    /** 미리보기에서 이동하면 편집 중이던 폼을 잃는다(§16.1 "제출해도 아무 일이 없다"). */
+    it("미리보기는 이동하지 않는다", async () => {
+      const spy = vi.spyOn(globalThis, "fetch");
+      vi.spyOn(globalThis, "setTimeout");
+      mount({ config: withRedirect("https://x.test/done"), preview: true });
+      fill('input[type="email"]', "a@b.com");
+      tickPrivacy();
+      submitBtn().click();
+      await flush();
+      expect(spy).not.toHaveBeenCalled();
+      expect(text()).toContain("nothing was saved");
+      expect(scheduled()).toHaveLength(0);
+    });
+
+    /** 이동할 수 없는 주소면 그냥 안 간다 — 등록은 이미 성공했다. */
+    it("위험한 주소는 이동을 예약하지 않는다", async () => {
+      await succeed(withRedirect("javascript:alert(1)"));
+      expect(text()).toContain("You're registered");
+      expect(scheduled()).toHaveLength(0);
+    });
+
+    it("템플릿이 비어 있으면 인라인 완료 카드가 그대로다", async () => {
+      await succeed(withRedirect(""));
+      expect(text()).toContain("You're registered");
+      expect(scheduled()).toHaveLength(0);
+    });
+  });
+
   /** iOS numeric 키패드에는 + 키가 없다 — 기본 국가가 아닌 사람이 국제표기를 못 친다. */
   it("전화 입력은 inputMode=tel 이다", () => {
     mount();
