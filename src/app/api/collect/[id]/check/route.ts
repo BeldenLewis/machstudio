@@ -14,16 +14,49 @@ import { getClientIp, rateLimitAsync } from "@/lib/ratelimit";
 import { isValidEmail } from "@/lib/webinar-config";
 import { normalizeEmail } from "@/lib/collect-submit";
 
-const CORS_HEADERS = {
+const PREFLIGHT_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
+  Vary: "Origin",
 } as const;
+
+function normalizeOrigin(s: string): string {
+  try {
+    const u = new URL(s);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return s.trim().toLowerCase();
+  }
+}
+
+/**
+ * **제출 라우트와 같은 Origin 규칙을 쓴다.**
+ *
+ * 예전에는 여기만 항상 `*` 였다. 그러면 운영자가 allowedOrigins 를 파트너 도메인으로
+ * 좁혀 놔도, 공격자가 아무 사이트에 스크립트 한 줄을 심어 **방문자들의 브라우저로 분산**
+ * 조회를 돌릴 수 있다("ceo@경쟁사.com 이 이 전시에 등록했는가"). 부울 하나뿐이라도
+ * 참관객 명단은 전시 사업의 자산이다.
+ */
+function corsHeaders(origin: string | null, allowed: string[]): Record<string, string> {
+  const allowAll = allowed.length === 0;
+  let allowOrigin = "*";
+  if (!allowAll) {
+    const o = origin ? normalizeOrigin(origin) : "";
+    allowOrigin = o && allowed.includes(o) ? o : "null";
+  }
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    Vary: "Origin",
+  };
+}
 
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
-    headers: { ...CORS_HEADERS, "Access-Control-Max-Age": "86400" },
+    headers: { ...PREFLIGHT_HEADERS, "Access-Control-Max-Age": "86400" },
   });
 }
 
@@ -36,7 +69,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "요청이 너무 잦아요" },
-      { status: 429, headers: { ...CORS_HEADERS, "Retry-After": Math.ceil(rl.retryAfterMs / 1000).toString() } },
+      { status: 429, headers: { ...PREFLIGHT_HEADERS, "Retry-After": Math.ceil(rl.retryAfterMs / 1000).toString() } },
     );
   }
 
@@ -44,19 +77,42 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     body = (await request.json()) as { email?: unknown };
   } catch {
-    return NextResponse.json({ error: "잘못된 요청" }, { status: 400, headers: CORS_HEADERS });
+    return NextResponse.json({ error: "잘못된 요청" }, { status: 400, headers: PREFLIGHT_HEADERS });
   }
 
   const email = normalizeEmail(body.email);
-  // 형식이 아니면 조회하지 않는다 — 무효한 값으로 DB 를 두드리게 두면 그게 곧 남용 경로다.
+  // 형식이 아니면 **소스를 조회하기도 전에** 끊는다 — 무효한 값으로 DB 를 두드리게 두면
+  // 그게 곧 남용 경로다.
   if (!email || !isValidEmail(email)) {
-    return NextResponse.json({ exists: false }, { headers: CORS_HEADERS });
+    return NextResponse.json({ exists: false }, { headers: PREFLIGHT_HEADERS });
+  }
+
+  /**
+   * 소스를 확인한다. 예전에는 URL 의 id 를 그대로 레코드 조회에 넣어서, 연동형·비활성·
+   * 삭제된 소스에도 그대로 답하는 **범용 이메일 존재 오라클**이었다. 제출 라우트는 같은
+   * 검사를 하는데 여기만 빠져 있었다.
+   */
+  const source = await prisma.collectSource.findUnique({
+    where: { id },
+    select: { id: true, isActive: true, mode: true, deletedAt: true, allowedOrigins: true },
+  });
+  if (!source || !source.isActive || source.mode !== "builder" || source.deletedAt) {
+    return NextResponse.json({ exists: false }, { headers: PREFLIGHT_HEADERS });
+  }
+
+  const headers = corsHeaders(request.headers.get("origin"), source.allowedOrigins ?? []);
+  if (source.allowedOrigins && source.allowedOrigins.length > 0) {
+    const o = request.headers.get("origin");
+    const norm = o ? normalizeOrigin(o) : "";
+    if (!norm || !source.allowedOrigins.includes(norm)) {
+      return NextResponse.json({ error: "허용되지 않은 출처" }, { status: 403, headers });
+    }
   }
 
   const found = await prisma.collectRecord.findFirst({
-    where: { sourceId: id, emailNormalized: email },
+    where: { sourceId: source.id, emailNormalized: email },
     select: { id: true },
   });
 
-  return NextResponse.json({ exists: Boolean(found) }, { headers: CORS_HEADERS });
+  return NextResponse.json({ exists: Boolean(found) }, { headers });
 }

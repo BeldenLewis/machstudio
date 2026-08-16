@@ -17,6 +17,7 @@ export function CollectFormRuntime({
   locale,
   forceStatus,
   forceType,
+  serverNow,
   preview = true,
 }: {
   config: CollectFormConfig;
@@ -24,6 +25,11 @@ export function CollectFormRuntime({
   locale?: string;
   forceStatus?: RegistrationStatus;
   forceType?: string;
+  /**
+   * 서버 시각(ISO). 없으면 검토자 기기 시계로 접수 창을 판정한다 — 시계가 틀어진 기기에서
+   * "왜 마감으로 보이죠?" 라는 오해가 생기고, 그건 폼 설정 문제로 오인된다.
+   */
+  serverNow?: string;
   /** 기본이 미리보기다 — 이 컴포넌트를 쓰는 두 자리 모두 저장하면 안 되는 화면이다. */
   preview?: boolean;
 }) {
@@ -42,10 +48,11 @@ export function CollectFormRuntime({
       forceStatus,
       forceType,
       locale,
+      serverNow,
     });
     return () => handle.destroy();
     // config 는 빌더가 타이핑할 때마다 새 객체다 — 그때마다 다시 그리는 게 의도다(실시간 미리보기).
-  }, [config, sourceId, locale, forceStatus, forceType, preview]);
+  }, [config, sourceId, locale, forceStatus, forceType, preview, serverNow]);
 
   return <div ref={hostRef} />;
 }

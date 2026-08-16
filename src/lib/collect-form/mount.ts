@@ -31,6 +31,9 @@ import { buildUtmEnvelope } from "@/lib/attribution-client";
 
 const STYLE_ID = "msf-css";
 
+/** 이보다 더 과거인 serverNow 는 캐시에 굳은 값으로 보고 쓰지 않는다(아래 오프셋 계산). */
+const STALE_SERVER_NOW_MS = 5 * 60 * 1000;
+
 /**
  * 미리보기 완료 화면에 쓰는 더미 등록번호(설계 §16.1 "화면 확인용 더미 번호로 렌더").
  * **체크digit 이 일부러 틀린 값**이다 — 이 번호가 어딘가로 새어 나가 현장 조회에 쓰이면
@@ -148,7 +151,17 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
   if (opts.serverNow) {
     const parsed = Date.parse(opts.serverNow);
     if (!Number.isNaN(parsed)) {
-      serverOffsetMs = parsed + (opts.ageMs && opts.ageMs > 0 ? opts.ageMs : 0) - Date.now();
+      const offset = parsed + (opts.ageMs && opts.ageMs > 0 ? opts.ageMs : 0) - Date.now();
+      /**
+       * **과거로 크게 벌어진 오프셋은 버린다.**
+       *
+       * serverNow 는 스크립트 본문에 구워져 CDN 에 캐시된다 — 엣지가 stale 응답을 주면 그
+       * 시각이 실제보다 한참 과거다. 그대로 믿으면 이미 열린 폼이 "아직 안 열렸어요" 로
+       * 보이고, 방문자는 그냥 떠난다(로그에도 안 남는다).
+       * 기기 시계가 몇 분 틀어진 것보다 **몇 시간 묵은 서버 시각이 더 나쁘다.**
+       * 캐시 창(s-maxage + SWR)보다 넉넉한 상한을 두고, 넘으면 로컬 시계로 돌아간다.
+       */
+      serverOffsetMs = offset < -STALE_SERVER_NOW_MS ? 0 : offset;
     }
   }
   const nowDate = () => new Date(Date.now() + serverOffsetMs);
@@ -166,8 +179,13 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
   };
   let issues: SubmissionIssue[] = [];
   let submitting = false;
-  /** 중복확인이 "이미 있음" 이라고 답한 상태 — 제출 버튼을 잠근다. */
+  /**
+   * 중복확인이 "이미 있음" 이라고 답한 상태 — 제출 버튼을 잠근다.
+   * 어느 항목에서 났는지 함께 들고 있어야 **재렌더 뒤에도 안내가 남는다.** 예전에는
+   * 상태만 남고 문구가 사라져 "이유 없이 잠긴 버튼" 이 됐다.
+   */
   let duplicate = false;
+  let duplicateKey: string | null = null;
   let doneRegNo: string | null = null;
   let banner: { tone: "warn" | "ok"; text: string } | null = null;
   let startedTracked = false;
@@ -214,17 +232,25 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
 
     if (n.mode !== "notice") {
       const key = noticeValueKey(n.id);
-      const cb = h("input", { type: "checkbox" }) as HTMLInputElement;
+      const errId = `msf-${opts.sourceId}-${key}-err`;
+      const issue = issueFor(key);
+      const errSlot = h("div", { class: "msf-err", id: errId, role: "alert" }, issue ? ISSUE_COPY[issue.code] : "");
+      const cb = h("input", {
+        type: "checkbox",
+        "data-msf-key": key,
+        "aria-invalid": issue ? "true" : "false",
+        "aria-describedby": errId,
+      }) as HTMLInputElement;
       cb.checked = values[key] === true;
       cb.addEventListener("change", () => {
         values[key] = cb.checked;
         clearIssue(key);
         errSlot.textContent = "";
+        cb.setAttribute("aria-invalid", "false");
         updateSubmitState();
       });
       const mark = n.mode === "checkbox-required" ? "[required] " : "[optional] ";
       box.appendChild(h("label", { class: "msf-check" }, cb, h("span", null, mark + "I agree")));
-      const errSlot = h("div", { class: "msf-err" }, issueFor(key) ? ISSUE_COPY[issueFor(key)!.code] : "");
       box.appendChild(errSlot);
     }
     return box;
@@ -232,6 +258,27 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
 
   const noticesAt = (placement: "top" | "above-consent" | "bottom") =>
     config.notices.filter((n) => n.enabled && n.placement === placement);
+
+  /**
+   * 안내 블록은 **자리마다 호스트를 두고 다시 그린다.**
+   *
+   * 예전에는 render() 에서 한 번만 만들어 붙였는데, 제출이 실패하면 renderFields()·
+   * renderConsent() 만 다시 그려서 **필수 동의 안내의 오류가 화면에 영영 안 나타났다** —
+   * 초상권 동의를 안 누른 사람에게 "Register 를 눌러도 아무 일도 안 일어난다" 가 된다.
+   * 파리(GDPR 관할)는 이 동의가 법적 필수라 그 폼은 통째로 등록이 막힌다.
+   */
+  const noticeHosts: Record<"top" | "above-consent" | "bottom", HTMLElement> = {
+    top: h("div", { class: "msf-stack" }),
+    "above-consent": h("div", { class: "msf-stack" }),
+    bottom: h("div", { class: "msf-stack" }),
+  };
+  function renderNotices(): void {
+    for (const placement of ["top", "above-consent", "bottom"] as const) {
+      const host = noticeHosts[placement];
+      clearNode(host);
+      for (const n of noticesAt(placement)) host.appendChild(renderNotice(n));
+    }
+  }
 
   // ── 항목 ────────────────────────────────────────────────────────────
   const fieldsHost = h("div", { class: "msf-stack" });
@@ -249,13 +296,23 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     );
 
     const issue = issueFor(f.key);
-    const err = h("div", { class: "msf-err" }, issue ? ISSUE_COPY[issue.code] : "");
-    const invalid = issue ? "true" : "false";
+    const dupHere = duplicate && duplicateKey === f.key;
+    const errId = `${inputId}-err`;
+    /**
+     * role="alert" — 오류가 **소리로도** 전달돼야 한다. 빨간 글씨만으로는 스크린리더
+     * 사용자가 "왜 제출이 안 되지" 를 알 수 없다(AGENTS.md 접근성 기본).
+     */
+    const err = h("div", { class: "msf-err", id: errId, role: "alert" },
+      issue ? ISSUE_COPY[issue.code] : dupHere ? COPY.duplicate : "");
+    const invalid = issue || dupHere ? "true" : "false";
 
     const options = f.options.map((o) => t(o)).filter(Boolean);
 
     if (f.type === "select") {
-      const sel = h("select", { class: "msf-select", id: inputId, "aria-invalid": invalid }) as HTMLSelectElement;
+      const sel = h("select", {
+        class: "msf-select", id: inputId, "aria-invalid": invalid,
+        "aria-describedby": errId, "data-msf-key": f.key,
+      }) as HTMLSelectElement;
       sel.appendChild(h("option", { value: "" }, t(f.placeholder) || "Select"));
       for (const o of options) sel.appendChild(h("option", { value: o }, o));
       sel.value = str(values[f.key]);
@@ -294,8 +351,11 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
           }
         };
         for (const o of options) {
-          const box = h("input", { type: "checkbox" }) as HTMLInputElement;
+          const box = h("input", { type: "checkbox", "data-msf-key": f.key }) as HTMLInputElement;
           const chip = h("label", { class: "msf-chip", "data-v": o }, box, h("span", null, o));
+          // :has() 를 못 쓰는 브라우저에서도 포커스가 보이게 — 키보드 사용자가 위치를 잃지 않는다.
+          box.addEventListener("focus", () => chip.classList.add("is-focus"));
+          box.addEventListener("blur", () => chip.classList.remove("is-focus"));
           box.addEventListener("change", () => {
             const list = picked();
             values[f.key] = box.checked ? list.concat([o]) : list.filter((x) => x !== o);
@@ -312,7 +372,10 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
         if (f.maxSelect != null) wrap.appendChild(h("div", { class: "msf-hint" }, `Choose up to ${f.maxSelect}`));
       }
     } else if (f.type === "checkbox") {
-      const cb = h("input", { type: "checkbox", id: inputId }) as HTMLInputElement;
+      const cb = h("input", {
+        type: "checkbox", id: inputId, "aria-invalid": invalid,
+        "aria-describedby": errId, "data-msf-key": f.key,
+      }) as HTMLInputElement;
       cb.checked = values[f.key] === true;
       cb.addEventListener("change", () => {
         values[f.key] = cb.checked;
@@ -329,12 +392,24 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
         type: f.type === "email" ? "email" : f.type === "tel" ? "tel" : "text",
         placeholder: t(f.placeholder),
         "aria-invalid": invalid,
-        autocomplete: f.type === "email" ? "email" : f.type === "tel" ? "tel" : "on",
+        "aria-describedby": errId,
+        "data-msf-key": f.key,
+        name: f.key,
+        /**
+         * 자동완성 토큰은 **key 이름에서 추측**한다. 휴대폰에서 이름·회사를 다시 치는 것이
+         * 이탈의 큰 몫이고, autocomplete="on" 만으로는 브라우저가 무엇을 채울지 모른다.
+         */
+        autocomplete: autocompleteToken(f),
       }) as HTMLInputElement;
       input.value = str(values[f.key]);
 
       if (f.type === "tel") {
-        input.inputMode = "numeric";
+        /**
+         * numeric 이 아니라 tel 이다. iOS 의 numeric 키패드에는 **`+` 키가 없어서**
+         * 기본 국가가 아닌 사람이 국제표기를 아예 칠 수 없다(우리는 값에서 `+` 를 살려 둔다).
+         * tel 키패드에는 `+ * #` 가 있다.
+         */
+        input.inputMode = "tel";
         /**
          * 하이픈·괄호·공백은 **타이핑 즉시** 지운다(AGENTS.md "입력은 소스에서 정규화").
          * 값이 실제로 달라졌을 때만 되쓴다 — 매번 대입하면 커서가 끝으로 튄다.
@@ -358,7 +433,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
           clearIssue(f.key);
           err.textContent = "";
           markStarted();
-          if (f.type === "email") scheduleDuplicateCheck(input.value, err);
+          if (f.type === "email") scheduleDuplicateCheck(f.key, input.value, err);
           updateSubmitState();
         });
       }
@@ -378,6 +453,24 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
 
     wrap.appendChild(err);
     return wrap;
+  }
+
+  /**
+   * 항목 key 에서 자동완성 토큰을 고른다. 표준 토큰이 아니면 브라우저가 무시할 뿐이라
+   * 틀려도 손해가 없고, 맞으면 모바일에서 한 번에 채워진다.
+   */
+  function autocompleteToken(f: CollectField): string {
+    if (f.type === "email") return "email";
+    if (f.type === "tel") return "tel";
+    const k = f.key.toLowerCase();
+    if (/first.*name|given/.test(k)) return "given-name";
+    if (/last.*name|family|surname/.test(k)) return "family-name";
+    if (/full.*name|^name$/.test(k)) return "name";
+    if (/company|organi[sz]ation|employer/.test(k)) return "organization";
+    if (/job|title|position|role/.test(k)) return "organization-title";
+    if (/country/.test(k)) return "country-name";
+    if (/city/.test(k)) return "address-level2";
+    return "on";
   }
 
   /** querySelector 용 id 이스케이프. 항목 key 는 운영자가 정하므로 점·콜론이 들어올 수 있다. */
@@ -409,10 +502,10 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
    * 타이핑하는 순간 잠금을 먼저 푼다 — 고치는 중에 버튼이 잠겨 있으면 고장으로 보인다.
    * 그래서 이건 **안내이지 방어선이 아니다.** 진짜 방어선은 서버의 409 다(DB 유니크).
    */
-  function scheduleDuplicateCheck(raw: string, errSlot: HTMLElement): void {
+  function scheduleDuplicateCheck(fieldKey: string, raw: string, errSlot: HTMLElement): void {
     if (dupTimer) clearTimeout(dupTimer);
     const mySeq = ++dupSeq;
-    if (duplicate) { duplicate = false; updateSubmitState(); }
+    if (duplicate) { duplicate = false; duplicateKey = null; updateSubmitState(); }
     const value = raw.trim().toLowerCase();
     if (!isValidEmail(value)) return;
     if (config.validation.onDuplicate !== "block") return;
@@ -428,6 +521,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
         .then((d: { exists?: boolean } | null) => {
           if (destroyed || mySeq !== dupSeq) return;
           duplicate = Boolean(d && d.exists);
+          duplicateKey = duplicate ? fieldKey : null;
           if (duplicate) {
             errSlot.textContent = COPY.duplicate;
             track(preview, "ms_form_duplicate");
@@ -518,11 +612,21 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     return out;
   }
 
+  /**
+   * 첫 오류로 데려간다. **항목만 찾으면 안 된다** — 필수 안내 동의(notice_*)와 개인정보
+   * 동의는 항목이 아니라서 그 id 가 없고, 그러면 "눌러도 아무 일 없다" 로 보인다.
+   * 루트 전체에서 data-msf-key 로 찾는다.
+   */
   function focusFirstIssue(): void {
     const first = issues[0];
     if (!first) return;
-    const el = fieldsHost.querySelector<HTMLElement>(`#${cssId(`msf-${opts.sourceId}-${first.key}`)}`);
-    if (el && typeof el.focus === "function") el.focus();
+    const el =
+      root.querySelector<HTMLElement>(`[data-msf-key="${cssId(first.key)}"]`) ??
+      fieldsHost.querySelector<HTMLElement>(`#${cssId(`msf-${opts.sourceId}-${first.key}`)}`);
+    if (el && typeof el.focus === "function") {
+      el.focus();
+      if (typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "center" });
+    }
   }
 
   async function submit(): Promise<void> {
@@ -548,6 +652,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     });
     if (issues.length > 0) {
       renderFields();
+      renderNotices();
       renderConsent();
       focusFirstIssue();
       track(preview, "ms_form_error", { error_code: issues[0].code });
@@ -582,8 +687,19 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
         }),
       });
       const data = (await res.json().catch(() => null)) as
-        | { registrationNo?: string; rid?: string; issues?: SubmissionIssue[]; duplicateField?: string; status?: string }
+        | { registrationNo?: string | null; rid?: string; issues?: SubmissionIssue[]; duplicateField?: string; status?: string }
         | null;
+
+      /**
+       * 허니팟에 걸리면 서버는 **봇을 속이려고** 200 + registrationNo: null 을 준다.
+       * 그 계약을 클라이언트가 모르면 사람에게 오탐이 났을 때 "Couldn't submit" 만 반복되고
+       * 등록은 영영 안 된다. 성공처럼 보여 주되 번호는 없으므로 완료 화면 대신 안내를 남긴다.
+       */
+      if (res.status === 200 && data && data.registrationNo === null) {
+        showBanner("warn", COPY.networkError);
+        track(preview, "ms_form_error", { error_code: "rejected" });
+        return;
+      }
 
       if (res.status === 201 && data?.registrationNo) {
         doneRegNo = data.registrationNo;
@@ -596,6 +712,11 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
       }
       if (res.status === 409) {
         duplicate = true;
+        // 서버가 알려 준 항목에 인라인으로 붙인다 — 배너만 띄우면 어느 칸을 고쳐야 할지 모른다.
+        duplicateKey = data?.duplicateField === "email"
+          ? (visibleFields(config, values).find((x) => x.type === "email")?.key ?? null)
+          : null;
+        renderFields();
         track(preview, "ms_form_duplicate");
         showBanner("warn", COPY.duplicate);
       } else if (res.status === 403 && data?.status) {
@@ -605,6 +726,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
       } else if (res.status === 400 && Array.isArray(data?.issues)) {
         issues = data.issues;
         renderFields();
+        renderNotices();
         renderConsent();
         focusFirstIssue();
         track(preview, "ms_form_error", { error_code: issues[0]?.code ?? "invalid" });
@@ -703,13 +825,14 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
       }
     }
 
-    for (const n of noticesAt("top")) stack.appendChild(renderNotice(n));
+    renderNotices();
+    stack.appendChild(noticeHosts.top);
     renderFields();
     stack.appendChild(fieldsHost);
-    for (const n of noticesAt("above-consent")) stack.appendChild(renderNotice(n));
+    stack.appendChild(noticeHosts["above-consent"]);
     renderConsent();
     stack.appendChild(consentHost);
-    for (const n of noticesAt("bottom")) stack.appendChild(renderNotice(n));
+    stack.appendChild(noticeHosts.bottom);
     stack.appendChild(honeypot);
     stack.appendChild(submitBtn);
     stack.appendChild(bannerEl);
@@ -719,14 +842,45 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     track(preview, "ms_form_view", { form_status: status });
   }
 
+  /**
+   * 접수 창 경계에서 **스스로 다시 그린다.**
+   *
+   * 없으면: 오픈 10분 전에 페이지를 열어 둔 사람은 오픈 시각이 지나도 "아직 안 열렸어요" 를
+   * 계속 본다(상태를 마운트 때 한 번만 계산하기 때문). 오픈 직전은 트래픽이 가장 몰리는
+   * 순간이고, 그 사람들은 새로고침해야 한다는 걸 모른다.
+   *
+   * setTimeout 은 ~24.8일(2^31ms)을 넘기면 즉시 발화하므로 12시간 상한을 씌운다. 일찍
+   * 깨어나도 다시 계산할 뿐이라 안전하다(랜딩 로더의 scheduleBoundary 와 같은 패턴).
+   */
+  let boundaryTimer: ReturnType<typeof setTimeout> | null = null;
+  function scheduleBoundary(): void {
+    if (opts.forceStatus) return; // 미리보기에서 상태를 고정했으면 바꾸지 않는다
+    const { opensAt, closesAt } = config.eventInfo.registrationWindow;
+    const now = nowDate().getTime();
+    const next = [opensAt, closesAt]
+      .map((iso) => (iso ? Date.parse(iso) : NaN))
+      .filter((t) => Number.isFinite(t) && t > now)
+      .sort((a, b) => a - b)[0];
+    if (next === undefined) return;
+    const delay = Math.min(Math.max(next - now + 1000, 1000), 12 * 3600 * 1000);
+    boundaryTimer = setTimeout(() => {
+      if (destroyed) return;
+      // 입력값은 JS 상태에 있으므로 다시 그려도 남는다.
+      render();
+      scheduleBoundary();
+    }, delay);
+  }
+
   clearNode(mount);
   mount.appendChild(root);
   render();
+  scheduleBoundary();
 
   return {
     destroy() {
       destroyed = true;
       if (dupTimer) clearTimeout(dupTimer);
+      if (boundaryTimer) clearTimeout(boundaryTimer);
       if (root.parentNode) root.parentNode.removeChild(root);
     },
   };

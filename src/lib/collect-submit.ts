@@ -54,21 +54,55 @@ function str(v: unknown): string {
 }
 
 /**
+ * 한 항목에 담을 수 있는 최대 길이. 자유 서술(회사 소개 등)도 넉넉히 들어가되,
+ * 인증 없는 쓰기 경로가 **DB 를 임의 크기로 부풀리지 못하게** 한다.
+ */
+const MAX_VALUE_LEN = 2000;
+/** 복수 선택의 최대 항목 수 — 선택지가 아무리 많아도 이보다 많이 고를 수는 없다. */
+const MAX_ARRAY_LEN = 100;
+
+/**
+ * 저장 가능한 모양으로 좁힌다. **문자열·불리언·숫자와 그 배열만** 남긴다.
+ *
+ * 없으면: `{"name":{"a":{"b":[...]}}}` 같은 중첩 객체가 검증을 통과해(빈 값이 아니므로)
+ * CollectRecord.data 에 그대로 저장되고, data 를 문자열 맵으로 가정하는 소비처
+ * (등록자 표·CSV 내보내기·웹훅 페이로드)가 등록 오픈 직후 한꺼번에 깨진다.
+ * 그런 값은 **거절이 아니라 제거**한다 — 정상 항목까지 400 으로 막을 이유가 없다.
+ */
+function narrowValue(v: unknown): unknown {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
+  if (typeof v === "string") return v.slice(0, MAX_VALUE_LEN);
+  if (Array.isArray(v)) {
+    const out = v
+      .slice(0, MAX_ARRAY_LEN)
+      .map((x) => (typeof x === "string" ? x.slice(0, MAX_VALUE_LEN) : typeof x === "number" || typeof x === "boolean" ? x : undefined))
+      .filter((x) => x !== undefined);
+    return out;
+  }
+  return undefined;
+}
+
+/**
  * 이메일·전화의 **대표 항목**을 고른다.
  *
  * 정규화 컬럼(emailNormalized·phoneE164)은 하나씩뿐인데 폼에는 같은 유형이 여럿일 수 있다
- * (예: 본인 이메일 + 비서 이메일). **보이는 순서에서 처음 것**을 대표로 삼는다 — 화면에서
- * 위에 있는 것이 본인 것이라는 게 폼 작성의 통상이고, 규칙이 있어야 서버·런타임·조회가
- * 같은 값을 본다. 규칙 없이 "아무거나 이메일 하나" 로 두면 중복 차단이 폼 편집 순서에 따라
- * 조용히 다른 항목에 걸린다.
+ * (예: 본인 이메일 + 회사 대표 이메일). 규칙은 **값이 채워진 것 중 보이는 순서로 처음**이다.
+ *
+ * "값 유무를 보지 않고 순서상 첫 항목" 이면, 위칸이 선택 항목인 폼에서 그 칸을 비운 모든
+ * 제출이 emailNormalized = null 로 저장된다. 부분 유니크는 `WHERE emailNormalized IS NOT NULL`
+ * 이라 **중복 차단이 통째로 꺼진다** — 화면에는 "중복은 막습니다" 라고 적혀 있는 채로.
+ * 값이 하나도 없으면 첫 항목 키를 돌려준다(그때는 어차피 null 이 맞다).
  */
 export function primaryFieldKey(
   config: CollectFormConfig,
   values: Record<string, unknown>,
   type: "email" | "tel",
 ): string | null {
-  const f = visibleFields(config, values).find((x) => x.type === type);
-  return f ? f.key : null;
+  const candidates = visibleFields(config, values).filter((x) => x.type === type);
+  if (candidates.length === 0) return null;
+  const filled = candidates.find((x) => str(values[x.key]).trim() !== "");
+  return (filled ?? candidates[0]).key;
 }
 
 /** 이메일 정규화 — 중복 판정의 전제(설계 §6.2). trim + 소문자, 그 이상 조이지 않는다. */
@@ -99,7 +133,11 @@ export function prepareBuilderSubmission(
     if (n.enabled && n.mode !== "notice") allowed.add(`notice_${n.id}`);
   }
   const values: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(rawValues)) if (allowed.has(k)) values[k] = v;
+  for (const [k, v] of Object.entries(rawValues)) {
+    if (!allowed.has(k)) continue;
+    const narrowed = narrowValue(v);
+    if (narrowed !== undefined) values[k] = narrowed;
+  }
 
   // ── 3. 형식 검증 — 런타임과 **같은 함수** ───────────────────────────
   const consent = {

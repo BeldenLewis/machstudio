@@ -122,6 +122,7 @@ export default async function CollectFormPreviewPage({
             locale={lang}
             forceStatus={forceStatus}
             forceType={forceType}
+            serverNow={new Date().toISOString()}
           />
         </div>
         <p className="mt-3 px-1 text-center text-[11px] leading-relaxed text-muted-foreground">

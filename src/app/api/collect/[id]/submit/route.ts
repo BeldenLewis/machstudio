@@ -11,7 +11,7 @@
  * 다시 열어 새 키를 얻는다 — 보호가 아니라 의식(儀式)이다. 실제 방어선은 Origin 검증,
  * 레이트리밋, 허니팟, 그리고 서버 검증이다.
  */
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getClientIp, rateLimitAsync } from "@/lib/ratelimit";
 import { fireWebhook } from "@/lib/webhook";
@@ -83,7 +83,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
    * 난사해도 매 요청이 쿼리 한 번인데, 이 저장소는 커넥션 풀 고갈로 실제 장애를 겪었다.
    */
   const ip = getClientIp(request);
-  const rl = await rateLimitAsync(`collect-submit:${id}:${ip}`, { limit: 20, windowMs: 60_000 });
+  /**
+   * 키에 **id 를 넣지 않는다.** id 는 URL 세그먼트라 요청자가 매번 바꿀 수 있고, 그러면
+   * 요청마다 새 버킷이 생겨 한도가 사실상 사라진다(그리고 매 요청이 소스 조회 한 번이다).
+   * 소스별 한도가 필요해지면 소스를 로드한 **뒤에** 따로 건다.
+   */
+  const rl = await rateLimitAsync(`collect-submit:${ip}`, { limit: 20, windowMs: 60_000 });
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "요청이 너무 잦아요. 잠시 후 다시 시도해주세요." },
@@ -102,7 +107,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const source = await prisma.collectSource.findUnique({ where: { id } });
-  if (!source || !source.isActive || source.mode !== "builder") {
+  if (!source || !source.isActive || source.mode !== "builder" || source.deletedAt) {
     return NextResponse.json({ error: "등록을 받을 수 없어요" }, { status: 404, headers: PREFLIGHT_HEADERS });
   }
 
@@ -217,33 +222,44 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "등록번호를 발급하지 못했어요" }, { status: 503, headers });
   }
 
-  if (source.webhookUrl) {
-    fireWebhook(source.webhookUrl, {
+  /**
+   * 응답 이후 작업은 `after()` 안에서 돈다. 그냥 떠 있는 프로미스로 두면 서버리스에서
+   * 응답 직후 인스턴스가 얼어붙어 **웹훅과 알림이 무작위로 유실된다** — 등록은 저장됐는데
+   * 파트너 시스템과 담당자에게는 아무것도 안 가는, 알아채기 어려운 실패다.
+   */
+  after(async () => {
+    if (source.webhookUrl) {
+      fireWebhook(source.webhookUrl, {
       event: "record.created",
       sourceId: source.id,
       sourceName: source.name,
       recordId,
-      registrationNo,
-      data: p.data,
-      createdAt: new Date().toISOString(),
-    });
-  }
+        registrationNo,
+        data: p.data,
+        createdAt: new Date().toISOString(),
+      });
+    }
 
-  if (source.notifyOnSubmit) {
-    prisma.workspaceMember
-      .findMany({ where: { workspaceId: source.workspaceId }, select: { userId: true } })
-      .then(async (members) => {
-        if (members.length === 0) return;
-        await prisma.notification.createMany({
-          data: members.map((m) => ({
-            userId: m.userId,
-            type: "COLLECT_SUBMITTED",
-            data: { sourceId: source.id, sourceName: source.name, recordId } as never,
-          })),
+    if (source.notifyOnSubmit) {
+      try {
+        const members = await prisma.workspaceMember.findMany({
+          where: { workspaceId: source.workspaceId },
+          select: { userId: true },
         });
-      })
-      .catch((e) => console.warn("[notify] failed:", e));
-  }
+        if (members.length > 0) {
+          await prisma.notification.createMany({
+            data: members.map((m) => ({
+              userId: m.userId,
+              type: "COLLECT_SUBMITTED",
+              data: { sourceId: source.id, sourceName: source.name, recordId } as never,
+            })),
+          });
+        }
+      } catch (e) {
+        console.warn("[notify] failed:", e);
+      }
+    }
+  });
 
   /**
    * `rid` 는 전환 중복 집계를 막는 키다(설계 §8) — 완료 페이지 새로고침으로 태그가 다시

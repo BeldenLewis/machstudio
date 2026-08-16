@@ -225,14 +225,19 @@ export function CollectFormSections({ config, patch }: { config: CollectFormConf
             없는 국가 코드예요. 이대로면 모든 전화번호가 무효 처리됩니다 (영국은 UK 가 아니라 GB).
           </p>
         )}
-        <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <Switch
-            checked={config.validation.onDuplicate === "block"}
-            onChange={(v) => patch({ validation: { ...config.validation, onDuplicate: v ? "block" : "allow" } })}
-            label="중복 이메일 차단"
-          />
-          같은 이메일의 재등록을 막아요
-        </label>
+        {/**
+          * 끌 수 있는 토글이 아니다.
+          *
+          * 차단은 DB 의 부분 유니크 인덱스가 하는데(동시 제출을 막으려면 그래야 한다),
+          * 인덱스는 설정을 읽지 못한다. 토글을 끄면 화면만 "허용" 이 되고 제출은 그대로
+          * 409 를 맞는다 — 게다가 그 상태에서는 런타임의 사전 안내까지 꺼져서 사용자가
+          * **이유도 모른 채 막힌다.** 설계도 지금은 block 만 쓴다고 못 박았다(§6.2).
+          * 유료 전시에서 재검토할 때 인덱스와 함께 열어야 한다.
+          */}
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          같은 이메일의 재등록은 <b className="font-semibold text-foreground/80">항상 차단</b>됩니다.
+          동시 제출까지 막으려면 DB 제약이 필요한데, 그건 설정으로 켜고 끌 수 있는 것이 아니에요.
+        </p>
       </Block>
 
       {/* ── 동의 ─────────────────────────────────────────────────── */}

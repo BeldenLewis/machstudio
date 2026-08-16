@@ -32,12 +32,16 @@ export function landingSourceHash(root) {
   return hashFiles([
     join(root, "src/embed/landing-entry.ts"),
     ...dirTs(root, "src/lib/landing"),
-    // 랜딩 밖에 있지만 번들에 들어간다
+    // 랜딩 밖에 있지만 번들에 들어간다 (esbuild metafile 로 실측한 목록)
     join(root, "src/lib/dom/h.ts"),
     join(root, "src/lib/webinar-config.ts"),
     join(root, "src/lib/datetime.ts"),
     // 랜딩 CSS 가 로고 규격을 여기서 가져온다
     join(root, "src/lib/webinar-logo.ts"),
+    join(root, "src/lib/webinar-image.ts"),
+    join(root, "src/lib/attribution-client.ts"),
+    join(root, "src/lib/attribution-normalize.ts"),
+    join(root, "src/lib/webinar-share.ts"),
   ]);
 }
 
@@ -47,9 +51,13 @@ export function formSourceHash(root) {
     join(root, "src/embed/form-entry.ts"),
     ...dirTs(root, "src/lib/collect-form"),
     // 폼 밖에 있지만 번들에 들어간다 — 검증 규칙·DOM 빌더·UTM 봉투
+    // (esbuild metafile 로 실측했다. 목록이 실제 입력보다 짧으면 검사는 초록인데
+    //  커밋된 번들은 낡을 수 있다 — 그게 이 검사가 막으려던 바로 그 상황이다.)
     join(root, "src/lib/collect-form-config.ts"),
     join(root, "src/lib/dom/h.ts"),
     join(root, "src/lib/webinar-config.ts"),
     join(root, "src/lib/attribution-client.ts"),
+    join(root, "src/lib/attribution-normalize.ts"),
+    join(root, "src/lib/webinar-share.ts"),
   ]);
 }

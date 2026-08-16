@@ -15,6 +15,7 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getClientIp, rateLimitAsync } from "@/lib/ratelimit";
 import { FORM_RUNTIME_JS } from "@/generated/form-runtime";
 
 const CORS_HEADERS = {
@@ -53,22 +54,47 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params;
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
 
-  let source: { id: string; mode: string; isActive: boolean; formConfig: unknown } | null = null;
+  /**
+   * 인증 없이 DB 를 여는 경로다 — 없는 id 를 난사하면 매 요청이 쿼리 한 번이 된다.
+   * 이 저장소는 커넥션 풀 고갈로 실제 장애를 겪었으므로 **조회 전에** 한도를 건다
+   * (/submit·/check·/p 와 같은 규약. 여기만 빠져 있었다).
+   * 한 페이지에 폼을 여러 개 붙이거나 새로고침을 반복해도 닿지 않는 값이다.
+   */
+  const rl = await rateLimitAsync(`collect-loader:${getClientIp(req)}`, { limit: 60, windowMs: 60_000 });
+  if (!rl.allowed) {
+    return new NextResponse(`/* mach form: slow down */\n`, {
+      status: 429,
+      headers: { ...SCRIPT_HEADERS, "Retry-After": Math.ceil(rl.retryAfterMs / 1000).toString() },
+    });
+  }
+
+  let source: { id: string; mode: string; isActive: boolean; formConfig: unknown; deletedAt: Date | null } | null = null;
   try {
     source = await prisma.collectSource.findUnique({
       where: { id },
-      select: { id: true, mode: true, isActive: true, formConfig: true },
+      select: { id: true, mode: true, isActive: true, formConfig: true, deletedAt: true },
     });
-  } catch {
-    // DB 가 흔들려도 파트너 페이지에 500 을 남기지 않는다 — 아래에서 404 로 떨어진다.
+  } catch (e) {
+    /**
+     * DB 가 흔들려도 파트너 페이지에 500 을 남기지 않는다 — 아래에서 404 로 떨어진다.
+     * 다만 **조용히 삼키지는 않는다.** 예전에는 빈 catch 라 폼이 소리 없이 사라져도
+     * 로그·Sentry 에 아무것도 남지 않았다(운영자는 제보를 받고서야 안다).
+     */
+    console.error("[form-loader] 소스 조회 실패", { id, error: e });
     source = null;
   }
 
-  // 없는 소스·연동형은 404. 연동형에는 그릴 폼이 없고, 존재 여부를 알려 줄 이유도 없다.
-  if (!source || source.mode !== "builder") {
+  // 없는 소스·연동형·삭제된 소스는 404. 존재 여부를 알려 줄 이유도 없다.
+  if (!source || source.mode !== "builder" || source.deletedAt) {
     return new NextResponse(`/* mach form: not found */\n`, {
       status: 404,
-      headers: { ...SCRIPT_HEADERS, "Cache-Control": "public, max-age=0, must-revalidate" },
+      headers: {
+        ...SCRIPT_HEADERS,
+        "Cache-Control": "public, max-age=0, must-revalidate",
+        // 404 도 엣지가 흡수해야 한다 — 없는 id 난사가 매번 DB 까지 내려가면 위 한도만으로는
+        // 분산 트래픽을 감당하지 못한다.
+        "CDN-Cache-Control": "public, s-maxage=60, stale-while-revalidate=60",
+      },
     });
   }
 
@@ -102,7 +128,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
    */
   const cacheHeaders = {
     "Cache-Control": "public, max-age=0, must-revalidate",
-    "CDN-Cache-Control": "public, s-maxage=60, stale-while-revalidate=86400",
+    /**
+     * SWR 을 짧게 잡는다(예전 86400). 이 응답에는 **serverNow 가 구워져 있어서**
+     * stale 응답이 오래 서빙되면 접수 창 판정이 그만큼 과거에 머문다 — 오픈했는데
+     * "아직 안 열렸어요" 가 나가는 실패다. 런타임에도 상한 가드가 있지만(STALE_SERVER_NOW_MS)
+     * 애초에 오래된 응답을 내보내지 않는 것이 먼저다.
+     */
+    "CDN-Cache-Control": "public, s-maxage=60, stale-while-revalidate=60",
     ETag: etag,
   } as const;
 

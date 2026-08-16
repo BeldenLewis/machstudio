@@ -65,6 +65,8 @@ export const COLLECT_FORM_CSS = `
 }
 .msf-select{background-image:none;padding-right:12px}
 .msf-input:focus,.msf-select:focus{border-color:var(--msf-accent);box-shadow:0 0 0 3px rgba(31,58,95,.14)}
+/* 호스트 테마가 outline:none 을 전역으로 거는 일이 잦다 — 키보드 사용자가 위치를 잃는다. */
+.msf :where(input,select,button,a):focus-visible{outline:2px solid var(--msf-accent) !important;outline-offset:2px !important}
 .msf-input[aria-invalid="true"],.msf-select[aria-invalid="true"]{border-color:var(--msf-warn)}
 .msf-input::placeholder{color:#9aa4af;opacity:1}
 
@@ -91,7 +93,10 @@ export const COLLECT_FORM_CSS = `
 .msf-chip:hover{border-color:var(--msf-accent)}
 .msf-chip[data-on="1"]{background:var(--msf-accent);border-color:var(--msf-accent);color:var(--msf-accent-fg)}
 .msf-chip[data-disabled="1"]{opacity:.45;cursor:not-allowed}
-.msf-chip input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+/* 체크박스를 화면에서만 숨긴다 — display:none 이면 **탭 순서에서도 빠져** 키보드로 못 고른다.
+   칩 자체에 포커스 표시를 옮겨 준다(:has 미지원 브라우저를 위해 .is-focus 도 함께 건다). */
+.msf-chip input{position:absolute;width:1px;height:1px;opacity:0;margin:0}
+.msf-chip:has(input:focus-visible),.msf-chip.is-focus{outline:2px solid var(--msf-accent);outline-offset:2px}
 
 /* 체크박스 한 줄 */
 .msf-check{display:flex;align-items:flex-start;gap:9px;font-size:13px;cursor:pointer;min-height:24px}
@@ -152,10 +157,10 @@ export const COLLECT_FORM_CSS = `
   background:#eef2f7;color:var(--msf-accent);border-radius:999px;padding:8px 14px;align-self:flex-start;
 }
 
-@media (max-width:420px){
-  .msf{font-size:16px}          /* iOS 는 16px 미만 입력에서 화면을 확대한다 */
-  .msf-input,.msf-select{font-size:16px}
-}
+/* iOS 는 16px 미만 입력에 포커스하면 화면을 확대하고, 그 확대는 **파트너 페이지 전체**에
+   걸린다(그리고 되돌아오지 않는다). 브레이크포인트로 나누면 최신 대화면 아이폰(430px)이
+   조건 밖으로 빠지므로 입력은 항상 16px 로 둔다. */
+.msf-input,.msf-select{font-size:16px}
 
 @media (prefers-reduced-motion:reduce){
   .msf *{transition:none !important;animation:none !important}

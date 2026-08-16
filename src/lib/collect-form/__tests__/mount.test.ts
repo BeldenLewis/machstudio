@@ -124,6 +124,7 @@ describe("제출", () => {
     el.value = v;
     el.dispatchEvent(new Event("input", { bubbles: true }));
   };
+  const submit = () => submitBtn().click();
   const tickPrivacy = () => {
     const cb = [...host.querySelectorAll<HTMLInputElement>(".msf-check input")].pop()!;
     cb.checked = true;
@@ -180,6 +181,44 @@ describe("제출", () => {
     tickPrivacy();
     submitBtn().click();
     expect((window as { dataLayer?: unknown[] }).dataLayer).toBeUndefined();
+  });
+
+  /**
+   * **적대적 리뷰가 잡은 치명 결함의 회귀 테스트.**
+   * 안내 블록을 다시 그리지 않아서, 필수 동의(초상권 등)를 안 누른 사람에게는
+   * Register 를 눌러도 **아무 일도 일어나지 않았다.** 파리(GDPR)에서는 그 폼이 통째로 막힌다.
+   */
+  it("필수 안내 동의를 안 누르면 그 자리에 오류가 보인다", () => {
+    const withRequiredNotice = normalizeCollectForm({
+      fields: [{ id: "f1", key: "email", label: { en: "Email" }, type: "email", enabled: true }],
+      notices: [{ id: "portrait", enabled: true, placement: "above-consent", mode: "checkbox-required", body: { en: "Photo notice" } }],
+      consent: { privacy: { enabled: false } },
+    });
+    mount({ config: withRequiredNotice });
+    submit();
+
+    const errs = [...host.querySelectorAll(".msf-err")].map((e) => e.textContent).filter(Boolean);
+    expect(errs).toContain("Please agree to continue");
+    // 그 체크박스로 데려가기까지 해야 한다 — 항목이 아니라서 id 로는 못 찾는다.
+    expect(host.querySelector('[data-msf-key="notice_portrait"]')).toBeTruthy();
+  });
+
+  /** 오류는 눈에만 보이면 안 된다 — 스크린리더 사용자는 왜 막혔는지 알 수 없다. */
+  it("오류가 입력과 연결되고 role=alert 로 알려진다", () => {
+    mount();
+    submit();
+    const email = host.querySelector<HTMLInputElement>('input[type="email"]')!;
+    expect(email.getAttribute("aria-invalid")).toBe("true");
+    const errId = email.getAttribute("aria-describedby")!;
+    const err = host.querySelector(`#${errId}`)!;
+    expect(err.getAttribute("role")).toBe("alert");
+    expect(err.textContent).toBe("Required");
+  });
+
+  /** iOS numeric 키패드에는 + 키가 없다 — 기본 국가가 아닌 사람이 국제표기를 못 친다. */
+  it("전화 입력은 inputMode=tel 이다", () => {
+    mount();
+    expect(host.querySelector<HTMLInputElement>('input[type="tel"]')!.inputMode).toBe("tel");
   });
 
   it("실제 모드에서는 폼 노출·시작·제출이 dataLayer 로 나간다(§18)", () => {
