@@ -5,6 +5,7 @@ export type ActivityAction =
   | "source.updated"
   | "source.deleted"
   | "source.key_regenerated"
+  | "source.preview_token_regenerated"
   | "record.created"
   | "record.updated"
   | "record.deleted"

@@ -1344,9 +1344,13 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
             </div>
           )}
 
-          {/* 필드 설정 탭 */}
+          {/* 등록 폼 탭 — 빌더형 전용(tabsFor 가 연동형에는 안 준다) */}
           {tab === "form" && (
-            <FormBuilderTab sourceId={source.id} initialConfig={source.formConfig} />
+            <FormBuilderTab
+              sourceId={source.id}
+              initialConfig={source.formConfig}
+              previewToken={source.previewToken}
+            />
           )}
 
           {tab === "fields" && (
@@ -2216,6 +2220,7 @@ function activityLabel(action: string): { label: string; color: string } {
     case "source.updated":         return { label: "소스 설정 변경",     color: "bg-blue-500" };
     case "source.deleted":         return { label: "소스 삭제",         color: "bg-red-500" };
     case "source.key_regenerated": return { label: "API 키 재발급",      color: "bg-amber-500" };
+    case "source.preview_token_regenerated": return { label: "미리보기 링크 재발급", color: "bg-amber-500" };
     case "record.created":         return { label: "레코드 생성",        color: "bg-emerald-500" };
     case "record.updated":         return { label: "레코드 편집",        color: "bg-blue-500" };
     case "record.deleted":         return { label: "레코드 삭제",        color: "bg-red-500" };

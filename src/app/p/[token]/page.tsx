@@ -1,0 +1,96 @@
+/**
+ * 빌더형 등록 폼 **미리보기 링크** — /p/{previewToken} (설계 §16.1).
+ *
+ * 공개 폼이 아직 서기 전에도 운영자가 링크 하나로 "이렇게 보인다" 를 공유하려고 만든 자리다.
+ * 그래서 두 가지가 동시에 참이어야 한다:
+ *  1. **로그인 없이 열린다** — 검토자는 워크스페이스 멤버가 아닌 경우가 대부분이다.
+ *  2. **아무 부작용도 없다** — 저장·이메일·추적이 전부 없다. 렌더러에 onSubmit 을 넘기지
+ *     않는 것이 그 장치이고(제출 버튼은 검증만 한다), 이 페이지는 조회 외의 쿼리를 하지 않는다.
+ *
+ * 토큰은 24바이트 난수라 추측할 수 없다. 그래도 **검색엔진에는 올리지 않는다** — 아래 robots.
+ * 유출되면 재발급으로 끊는다(설정 탭의 "미리보기 링크 새로 발급").
+ */
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import { normalizeCollectForm, type RegistrationStatus } from "@/lib/collect-form-config";
+import { CollectFormView, type CollectScreen } from "@/components/form-builder/CollectFormView";
+import { PreviewSwitcher } from "./PreviewSwitcher";
+
+// 운영자가 빌더에서 고치는 즉시 이 링크에 반영돼야 한다 — 캐시하면 "안 바뀌는데요" 가 된다.
+export const dynamic = "force-dynamic";
+
+/** 미리보기 링크가 검색 결과에 뜨면 준비 중인 폼이 공개된 것과 같다. */
+export const metadata: Metadata = { robots: { index: false, follow: false } };
+
+type Params = Promise<{ token: string }>;
+type Search = Promise<Record<string, string | string[] | undefined>>;
+
+/** 쿼리는 배열로도 올 수 있다(?lang=a&lang=b) — 첫 값만 본다. */
+function one(v: string | string[] | undefined): string {
+  return (Array.isArray(v) ? v[0] : v) ?? "";
+}
+
+const STATUSES: readonly RegistrationStatus[] = ["before", "open", "closed"];
+const SCREENS: readonly CollectScreen[] = ["form", "done"];
+
+export default async function CollectFormPreviewPage({
+  params, searchParams,
+}: { params: Params; searchParams: Search }) {
+  const { token } = await params;
+  const sp = await searchParams;
+
+  // 토큰 하나로만 찾는다 — 워크스페이스·레코드는 읽지 않는다(미리보기가 볼 이유가 없다).
+  const source = token
+    ? await prisma.collectSource.findUnique({
+        where: { previewToken: token },
+        select: { id: true, name: true, mode: true, formConfig: true },
+      })
+    : null;
+
+  // 연동형에는 그릴 폼이 없다 — 없는 것과 같이 다룬다(존재 여부를 알려 줄 이유도 없다).
+  if (!source || source.mode !== "builder") notFound();
+
+  const config = normalizeCollectForm(source.formConfig);
+
+  const statusParam = one(sp.status);
+  const screenParam = one(sp.screen);
+  const langParam = one(sp.lang);
+
+  const forceStatus = STATUSES.includes(statusParam as RegistrationStatus)
+    ? (statusParam as RegistrationStatus)
+    : undefined;
+  const screen: CollectScreen = SCREENS.includes(screenParam as CollectScreen)
+    ? (screenParam as CollectScreen)
+    : "form";
+  const lang = langParam || config.defaultLocale;
+
+  // 실제로 번역이 들어 있는 로케일만 고를 수 있게 — 빈 언어를 고르면 폴백 때문에
+  // 아무것도 안 바뀐 것처럼 보인다.
+  const locales = [...new Set([
+    config.defaultLocale,
+    ...config.fields.flatMap((f) => Object.keys(f.label)),
+    ...config.notices.flatMap((n) => [...Object.keys(n.title), ...Object.keys(n.body)]),
+  ])].filter(Boolean);
+
+  return (
+    <div className="min-h-dvh bg-secondary/30">
+      <header className="border-b border-black/5 bg-background/80 backdrop-blur">
+        <div className="mx-auto flex max-w-lg flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5">
+          <span className="rounded-full bg-violet-500/12 px-2 py-0.5 text-[10px] font-semibold text-violet-600">미리보기</span>
+          <span className="min-w-0 flex-1 truncate text-xs font-medium">{source.name}</span>
+        </div>
+        <PreviewSwitcher status={forceStatus} screen={screen} lang={lang} locales={locales} />
+      </header>
+
+      <main className="mx-auto max-w-lg px-4 py-6">
+        <div className="rounded-2xl bg-background p-5 shadow-sm">
+          <CollectFormView config={config} locale={lang} forceStatus={forceStatus} screen={screen} />
+        </div>
+        <p className="mt-3 px-1 text-center text-[11px] leading-relaxed text-muted-foreground">
+          실제 등록 화면과 같은 폼입니다. 여기서 제출해도 저장되지 않아요.
+        </p>
+      </main>
+    </div>
+  );
+}

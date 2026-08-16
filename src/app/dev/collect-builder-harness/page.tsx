@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import FormBuilderTab from "@/app/(app)/collect/[id]/FormBuilderTab";
 import { AutosaveScope } from "@/components/ui/autosave-scope";
+import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 
 const SEED = {
   fields: [
@@ -55,9 +56,13 @@ export default function CollectBuilderHarness() {
         <p className="mt-1 text-xs text-muted-foreground">저장은 가로채서 화면에만 기록해요 — 실제 소스는 바뀌지 않습니다.</p>
       </header>
 
-      <AutosaveScope>
-        <FormBuilderTab sourceId="harness" initialConfig={SEED} />
-      </AutosaveScope>
+      {/* 미리보기 링크 재발급이 공용 확인 모달을 쓴다 — 프로바이더 없이 렌더하면 훅이 던진다. */}
+      <ConfirmProvider>
+        <AutosaveScope>
+          {/* 하니스에도 토큰을 태운다 — 링크·재발급 자리가 실제로 그려지는지 여기서 본다. */}
+          <FormBuilderTab sourceId="harness" initialConfig={SEED} previewToken="harness-preview-token" />
+        </AutosaveScope>
+      </ConfirmProvider>
 
       <section className="mt-6">
         <h2 className="text-xs font-semibold">자동저장 기록</h2>

@@ -67,6 +67,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   "source.updated": "사전등록 폼 설정 변경",
   "source.deleted": "사전등록 폼 삭제",
   "source.key_regenerated": "API 키 재발급",
+  "source.preview_token_regenerated": "미리보기 링크 재발급",
   "record.created": "레코드 생성",
   "record.updated": "레코드 수정",
   "record.deleted": "레코드 삭제",
