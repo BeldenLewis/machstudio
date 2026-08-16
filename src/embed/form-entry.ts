@@ -2,14 +2,20 @@
  * 등록 폼 임베드 진입점 — 외부 사이트(아임웹 등) 문서에서 실행된다 (설계 §17).
  *
  * 스니펫:
+ *   <!-- 등록 폼 -->
  *   <script async src="https://machstudio.vercel.app/f/SOURCE_ID"></script>
  *   <div data-mach-form></div>
+ *
+ *   <!-- 등록 확인 (Find My QR) -->
+ *   <script async src="https://machstudio.vercel.app/f/SOURCE_ID/check"></script>
+ *   <div data-mach-form-check></div>
  *
  * 이 파일은 esbuild 로 IIFE 번들(globalName=__msForm)이 되고, /f/{id} 라우트가 번들 뒤에
  * `__msForm.boot({...})` 를 붙여 내려보낸다. **config 가 스크립트 본문에 실려 오므로**
  * 요청 1회로 최종 화면이 그려진다 — fetch 방식은 실측 10초 넘게 빈 화면이었다(랜딩의 교훈).
  */
 import { mountCollectForm, type CollectFormHandle } from "@/lib/collect-form/mount";
+import { mountCollectLookup, type LookupHandle } from "@/lib/collect-form/lookup-mount";
 import { normalizeCollectForm } from "@/lib/collect-form-config";
 
 export interface FormBootConfig {
@@ -21,10 +27,16 @@ export interface FormBootConfig {
   serverNow: string;
   /** 소스가 비활성이면 폼을 그리지 않는다. */
   active: boolean;
+  /**
+   * 무엇을 그리는가. `/f/{id}` 는 등록 폼, `/f/{id}/check` 는 등록 확인이다(설계 §17).
+   * 한 번들에 둘 다 들어 있다 — 스타일·검증·DOM 빌더를 공유하고, 두 탭을 다 붙이는
+   * 사이트에서 두 번째 스크립트는 캐시에서 온다.
+   */
+  view?: "form" | "check";
 }
 
 interface Instance {
-  handle: CollectFormHandle | null;
+  handle: CollectFormHandle | LookupHandle | null;
   mount: HTMLElement | null;
   cfg: FormBootConfig;
   observer: MutationObserver | null;
@@ -56,13 +68,17 @@ function warn(msg: string, e?: unknown): void {
  * "스크립트는 넣었는데 아무것도 안 나온다" 가 된다(설계 §17 "마운트 <div> 가 없으면
  * 스크립트 태그 위치에 자동 마운트").
  */
-function findMount(sourceId: string): HTMLElement | null {
+function findMount(sourceId: string, view: "form" | "check"): HTMLElement | null {
+  // 등록 폼과 등록 확인은 **다른 마운트 속성**을 쓴다 — 한 페이지에 둘 다 붙는 경우가
+  // 기본이고(등록 탭 + Registration Check 탭), 같은 속성이면 서로의 자리를 뺏는다.
+  const attr = view === "check" ? "data-mach-form-check" : "data-mach-form";
+
   const exact = document.querySelector<HTMLElement>(
-    '[data-mach-form="' + CSS.escape(sourceId) + '"]',
+    "[" + attr + '="' + CSS.escape(sourceId) + '"]',
   );
   if (exact) return exact;
 
-  const all = document.querySelectorAll<HTMLElement>("[data-mach-form]");
+  const all = document.querySelectorAll<HTMLElement>("[" + attr + "]");
   for (let i = 0; i < all.length; i++) {
     // 다른 소스에 이미 잡힌 자리는 건너뛴다(한 페이지에 폼 2개를 붙일 수 있다).
     const claimed = all[i].getAttribute("data-mach-form-claimed");
@@ -71,11 +87,11 @@ function findMount(sourceId: string): HTMLElement | null {
 
   // 스크립트 태그 자리에 직접 만든다.
   const script = document.querySelector<HTMLScriptElement>(
-    'script[src*="/f/' + sourceId + '"]',
+    'script[src*="/f/' + sourceId + (view === "check" ? '/check' : '') + '"]',
   );
   if (script && script.parentNode) {
     const host = document.createElement("div");
-    host.setAttribute("data-mach-form", sourceId);
+    host.setAttribute(attr, sourceId);
     script.parentNode.insertBefore(host, script.nextSibling);
     return host;
   }
@@ -101,7 +117,8 @@ function unhideWidget(mount: HTMLElement): void {
 }
 
 function render(inst: Instance): void {
-  const mount = findMount(inst.cfg.sourceId);
+  const view = inst.cfg.view === "check" ? "check" : "form";
+  const mount = findMount(inst.cfg.sourceId, view);
   if (!mount) {
     warn("마운트 지점을 찾지 못했습니다: " + inst.cfg.sourceId);
     return;
@@ -118,14 +135,22 @@ function render(inst: Instance): void {
   }
 
   inst.handle?.destroy();
-  inst.handle = mountCollectForm({
-    mount,
-    config: normalizeCollectForm(inst.cfg.formConfig),
-    origin: inst.cfg.origin,
-    sourceId: inst.cfg.sourceId,
-    serverNow: inst.cfg.serverNow,
-    ageMs: 0, // 스크립트 본문에 실려 온 시각이라 CDN Age 는 라우트가 이미 반영한다
-  });
+  const config = normalizeCollectForm(inst.cfg.formConfig);
+  inst.handle = view === "check"
+    ? mountCollectLookup({ mount, config, origin: inst.cfg.origin, sourceId: inst.cfg.sourceId })
+    : mountCollectForm({
+        mount,
+        config,
+        origin: inst.cfg.origin,
+        sourceId: inst.cfg.sourceId,
+        serverNow: inst.cfg.serverNow,
+        /**
+         * 라우트가 SWR 을 짧게(60초) 잡아 두므로 남는 지연은 작고, 런타임에도 5분 넘게
+         * 과거인 serverNow 를 버리는 가드가 있다. 스크립트 태그로는 응답 헤더(Age)를
+         * 읽을 수 없어 여기서 보정할 방법이 없다 — 그 사실을 남겨 둔다.
+         */
+        ageMs: 0,
+      });
 }
 
 /**
@@ -165,7 +190,10 @@ function watchForRerender(inst: Instance): void {
 export function boot(cfg: FormBootConfig): void {
   try {
     const reg = registry();
-    const prev = reg[cfg.sourceId];
+    // 같은 소스라도 폼과 등록 확인은 별개 인스턴스다 — 한 키를 쓰면 나중에 부트된 쪽이
+    // 앞의 것을 destroy 해 버린다(둘 다 붙은 페이지가 기본 구성이다).
+    const key = cfg.sourceId + ":" + (cfg.view === "check" ? "check" : "form");
+    const prev = reg[key];
     if (prev) {
       // 재진입은 조기 return 이 아니라 재마운트 — 호스트 재렌더 후 스크립트가 다시 돌 수 있다.
       prev.cfg = cfg;
@@ -180,7 +208,7 @@ export function boot(cfg: FormBootConfig): void {
       remounts: 0,
       remountWindowStart: Date.now(),
     };
-    reg[cfg.sourceId] = inst;
+    reg[key] = inst;
 
     const start = () => {
       render(inst);

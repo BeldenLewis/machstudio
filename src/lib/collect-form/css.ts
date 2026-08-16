@@ -150,6 +150,30 @@ export const COLLECT_FORM_CSS = `
 }
 .msf-regno-label{font-size:11px;color:var(--msf-muted);margin-top:4px;letter-spacing:normal}
 
+/* ── QR ────────────────────────────────────── */
+/**
+ * **강제 라이트.** 페이지 나머지가 테마를 따라도 QR 카드만은 흰 배경·검은 모듈로 못 박는다.
+ * AGENTS.md "색 하드코딩 금지" 의 의도적 예외다 — 이 흰색은 디자인 토큰이 아니라
+ * **스캔 가능성 요건**이라(설계 §9.2) 테마를 따라가면 안 된다. 다크 UI 위에서 대비가
+ * 사라진 QR 은 현장에서 줄을 만든다.
+ */
+.msf-qr{
+  display:inline-block;margin:14px auto 0;
+  background:#ffffff !important;padding:10px !important;border-radius:12px !important;
+}
+/**
+ * **이미지가 200px 이어야 한다**(§9.2 화면 최소치). 카드에 200px 을 주면
+ * box-sizing:border-box 때문에 패딩이 그 안을 먹어 실제 QR 은 180px 로 그려진다(실측).
+ * 카드는 내용에 맞추고 이미지에 크기를 준다.
+ */
+.msf-qr img{display:block;width:200px;height:200px;image-rendering:pixelated}
+
+/* ── 등록 확인(Find My QR) ──────────────────── */
+.msf-lookup{display:flex;flex-direction:column;gap:14px}
+.msf-found{text-align:center;background:var(--msf-soft);border-radius:var(--msf-radius);padding:22px 20px}
+.msf-found-name{font-size:16px;font-weight:700}
+.msf-found-type{font-size:12px;color:var(--msf-muted);margin-top:2px}
+
 /* ── 미리보기 배너 ─────────────────────────── */
 /* 없으면 담당자가 미리보기에서 등록하고 "왜 명단에 없냐"고 묻는다(설계 §16.1). */
 .msf-preview-flag{

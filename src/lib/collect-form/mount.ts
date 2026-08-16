@@ -61,6 +61,7 @@ const COPY = {
   doneTitle: "You're registered",
   regNoLabel: "Registration number — show this at the venue",
   previewFlag: "Preview — nothing is saved",
+  ticketLink: "Open my ticket page →",
   previewDone: "Sample number — nothing was saved.",
   more: "Details",
   less: "Hide",
@@ -760,6 +761,36 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     }
   }
 
+  /**
+   * QR 카드. 이미지 하나짜리다 — 번호를 그림으로 바꾸는 일을 클라이언트에서 또 구현하면
+   * 자리마다 옵션이 갈리고, 그 차이는 **현장에서 스캐너가 안 읽힐 때** 처음 드러난다.
+   */
+  function qrCard(regNo: string): HTMLElement {
+    const img = h("img", {
+      src: `${opts.origin}/api/collect/qr/${encodeURIComponent(regNo)}`,
+      alt: `Registration QR for ${regNo}`,
+      width: "200",
+      height: "200",
+      loading: "eager",
+    });
+    return h("div", { class: "msf-qr" }, img);
+  }
+
+  /**
+   * 티켓 페이지 링크. 완료 화면을 떠나면 번호를 다시 볼 방법이 없다는 것이 이 슬라이스
+   * 이전의 결함이었다 — 화면을 닫기 전에 **저장할 수 있는 주소**를 준다.
+   */
+  function ticketLink(regNo: string): HTMLElement | null {
+    if (preview) return null;
+    return h("a", {
+      class: "msf-more",
+      href: `${opts.origin}/t/${encodeURIComponent(regNo)}`,
+      target: "_blank",
+      rel: "noopener noreferrer",
+      style: { marginTop: "10px", display: "inline-block" },
+    }, COPY.ticketLink);
+  }
+
   // ── 렌더 ────────────────────────────────────────────────────────────
   const consentHost = h("div", { class: "msf-stack" });
   function renderConsent(): void {
@@ -788,8 +819,15 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
       stack.appendChild(
         h("div", { class: "msf-done" },
           h("div", { class: "msf-done-title" }, COPY.doneTitle),
+          /**
+           * QR 을 여기서 보여 준다 — 이메일 연동 전에는 등록자가 QR 을 받는 **첫 경로**다
+           * (설계 §2·§8). 서버에서 그리므로 §9.2 규칙(EC Q·여백 4모듈·불투명 흰 배경)이
+           * 세 자리(완료·티켓·이메일)에서 같다.
+           */
+          config.completion.showQr ? qrCard(doneRegNo) : null,
           h("div", { class: "msf-regno" }, doneRegNo),
           h("div", { class: "msf-regno-label" }, preview ? COPY.previewDone : COPY.regNoLabel),
+          ticketLink(doneRegNo),
         ),
       );
       return;

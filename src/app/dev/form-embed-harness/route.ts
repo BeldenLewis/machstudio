@@ -25,6 +25,8 @@ export async function GET(request: Request) {
   const id = (url.searchParams.get("id") ?? "").replace(/[^a-zA-Z0-9_-]/g, "");
   // ?nomount=1 — 마운트 div 를 일부러 빼서 "스크립트 자리 자동 마운트" 폴백을 확인한다.
   const noMount = url.searchParams.get("nomount") === "1";
+  // ?check=1 — 등록 확인(Find My QR) 임베드도 같은 페이지에 붙인다(아임웹의 실제 구성).
+  const withCheck = url.searchParams.get("check") === "1";
 
   const html = `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8">
@@ -53,6 +55,7 @@ export async function GET(request: Request) {
     호스트 페이지가 <b>일부러 험한 CSS</b>를 겁니다 — 폼이 멀쩡하면 <code>.msf</code> 격리가 듣는 것입니다.
     ${id ? `소스: <code>${id}</code>` : `<b>?id=SOURCE_ID</b> 를 붙여 주세요(빌더형 소스).`}
     ${noMount ? " · 마운트 div 없음(자동 마운트 확인)" : ""}
+    ${withCheck ? " · 등록 확인 임베드 동시 부착" : " · <b>?check=1</b> 로 등록 확인도 함께 붙습니다"}
   </p>
 </header>
 <main>
@@ -61,6 +64,12 @@ export async function GET(request: Request) {
     ${noMount ? "" : `<div data-mach-form></div>`}
     ${id ? `<script async src="/f/${id}"></script>` : ""}
   </div>
+  ${withCheck && id ? `
+  <hr style="margin:32px 0;border:0;border-top:1px solid #d8dde3">
+  <div class="_widget_data wg_animated" style="visibility:hidden;opacity:0">
+    <div data-mach-form-check></div>
+    <script async src="/f/${id}/check"></script>
+  </div>` : ""}
 </main>
 </body></html>`;
 
