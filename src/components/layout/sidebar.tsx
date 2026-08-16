@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, BarChart3, LogOut,
-  ChevronDown, Plus, FolderOpen, Check, Loader2, Settings2, Settings, Database, Video, Link2, Pencil, Trash2, ShieldCheck, Menu,
+  ChevronDown, Plus, FolderOpen, Check, Loader2, Settings2, Settings, Database, Video, Link2, Pencil, Trash2, ShieldCheck, Menu, Trophy,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useWorkspace } from "@/contexts/workspace";
@@ -27,6 +27,7 @@ const navItems = [
   { href: "/analytics", icon: BarChart3, label: "광고 성과" },
   { href: "/utm-builder", icon: Link2, label: "UTM 빌더" },
   { href: "/webinar", icon: Video, label: "웨비나" },
+  { href: "/competition", icon: Trophy, label: "대회" },
 ];
 
 function Dropdown({

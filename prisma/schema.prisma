@@ -74,6 +74,7 @@ model Workspace {
   webinarEmbedSites    WebinarEmbedSite[]
   adPerformanceImports AdPerformanceImportBatch[]
   adPerformanceRecords AdPerformanceRecord[]
+  competitions         Competition[]
 }
 
 model WorkspaceMember {
@@ -151,6 +152,7 @@ model Project {
   webinarEmbedSites    WebinarEmbedSite[]
   adPerformanceImports AdPerformanceImportBatch[]
   adPerformanceRecords AdPerformanceRecord[]
+  competitions         Competition[]
 }
 
 model AdPerformanceImportBatch {
@@ -535,11 +537,11 @@ model ShortLink {
 }
 
 model Webinar {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   workspaceId      String
   projectId        String
   name             String
-  slug             String   @unique
+  slug             String    @unique
   description      String?
   liveStartAt      DateTime
   liveEndAt        DateTime
@@ -554,12 +556,12 @@ model Webinar {
   broadcastEndedAt DateTime?
   components       Json? // 임베드 컴포넌트 설정 { heroButton, banner, formWidget, allowLiveRegistration, entryOpenBeforeMinutes, endedMode }
   // 채팅 모더레이션 — 전용 컬럼(components 블롭이 설정탭 저장으로 덮어써지는 것 방지). 천천히모드 초·금지어·차단 등록자.
-  chatSlowSec      Int      @default(0)
-  chatBannedWords  String[] @default([])
-  chatBannedRegIds String[] @default([])
-  chatHideLinks    Boolean  @default(true) // 링크 자동 숨김(공개 POST에서 링크 제거) — 운영자 토글
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  chatSlowSec      Int       @default(0)
+  chatBannedWords  String[]  @default([])
+  chatBannedRegIds String[]  @default([])
+  chatHideLinks    Boolean   @default(true) // 링크 자동 숨김(공개 POST에서 링크 제거) — 운영자 토글
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   workspace          Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project            Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -616,35 +618,35 @@ model WebinarSession {
 }
 
 model WebinarRegistration {
-  id             String    @id @default(cuid())
-  webinarId      String
-  name           String
-  phone          String?
-  email          String?
-  company        String?
-  department     String?
-  jobTitle       String?
-  industry       String?
-  agreeMarketing Boolean   @default(false)
-  agreePrivacy   Boolean   @default(true)
-  memo           String?
-  enteredAt      DateTime?
-  leftAt         DateTime?
-  lastPingAt     DateTime?
-  presencePingAt DateTime?
+  id               String    @id @default(cuid())
+  webinarId        String
+  name             String
+  phone            String?
+  email            String?
+  company          String?
+  department       String?
+  jobTitle         String?
+  industry         String?
+  agreeMarketing   Boolean   @default(false)
+  agreePrivacy     Boolean   @default(true)
+  memo             String?
+  enteredAt        DateTime?
+  leftAt           DateTime?
+  lastPingAt       DateTime?
+  presencePingAt   DateTime?
   // 접속 시간 — heartbeat 간격을 누적한다(끊긴 구간은 제외). 화면 표시·정렬·평균의 단일 소스.
   // stayMinutes 는 leave 시점의 "입장~퇴장" 스팬이라 자리비움을 포함하는 레거시 값 — 폴백 전용.
-  connectedSeconds Int     @default(0)
+  connectedSeconds Int       @default(0)
   // 그중 탭이 실제로 보였던 시간. 접속-포커스 차이가 "틀어놓고 듣기" 구간이다.
-  focusSeconds     Int     @default(0)
-  stayMinutes    Int       @default(0)
-  isActive       Boolean   @default(false)
-  submittedAt    DateTime  @default(now())
+  focusSeconds     Int       @default(0)
+  stayMinutes      Int       @default(0)
+  isActive         Boolean   @default(false)
+  submittedAt      DateTime  @default(now())
 
   // 입소문 추적 — 이 등록자의 추천 코드(공유 링크 `?ref=`)와, 누구의 추천으로 들어왔는지.
   // registrationId 를 링크에 넣으면 사칭이 가능해 별도 코드를 쓴다(webinar-share.ts 주석 참고).
-  shareCode      String?   @unique
-  referredById   String?
+  shareCode    String? @unique
+  referredById String?
 
   // UTM 어트리뷰션 (CollectRecord와 동일 구성 — attribution-core 공용화 대비)
   utmSource        String?
@@ -979,23 +981,23 @@ model WebinarTallyPush {
 // questions 는 JSON: [{ id, type: 'rating'|'single'|'multiple'|'text'|'nps', title, required, options[] }]
 // isActive = 라이브 푸시 활성(웨비나당 1개 — 부분 유니크 인덱스는 db execute 로 적용, P2002→409 처리)
 model WebinarSurvey {
-  id          String    @id @default(cuid())
-  webinarId   String
-  title       String
-  description String?
-  questions   Json      @default("[]")
-  isOpen      Boolean   @default(true) // 응답 수집 여부 — 운영자 수동 온·오프(마스터 게이트)
-  opensAt     DateTime? // 시작 예약 — 이 시각 전에는 isOpen 이 켜져 있어도 받지 않는다. 비우면 즉시
-  closesAt    DateTime? // 마감 예약 — 이 시각이 지나면 isOpen 과 무관하게 응답 마감. 비우면 무기한
+  id              String    @id @default(cuid())
+  webinarId       String
+  title           String
+  description     String?
+  questions       Json      @default("[]")
+  isOpen          Boolean   @default(true) // 응답 수집 여부 — 운영자 수동 온·오프(마스터 게이트)
+  opensAt         DateTime? // 시작 예약 — 이 시각 전에는 isOpen 이 켜져 있어도 받지 않는다. 비우면 즉시
+  closesAt        DateTime? // 마감 예약 — 이 시각이 지나면 isOpen 과 무관하게 응답 마감. 비우면 무기한
   doneTitle       String? // 제출 완료 화면 제목 (없으면 노출면별 기본 문구)
   doneDescription String? // 제출 완료 화면 설명
   ctaLabel        String? // 종료 화면 카드의 버튼 문구 (없으면 기본: "설문 참여하기")
-  showOnEnded Boolean   @default(false) // 종료 화면 만족도 설문 카드에 연결
-  isActive    Boolean   @default(false) // 라이브 푸시 중
-  pushedAt    DateTime? // 마지막 발행 시각 — 시청자 재노출 키(편집으로 바뀌는 updatedAt 과 분리)
-  sentBy      String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  showOnEnded     Boolean   @default(false) // 종료 화면 만족도 설문 카드에 연결
+  isActive        Boolean   @default(false) // 라이브 푸시 중
+  pushedAt        DateTime? // 마지막 발행 시각 — 시청자 재노출 키(편집으로 바뀌는 updatedAt 과 분리)
+  sentBy          String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   webinar   Webinar                 @relation(fields: [webinarId], references: [id], onDelete: Cascade)
   responses WebinarSurveyResponse[]
@@ -1018,4 +1020,208 @@ model WebinarSurveyResponse {
   @@unique([surveyId, registrationId])
   @@index([webinarId])
   @@index([surveyId, submittedAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// 대회·투표 — docs/superpowers/specs/2026-08-13-competition-voting-system-design.md
+// 최상위 단위 구조는 Webinar 를 본떴다(workspace+project, slug @unique, theme/config Json,
+// 수동 override). 검증된 구조라 새로 발명하지 않는다.
+// ─────────────────────────────────────────────────────────────
+
+model Competition {
+  id          String  @id @default(cuid())
+  workspaceId String
+  projectId   String
+  name        String
+  slug        String  @unique
+  description String?
+
+  // 단계 — 날짜로 자동 판정하되 수동 override 가 이긴다(resolveWebinarStatus 와 같은 규칙).
+  // 현장에서 "지금 접수 닫아" 같은 조작이 반드시 필요하다.
+  phaseOverride  String? // "recruiting"|"prelim"|"judging"|"final"|"announced"|"closed"|null(자동)
+  recruitOpenAt  DateTime?
+  recruitCloseAt DateTime?
+
+  theme         Json // accentColor·textColor·surfaceColor·borderRadius·logoUrl
+  config        Json // 공고 페이지 블록 + 신청 폼 + 동의 + 완료 처리 (competition-config.ts)
+  scoringConfig Json? // 대중:심사 비율·진출 n팀·동점 규칙
+  showConfig    Json? // 발표 연출 (C5)
+
+  // 한 신청자가 낼 수 있는 참가작 수. 기본 1(1팀 1작품) — 필요해지면 올린다.
+  maxEntriesPerApplicant Int @default(1)
+
+  previewToken String? @unique // 미리보기 링크 /cp/{token}
+  showToken    String? @unique // 발표 화면 /show/{token}
+
+  // 결과 발표 페이지를 공개한 시각. null 이면 결과 임베드가 "준비 중"만 보여준다.
+  // 개별 수상의 revealedAt 과 다르다 — 이건 "결과 페이지 자체를 열었는가".
+  resultPublishedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rounds    CompetitionRound[]
+  entries   CompetitionEntry[]
+  judges    CompetitionJudge[]
+  awards    CompetitionAward[]
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([workspaceId])
+}
+
+/// 예선·본선. 라운드를 행으로 두는 이유: 두 라운드의 규칙이 다르다(상한·비율·순서·식별 방식).
+/// 대회에 필드를 늘리면 prelimXxx/finalXxx 가 두 벌씩 생기고 3라운드가 오면 또 늘어난다.
+model CompetitionRound {
+  id            String @id @default(cuid())
+  competitionId String
+  kind          String // "prelim" | "final"
+  name          String
+  sortOrder     Int    @default(0)
+
+  // 투표 운영
+  voteEnabled      Boolean   @default(false)
+  voteOpenAt       DateTime?
+  voteCloseAt      DateTime?
+  maxVotesPerVoter Int       @default(1)
+  allowVoteUndo    Boolean   @default(false)
+  // "ip"|"device"|"both"|"registration" — 현장에서 ip 단독은 쓰지 않는다(공유 와이파이가 한 명으로 묶인다).
+  voterIdentity    String    @default("device")
+  ipVoteLimit      Int? // device 모드의 IP 보조 상한. 정상 공유망을 막지 않을 만큼 넉넉히.
+  showLiveTally    Boolean   @default(false)
+
+  // 참가작 표시 순서. random 은 방문자마다 섞되 그 사람에게는 고정된다(voterKey 파생 시드).
+  entryOrder String @default("random") // "random"|"manual"|"submitted"
+
+  // 이전 라운드 점수 이월 — 기본 끔(리셋). 나중에 켤 수 있게 구조만 열어 둔다.
+  carryOverEnabled Boolean @default(false)
+  carryOverPercent Int     @default(0)
+
+  // 심사
+  judgeCriteria Json? // [{ key, label, maxScore }]
+  publicWeight  Int   @default(50)
+  judgeWeight   Int   @default(50)
+  advanceCount  Int?
+
+  competition Competition             @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  votes       CompetitionVote[]
+  judgeScores CompetitionJudgeScore[]
+
+  @@unique([competitionId, kind])
+  @@index([competitionId])
+}
+
+model CompetitionEntry {
+  id            String  @id @default(cuid())
+  competitionId String
+  entryNo       String // 현장에서 "3번 팀"으로 부른다. cuid 는 사람이 못 읽는다.
+  title         String
+  teamName      String?
+  summary       String? @db.Text
+
+  data  Json // 신청 폼 응답 전체 (CollectRecord.data 와 같은 계약)
+  media Json // [{ kind:"image"|"youtube", url?|videoId?, sortOrder }]
+
+  // 검색·연락용으로 승격한 신청자 정보 (원본은 data 에도 남는다)
+  contactName  String?
+  contactEmail String?
+  contactPhone String?
+
+  status      String  @default("submitted") // submitted|approved|rejected
+  isPublished Boolean @default(false) // 투표 노출 토글
+  sortOrder   Int     @default(0)
+  advanced    Boolean @default(false) // 본선 진출
+  // 본선 진행 순서. 예선 신청 순서와 무관하게 운영자가 다시 정한다(sortOrder 를 덮어쓰면
+  // 공고·예선 기록까지 뒤바뀐다). null 이면 참가번호 순으로 떨어진다.
+  finalOrder  Int?
+
+  submittedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  competition Competition             @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  votes       CompetitionVote[]
+  judgeScores CompetitionJudgeScore[]
+  awards      CompetitionAward[]
+
+  @@unique([competitionId, entryNo])
+  @@index([competitionId, isPublished, sortOrder])
+  @@index([competitionId, submittedAt])
+  @@index([competitionId, advanced, finalOrder])
+}
+
+/// 대중 투표. 상한의 최종 방어선은 레이트리미터가 아니라 아래 @@unique 다 —
+/// ratelimit.ts 는 Redis 가 없으면 메모리 폴백이라 서버리스에서 인스턴스마다 상한이 새어 나간다.
+model CompetitionVote {
+  id        String   @id @default(cuid())
+  roundId   String
+  entryId   String
+  voterKey  String // 해시. 원본 IP·전화번호를 저장하지 않는다.
+  ipHash    String? // IP 보조 상한용 별도 해시
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  round CompetitionRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  entry CompetitionEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, entryId, voterKey])
+  @@index([roundId, voterKey])
+  @@index([roundId, entryId])
+  @@index([roundId, ipHash])
+}
+
+model CompetitionJudge {
+  id            String    @id @default(cuid())
+  competitionId String
+  name          String
+  email         String?
+  affiliation   String?
+  accessToken   String    @unique // 심사위원마다 다른 링크
+  passwordHash  String? // 링크만으로는 열리지 않는다. hashSharePassword 재사용.
+  weight        Int       @default(1)
+  invitedAt     DateTime?
+  lastSeenAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  competition Competition             @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  scores      CompetitionJudgeScore[]
+
+  @@index([competitionId])
+}
+
+model CompetitionJudgeScore {
+  id      String @id @default(cuid())
+  roundId String
+  entryId String
+  judgeId String
+
+  scores Json // { creativity: 27, ... }
+  total  Float // 저장 시 계산 — 순위 쿼리마다 Json 을 파싱하지 않는다.
+
+  comment   String?  @db.Text
+  submitted Boolean  @default(false) // 제출 전엔 임시저장
+  updatedAt DateTime @updatedAt
+
+  round CompetitionRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  entry CompetitionEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  judge CompetitionJudge @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, entryId, judgeId])
+  @@index([roundId, entryId])
+  @@index([judgeId])
+}
+
+model CompetitionAward {
+  id            String    @id @default(cuid())
+  competitionId String
+  entryId       String?
+  name          String
+  rank          Int
+  description   String?
+  revealedAt    DateTime?
+
+  competition Competition       @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  entry       CompetitionEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
+
+  @@index([competitionId, rank])
 }

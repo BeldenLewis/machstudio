@@ -10,9 +10,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build:landing-runtime": "node scripts/build-landing-runtime.mjs",
-    "prebuild": "node scripts/build-landing-runtime.mjs && node scripts/build-form-runtime.mjs",
-    "predev": "node scripts/build-landing-runtime.mjs && node scripts/build-form-runtime.mjs",
-    "build:form-runtime": "node scripts/build-form-runtime.mjs"
+    "build:competition-runtime": "node scripts/build-competition-runtime.mjs",
+    "build:competition-vote-runtime": "node scripts/build-competition-vote-runtime.mjs",
+    "build:competition-result-runtime": "node scripts/build-competition-result-runtime.mjs",
+    "build:form-runtime": "node scripts/build-form-runtime.mjs",
+    "build:embed-runtimes": "node scripts/build-landing-runtime.mjs && node scripts/build-competition-runtime.mjs && node scripts/build-competition-vote-runtime.mjs && node scripts/build-competition-result-runtime.mjs && node scripts/build-form-runtime.mjs",
+    "prebuild": "npm run build:embed-runtimes",
+    "predev": "npm run build:embed-runtimes"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

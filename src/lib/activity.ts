@@ -104,7 +104,21 @@ export type ActivityAction =
   | "workspace.deleted"
   | "invitation.redeemed"
   | "invitation.accepted"
-  | "invitation.declined";
+  | "invitation.declined"
+  | "competition.created"
+  | "competition.updated"
+  | "competition.deleted"
+  | "competition.entry_updated"
+  | "competition.entry_deleted"
+  | "competition.preview_token_rotated"
+  | "competition.judge_created"
+  | "competition.judge_updated"
+  | "competition.judge_deleted"
+  | "competition.advanced"
+  | "competition.final_order_updated"
+  | "competition.award_saved"
+  | "competition.award_deleted"
+  | "competition.result_published";
 
 export async function logActivity(args: {
   workspaceId: string;

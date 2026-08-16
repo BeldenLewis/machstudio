@@ -1,0 +1,280 @@
+/**
+ * 대회 투표 임베드 런타임 — 아임웹 코드블럭에 한 줄로 붙는다.
+ *
+ *   <script async src="https://…/c/{competitionId}/vote"></script>
+ *   <div data-mach-competition-vote></div>
+ *
+ * 공고 임베드와 달리 **참가작 목록을 실행 시점에 가져온다.** 노출 토글·투표 수·이미 찍은 표가
+ * 사람마다·순간마다 다르기 때문이다(스냅샷으로 굳히면 안 된다).
+ *
+ * 영상은 썸네일만 깔고 **클릭했을 때 iframe 을 붙인다** — 20개를 한 번에 임베드하면 페이지가 죽는다.
+ */
+import { buildCompetitionCss, escapeHtml, type CompetitionTheme } from "@/lib/competition-render";
+import { VOTE_CSS } from "@/lib/competition-vote-css";
+
+interface BootPayload {
+  competitionId: string;
+  origin: string;
+  round: "prelim" | "final";
+  preview?: boolean;
+}
+
+interface MediaItem {
+  kind: "image" | "youtube";
+  url?: string;
+  videoId?: string;
+}
+
+interface EntryDto {
+  id: string;
+  entryNo: string;
+  title: string;
+  teamName: string | null;
+  summary: string | null;
+  media: MediaItem[];
+}
+
+interface StateDto {
+  competition: { id: string; name: string; theme: CompetitionTheme };
+  round: { kind: string; name: string; maxVotesPerVoter: number; allowVoteUndo: boolean; showLiveTally: boolean };
+  open: boolean;
+  message: string;
+  entries: EntryDto[];
+  myVoteIds: string[];
+  remaining: number;
+  tally: Record<string, number> | null;
+}
+
+const DEVICE_KEY = "mc_device_id";
+const STYLE_ID = "mc-vote-styles";
+
+function warn(message: string, error?: unknown) {
+  try {
+    if (typeof console !== "undefined" && console.warn) console.warn("[mach competition vote] " + message, error ?? "");
+  } catch {
+    /* 로깅 실패는 무시 */
+  }
+}
+
+/**
+ * 기기 식별자 — 브라우저에 보관하는 임의 값. 서버는 이걸 해시해서만 저장한다.
+ * localStorage 가 막힌 환경(시크릿·차단)에서는 세션 단위로라도 유지되게 폴백한다.
+ */
+function getDeviceId(): string {
+  try {
+    let id = localStorage.getItem(DEVICE_KEY);
+    if (!id) {
+      id = (crypto.randomUUID?.() ?? String(Date.now()) + Math.random().toString(36).slice(2));
+      localStorage.setItem(DEVICE_KEY, id);
+    }
+    return id;
+  } catch {
+    try {
+      let id = sessionStorage.getItem(DEVICE_KEY);
+      if (!id) {
+        id = String(Date.now()) + Math.random().toString(36).slice(2);
+        sessionStorage.setItem(DEVICE_KEY, id);
+      }
+      return id;
+    } catch {
+      return "";
+    }
+  }
+}
+
+function findMount(): HTMLElement | null {
+  const marked = document.querySelector<HTMLElement>("[data-mach-competition-vote]");
+  if (marked) return marked;
+  const current = document.currentScript as HTMLScriptElement | null;
+  const scripts = current ? [current] : Array.from(document.querySelectorAll("script[src*='/vote']"));
+  const script = scripts[scripts.length - 1] as HTMLScriptElement | undefined;
+  if (!script?.parentNode) return null;
+  const host = document.createElement("div");
+  host.setAttribute("data-mach-competition-vote", "");
+  script.parentNode.insertBefore(host, script.nextSibling);
+  return host;
+}
+
+function injectStyles(theme: CompetitionTheme) {
+  const css = buildCompetitionCss(theme) + "\n" + VOTE_CSS;
+  const existing = document.getElementById(STYLE_ID);
+  if (existing) { existing.textContent = css; return; }
+  const style = document.createElement("style");
+  style.id = STYLE_ID;
+  style.textContent = css;
+  document.head.appendChild(style);
+}
+
+export function boot(payload: BootPayload) {
+  try {
+    void start(payload);
+  } catch (error) {
+    warn("boot failed", error);
+  }
+}
+
+async function start(payload: BootPayload) {
+  const mount = findMount();
+  if (!mount) {
+    warn("마운트 지점을 찾지 못했어요 — <div data-mach-competition-vote></div> 를 넣어주세요.");
+    return;
+  }
+  const deviceId = getDeviceId();
+
+  let state: StateDto;
+  try {
+    const res = await fetch(
+      `${payload.origin}/api/competitions/${payload.competitionId}/votes?round=${payload.round}&deviceId=${encodeURIComponent(deviceId)}`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) throw new Error(String(res.status));
+    state = await res.json();
+  } catch (error) {
+    warn("상태를 불러오지 못했어요", error);
+    mount.innerHTML = `<div class="mc"><p class="mc-note">투표 정보를 불러오지 못했어요. 잠시 후 새로고침해주세요.</p></div>`;
+    return;
+  }
+
+  injectStyles(state.competition.theme);
+  renderVote(mount, state, payload, deviceId);
+}
+
+function mediaThumbHtml(entry: EntryDto): string {
+  const image = entry.media.find((m) => m.kind === "image" && m.url);
+  if (image?.url) {
+    return `<img class="mcv-thumb-img" src="${escapeHtml(image.url)}" alt="" loading="lazy">`;
+  }
+  const video = entry.media.find((m) => m.kind === "youtube" && m.videoId);
+  if (video?.videoId) {
+    // 썸네일만 깔고 재생은 클릭 시 — 목록에 iframe 을 다 붙이면 페이지가 느려진다.
+    return `<button type="button" class="mcv-video" data-mcv-play="${escapeHtml(video.videoId)}" aria-label="영상 재생">
+      <img class="mcv-thumb-img" src="https://img.youtube.com/vi/${escapeHtml(video.videoId)}/hqdefault.jpg" alt="" loading="lazy">
+      <span class="mcv-play">▶</span></button>`;
+  }
+  return `<div class="mcv-thumb-empty"></div>`;
+}
+
+function renderVote(mount: HTMLElement, state: StateDto, payload: BootPayload, deviceId: string) {
+  const selected = new Set(state.myVoteIds);
+  let remaining = state.remaining;
+
+  const cards = state.entries
+    .map((entry) => {
+      const voted = selected.has(entry.id);
+      const tallyText =
+        state.round.showLiveTally && state.tally ? `<span class="mcv-count">${state.tally[entry.id] ?? 0}표</span>` : "";
+      return `<article class="mcv-card${voted ? " is-voted" : ""}" data-mcv-entry="${escapeHtml(entry.id)}">
+        <div class="mcv-media">${mediaThumbHtml(entry)}</div>
+        <div class="mcv-body">
+          <div class="mcv-head"><span class="mcv-no">${escapeHtml(entry.entryNo)}</span>${tallyText}</div>
+          <h3 class="mcv-title">${escapeHtml(entry.title)}</h3>
+          ${entry.teamName ? `<p class="mcv-team">${escapeHtml(entry.teamName)}</p>` : ""}
+          ${entry.summary ? `<p class="mcv-summary">${escapeHtml(entry.summary)}</p>` : ""}
+          <button type="button" class="mcv-btn" data-mcv-vote="${escapeHtml(entry.id)}">
+            ${voted ? "투표함" : "투표하기"}
+          </button>
+        </div>
+      </article>`;
+    })
+    .join("");
+
+  mount.innerHTML = `<div class="mc mcv">
+    ${payload.preview ? '<div class="mc-preview-banner">미리보기입니다. 투표해도 반영되지 않아요.</div>' : ""}
+    <div class="mcv-bar">
+      <span class="mcv-bar-title">${escapeHtml(state.round.name)}</span>
+      <span class="mcv-remain" data-mcv-remain>남은 표 ${remaining} / ${state.round.maxVotesPerVoter}</span>
+    </div>
+    ${state.open ? "" : `<p class="mc-note">${escapeHtml(state.message)}</p>`}
+    ${state.entries.length === 0 ? '<p class="mc-note">아직 공개된 참가작이 없어요.</p>' : `<div class="mcv-grid">${cards}</div>`}
+    <p class="mc-msg" data-mcv-msg></p>
+  </div>`;
+
+  const msgNode = mount.querySelector<HTMLElement>("[data-mcv-msg]");
+  const remainNode = mount.querySelector<HTMLElement>("[data-mcv-remain]");
+  const showMsg = (kind: "error" | "success", text: string) => {
+    if (!msgNode) return;
+    msgNode.className = `mc-msg mc-msg-${kind}`;
+    msgNode.textContent = text;
+  };
+  const syncRemain = () => {
+    if (remainNode) remainNode.textContent = `남은 표 ${remaining} / ${state.round.maxVotesPerVoter}`;
+  };
+
+  // 영상 재생 — 클릭한 카드에만 iframe 을 붙인다.
+  mount.querySelectorAll<HTMLElement>("[data-mcv-play]").forEach((node) => {
+    node.addEventListener("click", () => {
+      const videoId = node.getAttribute("data-mcv-play");
+      if (!videoId) return;
+      const frame = document.createElement("iframe");
+      frame.className = "mcv-frame";
+      frame.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1`;
+      frame.allow = "accelerometer; autoplay; encrypted-media; picture-in-picture";
+      frame.setAttribute("allowfullscreen", "");
+      frame.setAttribute("title", "참가작 영상");
+      node.replaceWith(frame);
+    });
+  });
+
+  mount.querySelectorAll<HTMLButtonElement>("[data-mcv-vote]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const entryId = button.getAttribute("data-mcv-vote");
+      if (!entryId) return;
+
+      if (!state.open) { showMsg("error", state.message || "지금은 투표할 수 없어요."); return; }
+
+      const card = button.closest<HTMLElement>(".mcv-card");
+      const alreadyVoted = selected.has(entryId);
+
+      if (alreadyVoted && !state.round.allowVoteUndo) {
+        showMsg("error", "이미 투표한 참가작이에요.");
+        return;
+      }
+      if (!alreadyVoted && remaining <= 0) {
+        showMsg("error", `이 투표는 ${state.round.maxVotesPerVoter}표까지 할 수 있어요.`);
+        return;
+      }
+
+      if (payload.preview) {
+        showMsg("success", "미리보기라 반영되지 않았어요.");
+        return;
+      }
+
+      button.disabled = true;
+      try {
+        const res = await fetch(`${payload.origin}/api/competitions/${payload.competitionId}/votes`, {
+          method: alreadyVoted ? "DELETE" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            round: payload.round,
+            deviceId,
+            ...(alreadyVoted ? { entryId } : { entryIds: [entryId] }),
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          showMsg("error", data.error || "처리에 실패했어요.");
+          if (typeof data.remaining === "number") { remaining = data.remaining; syncRemain(); }
+          return;
+        }
+
+        if (alreadyVoted) {
+          selected.delete(entryId);
+          card?.classList.remove("is-voted");
+          button.textContent = "투표하기";
+          showMsg("success", "투표를 취소했어요.");
+        } else {
+          selected.add(entryId);
+          card?.classList.add("is-voted");
+          button.textContent = "투표함";
+          showMsg("success", data.message || "투표했어요.");
+        }
+        if (typeof data.remaining === "number") remaining = data.remaining;
+        syncRemain();
+      } catch {
+        showMsg("error", "네트워크 오류가 발생했어요.");
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+}

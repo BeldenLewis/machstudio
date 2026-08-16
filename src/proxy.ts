@@ -19,6 +19,23 @@ export async function proxy(request: NextRequest) {
     pathname.match(/^\/webinar\/[^/]+\/live/) ||
     pathname.match(/^\/webinar\/[^/]+\/survey\//) || // 시청자 설문 응답 페이지(공개 — 종료화면·응답링크로 진입)
     pathname.match(/^\/webinar\/[^/]+\/landing/) || // 랜딩 상세페이지(공개 — 외부 사이트 iframe 임베드)
+    pathname.startsWith("/c/") || // 대회 임베드 로더 (외부 사이트 부착)
+    pathname.startsWith("/cp/") || // 대회 미리보기 (토큰 링크)
+    // 대회 공개 API — 신청 제출·이미지 업로드. **POST 로 한정한다**: 같은 /entries 경로의
+    // GET 은 어드민 목록이라, 여기로 새면 세션 갱신을 건너뛰어 만료 직전 토큰이 401 이 된다.
+    ((request.method === "POST" || request.method === "OPTIONS") &&
+      pathname.match(/^\/api\/competitions\/[^/]+\/(entries|entry-image)$/) !== null) ||
+    // 투표는 GET(목록·내 표) / POST(투표) / DELETE(취소) 전부 공개다 — 어드민 전용 GET 이 없다.
+    // 집계(/tally)는 여기 없다: 운영자만 봐야 하므로 로그인 흐름을 그대로 탄다.
+    pathname.match(/^\/api\/competitions\/[^/]+\/votes$/) !== null ||
+    // 결과 발표는 관람객이 보는 공개 조회다. 발표 전에는 라우트가 스스로 빈 결과를 준다.
+    pathname.match(/^\/api\/competitions\/[^/]+\/result$/) !== null ||
+    // 심사 화면·API — machstudio 계정이 없는 심사위원이 링크+비밀번호로 들어온다.
+    pathname.startsWith("/j/") ||
+    pathname.startsWith("/api/judge/") ||
+    // 발표 화면 — 무대 노트북은 machstudio 계정으로 로그인돼 있지 않다. 링크(showToken)가 열쇠다.
+    pathname.startsWith("/show/") ||
+    pathname.startsWith("/api/show/") ||
     pathname.startsWith("/api/public") ||
     pathname.startsWith("/api/shorten-url") ||
     pathname.startsWith("/api/health") ||
