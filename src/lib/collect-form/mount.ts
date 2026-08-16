@@ -34,9 +34,6 @@ import { buildUtmEnvelope } from "@/lib/attribution-client";
 
 const STYLE_ID = "msf-css";
 
-/** 이보다 더 과거인 serverNow 는 캐시에 굳은 값으로 보고 쓰지 않는다(아래 오프셋 계산). */
-const STALE_SERVER_NOW_MS = 5 * 60 * 1000;
-
 /**
  * 미리보기 완료 화면에 쓰는 더미 등록번호(설계 §16.1 "화면 확인용 더미 번호로 렌더").
  *
@@ -154,24 +151,39 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
    * 서버 시각 오프셋. Age 를 더하지 않으면 CDN 에 굳은 serverNow 를 "지금" 으로 믿어
    * 최대 s-maxage+SWR 만큼 과거가 된다(웨비나 로더가 실제로 겪은 지연).
    */
-  let serverOffsetMs = 0;
+  /**
+   * 기준 시각을 **서버가 준 값 + 단조 시계 경과분**으로 만든다.
+   *
+   * 기기 벽시계(Date.now)를 기준으로 오프셋을 계산하면, 시계가 틀어진 기기에서 그 오차가
+   * 그대로 판정에 들어간다. 예전에는 "과거로 크게 벌어진 오프셋은 버린다" 는 상한을 뒀는데,
+   * 그건 **기기 시계가 앞선 경우**(연도가 틀린 태블릿, 수동 설정 폰)에 보정이 통째로
+   * 버려져 서버는 접수 중인데 화면만 "마감" 이 되는 방향으로 고장 났다.
+   *
+   * performance.now() 는 페이지 로드 기준의 단조 증가 값이라 사용자가 시계를 바꿔도
+   * 흔들리지 않는다. 그래서 오차 상한이 **캐시 창(s-maxage+SWR ≈ 120초)** 으로 묶이고,
+   * 기기 시계가 얼마나 틀어져 있든 판정은 서버 시각을 따른다.
+   *
+   * ageMs 를 더하는 이유: serverNow 는 스크립트 본문에 구워져 CDN 에 캐시된다 — 엣지가
+   * stale 응답을 주면 그 시각이 그만큼 과거다(웨비나 로더가 실제로 겪은 지연).
+   */
+  let serverBaseMs: number | null = null;
+  let monoBase = 0;
   if (opts.serverNow) {
     const parsed = Date.parse(opts.serverNow);
     if (!Number.isNaN(parsed)) {
-      const offset = parsed + (opts.ageMs && opts.ageMs > 0 ? opts.ageMs : 0) - Date.now();
-      /**
-       * **과거로 크게 벌어진 오프셋은 버린다.**
-       *
-       * serverNow 는 스크립트 본문에 구워져 CDN 에 캐시된다 — 엣지가 stale 응답을 주면 그
-       * 시각이 실제보다 한참 과거다. 그대로 믿으면 이미 열린 폼이 "아직 안 열렸어요" 로
-       * 보이고, 방문자는 그냥 떠난다(로그에도 안 남는다).
-       * 기기 시계가 몇 분 틀어진 것보다 **몇 시간 묵은 서버 시각이 더 나쁘다.**
-       * 캐시 창(s-maxage + SWR)보다 넉넉한 상한을 두고, 넘으면 로컬 시계로 돌아간다.
-       */
-      serverOffsetMs = offset < -STALE_SERVER_NOW_MS ? 0 : offset;
+      serverBaseMs = parsed + (opts.ageMs && opts.ageMs > 0 ? opts.ageMs : 0);
+      monoBase = typeof performance !== "undefined" && typeof performance.now === "function"
+        ? performance.now()
+        : 0;
     }
   }
-  const nowDate = () => new Date(Date.now() + serverOffsetMs);
+  const nowDate = (): Date => {
+    if (serverBaseMs === null) return new Date();
+    const elapsed = typeof performance !== "undefined" && typeof performance.now === "function"
+      ? performance.now() - monoBase
+      : 0;
+    return new Date(serverBaseMs + elapsed);
+  };
 
   // ── 상태 ────────────────────────────────────────────────────────────
   /**
@@ -582,7 +594,17 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
           duplicate = Boolean(d && d.exists);
           duplicateKey = duplicate ? fieldKey : null;
           if (duplicate) {
+            /**
+             * **재렌더로 사라지지 않게 다시 그린다.**
+             *
+             * 여기 잡아 둔 `errSlot` 은 조회를 쏠 당시의 DOM 노드다. 조회가 도는 600ms+RTT
+             * 사이에 분기 select 를 건드리면 항목이 다시 그려져 그 노드가 화면에서 빠지고,
+             * 그러면 **제출 버튼만 회색으로 잠긴 채 이유가 안 보인다.** 어느 칸을 고쳐야
+             * 할지 모르니 등록을 포기한다. 상태(duplicate/duplicateKey)는 이미 세웠으므로
+             * renderFields() 가 새 노드에 같은 안내를 붙인다(409 경로가 쓰는 방식과 같다).
+             */
             errSlot.textContent = COPY.duplicate;
+            if (!errSlot.isConnected) renderFields();
             track(preview, "ms_form_duplicate");
           }
           updateSubmitState();
@@ -768,6 +790,13 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
         track(preview, "generate_lead", {
           visitor_type: visitorType,
           transaction_id: data.rid ?? data.registrationNo,
+          /**
+           * 마케팅 동의 상태를 같이 싣는다(§18 "동의 연동").
+           * GTM 이 이 값으로 Consent Mode v2 의 ad_storage·ad_user_data 를 내린다 —
+           * 없으면 미동의자에 대해 거절 상태를 만들 근거가 없다. 전시별 GTM 설정이
+           * 이 키를 읽으므로 이름을 바꾸지 마라.
+           */
+          ms_consent: consent.marketing ? "granted" : "denied",
         });
         /**
          * 완료 화면을 **먼저** 그린다. 이동이 설정돼 있어도 그렇다 — 이동은 1초 뒤이고,

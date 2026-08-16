@@ -441,6 +441,28 @@ describe("제출", () => {
     expect(withErr).toEqual([[1, "This email is already registered."]]);
   });
 
+  /**
+   * 서버가 준 시각을 **단조 시계**로 이어간다(§17). 기기 벽시계를 기준으로 오프셋을 잡으면
+   * 시계가 앞선 기기에서 보정이 통째로 버려져, 서버는 접수 중인데 화면만 마감이 된다.
+   */
+  it("기기 시계가 크게 앞서도 서버 시각으로 판정한다", () => {
+    const closesAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const openConfig = normalizeCollectForm({
+      fields: [{ id: "f1", key: "email", label: { en: "Email" }, type: "email", enabled: true }],
+      eventInfo: { enabled: true, registrationWindow: { closesAt } },
+    });
+    // 서버는 "지금" 이라고 말한다. 기기 시계는 2시간 앞서 있다고 가정한다.
+    const realNow = Date.now;
+    vi.spyOn(Date, "now").mockImplementation(() => realNow.call(Date) + 2 * 60 * 60 * 1000);
+    try {
+      mount({ config: openConfig, serverNow: new Date(realNow.call(Date)).toISOString() });
+      expect(text()).not.toContain("Registration is closed");
+      expect(submitBtn()).toBeDefined();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it("실제 모드에서는 폼 노출·시작·제출이 dataLayer 로 나간다(§18)", () => {
     mount({ preview: false });
     const events = () => ((window as { dataLayer?: Array<{ event: string }> }).dataLayer ?? []).map((e) => e.event);
@@ -448,5 +470,21 @@ describe("제출", () => {
 
     fill('input[type="email"]', "a@b.com");
     expect(events()).toContain("ms_form_start");
+  });
+
+  /** §18 "동의 연동" — 이 값이 없으면 GTM 이 미동의자에게 Consent Mode v2 를 못 내린다. */
+  it("성공 이벤트에 마케팅 동의 상태가 실린다", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ registrationNo: "1234567890128", rid: "r1" }), { status: 201 }),
+    );
+    mount({ preview: false });
+    fill('input[type="email"]', "a@b.com");
+    tickPrivacy();
+    submitBtn().click();
+    await flush();
+
+    const dl = ((window as { dataLayer?: Array<Record<string, unknown>> }).dataLayer ?? []);
+    const lead = dl.find((e) => e.event === "generate_lead")!;
+    expect(lead.ms_consent).toBe("denied");
   });
 });
