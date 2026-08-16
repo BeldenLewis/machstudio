@@ -27,6 +27,7 @@ import {
   type SubmissionIssue,
 } from "@/lib/collect-form-config";
 import { isValidCollectEmail } from "@/lib/collect-email";
+import { COUNTRY_DIALS, flagEmoji, isKnownCountry } from "@/lib/collect-country";
 // 로더가 심어 둔 first-touch UTM 을 그대로 쓴다 — 파트너 사이트를 먼저 거친 방문자의 정본이다.
 import { buildUtmEnvelope } from "@/lib/attribution-client";
 
@@ -199,6 +200,11 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
    * 받았다는 것은 서버가 이미 판정을 끝냈다는 뜻이므로, 그때부터는 그 값을 쓴다.
    */
   let serverStatus: RegistrationStatus | null = null;
+  /**
+   * 전화 항목별로 방문자가 고른 국가(§6.3). 기본값은 설정의 기본 국가다 —
+   * "기본 국가를 박아두고 아닌 사람만 바꾼다" 가 설계가 정한 동작이다.
+   */
+  const phoneCountries: Record<string, string> = {};
 
   /**
    * 접수 상태의 단일 판정. 우선순위: **미리보기 강제 → 서버 확정 → 로컬 시각 계산.**
@@ -460,13 +466,42 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
       }
 
       if (f.type === "tel") {
-        // 국가코드는 설정값 하나(LA 는 US) — 아닌 사람만 국제표기(+…)로 직접 적는다(§6.3).
-        wrap.appendChild(
-          h("div", { class: "msf-tel" },
-            h("span", { class: "msf-tel-cc" }, config.validation.defaultCountry),
-            input,
-          ),
-        );
+        /**
+         * 국가 선택(§6.3 `[🇺🇸 United States +1 ▾] [2025550147]`).
+         *
+         * 고를 수 없으면 **등록을 끝내지 못하는 사람이 생긴다.** LA 파일럿의 기본 국가는
+         * US 인데 한국 참관객이 `01012345678` 을 치면 서버는 invalid_phone 을 내고,
+         * 화면에는 국가를 바꿀 컨트롤도 `+82` 를 붙이라는 안내도 없었다.
+         *
+         * 값은 국가번호를 붙여 보내지 않고 **고른 국가를 그대로 보낸다** — 앞 0 처리
+         * 규칙이 나라마다 달라서(한국은 떼고 이탈리아는 안 뗀다) 붙이면 틀린다.
+         */
+        const current = phoneCountries[f.key] ?? config.validation.defaultCountry;
+        const sel = h("select", {
+          // data-msf-cc — 항목 select(data-msf-key)와 구분되는 표시. 없으면 폼 안의
+          // `querySelector("select")` 가 전부 이 국가 칸을 먼저 잡는다.
+          class: "msf-tel-cc", "data-msf-cc": f.key, "aria-label": `${labelText} — country`,
+        }) as HTMLSelectElement;
+        for (const c of COUNTRY_DIALS) {
+          /**
+           * 국가번호를 **이름 앞에** 둔다. select 는 닫혀 있을 때 선택된 항목의 글자를
+           * 그대로 보여 주는데, 245개국 이름 중 긴 것에 폭을 맞추면 번호 입력칸이 사라져
+           * 폭을 묶어 뒀다 — 그러면 뒤가 잘린다. 잘려도 남아야 하는 건 "+1" 쪽이다.
+           */
+          sel.appendChild(h("option", { value: c.code }, `${flagEmoji(c.code)} +${c.dial} ${c.name}`));
+        }
+        // 설정의 기본 국가가 아는 값이 아니면(운영자가 GB 를 UK 로 적는 식) 목록의 선택을
+        // 강요하지 않는다 — 첫 항목이 조용히 선택되면 왜 안 되는지 아무도 모른다.
+        if (isKnownCountry(current)) sel.value = current.toUpperCase();
+        phoneCountries[f.key] = sel.value;
+        sel.addEventListener("change", () => {
+          phoneCountries[f.key] = sel.value;
+          // 국가를 바꾼 건 "이 번호를 다시 봐 달라" 는 뜻이다 — 옛 오류를 남겨 두지 않는다.
+          clearIssue(f.key);
+          err.textContent = "";
+          updateSubmitState();
+        });
+        wrap.appendChild(h("div", { class: "msf-tel" }, sel, input));
       } else {
         wrap.appendChild(input);
       }
@@ -669,6 +704,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
       // 전화 검증은 서버가 libphonenumber 로 한다 — 그 메타데이터를 번들에 넣으면
       // 임베드가 수백 KB 커진다(collect-phone.ts 주석). 여기서는 비어 있지 않은지만 본다.
       isValidPhone: (v) => v.trim().length > 0,
+      countryFor: (key) => phoneCountries[key] ?? config.validation.defaultCountry,
       consent,
     });
     if (issues.length > 0) {
@@ -702,6 +738,8 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
         body: JSON.stringify({
           values: body,
           consent,
+          // 어느 나라 번호로 읽어야 하는지. 값에 국가번호를 붙이지 않는 이유는 §6.3 주석에.
+          phoneCountries,
           locale: lang,
           _hp: honeypot.value || "",
           _utm: utmEnvelope(),

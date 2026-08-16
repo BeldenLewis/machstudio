@@ -167,6 +167,55 @@ describe("대표 항목 고르기", () => {
   });
 });
 
+/**
+ * 방문자가 고른 국가로 번호를 읽는다(§6.3). LA 폼(기본 US)에 한국 참관객이 오는 것이
+ * 파일럿의 기본 시나리오이므로, 이게 안 되면 그 사람들은 등록을 끝내지 못한다.
+ */
+describe("전화 국가 선택", () => {
+  const phoneForm = normalizeCollectForm({
+    fields: [{ id: "f1", key: "phone", label: { en: "Phone" }, type: "tel", required: true, enabled: true }],
+    validation: { defaultCountry: "US" },
+  });
+  // 개인정보 동의는 기본이 필수다 — 빼면 전화가 아니라 동의에서 걸린다.
+  const run = (phone: string, phoneCountries?: unknown) =>
+    prepareBuilderSubmission(
+      phoneForm,
+      { values: { phone }, phoneCountries, consent: { privacy: true } },
+      new Date(),
+    );
+
+  it("KR 을 고르면 한국 번호가 통과하고 앞 0 이 떨어진다", () => {
+    const r = run("01012345678", { phone: "KR" });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.prepared.phoneE164).toBe("+821012345678");
+  });
+
+  /** 고르지 않으면 설정의 기본 국가다 — "기본을 박아두고 아닌 사람만 바꾼다"(§6.3). */
+  it("안 고르면 기본 국가로 읽는다", () => {
+    const r = run("2025550147");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.prepared.phoneE164).toBe("+12025550147");
+  });
+
+  /** 같은 번호도 국가가 틀리면 무효다 — 그래서 고를 수 있어야 한다. */
+  it("기본 국가로는 거부되던 번호가 국가를 고르면 통과한다", () => {
+    const withoutPick = run("01012345678");
+    expect(withoutPick.ok).toBe(false);
+    if (!withoutPick.ok && withoutPick.code === "invalid") {
+      expect(withoutPick.issues[0]).toEqual({ key: "phone", code: "invalid_phone" });
+    }
+  });
+
+  /** 아무 문자열이나 받으면 toE164 가 전부 null 을 내 그 폼의 전화가 통째로 무효가 된다. */
+  it("모르는 국가 코드는 무시하고 기본으로 떨어진다", () => {
+    for (const bad of [{ phone: "UK" }, { phone: "" }, { phone: 82 }, "not-an-object", null]) {
+      const r = run("2025550147", bad);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.prepared.phoneE164).toBe("+12025550147");
+    }
+  });
+});
+
 describe("이메일 유효성 — 설계 §6.2 의 '추가 차단'", () => {
   /**
    * **과잉 차단 회귀 방지가 먼저다.** §22 가 이 주소를 이름으로 지목한다 —

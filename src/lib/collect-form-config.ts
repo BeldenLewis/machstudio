@@ -596,6 +596,13 @@ export function validateSubmission(
   deps: {
     isValidEmail: (v: string) => boolean;
     isValidPhone: (v: string, country: string) => boolean;
+    /**
+     * 그 전화 항목을 **어느 나라 번호로 읽을 것인가**.
+     * 방문자가 폼에서 국가를 고를 수 있으므로(§6.3) 설정값 하나로는 부족하다 —
+     * LA 폼(기본 US)에 한국 참관객이 오는 것이 파일럿의 기본 시나리오다.
+     * 주지 않으면 설정의 기본 국가를 쓴다(옛 호출부 호환).
+     */
+    countryFor?: (fieldKey: string) => string;
     consent: { privacy?: boolean; marketing?: boolean };
   },
 ): SubmissionIssue[] {
@@ -637,7 +644,8 @@ export function validateSubmission(
     if (f.type === "email" && !deps.isValidEmail(safeStr(raw).trim())) {
       issues.push({ key: f.key, code: "invalid_email" });
     }
-    if (f.type === "tel" && !deps.isValidPhone(safeStr(raw).trim(), config.validation.defaultCountry)) {
+    const telCountry = deps.countryFor?.(f.key) || config.validation.defaultCountry;
+    if (f.type === "tel" && !deps.isValidPhone(safeStr(raw).trim(), telCountry)) {
       issues.push({ key: f.key, code: "invalid_phone" });
     }
     if (f.type === "multiple") {

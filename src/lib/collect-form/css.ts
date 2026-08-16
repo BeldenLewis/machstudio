@@ -72,8 +72,14 @@ export const COLLECT_FORM_CSS = `
 
 /* 전화 — 국가코드 칸 + 번호 칸 */
 .msf-tel{display:flex;gap:8px;align-items:stretch}
-.msf-tel-cc{flex:0 0 auto;display:flex;align-items:center;padding:0 12px;font-size:14px;font-weight:600;
-  background:var(--msf-soft);border:1px solid var(--msf-line);border-radius:var(--msf-radius);color:var(--msf-muted);white-space:nowrap}
+/* 국가 선택 — 폭을 묶는다. 245개국 이름 중 제일 긴 것에 맞추면 번호칸이 사라진다.
+   text-overflow 는 select 에 안 먹으므로 폭 자체를 제한하고, 열린 목록은 원래 넓게 그려진다. */
+.msf-tel-cc{flex:0 0 auto;max-width:44%;padding:0 8px;font-size:14px;font-weight:600;
+  background:var(--msf-soft);border:1px solid var(--msf-line);border-radius:var(--msf-radius);
+  color:var(--msf-fg);white-space:nowrap;cursor:pointer;
+  /* 44px 터치 타깃 — 현장에서 휴대폰으로 채우는 폼이다 */
+  min-height:44px;appearance:auto}
+.msf-tel-cc:focus-visible{outline:2px solid var(--msf-accent);outline-offset:1px}
 .msf-tel .msf-input{flex:1 1 auto;min-width:0}
 
 /* 선택지 — 칩 */

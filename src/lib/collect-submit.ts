@@ -12,6 +12,7 @@
  */
 import { isValidCollectEmail, normalizeEmail } from "@/lib/collect-email";
 import { isValidPhoneForCountry, toE164 } from "@/lib/collect-phone";
+import { isKnownCountry } from "@/lib/collect-country";
 import { generateRegistrationNo } from "@/lib/collect-registration-no";
 import {
   resolveRegistrationStatus,
@@ -53,6 +54,15 @@ export interface SubmissionInput {
   values: Record<string, unknown>;
   consent?: { privacy?: unknown; marketing?: unknown };
   locale?: unknown;
+  /**
+   * 전화 항목별로 방문자가 고른 국가(§6.3). `{ phone: "KR" }`.
+   *
+   * 왜 값에 국가번호를 붙여 보내지 않나: 나라마다 **국내 표기의 앞 0** 규칙이 다르다.
+   * 한국 `01012345678` 앞에 `+82` 를 그냥 붙이면 `+82010…` 이 되어 틀린 번호가 된다.
+   * 앞 0 처리는 libphonenumber 가 "이 나라 번호로 읽어라" 를 알아야 할 수 있으므로,
+   * 붙이지 않고 **어느 나라인지**를 보낸다.
+   */
+  phoneCountries?: unknown;
 }
 
 function str(v: unknown): string {
@@ -151,9 +161,20 @@ export function prepareBuilderSubmission(
     privacy: input.consent?.privacy === true,
     marketing: input.consent?.marketing === true,
   };
+  /**
+   * 방문자가 고른 국가는 **아는 코드만** 받는다. 아무 문자열이나 통과시키면 toE164 가
+   * 전부 null 을 내고 그 폼의 전화가 통째로 무효가 된다 — 화면엔 이유가 안 뜬다.
+   */
+  const picked = input.phoneCountries;
+  const countryFor = (key: string): string => {
+    const v = picked && typeof picked === "object" ? (picked as Record<string, unknown>)[key] : null;
+    return isKnownCountry(v) ? String(v).toUpperCase() : config.validation.defaultCountry;
+  };
+
   const issues = validateSubmission(config, values, {
     isValidEmail: isValidCollectEmail,
     isValidPhone: (v, country) => isValidPhoneForCountry(v, country),
+    countryFor,
     consent,
   });
   if (issues.length > 0) return { ok: false, code: "invalid", issues };
@@ -163,7 +184,7 @@ export function prepareBuilderSubmission(
   const phoneKey = primaryFieldKey(config, values, "tel");
   const emailNormalized = emailKey ? normalizeEmail(values[emailKey]) : null;
   const phoneRaw = phoneKey ? str(values[phoneKey]).trim() : "";
-  const phoneE164 = phoneRaw ? toE164(phoneRaw, config.validation.defaultCountry) : null;
+  const phoneE164 = phoneRaw && phoneKey ? toE164(phoneRaw, countryFor(phoneKey)) : null;
 
   // 로케일은 뷰어가 보낸 값을 **폼이 아는 것 중에서만** 받는다. 아무 문자열이나 저장하면
   // 나중에 언어별 재발송이 그 값으로 갈라져 보낼 수 없는 언어가 생긴다.

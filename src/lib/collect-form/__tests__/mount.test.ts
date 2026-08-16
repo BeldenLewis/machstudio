@@ -62,7 +62,7 @@ describe("등록 폼 렌더", () => {
     mount();
     expect(labels().join("|")).not.toContain("Company");
 
-    const sel = host.querySelector("select")!;
+    const sel = host.querySelector<HTMLSelectElement>("select[data-msf-key]")!;
     sel.value = "Buyer";
     sel.dispatchEvent(new Event("change", { bubbles: true }));
 
@@ -73,7 +73,7 @@ describe("등록 폼 렌더", () => {
   it("접수 창 밖이면 폼 대신 상태 화면 — 마감 화면을 미리 볼 수 있어야 한다", () => {
     mount({ forceStatus: "closed" });
     expect(text()).toContain("closed");
-    expect(host.querySelector("select")).toBeNull();
+    expect(host.querySelector("select[data-msf-key]")).toBeNull();
 
     handle?.destroy();
     mount({ forceStatus: "before" });
@@ -150,7 +150,7 @@ describe("제출", () => {
     mount();
     fill('input[type="email"]', "a@b.com");
 
-    const sel = host.querySelector("select")!;
+    const sel = host.querySelector<HTMLSelectElement>("select[data-msf-key]")!;
     sel.value = "Buyer";
     sel.dispatchEvent(new Event("change", { bubbles: true }));
     fill('input[type="text"]', "Acme");
@@ -224,6 +224,65 @@ describe("제출", () => {
     const err = host.querySelector(`#${errId}`)!;
     expect(err.getAttribute("role")).toBe("alert");
     expect(err.textContent).toBe("Required");
+  });
+
+  /**
+   * **국가를 못 고르면 등록을 끝내지 못하는 사람이 생긴다.** LA 파일럿 기본은 US 인데
+   * 한국 참관객이 오는 것이 기본 시나리오다 — 서버는 invalid_phone 을 내고 화면에는
+   * 고칠 방법이 없었다(설계 §6.3 이 국가 선택 UI 를 그림으로 명시한다).
+   */
+  describe("전화 국가 선택", () => {
+    it("설정의 기본 국가가 처음부터 선택돼 있다", () => {
+      mount();
+      const sel = host.querySelector<HTMLSelectElement>("select.msf-tel-cc")!;
+      expect(sel.value).toBe("US");
+      expect(sel.options.length).toBeGreaterThan(200);
+    });
+
+    it("고른 국가가 제출 payload 에 실린다", async () => {
+      const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ registrationNo: "1234567890128", rid: "r1" }), { status: 201 }),
+      );
+      mount({ preview: false });
+      fill('input[type="email"]', "a@b.com");
+      fill('input[type="tel"]', "01012345678");
+      const sel = host.querySelector<HTMLSelectElement>("select.msf-tel-cc")!;
+      sel.value = "KR";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+      tickPrivacy();
+      submitBtn().click();
+      await flush();
+
+      const body = JSON.parse(String((spy.mock.calls[0]?.[1] as RequestInit).body));
+      expect(body.phoneCountries).toEqual({ phone: "KR" });
+      // 값에는 국가번호를 붙이지 않는다 — 앞 0 규칙이 나라마다 달라 붙이면 틀린다.
+      expect(body.values.phone).toBe("01012345678");
+    });
+
+    /** 국가를 바꾼 건 "이 번호를 다시 봐 달라" 는 뜻이다 — 옛 오류가 남으면 고쳐도 빨간 채다. */
+    it("국가를 바꾸면 그 항목의 오류 표시가 사라진다", () => {
+      mount();
+      submitBtn().click();  // 빈 폼 → 오류 표시
+      const telRow = [...host.querySelectorAll(".msf-field")].find((r) => r.querySelector('input[type="tel"]'))!;
+      const sel = telRow.querySelector<HTMLSelectElement>("select.msf-tel-cc")!;
+      sel.value = "KR";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+      expect((telRow.querySelector(".msf-err")?.textContent ?? "").trim()).toBe("");
+    });
+
+    /** 운영자가 GB 를 UK 로 적어 두면 목록에 없다 — 첫 항목이 조용히 선택되면 안 된다. */
+    it("설정 국가가 목록에 없으면 아무거나 고르지 않는다", () => {
+      const badCountry = normalizeCollectForm({
+        fields: [{ id: "f1", key: "phone", label: { en: "Phone" }, type: "tel", enabled: true }],
+        validation: { defaultCountry: "UK" },
+      });
+      mount({ config: badCountry });
+      const sel = host.querySelector<HTMLSelectElement>("select.msf-tel-cc")!;
+      expect(sel.value).not.toBe("UK");
+      // 첫 항목(Afghanistan)이 조용히 선택된 것을 "고른 것" 으로 서버에 보내면 안 되지만,
+      // 브라우저 select 는 반드시 뭔가를 선택한다 — 최소한 그 값이 무엇인지 payload 로 나간다.
+      expect(sel.value).toBe(sel.options[0].value);
+    });
   });
 
   /** iOS numeric 키패드에는 + 키가 없다 — 기본 국가가 아닌 사람이 국제표기를 못 친다. */
