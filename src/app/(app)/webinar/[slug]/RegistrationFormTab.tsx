@@ -2,7 +2,8 @@
 
 import { useId, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { motion } from "framer-motion";
-import { Plus, Trash2, GripVertical, Smartphone, SquareCheck, ChevronDown } from "lucide-react";
+// Trash2·GripVertical 은 골격(EditableList)이 핸들·삭제를 대신 그리면서 쓸 곳이 없어졌다.
+import { Plus, Smartphone, SquareCheck, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
@@ -54,7 +55,8 @@ function FieldCard({
   /** 골격이 만든 삭제 컨트롤. removable 이 false 면 null 을 준다(기본 필드). */
   removeButton: (opts?: { label?: string; onClick?: () => void }) => ReactNode | null;
 }) {
-  const typePop = useRegPopover();
+  // 반환 객체를 통째로 들고 있으면 컴파일러가 ref 를 품은 객체로 보고 렌더 중 접근을 막는다(react-hooks/refs).
+  const { open: typeOpen, setOpen: setTypeOpen, ref: typeRef } = useRegPopover();
   const patch = (next: Partial<RegistrationField>) =>
     setFields((fields) => fields.map((item) => (item.id === field.id ? { ...item, ...next } : item)));
 
@@ -69,7 +71,7 @@ function FieldCard({
   const liveMax = maxSelectFor({ type: field.type, maxSelect: field.maxSelect, options: options.filter((o) => o.trim()) });
 
   const changeType = (t: FieldType) => {
-    typePop.setOpen(false);
+    setTypeOpen(false);
     if (t === field.type) return;
     const next: Partial<RegistrationField> = { type: t };
     // 선택형으로 바꿀 때 빈 옵션 두 줄을 깔아 준다 — 옵션 0개면 공개 폼에서 항목이 사라진다.
@@ -94,12 +96,12 @@ function FieldCard({
         <div className="flex items-center gap-1 px-2 pt-2">
           {handle}
 
-          <div className="relative" ref={typePop.ref}>
+          <div className="relative" ref={typeRef}>
             <button
               type="button"
-              onClick={() => !typeLocked && typePop.setOpen((v) => !v)}
+              onClick={() => !typeLocked && setTypeOpen((v) => !v)}
               aria-haspopup={typeLocked ? undefined : "menu"}
-              aria-expanded={typeLocked ? undefined : typePop.open}
+              aria-expanded={typeLocked ? undefined : typeOpen}
               disabled={typeLocked}
               className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-background px-2 py-1.5 text-xs font-semibold shadow-sm transition-shadow hover:shadow disabled:cursor-default disabled:opacity-90"
             >
@@ -107,7 +109,7 @@ function FieldCard({
               {meta.label}
               {!typeLocked && <ChevronDown className="h-3 w-3 text-muted-foreground/60" />}
             </button>
-            {typePop.open && !typeLocked && <RegTypeMenu current={field.type} onPick={changeType} />}
+            {typeOpen && !typeLocked && <RegTypeMenu current={field.type} onPick={changeType} />}
           </div>
 
           {field.system && <span className="ml-1.5 shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">기본</span>}

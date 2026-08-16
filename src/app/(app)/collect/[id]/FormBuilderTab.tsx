@@ -14,6 +14,7 @@ import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { btnCls, R, FINISH } from "@/components/ui/primitives";
 import { CollectFieldCard, keyFromLabel } from "@/components/form-builder/CollectFieldCard";
 import { CollectFormPreview } from "@/components/form-builder/CollectFormPreview";
+import { CollectFormSections } from "@/components/form-builder/CollectFormSections";
 import {
   DEFAULT_LOCALE,
   normalizeCollectForm,
@@ -117,10 +118,13 @@ export default function FormBuilderTab({
             />
           )}
         />
+
+        {/* 항목 아래에 나머지 설정 — 순서가 곧 폼이 그려지는 순서다(개요 → 항목 → 안내 → 동의). */}
+        <CollectFormSections config={config} patch={patch} />
       </div>
 
       {/* 미리보기는 임베드와 같은 모델·가시성 규칙을 읽는다 — 각자 그리면 반드시 갈라진다. */}
-      <aside className="space-y-2">
+      <aside className="space-y-2 lg:sticky lg:top-4 lg:self-start">
         <div className="flex items-center gap-1">
           {PREVIEW_STATES.map((s) => (
             <button

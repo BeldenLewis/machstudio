@@ -63,7 +63,8 @@ export function CollectFieldCard({
   /** 이미 쓰인 key 들 — 중복이면 저장해도 하나가 버려지므로 그 자리에서 알린다. */
   takenKeys: ReadonlySet<string>;
 }) {
-  const typePop = useRegPopover();
+  // 반환 객체를 통째로 들고 있으면 컴파일러가 ref 를 품은 객체로 보고 렌더 중 접근을 막는다(react-hooks/refs).
+  const { open: typeOpen, setOpen: setTypeOpen, ref: typeRef } = useRegPopover();
   const patch = (next: Partial<CollectField>) =>
     setFields((all) => all.map((f) => (f.id === field.id ? { ...f, ...next } : f)));
 
@@ -82,7 +83,7 @@ export function CollectFieldCard({
         : "";
 
   const changeType = (t: BuilderFieldType) => {
-    typePop.setOpen(false);
+    setTypeOpen(false);
     if (t === field.type) return;
     const next: Partial<CollectField> = { type: t };
     if (t !== "multiple") next.maxSelect = undefined;
@@ -98,19 +99,19 @@ export function CollectFieldCard({
     <div className={`${R.surface} bg-secondary ${FINISH.s2} transition-colors focus-within:bg-secondary/70 ${field.enabled ? "" : "opacity-60"}`}>
       <div className="flex items-center gap-1 px-2 pt-2">
         {handle}
-        <div className="relative" ref={typePop.ref}>
+        <div className="relative" ref={typeRef}>
           <button
             type="button"
-            onClick={() => typePop.setOpen((v) => !v)}
+            onClick={() => setTypeOpen((v) => !v)}
             aria-haspopup="menu"
-            aria-expanded={typePop.open}
+            aria-expanded={typeOpen}
             className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-background px-2 py-1.5 text-xs font-semibold shadow-sm transition-shadow hover:shadow"
           >
             <span className="grid h-5 w-5 place-items-center rounded-lg bg-violet-500/10 text-violet-500"><TypeIcon className="h-3 w-3" /></span>
             {meta.label}
             <ChevronDown className="h-3 w-3 text-muted-foreground/60" />
           </button>
-          {typePop.open && <RegTypeMenu current={field.type} onPick={changeType} />}
+          {typeOpen && <RegTypeMenu current={field.type} onPick={changeType} />}
         </div>
 
         {isBranchKey && (

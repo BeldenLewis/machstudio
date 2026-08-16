@@ -1,0 +1,359 @@
+"use client";
+
+/**
+ * 폼 빌더의 항목 외 설정 — 행사 개요·안내 블록·검증·동의·완료·등록 확인(설계 §5·§6·§7·§8·§10).
+ *
+ * 전부 **편집 영역**이라 값이 항상 보이고 그 자리에서 고쳐진다(AGENTS.md §2).
+ * 섹션은 블록 카드로 나누되 접지 않는다 — 접으면 "무엇이 켜져 있는지" 를 매번 열어 확인해야 한다.
+ */
+import { AlertTriangle } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { EditableList, ROW_KEY, withRowKeys } from "@/components/ui/editable-list";
+import { FIELD_CLS, FINISH, R, UrlField } from "@/components/ui/primitives";
+import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
+import { isSupportedCountry } from "@/lib/collect-phone";
+import {
+  DEFAULT_LOCALE,
+  localize,
+  toLocalized,
+  type CollectFormConfig,
+  type CollectNotice,
+  type NoticeMode,
+  type NoticePlacement,
+} from "@/lib/collect-form-config";
+
+type Patch = (next: Partial<CollectFormConfig>) => void;
+
+const PLACEMENTS: Array<{ id: NoticePlacement; label: string }> = [
+  { id: "top", label: "폼 위" },
+  { id: "above-consent", label: "동의 위" },
+  { id: "bottom", label: "폼 아래" },
+  { id: "completion", label: "완료 화면" },
+  { id: "email", label: "이메일" },
+];
+
+const NOTICE_MODES: Array<{ id: NoticeMode; label: string }> = [
+  { id: "notice", label: "안내만" },
+  { id: "checkbox-optional", label: "선택 동의" },
+  { id: "checkbox-required", label: "필수 동의" },
+];
+
+function Block({ title, desc, children, right }: { title: string; desc?: string; children: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <section className={`${R.surface} bg-background p-4 ${FINISH.s2} space-y-3`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold">{title}</h3>
+          {desc && <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{desc}</p>}
+        </div>
+        {right}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Row({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-medium text-muted-foreground">{label}</span>
+      {children}
+      {hint && <span className="mt-1 block text-[11px] leading-snug text-muted-foreground/70">{hint}</span>}
+    </label>
+  );
+}
+
+export function CollectFormSections({ config, patch }: { config: CollectFormConfig; patch: Patch }) {
+  const ev = config.eventInfo;
+  const win = ev.registrationWindow;
+  const countryBad = !isSupportedCountry(config.validation.defaultCountry);
+
+  const setEvent = (next: Partial<typeof ev>) => patch({ eventInfo: { ...ev, ...next } });
+  const setWindow = (next: Partial<typeof win>) =>
+    patch({ eventInfo: { ...ev, registrationWindow: { ...win, ...next } } });
+
+  return (
+    <div className="space-y-3">
+      {/* ── 행사 개요 ─────────────────────────────────────────────── */}
+      <Block
+        title="행사 개요"
+        desc="표시용이 아니라 동작하는 값이에요 — 사전등록 기간이 폼을 자동으로 열고 닫습니다."
+        right={<Switch checked={ev.enabled} onChange={(v) => setEvent({ enabled: v })} label="행사 개요 표시" />}
+      >
+        <Row label="개최일" hint="쉼표로 구분해 여러 날을 넣어요. 현장 체크인의 일자 판정에도 쓰입니다.">
+          <input
+            value={ev.eventDates.join(", ")}
+            onChange={(e) => setEvent({ eventDates: e.target.value.split(",").map((d) => d.trim()).filter(Boolean) })}
+            placeholder="2026-10-22, 2026-10-23"
+            className={FIELD_CLS}
+          />
+        </Row>
+        <Row label="장소">
+          <input
+            value={localize(ev.venue, DEFAULT_LOCALE)}
+            onChange={(e) => setEvent({ venue: toLocalized(e.target.value) })}
+            placeholder="Los Angeles Convention Center"
+            className={FIELD_CLS}
+          />
+        </Row>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {/* 입력은 KST 벽시각, 저장은 오프셋이 붙은 ISO — 서버(UTC)와 브라우저가 같은 순간을
+              가리켜야 접수 창 판정이 한쪽에서만 열리는 일이 없다. 웨비나 일정과 같은 헬퍼를 쓴다. */}
+          <Row label="접수 시작 (KST)">
+            <input
+              type="datetime-local"
+              value={win.opensAt ? kstDateTimeLocalInput(win.opensAt) : ""}
+              onChange={(e) => setWindow({ opensAt: e.target.value ? kstDateTimeLocalToIso(e.target.value) : null })}
+              className={FIELD_CLS}
+            />
+          </Row>
+          <Row label="접수 마감 (KST)">
+            <input
+              type="datetime-local"
+              value={win.closesAt ? kstDateTimeLocalInput(win.closesAt) : ""}
+              onChange={(e) => setWindow({ closesAt: e.target.value ? kstDateTimeLocalToIso(e.target.value) : null })}
+              className={FIELD_CLS}
+            />
+          </Row>
+        </div>
+        {win.opensAt && win.closesAt && Date.parse(win.opensAt) >= Date.parse(win.closesAt) && (
+          <p className="flex items-start gap-1.5 text-[11px] text-red-600 dark:text-red-400">
+            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+            마감이 시작보다 빨라요 — 이대로면 폼이 영영 열리지 않습니다.
+          </p>
+        )}
+        <Row label="상태 수동 전환" hint="시각 계산을 이깁니다. 마감을 앞당기거나 연장할 때만 쓰세요.">
+          <select
+            value={config.statusOverride ?? ""}
+            onChange={(e) => patch({ statusOverride: (e.target.value || null) as CollectFormConfig["statusOverride"] })}
+            className={FIELD_CLS}
+          >
+            <option value="">자동 (시각으로 판정)</option>
+            <option value="before">접수 전으로 고정</option>
+            <option value="open">접수 중으로 고정</option>
+            <option value="closed">마감으로 고정</option>
+          </select>
+        </Row>
+      </Block>
+
+      {/* ── 안내 블록 ─────────────────────────────────────────────── */}
+      <Block title="안내 블록" desc="초상권 안내 같은 문구. 형태만 바꾸면 안내 → 동의로 승격돼요.">
+        <EditableList<CollectNotice & { [ROW_KEY]?: string }>
+          listId="cnotice"
+          itemNoun="안내"
+          items={withRowKeys(config.notices)}
+          onChange={(next) => patch({ notices: next })}
+          rowKey={(n) => n.id}
+          reorderable
+          addLabel="안내 추가"
+          makeItem={() => ({
+            id: crypto.randomUUID().slice(0, 8), enabled: true, placement: "above-consent",
+            title: {}, body: {}, mode: "notice", collapsible: false,
+          })}
+          emptyState={<p className="rounded-xl bg-secondary/40 p-4 text-center text-[11px] text-muted-foreground">안내가 없어요</p>}
+          renderRow={({ item, handle, removeButton, patch: patchRow }) => (
+            <div className={`${R.surface} bg-secondary p-2 ${FINISH.s2} ${item.enabled ? "" : "opacity-60"}`}>
+              <div className="flex items-center gap-1">
+                {handle}
+                <select
+                  value={item.placement}
+                  onChange={(e) => patchRow({ placement: e.target.value as NoticePlacement })}
+                  aria-label="표시 위치"
+                  className="rounded-lg bg-background px-1.5 py-1 text-[11px] shadow-sm outline-none"
+                >
+                  {PLACEMENTS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                </select>
+                <select
+                  value={item.mode}
+                  onChange={(e) => patchRow({ mode: e.target.value as NoticeMode })}
+                  aria-label="형태"
+                  className="rounded-lg bg-background px-1.5 py-1 text-[11px] shadow-sm outline-none"
+                >
+                  {NOTICE_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+                <span className="flex-1" />
+                <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+                  표시<Switch checked={item.enabled} onChange={(v) => patchRow({ enabled: v })} label="안내 표시" />
+                </label>
+                {removeButton()}
+              </div>
+              {/* 완료 화면·이메일에 둔 안내는 폼에 체크박스가 없다 — 필수 동의로 두면
+                  누를 수 없는 동의를 요구하게 되므로 그 자리에서 알린다. */}
+              {item.mode === "checkbox-required" && !["top", "above-consent", "bottom"].includes(item.placement) && (
+                <p className="mt-1 flex items-start gap-1.5 px-1 text-[11px] text-amber-600">
+                  <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                  이 위치에는 체크박스가 없어서 필수 동의로 동작하지 않아요.
+                </p>
+              )}
+              <div className="mt-1 space-y-1 px-1">
+                <input
+                  value={localize(item.title, DEFAULT_LOCALE)}
+                  onChange={(e) => patchRow({ title: toLocalized(e.target.value) })}
+                  placeholder="제목 (선택)"
+                  aria-label="안내 제목"
+                  className="w-full bg-transparent text-[13px] font-semibold outline-none placeholder:font-normal placeholder:text-muted-foreground/50"
+                />
+                <textarea
+                  value={localize(item.body, DEFAULT_LOCALE)}
+                  onChange={(e) => patchRow({ body: toLocalized(e.target.value) })}
+                  placeholder="본문 — 줄바꿈이 그대로 보여요"
+                  aria-label="안내 본문"
+                  rows={2}
+                  className="w-full resize-y rounded-lg bg-background px-2 py-1.5 text-[12px] shadow-sm outline-none"
+                />
+              </div>
+            </div>
+          )}
+        />
+      </Block>
+
+      {/* ── 검증 ─────────────────────────────────────────────────── */}
+      <Block title="검증" desc="입력 시점에 강제해요 — 안내 문구가 아니라 규칙입니다.">
+        <Row label="연락처 기본 국가" hint="국가번호 없이 입력한 번호를 이 나라 기준으로 읽어요.">
+          <input
+            value={config.validation.defaultCountry}
+            onChange={(e) => patch({ validation: { ...config.validation, defaultCountry: e.target.value.toUpperCase().slice(0, 2) } })}
+            placeholder="US"
+            className={`${FIELD_CLS} font-mono ${countryBad ? "text-red-600 dark:text-red-400" : ""}`}
+          />
+        </Row>
+        {/* "UK" 는 존재하지 않는 코드다(영국은 GB) — 이걸 넣으면 그 폼의 전화가 전부 무효가
+            되는데 화면엔 이유가 안 뜬다. 그래서 저장 전에 여기서 잡는다. */}
+        {countryBad && (
+          <p className="flex items-start gap-1.5 text-[11px] text-red-600 dark:text-red-400">
+            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+            없는 국가 코드예요. 이대로면 모든 전화번호가 무효 처리됩니다 (영국은 UK 가 아니라 GB).
+          </p>
+        )}
+        <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <Switch
+            checked={config.validation.onDuplicate === "block"}
+            onChange={(v) => patch({ validation: { ...config.validation, onDuplicate: v ? "block" : "allow" } })}
+            label="중복 이메일 차단"
+          />
+          같은 이메일의 재등록을 막아요
+        </label>
+      </Block>
+
+      {/* ── 동의 ─────────────────────────────────────────────────── */}
+      <Block title="동의" desc="사전 체크는 기본 꺼짐이에요 — GDPR 관할에서는 유효한 동의로 인정되지 않습니다.">
+        {(["privacy", "marketing"] as const).map((kind) => {
+          const item = config.consent[kind];
+          const isPrivacy = kind === "privacy";
+          return (
+            <div key={kind} className={`${R.surface} bg-secondary p-2 ${FINISH.s2} space-y-1`}>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold">{isPrivacy ? "개인정보 (필수)" : "마케팅 (선택)"}</span>
+                <span className="flex-1" />
+                <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                  사용<Switch checked={item.enabled} onChange={(v) => patch({ consent: { ...config.consent, [kind]: { ...item, enabled: v } } })} label={`${kind} 사용`} />
+                </label>
+              </div>
+              <input
+                value={localize(item.label, DEFAULT_LOCALE)}
+                onChange={(e) => patch({ consent: { ...config.consent, [kind]: { ...item, label: toLocalized(e.target.value) } } })}
+                placeholder={isPrivacy ? "개인정보 수집·이용에 동의합니다" : "마케팅 정보 수신에 동의합니다"}
+                aria-label={`${kind} 문구`}
+                className="w-full bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/50"
+              />
+              <textarea
+                value={localize(item.body, DEFAULT_LOCALE)}
+                onChange={(e) => patch({ consent: { ...config.consent, [kind]: { ...item, body: toLocalized(e.target.value) } } })}
+                placeholder="'자세히' 팝업 전문 (선택)"
+                aria-label={`${kind} 전문`}
+                rows={2}
+                className="w-full resize-y rounded-lg bg-background px-2 py-1.5 text-[12px] shadow-sm outline-none"
+              />
+              <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <Switch
+                  checked={item.defaultChecked}
+                  onChange={(v) => patch({ consent: { ...config.consent, [kind]: { ...item, defaultChecked: v } } })}
+                  label={`${kind} 사전 체크`}
+                />
+                미리 체크해 두기
+              </label>
+              {item.defaultChecked && (
+                <p className="flex items-start gap-1.5 text-[11px] text-amber-600">
+                  <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                  {isPrivacy
+                    ? "필수 동의는 어차피 체크해야 제출돼요 — 사전 체크의 실익이 없습니다."
+                    : "EU·국내에서는 사전 체크가 유효한 동의로 인정되지 않아요."}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </Block>
+
+      {/* ── 완료 ─────────────────────────────────────────────────── */}
+      <Block title="등록 완료 후" desc="비워 두면 이동하지 않고 그 자리에 완료 카드를 보여줘요.">
+        <UrlField
+          label="완료 페이지 주소"
+          value={config.completion.redirectUrlTemplate}
+          onChange={(v) => patch({ completion: { ...config.completion, redirectUrlTemplate: v } })}
+          placeholder="https://example.com/registration-complete?{type}"
+        />
+        <p className="text-[11px] leading-snug text-muted-foreground/70">
+          쓸 수 있는 자리표시자: <code className="font-mono">{"{type}"}</code> <code className="font-mono">{"{regNo}"}</code> <code className="font-mono">{"{rid}"}</code> <code className="font-mono">{"{lang}"}</code>
+          {" — "}등록번호는 브라우저 기록에 남으니 꼭 필요할 때만 넣으세요.
+        </p>
+        <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <Switch
+            checked={config.completion.showQr}
+            onChange={(v) => patch({ completion: { ...config.completion, showQr: v } })}
+            label="완료 화면에 QR"
+          />
+          완료 화면에 QR·등록번호 보여주기
+        </label>
+      </Block>
+
+      {/* ── 등록 확인 ─────────────────────────────────────────────── */}
+      <Block
+        title="등록 확인"
+        desc="등록자가 자기 QR 을 다시 찾는 화면이에요. 켜면 조회에 성공한 사람에게 티켓이 보입니다."
+        right={<Switch checked={config.lookup.enabled} onChange={(v) => patch({ lookup: { ...config.lookup, enabled: v } })} label="등록 확인 사용" />}
+      >
+        {config.lookup.enabled && (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              {(["email", "phone"] as const).map((f) => {
+                const on = config.lookup.fields.includes(f);
+                return (
+                  <label key={f} className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <Switch
+                      checked={on}
+                      onChange={(v) => patch({
+                        lookup: {
+                          ...config.lookup,
+                          fields: v ? [...config.lookup.fields, f] : config.lookup.fields.filter((x) => x !== f),
+                        },
+                      })}
+                      label={`${f} 로 조회`}
+                    />
+                    {f === "email" ? "이메일" : "전화번호"}
+                  </label>
+                );
+              })}
+            </div>
+            <Row label="조회 조건" hint="무료 전시는 '하나만 맞아도'가 편해요. 유료로 가면 '둘 다'로 올리세요.">
+              <select
+                value={config.lookup.logic}
+                onChange={(e) => patch({ lookup: { ...config.lookup, logic: e.target.value as "or" | "and" } })}
+                className={FIELD_CLS}
+              >
+                <option value="or">하나만 맞아도 열림</option>
+                <option value="and">둘 다 맞아야 열림</option>
+              </select>
+            </Row>
+            {config.lookup.fields.length === 0 && (
+              <p className="flex items-start gap-1.5 text-[11px] text-amber-600">
+                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                조회 항목이 없으면 아무도 찾을 수 없어요.
+              </p>
+            )}
+          </>
+        )}
+      </Block>
+    </div>
+  );
+}
