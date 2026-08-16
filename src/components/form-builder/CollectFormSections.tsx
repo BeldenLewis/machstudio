@@ -251,7 +251,7 @@ export function CollectFormSections({ config, patch }: { config: CollectFormConf
                 <span className="text-[11px] font-semibold">{isPrivacy ? "개인정보 (필수)" : "마케팅 (선택)"}</span>
                 <span className="flex-1" />
                 <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                  사용<Switch checked={item.enabled} onChange={(v) => patch({ consent: { ...config.consent, [kind]: { ...item, enabled: v } } })} label={`${kind} 사용`} />
+                  사용<Switch checked={item.enabled} onChange={(v) => patch({ consent: { ...config.consent, [kind]: { ...item, enabled: v } } })} label={`${isPrivacy ? "개인정보" : "마케팅"} 동의 사용`} />
                 </label>
               </div>
               <input
@@ -273,7 +273,7 @@ export function CollectFormSections({ config, patch }: { config: CollectFormConf
                 <Switch
                   checked={item.defaultChecked}
                   onChange={(v) => patch({ consent: { ...config.consent, [kind]: { ...item, defaultChecked: v } } })}
-                  label={`${kind} 사전 체크`}
+                  label={`${isPrivacy ? "개인정보" : "마케팅"} 동의 사전 체크`}
                 />
                 미리 체크해 두기
               </label>
@@ -333,7 +333,7 @@ export function CollectFormSections({ config, patch }: { config: CollectFormConf
                           fields: v ? [...config.lookup.fields, f] : config.lookup.fields.filter((x) => x !== f),
                         },
                       })}
-                      label={`${f} 로 조회`}
+                      label={`${f === "email" ? "이메일" : "전화번호"}로 조회`}
                     />
                     {f === "email" ? "이메일" : "전화번호"}
                   </label>
@@ -350,6 +350,24 @@ export function CollectFormSections({ config, patch }: { config: CollectFormConf
                 <option value="and">둘 다 맞아야 열림</option>
               </select>
             </Row>
+            {/*
+              조회는 열어 두고 QR 만 닫는 조합이 필요하다 — `하나만 맞아도` 로 열어 둔 화면은
+              이메일 하나만 아는 사람에게도 열리므로, 유료 티켓이면 여기서 QR 을 끄고
+              "메일로 재발송" 으로 돌린다(§10.1).
+            */}
+            <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+              <Switch
+                checked={config.lookup.showQr}
+                onChange={(v) => patch({ lookup: { ...config.lookup, showQr: v } })}
+                label="조회 결과에 QR"
+              />
+              조회에 성공하면 QR 도 보여주기
+            </label>
+            {config.lookup.logic === "or" && !config.lookup.showQr && (
+              <p className="text-[11px] leading-snug text-muted-foreground/70">
+                QR 을 껐어요 — 조회한 사람에게는 이름·등록번호만 보입니다.
+              </p>
+            )}
             {config.lookup.fields.length === 0 && (
               <p className="flex items-start gap-1.5 text-[11px] text-amber-600">
                 <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />

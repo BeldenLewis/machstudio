@@ -7,7 +7,7 @@
  * 넣지 않는다. 자동저장 + 인접 실시간 미리보기가 같은 절의 요구다.
  */
 import { useCallback, useMemo, useState } from "react";
-import { Check, Copy, ExternalLink, Plus, RefreshCw } from "lucide-react";
+import { Check, Copy, ExternalLink, Plus, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { EditableList, withRowKeys, ROW_KEY } from "@/components/ui/editable-list";
@@ -154,6 +154,7 @@ export default function FormBuilderTab({
         </p>
 
         <PreviewLinkRow sourceId={sourceId} initialToken={previewToken} />
+        <EmbedSnippetRow sourceId={sourceId} lookupEnabled={config.lookup.enabled} />
       </aside>
     </div>
   );
@@ -233,10 +234,64 @@ function PreviewLinkRow({ sourceId, initialToken }: { sourceId: string; initialT
         <a href={`/p/${token}`} target="_blank" rel="noopener noreferrer" className={`${btnCls("ghost")} justify-center`}>
           <ExternalLink className="h-3.5 w-3.5" />열기
         </a>
+        {/* 등록 확인은 별도 화면이라 별도 링크다 — 같은 토큰을 쓴다(§16.1). */}
+        <a href={`/p/${token}/check`} target="_blank" rel="noopener noreferrer"
+           title="등록 확인 미리보기" aria-label="등록 확인 미리보기 열기"
+           className={`${btnCls("ghost")} justify-center`}>
+          <Search className="h-3.5 w-3.5" />
+        </a>
         <button type="button" onClick={regenerate} disabled={busy} title="새로 발급" aria-label="미리보기 링크 새로 발급" className={`${btnCls("ghost")} justify-center`}>
           <RefreshCw className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} />
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * 아임웹에 붙일 스니펫 (설계 §17).
+ *
+ * 여기 두는 이유: 폼을 다 만든 사람의 **다음 행동이 "이걸 어디에 붙이지"** 다. 배포 탭까지
+ * 찾아가게 하면 그 사이에 한 번 이탈하고, 아임웹 편집기에서 손으로 옮겨 적다 오타가 난다.
+ */
+function EmbedSnippetRow({ sourceId, lookupEnabled }: { sourceId: string; lookupEnabled: boolean }) {
+  const [copied, setCopied] = useState<"form" | "check" | null>(null);
+  // 서버에서 그릴 땐 origin 을 모른다 — 클라이언트에서만 절대 주소를 만든다.
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+
+  const formSnippet = `<script async src="${origin}/f/${sourceId}"></script>\n<div data-mach-form></div>`;
+  const checkSnippet = `<script async src="${origin}/f/${sourceId}/check"></script>\n<div data-mach-form-check></div>`;
+
+  const copy = (which: "form" | "check", text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(which);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const block = (which: "form" | "check", title: string, desc: string, snippet: string) => (
+    <div>
+      <p className="text-[11px] font-semibold">{title}</p>
+      <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{desc}</p>
+      <pre className="mt-1.5 overflow-x-auto whitespace-pre rounded-lg bg-background px-2 py-1.5 font-mono text-[10px] leading-relaxed shadow-sm">{snippet}</pre>
+      <button type="button" onClick={() => copy(which, snippet)} className={`${btnCls("ghost")} mt-1.5 w-full justify-center`}>
+        {copied === which ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+        {copied === which ? "복사됨" : "코드 복사"}
+      </button>
+    </div>
+  );
+
+  return (
+    <div className={`${R.surface} space-y-3 bg-secondary/40 p-3 ${FINISH.s2}`}>
+      {block("form", "등록 폼 붙이기", "아임웹 코드블럭에 그대로 넣으세요. 마운트 <div> 를 빠뜨려도 스크립트 자리에 그려집니다.", formSnippet)}
+      {/* 등록 확인은 켠 경우에만 보여 준다 — 꺼진 기능의 코드를 주면 붙여 놓고 안 나온다고 묻는다. */}
+      {lookupEnabled
+        ? block("check", "등록 확인 붙이기", "Registration Check 탭 등 별도 코드블럭에 넣으세요.", checkSnippet)
+        : (
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            등록 확인은 꺼져 있어요 — 아래 <b className="font-semibold text-foreground/80">등록 확인</b> 에서 켜면
+            붙일 코드가 여기에 나타납니다.
+          </p>
+        )}
     </div>
   );
 }
