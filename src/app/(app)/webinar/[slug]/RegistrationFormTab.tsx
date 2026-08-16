@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, type Dispatch, type ElementType, type ReactNode, type SetStateAction } from "react";
+import { useId, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { motion } from "framer-motion";
-import { Plus, Trash2, GripVertical, Smartphone, AlignLeft, Mail, Phone, ListChecks, SquareCheck, ChevronDown, ListPlus } from "lucide-react";
+// Trash2·GripVertical 은 골격(EditableList)이 핸들·삭제를 대신 그리면서 쓸 곳이 없어졌다.
+import { Plus, Smartphone, SquareCheck, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
@@ -12,6 +13,7 @@ import { resolveConsentBody, consentSourceLabel } from "@/lib/consent-template";
 import { Switch } from "@/components/ui/switch";
 import { FIELD_CLS, FIELD_CLS_DANGER, FINISH, R } from "@/components/ui/primitives";
 import { OptionRows } from "@/components/ui/option-rows";
+import { CHOICE_TYPES, REG_TYPE_META, RegTypeMenu, useRegPopover } from "@/components/form-builder/field-types";
 import { maxSelectFor } from "@/lib/webinar-config";
 import { EditableList } from "@/components/ui/editable-list";
 import { normalizeRegistrationForm, safeHttpUrl, type WebinarLinkCtaConfig, type WebinarRegistrationField } from "@/lib/webinar-config";
@@ -39,62 +41,6 @@ interface Webinar {
 
 const inputCls = FIELD_CLS;
 // 항목 형식 메타 — 설문 문항 타입 칩과 같은 결(아이콘+라벨)
-const REG_TYPE_META: Record<FieldType, { label: string; desc: string; icon: ElementType }> = {
-  text: { label: "텍스트", desc: "한 줄 입력", icon: AlignLeft },
-  email: { label: "이메일", desc: "이메일 주소", icon: Mail },
-  tel: { label: "전화번호", desc: "숫자만", icon: Phone },
-  select: { label: "드롭다운", desc: "하나만 선택", icon: ListChecks },
-  multiple: { label: "복수 선택", desc: "여러 개 선택", icon: ListPlus },
-  checkbox: { label: "체크박스", desc: "동의·확인", icon: SquareCheck },
-};
-// 선택형 둘(드롭다운·복수 선택)을 붙여 둔다 — 고를 때 비교하게 되는 짝이다.
-const REG_TYPE_ORDER: FieldType[] = ["text", "email", "tel", "select", "multiple", "checkbox"];
-/** 선택지를 쓰는 유형 — 옵션 편집·기타 허용·최대 개수가 여기 걸린다. */
-const CHOICE_TYPES: readonly FieldType[] = ["select", "multiple"];
-
-function useRegPopover() {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
-  }, [open]);
-  return { open, setOpen, ref };
-}
-
-function RegTypeMenu({ current, onPick }: { current: FieldType; onPick: (t: FieldType) => void }) {
-  return (
-    <div className={`absolute left-0 top-full z-30 mt-1.5 w-56 bg-popover p-1.5 ${R.surface} ${FINISH.overlay}`}>
-      <p className="px-2 pb-1 pt-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">항목 형식</p>
-      {REG_TYPE_ORDER.map((t) => {
-        const meta = REG_TYPE_META[t];
-        const Icon = meta.icon;
-        const active = current === t;
-        return (
-          <button
-            key={t}
-            type="button"
-            onClick={() => onPick(t)}
-            className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors ${active ? "bg-violet-500/10" : "hover:bg-secondary/70"}`}
-          >
-            <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${active ? "bg-violet-500 text-white" : "bg-violet-500/10 text-violet-500"}`}>
-              <Icon className="h-3.5 w-3.5" />
-            </span>
-            <span className="min-w-0">
-              <span className={`block text-[13px] font-semibold ${active ? "text-violet-600 dark:text-violet-400" : ""}`}>{meta.label}</span>
-              <span className="block text-[11px] text-muted-foreground">{meta.desc}</span>
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 // 필드 카드 — 설문 문항 카드(QuestionRow)와 동일한 결: 헤더에 타입 칩, 본문에 라벨·옵션.
 function FieldCard({
   field,
@@ -109,7 +55,8 @@ function FieldCard({
   /** 골격이 만든 삭제 컨트롤. removable 이 false 면 null 을 준다(기본 필드). */
   removeButton: (opts?: { label?: string; onClick?: () => void }) => ReactNode | null;
 }) {
-  const typePop = useRegPopover();
+  // 반환 객체를 통째로 들고 있으면 컴파일러가 ref 를 품은 객체로 보고 렌더 중 접근을 막는다(react-hooks/refs).
+  const { open: typeOpen, setOpen: setTypeOpen, ref: typeRef } = useRegPopover();
   const patch = (next: Partial<RegistrationField>) =>
     setFields((fields) => fields.map((item) => (item.id === field.id ? { ...item, ...next } : item)));
 
@@ -124,7 +71,7 @@ function FieldCard({
   const liveMax = maxSelectFor({ type: field.type, maxSelect: field.maxSelect, options: options.filter((o) => o.trim()) });
 
   const changeType = (t: FieldType) => {
-    typePop.setOpen(false);
+    setTypeOpen(false);
     if (t === field.type) return;
     const next: Partial<RegistrationField> = { type: t };
     // 선택형으로 바꿀 때 빈 옵션 두 줄을 깔아 준다 — 옵션 0개면 공개 폼에서 항목이 사라진다.
@@ -149,12 +96,12 @@ function FieldCard({
         <div className="flex items-center gap-1 px-2 pt-2">
           {handle}
 
-          <div className="relative" ref={typePop.ref}>
+          <div className="relative" ref={typeRef}>
             <button
               type="button"
-              onClick={() => !typeLocked && typePop.setOpen((v) => !v)}
+              onClick={() => !typeLocked && setTypeOpen((v) => !v)}
               aria-haspopup={typeLocked ? undefined : "menu"}
-              aria-expanded={typeLocked ? undefined : typePop.open}
+              aria-expanded={typeLocked ? undefined : typeOpen}
               disabled={typeLocked}
               className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-background px-2 py-1.5 text-xs font-semibold shadow-sm transition-shadow hover:shadow disabled:cursor-default disabled:opacity-90"
             >
@@ -162,7 +109,7 @@ function FieldCard({
               {meta.label}
               {!typeLocked && <ChevronDown className="h-3 w-3 text-muted-foreground/60" />}
             </button>
-            {typePop.open && !typeLocked && <RegTypeMenu current={field.type} onPick={changeType} />}
+            {typeOpen && !typeLocked && <RegTypeMenu current={field.type} onPick={changeType} />}
           </div>
 
           {field.system && <span className="ml-1.5 shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">기본</span>}

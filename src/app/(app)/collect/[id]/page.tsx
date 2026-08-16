@@ -17,6 +17,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/contexts/workspace";
 import ActiveToggle from "@/app/(app)/collect/_components/ActiveToggle";
+import FormBuilderTab from "./FormBuilderTab";
+import { tabsFor, type Tab } from "./tabs";
 import dynamic from "next/dynamic";
 const ImportModal = dynamic(() => import("./ImportModal"), { ssr: false });
 const CleanupModal = dynamic(() => import("./CleanupModal"), { ssr: false });
@@ -56,6 +58,10 @@ interface DiscoveredField {
 
 interface CollectSource {
   id: string;
+  /** "capture"(외부 폼에 스크립트) | "builder"(여기서 폼을 만든다) — 화면이 이걸로 갈린다. */
+  mode: string;
+  previewToken: string | null;
+  formConfig: unknown;
   name: string;
   description: string | null;
   apiKey: string;
@@ -78,6 +84,8 @@ interface CollectSource {
 interface CollectRecord {
   id: string;
   data: Record<string, string>;
+  /** 빌더형에만 있다 — 현장 입장의 열쇠이므로 목록에서 대조할 수 있어야 한다(§9.1·§12). */
+  registrationNo?: string | null;
   utmSource: string | null;
   utmMedium: string | null;
   utmCampaign: string | null;
@@ -94,18 +102,6 @@ interface ActivityLogEntry {
   createdAt: string;
   user: { id: string; name: string | null; email: string } | null;
 }
-
-const TABS = [
-  { id: "records", label: "수집 데이터", icon: Table2 },
-  { id: "fields", label: "필드", icon: Settings2 },
-  { id: "script", label: "스크립트", icon: Code2 },
-  { id: "install", label: "설치", icon: Wrench },
-  { id: "settings", label: "설정", icon: Shield },
-  { id: "data-mgmt", label: "데이터 관리", icon: HardDriveDownload },
-  { id: "activity", label: "활동", icon: Activity },
-] as const;
-
-type Tab = typeof TABS[number]["id"];
 
 function CopyButton({ text, className }: { text: string; className?: string }) {
   const [copied, setCopied] = useState(false);
@@ -887,7 +883,13 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
               <Database className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-semibold">{source.name}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-semibold">{source.name}</h1>
+                {/* 방식은 되돌릴 수 없는 성질이라(레코드가 쌓이면 전환 불가) 이름 옆에 상시 노출한다. */}
+                <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">
+                  {source.mode === "builder" ? "빌더형" : "연동형"}
+                </span>
+              </div>
               <div className="flex items-center gap-3 mt-0.5">
                 {source.description && <p className="text-sm text-muted-foreground">{source.description}</p>}
                 {source.siteUrl && (
@@ -906,7 +908,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
 
       {/* 탭 */}
       <div className="flex gap-1 border-b border-border overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {TABS.map(({ id: tabId, label, icon: Icon }) => {
+        {tabsFor(source.mode).map(({ id: tabId, label, icon: Icon }) => {
           const isDanger = tabId === "data-mgmt";
           const activeColor = isDanger ? "border-red-500 text-red-500" : "border-violet-500 text-violet-500";
           const idleColor = isDanger ? "border-transparent text-red-500/70 hover:text-red-500" : "border-transparent text-muted-foreground hover:text-foreground";
@@ -1224,6 +1226,12 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                             시간 {sortIcon("createdAt")}
                           </button>
                         </th>
+                        {/* 등록번호는 빌더형에만 있고 시간 바로 뒤다 — 현장에서 스캔한 번호로 찾는다. */}
+                        {source.mode === "builder" && (
+                          <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">
+                            등록번호
+                          </th>
+                        )}
                         {source.fieldMappings.map((f) => {
                           const colWidth = f.type === "email" ? "max-w-[240px]"
                             : (f.type === "select" || f.type === "checkbox") ? "max-w-[80px]"
@@ -1269,6 +1277,11 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                             />
                           </td>
                           <td className={`px-4 py-3 text-xs text-muted-foreground whitespace-nowrap sticky left-10 z-[1] shadow-[1px_0_0_0_hsl(var(--border))] ${selectedIds.has(record.id) ? "bg-violet-500/5" : "bg-background group-hover:bg-secondary/30"}`}>{timeStr(record.createdAt)}</td>
+                          {source.mode === "builder" && (
+                            <td className="px-4 py-3 font-mono text-xs tabular-nums text-muted-foreground whitespace-nowrap">
+                              {record.registrationNo ?? "-"}
+                            </td>
+                          )}
                           {source.fieldMappings.map((f) => {
                             const colWidth = f.type === "email" ? "max-w-[240px]"
                               : (f.type === "select" || f.type === "checkbox") ? "max-w-[80px]"
@@ -1344,7 +1357,15 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
             </div>
           )}
 
-          {/* 필드 설정 탭 */}
+          {/* 등록 폼 탭 — 빌더형 전용(tabsFor 가 연동형에는 안 준다) */}
+          {tab === "form" && (
+            <FormBuilderTab
+              sourceId={source.id}
+              initialConfig={source.formConfig}
+              previewToken={source.previewToken}
+            />
+          )}
+
           {tab === "fields" && (
             <div className="space-y-5">
               {/* A: 자동 감지된 필드 */}
@@ -2212,6 +2233,7 @@ function activityLabel(action: string): { label: string; color: string } {
     case "source.updated":         return { label: "소스 설정 변경",     color: "bg-blue-500" };
     case "source.deleted":         return { label: "소스 삭제",         color: "bg-red-500" };
     case "source.key_regenerated": return { label: "API 키 재발급",      color: "bg-amber-500" };
+    case "source.preview_token_regenerated": return { label: "미리보기 링크 재발급", color: "bg-amber-500" };
     case "record.created":         return { label: "레코드 생성",        color: "bg-emerald-500" };
     case "record.updated":         return { label: "레코드 편집",        color: "bg-blue-500" };
     case "record.deleted":         return { label: "레코드 삭제",        color: "bg-red-500" };

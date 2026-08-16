@@ -8,9 +8,12 @@ import { useWorkspace } from "@/contexts/workspace";
 import Link from "next/link";
 import ProjectMembersModal from "@/components/settings/ProjectMembersModal";
 import ActiveToggle from "@/app/(app)/collect/_components/ActiveToggle";
+import { FINISH, R, SELECTED } from "@/components/ui/primitives";
 
 interface CollectSource {
   id: string;
+  /** 방식 — 카드에서 구분되지 않으면 빌더형이 "설정이 덜 된 연동형" 처럼 보인다. */
+  mode: string;
   name: string;
   description: string | null;
   siteUrl: string | null;
@@ -24,7 +27,7 @@ export default function CollectPage() {
   const [sources, setSources] = useState<CollectSource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ name: "", description: "", siteUrl: "" });
+  const [form, setForm] = useState({ name: "", description: "", siteUrl: "", mode: "capture" as "capture" | "builder" });
   const [isCreating, setIsCreating] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [showMembers, setShowMembers] = useState(false);
@@ -58,13 +61,15 @@ export default function CollectPage() {
           projectId: currentProject.id,
           name: form.name.trim(),
           description: form.description.trim() || null,
-          siteUrl: form.siteUrl.trim() || null,
+          // 빌더형은 사이트 URL 칸 자체를 안 보여준다 — 남아 있던 값이 딸려 가지 않게 여기서도 끊는다.
+          siteUrl: form.mode === "capture" ? form.siteUrl.trim() || null : null,
+          mode: form.mode,
         }),
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error ?? "생성 실패"); return; }
       toast.success(`'${data.source.name}' 수집 소스가 생성됐어요`);
-      setForm({ name: "", description: "", siteUrl: "" });
+      setForm({ name: "", description: "", siteUrl: "", mode: "capture" as "capture" | "builder" });
       setShowCreate(false);
       fetchSources();
     } finally {
@@ -214,6 +219,44 @@ export default function CollectPage() {
           >
             <h3 className="text-sm font-semibold mb-4">새 수집 소스</h3>
             <div className="space-y-3">
+              {/*
+                방식 선택이 맨 위인 이유: 뒤 입력칸이 방식에 따라 달라진다(연동형만 사이트 URL 을 쓴다).
+                순서를 뒤집으면 다 채운 뒤 방식을 바꿔 입력이 무의미해진다.
+                기본값은 **연동형** — 기존 사용자가 무심코 만들 때 지금과 같은 소스가 나와야 한다.
+              */}
+              <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block">어떻게 수집할까요? *</label>
+                <div role="radiogroup" aria-label="수집 방식" className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {([
+                    { value: "capture", title: "연동형", desc: "이미 있는 폼에 스크립트를 붙여 데이터만 수집해요" },
+                    { value: "builder", title: "빌더형", desc: "여기서 폼을 만들고 코드블럭으로 삽입해요" },
+                  ] as const).map((opt) => {
+                    const active = form.mode === opt.value;
+                    return (
+                      <motion.button
+                        key={opt.value}
+                        type="button"
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setForm((f) => ({ ...f, mode: opt.value }))}
+                        role="radio"
+                        aria-checked={active}
+                        className={`text-left p-3 ${R.surface} transition-shadow ${
+                          active ? SELECTED : `bg-background ${FINISH.s2} hover:shadow-md`
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5 text-sm font-medium">
+                          <span
+                            aria-hidden
+                            className={`w-3.5 h-3.5 rounded-full shrink-0 ${active ? `bg-violet-500 ${FINISH.s2}` : `bg-transparent ${FINISH.s2}`}`}
+                          />
+                          {opt.title}
+                        </span>
+                        <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">{opt.desc}</span>
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">이름 *</label>
                 <input
@@ -236,16 +279,20 @@ export default function CollectPage() {
                   className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400"
                 />
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">사이트 URL</label>
-                <input
-                  type="url"
-                  placeholder="https://example.com"
-                  value={form.siteUrl}
-                  onChange={(e) => setForm((f) => ({ ...f, siteUrl: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400"
-                />
-              </div>
+              {/* 사이트 URL 은 연동형에서만 의미가 있다 — 스크립트를 붙일 대상 주소다.
+                  빌더형은 폼을 여기서 그리므로 이 칸이 하는 일이 없다. */}
+              {form.mode === "capture" && (
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">사이트 URL</label>
+                  <input
+                    type="url"
+                    placeholder="https://example.com"
+                    value={form.siteUrl}
+                    onChange={(e) => setForm((f) => ({ ...f, siteUrl: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:border-violet-400"
+                  />
+                </div>
+              )}
               <div className="flex gap-2 pt-1">
                 <motion.button
                   whileTap={{ scale: 0.95 }}
@@ -256,7 +303,7 @@ export default function CollectPage() {
                   {isCreating ? "생성 중..." : "생성"}
                 </motion.button>
                 <button
-                  onClick={() => { setShowCreate(false); setForm({ name: "", description: "", siteUrl: "" }); }}
+                  onClick={() => { setShowCreate(false); setForm({ name: "", description: "", siteUrl: "", mode: "capture" as "capture" | "builder" }); }}
                   className="px-4 py-2 rounded-xl border border-border text-sm hover:bg-secondary transition-colors"
                 >
                   취소
@@ -346,6 +393,11 @@ export default function CollectPage() {
                   <div className="flex items-center gap-3 mt-1">
                     <span className="text-xs text-muted-foreground flex items-center gap-1">
                       <Users className="w-3 h-3" />{source._count.records.toLocaleString()}건
+                    </span>
+                    {/* 방식 배지 — 빌더형은 사이트 URL 이 없어서, 배지가 없으면 "설정이 덜 된
+                        연동형" 처럼 보인다. 되돌릴 수 없는 성질이라 목록에서도 구분돼야 한다. */}
+                    <span className="shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      {source.mode === "builder" ? "빌더형" : "연동형"}
                     </span>
                     {source.siteUrl && (
                       <span className="text-xs text-muted-foreground flex items-center gap-1 truncate">

@@ -64,6 +64,21 @@ export async function POST(request: Request) {
   if (!source || !source.isActive) {
     return NextResponse.json({ error: "유효하지 않은 API 키" }, { status: 401, headers: PREFLIGHT_HEADERS });
   }
+  /**
+   * 빌더형 소스는 **이 경로로 받지 않는다.**
+   *
+   * 여기는 외부 폼의 제출을 가로채는 연동형 입구라 data 를 그대로 받는다. 빌더형이 이걸
+   * 통과하면 formConfig 검증·접수 창·동의가 전부 건너뛰어지고 임의 키가 그대로 저장된다
+   * (validateSubmission 의 unknown_key 가 막으려는 바로 그 오염이다). 게다가 그렇게 들어온
+   * 레코드 한 건이 "레코드가 있으면 방식 전환 불가" 규칙을 영구히 발동시킨다.
+   * 빌더형 제출은 자기 라우트가 생기면 그쪽에서 검증과 함께 받는다.
+   */
+  if (source.mode === "builder") {
+    return NextResponse.json(
+      { error: "이 수집 소스는 빌더형이에요 — 이 엔드포인트로는 받지 않습니다" },
+      { status: 409, headers: PREFLIGHT_HEADERS },
+    );
+  }
 
   const headers = corsHeaders(origin, source.allowedOrigins ?? []);
 
