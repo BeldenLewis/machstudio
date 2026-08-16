@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeCollectForm } from "@/lib/collect-form-config";
-import { buildLookupCriteria, buildLookupView } from "@/lib/collect-lookup";
+import { buildLookupCriteria, buildLookupView, buildTicketView } from "@/lib/collect-lookup";
 
 /**
  * 등록 확인(Find My QR) — 이메일 연동 전에는 등록자가 QR 을 되찾는 **유일한 경로**다(§2).
@@ -111,6 +111,52 @@ describe("내보내는 정보", () => {
       lookup: { enabled: true, fields: ["email"], logic: "or", showQr: false },
     });
     expect(buildLookupView(noQr, record)?.showQr).toBe(false);
+  });
+
+  /**
+   * **번호가 곧 티켓이다.** `/t/{regNo}` 는 번호만 알면 이름·유형·QR 을 전부 연다.
+   * `or` + `showQr:false` 는 "이메일 하나만 아는 사람에게 티켓을 주지 않겠다" 는
+   * 설정인데, 응답에 번호를 실어 보내면 화면에서 감춰 봐야 소용이 없다.
+   */
+  it("showQr 를 끄면 등록번호를 아예 내보내지 않는다", () => {
+    const noQr = normalizeCollectForm({
+      ...base,
+      lookup: { enabled: true, fields: ["email"], logic: "or", showQr: false },
+    });
+    const view = buildLookupView(noQr, record)!;
+    expect(view.registrationNo).toBeNull();
+    expect(JSON.stringify(view)).not.toContain("1234567890128");
+    // 본인 확인용 표시는 남는다 — 그게 없으면 "찾았다" 는 사실도 전달되지 않는다.
+    expect(view.name).toBe("Jane Doe");
+  });
+});
+
+/**
+ * 티켓 화면은 조회 화면과 **정책이 다르다.** 번호를 이미 손에 쥔 사람이고, 완료 화면에서
+ * 이어지는 §2 의 주 QR 전달 경로다 — 조회 설정 하나로 그 경로가 같이 끊기면 안 된다.
+ */
+describe("티켓 화면", () => {
+  const record = {
+    registrationNo: "1234567890128",
+    data: { first_name: "Jane", last_name: "Doe", email: "jane@example.com", company: "Acme Corp", type: "Buyer" },
+  };
+
+  it("showQr 를 꺼도 번호가 그대로 있다", () => {
+    const noQr = normalizeCollectForm({
+      ...base,
+      lookup: { enabled: true, fields: ["email"], logic: "or", showQr: false },
+    });
+    expect(buildTicketView(noQr, record)?.registrationNo).toBe("1234567890128");
+  });
+
+  it("조회 화면과 같은 최소 노출 규칙을 쓴다", () => {
+    const view = buildTicketView(orConfig, record)!;
+    expect(Object.keys(view).sort()).toEqual(["name", "registrationNo", "visitorType"]);
+    expect(JSON.stringify(view)).not.toContain("Acme");
+  });
+
+  it("등록번호가 없으면 화면을 만들지 않는다", () => {
+    expect(buildTicketView(orConfig, { registrationNo: null, data: {} })).toBeNull();
   });
 
   /**

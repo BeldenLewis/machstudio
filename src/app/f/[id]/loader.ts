@@ -102,7 +102,14 @@ export async function serveFormRuntime(
     `\n__msForm.boot(${jsonForScript({
       sourceId: source.id,
       origin,
-      formConfig: source.formConfig,
+      /**
+       * **비활성 소스에는 formConfig 를 싣지 않는다**(§17 "비활성 → 경고 주석만").
+       *
+       * 런타임은 active:false 면 아무것도 그리지 않으므로 화면에는 차이가 없지만,
+       * 그대로 실어 보내면 아직 공개 전인 폼의 문항 라벨·선택지·안내 문구·행사 개요가
+       * 인증 없이 통째로 읽힌다. 눈에 안 띄는 노출이 제일 늦게 발견된다.
+       */
+      formConfig: source.isActive ? source.formConfig : null,
       // 접수 창 판정의 기준 시각. 방문자 기기 시계를 믿지 않는다.
       serverNow: new Date().toISOString(),
       active: source.isActive,

@@ -15,7 +15,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getClientIp, rateLimitAsync } from "@/lib/ratelimit";
-import { normalizeCollectForm, type RegistrationStatus } from "@/lib/collect-form-config";
+import { REGISTRATION_STATUSES, normalizeCollectForm, type RegistrationStatus } from "@/lib/collect-form-config";
 import { CollectFormRuntime } from "@/components/form-builder/CollectFormRuntime";
 import { PreviewSwitcher } from "./PreviewSwitcher";
 
@@ -33,7 +33,6 @@ function one(v: string | string[] | undefined): string {
   return (Array.isArray(v) ? v[0] : v) ?? "";
 }
 
-const STATUSES: readonly RegistrationStatus[] = ["before", "open", "closed"];
 
 export default async function CollectFormPreviewPage({
   params, searchParams,
@@ -70,12 +69,17 @@ export default async function CollectFormPreviewPage({
   const source = token
     ? await prisma.collectSource.findUnique({
         where: { previewToken: token },
-        select: { id: true, name: true, mode: true, formConfig: true },
+        select: { id: true, name: true, mode: true, formConfig: true, deletedAt: true },
       })
     : null;
 
-  // 연동형에는 그릴 폼이 없다 — 없는 것과 같이 다룬다(존재 여부를 알려 줄 이유도 없다).
-  if (!source || source.mode !== "builder") notFound();
+  /**
+   * 연동형에는 그릴 폼이 없고, **삭제된 소스는 미리보기도 함께 끊긴다**(§17 "소스 삭제 → 404").
+   * 셋 다 없는 것과 같이 다룬다 — 존재 여부를 알려 줄 이유가 없다. 이 검사가 빠지면
+   * 임베드(/f/{id})와 등록 확인 미리보기는 404 인데 이 화면만 살아 있어, 링크를 받은
+   * 검토자가 "폼은 되는데 확인만 죽었다" 로 잘못 읽는다.
+   */
+  if (!source || source.mode !== "builder" || source.deletedAt) notFound();
 
   const config = normalizeCollectForm(source.formConfig);
 
@@ -88,7 +92,7 @@ export default async function CollectFormPreviewPage({
    */
   const typeParam = one(sp.type);
 
-  const forceStatus = STATUSES.includes(statusParam as RegistrationStatus)
+  const forceStatus = REGISTRATION_STATUSES.includes(statusParam as RegistrationStatus)
     ? (statusParam as RegistrationStatus)
     : undefined;
   const lang = langParam || config.defaultLocale;

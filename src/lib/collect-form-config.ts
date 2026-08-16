@@ -499,7 +499,7 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
 // ── 접수 창 ───────────────────────────────────────────────────────────
 export type RegistrationStatus = "before" | "open" | "closed";
 
-const REGISTRATION_STATUSES: readonly RegistrationStatus[] = ["before", "open", "closed"];
+export const REGISTRATION_STATUSES: readonly RegistrationStatus[] = ["before", "open", "closed"];
 
 /**
  * 지금 등록을 받는가. 웨비나 resolveWebinarStatus 와 같은 구조다 — 시각으로 판정하되

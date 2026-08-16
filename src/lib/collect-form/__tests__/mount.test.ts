@@ -126,6 +126,8 @@ describe("제출", () => {
     el.dispatchEvent(new Event("input", { bubbles: true }));
   };
   const submit = () => submitBtn().click();
+  /** fetch → res.json() → 렌더까지 두 단계라 마이크로태스크만으로는 안 끝난다. */
+  const flush = async () => { for (let i = 0; i < 4; i++) await new Promise((r) => setTimeout(r, 0)); };
   const tickPrivacy = () => {
     const cb = [...host.querySelectorAll<HTMLInputElement>(".msf-check input")].pop()!;
     cb.checked = true;
@@ -228,6 +230,80 @@ describe("제출", () => {
   it("전화 입력은 inputMode=tel 이다", () => {
     mount();
     expect(host.querySelector<HTMLInputElement>('input[type="tel"]')!.inputMode).toBe("tel");
+  });
+
+  /**
+   * 서버가 403 으로 마감을 확정했는데 화면이 안 바뀌면 방문자는 계속 누르고 계속 403 을
+   * 받는다. 런타임에는 config 폴링이 없어서 **서버 응답이 유일한 갱신 신호**다.
+   */
+  describe("서버가 확정한 접수 상태", () => {
+    const openConfig = normalizeCollectForm({
+      fields: [{ id: "f1", key: "email", label: { en: "Email" }, type: "email", required: true, enabled: true }],
+      consent: { privacy: { enabled: true, label: { en: "Privacy" } } },
+    });
+
+    const submitWith = async (status: string) => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ error: "closed", status }), { status: 403 }),
+      );
+      mount({ config: openConfig, preview: false });
+      fill('input[type="email"]', "a@b.com");
+      tickPrivacy();
+      submitBtn().click();
+      await flush();
+    };
+
+    it("403 이 마감이라고 하면 폼 대신 마감 화면이 된다", async () => {
+      await submitWith("closed");
+      // 입력칸과 제출 버튼이 남아 있으면 방문자는 계속 시도한다.
+      expect(submitBtn()).toBeUndefined();
+      expect(host.querySelector('input[type="email"]')).toBeNull();
+    });
+
+    /** before 인데 "just closed" 라고 하면 아직 안 열린 폼을 닫힌 것으로 오해한다. */
+    it("403 이 접수 전이라고 하면 마감이 아니라 '아직'이라고 말한다", async () => {
+      await submitWith("before");
+      expect(text()).toContain("hasn't opened yet");
+      expect(text()).not.toContain("just closed");
+    });
+
+    /** 서버가 모르는 값을 보내면 로컬 판정으로 돌아가야 한다 — 폼이 통째로 사라지면 안 된다. */
+    it("알 수 없는 상태값은 무시한다", async () => {
+      await submitWith("weird");
+      expect(submitBtn()).toBeDefined();
+    });
+  });
+
+  /**
+   * 이메일 항목이 둘인 폼에서 서버는 **값이 채워진** 칸으로 중복을 본다.
+   * 클라이언트가 "첫 이메일 항목" 을 다시 추측하면 안내가 빈 칸 밑에 붙는다.
+   */
+  it("409 안내는 서버가 알려 준 항목 밑에 붙는다", async () => {
+    const twoEmails = normalizeCollectForm({
+      fields: [
+        { id: "f1", key: "email_self", label: { en: "Your email" }, type: "email", enabled: true },
+        { id: "f2", key: "email_rep", label: { en: "Company email" }, type: "email", required: true, enabled: true },
+      ],
+      consent: { privacy: { enabled: true, label: { en: "Privacy" } } },
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: "dup", duplicateField: "email", duplicateKey: "email_rep" }), { status: 409 }),
+    );
+    mount({ config: twoEmails, preview: false });
+    const inputs = [...host.querySelectorAll<HTMLInputElement>('input[type="email"]')];
+    inputs[1].value = "taken@x.com";
+    inputs[1].dispatchEvent(new Event("input", { bubbles: true }));
+    tickPrivacy();
+    submitBtn().click();
+    await flush();
+
+    // 안내가 **글자와 함께** 붙은 칸이 방금 채운 두 번째 칸이어야 한다
+    // (.msf-err 자리는 모든 항목에 늘 있고, 오류가 없으면 비어 있다).
+    const rows = [...host.querySelectorAll(".msf-field")];
+    const withErr = rows
+      .map((r, i) => [i, (r.querySelector(".msf-err")?.textContent ?? "").trim()] as const)
+      .filter(([, t]) => t !== "");
+    expect(withErr).toEqual([[1, "This email is already registered."]]);
   });
 
   it("실제 모드에서는 폼 노출·시작·제출이 dataLayer 로 나간다(§18)", () => {

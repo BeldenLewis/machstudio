@@ -28,6 +28,12 @@ export interface PreparedSubmission {
   registrationNo: string;
   /** 소문자·trim. 이메일 항목이 없으면 null — 그러면 중복 차단도 걸리지 않는다. */
   emailNormalized: string | null;
+  /**
+   * 중복 판정에 쓴 이메일 항목의 저장 키.
+   * 409 응답에 실어 보낸다 — 이메일 항목이 여러 개인 폼에서 클라이언트가 안내를
+   * **엉뚱한 칸**(첫 항목)에 붙이지 않게 하기 위해서다.
+   */
+  emailKey: string | null;
   /** E.164. 파싱 실패면 null(원문은 data 에 남는다). */
   phoneE164: string | null;
   locale: string;
@@ -171,6 +177,7 @@ export function prepareBuilderSubmission(
       data: values,
       registrationNo: generateRegistrationNo(),
       emailNormalized,
+      emailKey,
       phoneE164,
       locale,
       entryChannel: "online",

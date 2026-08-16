@@ -65,7 +65,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   // 레이트리밋이 먼저다 — 인증 없이 DB 를 여는 경로다.
   const ip = getClientIp(request);
-  const rl = await rateLimitAsync(`collect-check:${id}:${ip}`, { limit: 30, windowMs: 60_000 });
+  /**
+   * **키에 id 를 넣지 않는다** — 제출 라우트와 같은 이유다. id 는 URL 세그먼트라
+   * 요청자가 매번 바꿀 수 있고, 그러면 요청마다 새 버킷이 생겨 한도가 사실상 사라진다.
+   * 통과분마다 소스 조회가 한 번씩이라 커넥션 풀이 먼저 마른다(2026-08-11 전례).
+   *
+   * 이 저장소의 공개 수집 라우트 세 곳은 전부 **IP 단독 키**로 통일한다:
+   * `collect-submit:{ip}` · `collect-lookup-ip:{ip}` · `collect-check:{ip}`.
+   * 소스별 한도가 필요해지면 소스를 로드한 **뒤에** 따로 건다.
+   */
+  const rl = await rateLimitAsync(`collect-check:${ip}`, { limit: 30, windowMs: 60_000 });
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "요청이 너무 잦아요" },

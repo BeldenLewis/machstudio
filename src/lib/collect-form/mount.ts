@@ -14,6 +14,7 @@ import { h, clearNode } from "@/lib/dom/h";
 import { COLLECT_FORM_CSS } from "./css";
 import {
   DEFAULT_LOCALE,
+  REGISTRATION_STATUSES,
   localize,
   noticeValueKey,
   resolveRegistrationStatus,
@@ -60,6 +61,7 @@ const COPY = {
   duplicate: "This email is already registered.",
   networkError: "Couldn't submit. Please try again.",
   closedNow: "Registration just closed.",
+  notOpenYet: "Registration hasn't opened yet.",
   doneTitle: "You're registered",
   regNoLabel: "Registration number — show this at the venue",
   previewFlag: "Preview — nothing is saved",
@@ -189,6 +191,22 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
    */
   let duplicate = false;
   let duplicateKey: string | null = null;
+  /**
+   * 서버가 403 으로 확정해 준 접수 상태. **로컬 config 판정을 이긴다.**
+   *
+   * 스크립트에 구워져 온 config 는 방문자가 탭을 연 시점의 것이고 폴링이 없다 —
+   * 운영자가 '마감으로 고정' 을 눌러도 그 탭은 계속 open 이라 믿는다. 제출이 403 을
+   * 받았다는 것은 서버가 이미 판정을 끝냈다는 뜻이므로, 그때부터는 그 값을 쓴다.
+   */
+  let serverStatus: RegistrationStatus | null = null;
+
+  /**
+   * 접수 상태의 단일 판정. 우선순위: **미리보기 강제 → 서버 확정 → 로컬 시각 계산.**
+   * 화면 렌더와 제출 직전 재확인이 같은 식을 써야 "화면은 열려 있는데 눌러도 안 되는"
+   * 상태가 생기지 않는다.
+   */
+  const currentStatus = (): RegistrationStatus =>
+    opts.forceStatus ?? serverStatus ?? resolveRegistrationStatus(config, nowDate());
   let doneRegNo: string | null = null;
   let banner: { tone: "warn" | "ok"; text: string } | null = null;
   let startedTracked = false;
@@ -640,7 +658,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     track(preview, "ms_form_submit", visitorType ? { visitor_type: visitorType } : undefined);
 
     // 접수 창을 **누를 때 다시 본다.** 폼을 열어 둔 채로 마감 시각이 지나갈 수 있다.
-    if (!opts.forceStatus && resolveRegistrationStatus(config, nowDate()) !== "open") {
+    if (!opts.forceStatus && currentStatus() !== "open") {
       render();
       return;
     }
@@ -690,7 +708,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
         }),
       });
       const data = (await res.json().catch(() => null)) as
-        | { registrationNo?: string | null; rid?: string; issues?: SubmissionIssue[]; duplicateField?: string; status?: string }
+        | { registrationNo?: string | null; rid?: string; issues?: SubmissionIssue[]; duplicateField?: string; duplicateKey?: string; status?: string }
         | null;
 
       /**
@@ -716,15 +734,35 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
       if (res.status === 409) {
         duplicate = true;
         // 서버가 알려 준 항목에 인라인으로 붙인다 — 배너만 띄우면 어느 칸을 고쳐야 할지 모른다.
-        duplicateKey = data?.duplicateField === "email"
-          ? (visibleFields(config, values).find((x) => x.type === "email")?.key ?? null)
-          : null;
+        /**
+         * 서버가 **판정에 쓴 항목의 key** 를 그대로 쓴다.
+         *
+         * 예전에는 "email 형식의 첫 항목" 을 다시 골랐는데, 서버는 첫 항목이 아니라
+         * **값이 채워진 첫 항목**으로 중복을 본다(collect-submit 의 primaryFieldKey).
+         * 이메일 항목이 둘인 폼(본인/회사 대표)에서 위칸을 비우면, 안내가 방금 채운
+         * 아래칸이 아니라 **빈 위칸** 밑에 붙어 멀쩡한 칸을 고치게 만든다.
+         */
+        duplicateKey = typeof data?.duplicateKey === "string" && data.duplicateKey
+          ? data.duplicateKey
+          : data?.duplicateField === "email"
+            ? (visibleFields(config, values).find((x) => x.type === "email")?.key ?? null)
+            : null;
         renderFields();
         track(preview, "ms_form_duplicate");
         showBanner("warn", COPY.duplicate);
       } else if (res.status === 403 && data?.status) {
-        // 마감이 서버에서 확정됐다 — 화면을 마감으로 바꾼다.
-        showBanner("warn", COPY.closedNow);
+        /**
+         * 마감(또는 오픈 전)이 **서버에서 확정됐다.**
+         *
+         * 스크립트에 구워져 온 config 로 다시 판정하면 아무것도 안 바뀐다 — 운영자가
+         * '마감으로 고정' 을 누른 뒤 이미 폼을 열어 둔 방문자는 config 를 다시 받지
+         * 않기 때문이다(런타임에 폴링이 없다). 그러면 눌러도 403, 또 눌러도 403 이다.
+         * 서버가 준 상태를 정본으로 세워 그 판정을 이기게 한다.
+         */
+        serverStatus = REGISTRATION_STATUSES.includes(data.status as RegistrationStatus)
+          ? (data.status as RegistrationStatus)
+          : null;
+        showBanner("warn", serverStatus === "before" ? COPY.notOpenYet : COPY.closedNow);
         render();
       } else if (res.status === 400 && Array.isArray(data?.issues)) {
         issues = data.issues;
@@ -835,7 +873,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
       return;
     }
 
-    const status = opts.forceStatus ?? resolveRegistrationStatus(config, nowDate());
+    const status = currentStatus();
     if (status !== "open") {
       const copy = status === "before" ? COPY.before : COPY.closed;
       stack.appendChild(

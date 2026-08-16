@@ -6,6 +6,17 @@ import { collectColumnsFor } from "@/lib/collect-columns";
 import { logActivity } from "@/lib/activity";
 import { normalizeCollectForm } from "@/lib/collect-form-config";
 
+/**
+ * 화면에 돌려주는 소스 한 벌.
+ *
+ * **GET 과 PATCH 가 반드시 같은 모양이어야 한다** — 화면은 저장 성공 시 응답으로 상태를
+ * 통째로 갈아끼운다. 두 곳에서 따로 조립하면 저장 직후에만 화면이 달라지는, 재현하기
+ * 어려운 종류의 어긋남이 생긴다.
+ */
+function sourcePayload<T extends Parameters<typeof collectColumnsFor>[0]>(source: T) {
+  return { ...source, fieldMappings: collectColumnsFor(source) };
+}
+
 function normalizeOriginInput(s: unknown): string | null {
   if (typeof s !== "string") return null;
   const trimmed = s.trim();
@@ -59,9 +70,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
    * 파생값을 같은 자리에 실으면 **소비처를 한 곳도 안 고치고** 동작한다. 연동형은 저장된
    * 값을 그대로 통과시키므로 기존 화면(레코드 52,000건)은 한 글자도 바뀌지 않는다.
    */
-  return NextResponse.json({
-    source: { ...source, fieldMappings: collectColumnsFor(source) },
-  });
+  return NextResponse.json({ source: sourcePayload(source) });
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -185,7 +194,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     meta: { fields: Object.keys(body) },
   });
 
-  return NextResponse.json({ source });
+  /**
+   * **GET 과 같은 계약으로 돌려준다.** 화면은 저장 성공 시 상태를 통째로 교체하는데
+   * (collect/[id]/page.tsx 의 setSource), 원본 매핑을 그대로 주면 빌더형은 그 값이
+   * 항상 [] 라 방금까지 보이던 문항 열이 화면에서 사라진다 — 새로고침해야 돌아온다.
+   * 운영자에게는 "저장했더니 데이터가 날아갔다" 로 보인다.
+   */
+  return NextResponse.json({ source: sourcePayload(source) });
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {

@@ -208,7 +208,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         });
         if (dup) {
           return NextResponse.json(
-            { error: "이미 등록된 이메일이에요", duplicateField: "email" },
+            // duplicateKey — 어느 칸 밑에 안내를 붙일지. 이메일 항목이 여러 개인 폼에서
+            // 클라이언트가 "첫 이메일 항목" 을 다시 추측하면 빈 칸에 붙는다.
+            { error: "이미 등록된 이메일이에요", duplicateField: "email", duplicateKey: p.emailKey },
             { status: 409, headers },
           );
         }

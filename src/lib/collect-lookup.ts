@@ -57,7 +57,14 @@ export function buildLookupCriteria(config: CollectFormConfig, input: LookupInpu
 
 /** 화면에 내보내는 것 — **이게 전부다**(§10.2 "표시 정보는 최소화"). */
 export interface LookupView {
-  registrationNo: string;
+  /**
+   * **showQr 이 꺼져 있으면 null 이다.**
+   *
+   * 번호가 곧 티켓이다 — `/t/{regNo}` 는 번호만 알면 이름·유형·QR 을 전부 연다.
+   * `or` + `showQr:false` 는 "이메일 하나만 아는 사람에게 티켓을 주지 않겠다" 는
+   * 설정인데, 응답에 번호를 실어 보내면 화면에서 감춰도 그 의도가 무너진다(§10.1·§10.2).
+   */
+  registrationNo: string | null;
   /** 본인 확인용 표시 이름. 못 고르면 빈 문자열(화면에서 생략한다). */
   name: string;
   /** 참관객 유형 — 분기 기준 항목의 값. 분기가 없으면 빈 문자열. */
@@ -102,6 +109,28 @@ export function buildLookupView(
   config: CollectFormConfig,
   record: { registrationNo: string | null; data: unknown },
 ): LookupView | null {
+  const base = buildTicketView(config, record);
+  if (!base) return null;
+  return {
+    ...base,
+    // 화면이 안 쓰는 값은 내보내지도 않는다(lookup-mount 는 showQr 가 false 면 번호를 그리지 않는다).
+    registrationNo: config.lookup.showQr ? base.registrationNo : null,
+    showQr: config.lookup.showQr,
+  };
+}
+
+/**
+ * 티켓 화면(`/t/{regNo}`)이 쓰는 표시 정보 — **번호를 이미 손에 쥔 사람**을 위한 것이라
+ * 항상 번호가 들어 있다.
+ *
+ * 조회 화면과 정책이 다른 이유: `lookup.showQr` 는 "이메일 하나만 아는 사람에게 티켓을
+ * 주지 않겠다" 는 설정이다. 번호로 직접 연 화면까지 그 설정으로 잠그면, 완료 화면에서
+ * 이어지는 §2 의 **주 QR 전달 경로**가 조회 설정 하나로 같이 끊긴다.
+ */
+export function buildTicketView(
+  config: CollectFormConfig,
+  record: { registrationNo: string | null; data: unknown },
+): (Omit<LookupView, "registrationNo" | "showQr"> & { registrationNo: string }) | null {
   if (!record.registrationNo) return null;
   const data = (record.data && typeof record.data === "object" ? record.data : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
@@ -115,10 +144,5 @@ export function buildLookupView(
 
   const visitorType = config.branch.enabled ? str(data[config.branch.fieldKey]) : "";
 
-  return {
-    registrationNo: record.registrationNo,
-    name,
-    visitorType,
-    showQr: config.lookup.showQr,
-  };
+  return { registrationNo: record.registrationNo, name, visitorType };
 }

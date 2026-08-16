@@ -23,7 +23,7 @@ import { prisma } from "@/lib/prisma";
 import { getClientIp, rateLimitAsync } from "@/lib/ratelimit";
 import { isValidRegistrationNo } from "@/lib/collect-registration-no";
 import { normalizeCollectForm } from "@/lib/collect-form-config";
-import { buildLookupView } from "@/lib/collect-lookup";
+import { buildTicketView } from "@/lib/collect-lookup";
 
 export const dynamic = "force-dynamic";
 
@@ -116,7 +116,8 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
   }
 
   const config = normalizeCollectForm(record.source.formConfig);
-  const view = buildLookupView(config, record);
+  // 조회 화면이 아니라 **번호로 직접 연 티켓**이다 — lookup.showQr 설정과 무관하다.
+  const view = buildTicketView(config, record);
   if (!view) notFound();
 
   const dates = config.eventInfo.enabled ? config.eventInfo.eventDates : [];
