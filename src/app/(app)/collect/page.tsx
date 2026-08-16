@@ -12,6 +12,8 @@ import { FINISH, R, SELECTED } from "@/components/ui/primitives";
 
 interface CollectSource {
   id: string;
+  /** 방식 — 카드에서 구분되지 않으면 빌더형이 "설정이 덜 된 연동형" 처럼 보인다. */
+  mode: string;
   name: string;
   description: string | null;
   siteUrl: string | null;
@@ -391,6 +393,11 @@ export default function CollectPage() {
                   <div className="flex items-center gap-3 mt-1">
                     <span className="text-xs text-muted-foreground flex items-center gap-1">
                       <Users className="w-3 h-3" />{source._count.records.toLocaleString()}건
+                    </span>
+                    {/* 방식 배지 — 빌더형은 사이트 URL 이 없어서, 배지가 없으면 "설정이 덜 된
+                        연동형" 처럼 보인다. 되돌릴 수 없는 성질이라 목록에서도 구분돼야 한다. */}
+                    <span className="shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      {source.mode === "builder" ? "빌더형" : "연동형"}
                     </span>
                     {source.siteUrl && (
                       <span className="text-xs text-muted-foreground flex items-center gap-1 truncate">

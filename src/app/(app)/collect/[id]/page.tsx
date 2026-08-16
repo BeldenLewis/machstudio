@@ -17,6 +17,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/contexts/workspace";
 import ActiveToggle from "@/app/(app)/collect/_components/ActiveToggle";
+import FormBuilderTab from "./FormBuilderTab";
+import { tabsFor, type Tab } from "./tabs";
 import dynamic from "next/dynamic";
 const ImportModal = dynamic(() => import("./ImportModal"), { ssr: false });
 const CleanupModal = dynamic(() => import("./CleanupModal"), { ssr: false });
@@ -56,6 +58,10 @@ interface DiscoveredField {
 
 interface CollectSource {
   id: string;
+  /** "capture"(외부 폼에 스크립트) | "builder"(여기서 폼을 만든다) — 화면이 이걸로 갈린다. */
+  mode: string;
+  previewToken: string | null;
+  formConfig: unknown;
   name: string;
   description: string | null;
   apiKey: string;
@@ -94,18 +100,6 @@ interface ActivityLogEntry {
   createdAt: string;
   user: { id: string; name: string | null; email: string } | null;
 }
-
-const TABS = [
-  { id: "records", label: "수집 데이터", icon: Table2 },
-  { id: "fields", label: "필드", icon: Settings2 },
-  { id: "script", label: "스크립트", icon: Code2 },
-  { id: "install", label: "설치", icon: Wrench },
-  { id: "settings", label: "설정", icon: Shield },
-  { id: "data-mgmt", label: "데이터 관리", icon: HardDriveDownload },
-  { id: "activity", label: "활동", icon: Activity },
-] as const;
-
-type Tab = typeof TABS[number]["id"];
 
 function CopyButton({ text, className }: { text: string; className?: string }) {
   const [copied, setCopied] = useState(false);
@@ -887,7 +881,13 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
               <Database className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-semibold">{source.name}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-semibold">{source.name}</h1>
+                {/* 방식은 되돌릴 수 없는 성질이라(레코드가 쌓이면 전환 불가) 이름 옆에 상시 노출한다. */}
+                <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">
+                  {source.mode === "builder" ? "빌더형" : "연동형"}
+                </span>
+              </div>
               <div className="flex items-center gap-3 mt-0.5">
                 {source.description && <p className="text-sm text-muted-foreground">{source.description}</p>}
                 {source.siteUrl && (
@@ -906,7 +906,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
 
       {/* 탭 */}
       <div className="flex gap-1 border-b border-border overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {TABS.map(({ id: tabId, label, icon: Icon }) => {
+        {tabsFor(source.mode).map(({ id: tabId, label, icon: Icon }) => {
           const isDanger = tabId === "data-mgmt";
           const activeColor = isDanger ? "border-red-500 text-red-500" : "border-violet-500 text-violet-500";
           const idleColor = isDanger ? "border-transparent text-red-500/70 hover:text-red-500" : "border-transparent text-muted-foreground hover:text-foreground";
@@ -1345,6 +1345,10 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
           )}
 
           {/* 필드 설정 탭 */}
+          {tab === "form" && (
+            <FormBuilderTab sourceId={source.id} initialConfig={source.formConfig} />
+          )}
+
           {tab === "fields" && (
             <div className="space-y-5">
               {/* A: 자동 감지된 필드 */}
