@@ -23,11 +23,14 @@ const COPY = {
   searching: "Searching…",
   /** 못 찾았을 때는 **이 문구 하나로만** 끝낸다(§10.2) — 이유를 나누면 열거 힌트가 된다. */
   notFound: "We couldn't find a registration with that information.",
+  needSomething: "Enter your email or phone number first.",
   networkError: "Something went wrong. Please try again.",
   tooMany: "Too many attempts. Please try again in a few minutes.",
   regNoLabel: "Show this at the venue",
   noQr: "Your registration was found. We'll email your ticket again.",
   needBoth: "Enter both your email and phone number.",
+  needEmail: "Your email is missing.",
+  needPhone: "Your phone number is missing.",
   ticketLink: "Open my ticket page →",
   previewFlag: "Preview — nothing is saved",
 } as const;
@@ -45,8 +48,14 @@ export interface LookupHandle {
   destroy(): void;
 }
 
-/** 미리보기용 표본. 체크digit 이 일부러 틀린 값이라 현장 조회에는 걸리지 않는다. */
-const PREVIEW_REG_NO = "0000000000000";
+/**
+ * 미리보기용 표본 번호.
+ *
+ * 예전 값 `0000000000000` 은 **Luhn 이 통과한다**(체크digit 0 이 맞다) — "일부러 틀린
+ * 값" 이라던 주석이 사실과 반대였고, 그러면 이 번호로 만든 QR 이 형식 검증을 통과한다.
+ * 마지막 자리를 1 로 바꿔 실제로 무효하게 만든다.
+ */
+const PREVIEW_REG_NO = "0000000000001";
 
 function ensureStyles(): void {
   if (typeof document === "undefined" || document.getElementById(STYLE_ID)) return;
@@ -103,7 +112,11 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
 
   const banner = h("div", { class: "msf-banner", role: "alert" });
   banner.style.display = "none";
-  const resultHost = h("div", null);
+  /**
+   * 조회 결과는 **소리로도 전달돼야 한다.** 시각장애 사용자가 Enter 를 치면 버튼 라벨이
+   * 잠깐 바뀔 뿐, 티켓을 찾았다는 사실도 등록번호도 낭독되지 않았다(WCAG 4.1.3).
+   */
+  const resultHost = h("div", { role: "status", "aria-live": "polite" });
   const submitBtn = h("button", { type: "button", class: "msf-submit" }, COPY.submit) as HTMLButtonElement;
 
   function showBanner(text: string): void {
@@ -124,6 +137,10 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
 
   function renderResult(view: { registrationNo: string; name: string; visitorType: string; showQr: boolean }): void {
     clearNode(resultHost);
+    // 결과 카드로 데려간다 — 긴 페이지에서는 결과가 화면 밖에 그려질 수 있다.
+    queueMicrotask(() => {
+      if (typeof resultHost.scrollIntoView === "function") resultHost.scrollIntoView({ block: "nearest" });
+    });
     const card = h("div", { class: "msf-found" });
     if (view.name) card.appendChild(h("div", { class: "msf-found-name" }, view.name));
     if (view.visitorType) card.appendChild(h("div", { class: "msf-found-type" }, view.visitorType));
@@ -165,13 +182,29 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
   async function search(): Promise<void> {
     if (busy) return;
     hideBanner();
-    clearNode(resultHost);
+    /**
+     * **결과를 먼저 지우지 않는다.** 예전에는 fetch 전에 비웠는데, 줄에 서서 QR 을 띄워
+     * 둔 사람이 실수로 버튼을 한 번 더 눌렀다가 그 순간 전파가 끊기면(입구는 가장 혼잡한
+     * 셀이다) 방금 있던 티켓이 사라지고 오류 문구만 남았다. 새 결과가 왔을 때만 바꾼다.
+     */
 
     const email = useEmail ? emailInput.value.trim() : "";
     const phone = usePhone ? phoneInput.value.trim() : "";
-    if (!email && !phone) return;
+    /**
+     * 빈 칸으로 눌러도 **반응이 있어야 한다.** 예전에는 조용히 return 해서 화면이 정지한
+     * 것처럼 보였다 — 모바일에서 입력칸이 화면 밖에 있으면 버튼부터 누르는 사람이 흔하고,
+     * 그 사람은 두세 번 더 누르고 "고장 났다" 로 판단한다.
+     */
+    if (!email && !phone) {
+      showBanner(COPY.needSomething);
+      (useEmail ? emailInput : phoneInput).focus();
+      return;
+    }
     if (needBoth && !(email && phone)) {
-      showBanner(COPY.needBoth);
+      // 상단 힌트와 **다른 문장**이어야 오류로 읽힌다. 같은 문장을 또 띄우면 화면에 이미
+      // 있던 안내가 하나 더 생긴 것으로 보이고, 스크린리더는 방금 읽은 것을 다시 읽는다.
+      showBanner(email ? COPY.needPhone : COPY.needEmail);
+      (email ? phoneInput : emailInput).focus();
       return;
     }
 
@@ -184,7 +217,12 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
     }
 
     busy = true;
-    submitBtn.disabled = true;
+    /**
+     * **disabled 를 걸지 않는다.** 포커스를 가진 버튼을 disabled 로 만들면 브라우저가
+     * 포커스를 body 로 되돌리고, 해제해도 돌아오지 않는다 — 키보드 사용자는 파트너 페이지
+     * 맨 위부터 다시 Tab 을 눌러야 한다. 중복 실행은 위의 busy 플래그가 이미 막는다.
+     */
+    submitBtn.setAttribute("aria-busy", "true");
     submitBtn.textContent = COPY.searching;
     try {
       const res = await fetch(`${opts.origin}/api/collect/${encodeURIComponent(opts.sourceId)}/lookup`, {
@@ -209,7 +247,7 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
       if (!destroyed) showBanner(COPY.networkError);
     } finally {
       busy = false;
-      submitBtn.disabled = false;
+      submitBtn.removeAttribute("aria-busy");
       submitBtn.textContent = COPY.submit;
     }
   }

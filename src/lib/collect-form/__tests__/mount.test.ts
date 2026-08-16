@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mountCollectForm } from "../mount";
 import { normalizeCollectForm } from "@/lib/collect-form-config";
+import { isValidRegistrationNo } from "@/lib/collect-registration-no";
 
 /**
  * 등록 폼 런타임 — **임베드·미리보기·빌더 옆칸이 전부 이 함수를 탄다.**
@@ -170,8 +171,16 @@ describe("제출", () => {
     submitBtn().click();
 
     expect(spy).not.toHaveBeenCalled();
-    expect(host.querySelector(".msf-regno")?.textContent).toBe("0000000000000");
     expect(text()).toContain("nothing was saved");
+
+    /**
+     * 표본 번호는 **체크digit 이 실제로 틀려야 한다.** 이 번호가 어딘가로 새어 나가
+     * 현장 조회에 쓰이면 "없는 번호" 가 아니라 "잘못 입력하셨어요" 로 걸러져야 한다.
+     * 예전 값 0000000000000 은 Luhn 을 통과했다 — 주석이 사실과 반대였다.
+     */
+    const shown = host.querySelector(".msf-regno")?.textContent ?? "";
+    expect(shown).toMatch(/^\d{13}$/);
+    expect(isValidRegistrationNo(shown)).toBe(false);
   });
 
   /** 미리보기 클릭이 광고 전환으로 잡히면 데이터가 오염된다(설계 §16.1·§18). */

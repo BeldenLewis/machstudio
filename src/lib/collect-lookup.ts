@@ -10,7 +10,7 @@
 import { toE164 } from "@/lib/collect-phone";
 import { isValidEmail } from "@/lib/webinar-config";
 import { normalizeEmail } from "@/lib/collect-submit";
-import type { CollectFormConfig } from "@/lib/collect-form-config";
+import type { CollectFormConfig, Localized } from "@/lib/collect-form-config";
 
 /** 조회 입력 — 설정에 따라 둘 중 하나만 쓰일 수도 있다. */
 export interface LookupInput {
@@ -66,9 +66,29 @@ export interface LookupView {
   showQr: boolean;
 }
 
-/** 이름으로 쓸 만한 항목 key 인가. 자동완성 토큰 추론과 같은 어휘를 쓴다. */
-function looksLikeName(key: string): boolean {
-  return /first.*name|last.*name|given|family|surname|full.*name|^name$/i.test(key);
+/**
+ * 이름으로 쓸 만한 항목인가.
+ *
+ * **앵커를 건다.** 앵커 없는 정규식은 `family_members`(참관 인원수)나
+ * `first_visit_company_name`(회사명)까지 잡아서 그 값이 티켓의 이름 자리에 인쇄된다 —
+ * 최소 노출 원칙(§10.2)을 어기는 방향이다.
+ *
+ * key 와 **라벨을 함께 본다.** key 는 운영자가 손으로 적는 자유 문자열이고, 빌더가 주는
+ * 기본값은 `field`·`field_2` 다(keyFromLabel 이 빈 라벨에 대해 그렇게 만든다). 라벨에
+ * "First name" 이라고 적어 놓고 key 를 안 고친 폼이 기본 경로인데, key 만 보면 그런 폼은
+ * **이름 줄이 통째로 사라진다** — 조회 결과가 내 것인지 확인할 유일한 표시다.
+ */
+const NAME_PATTERNS = [
+  /^(first|last|given|family|full)[_-]?names?$/i,
+  /^names?$/i,
+  /^surnames?$/i,
+  /^(first|last|given|family)$/i,
+];
+function looksLikeName(field: { key: string; label: Localized }): boolean {
+  const candidates = [field.key, ...Object.values(field.label)]
+    .map((v) => String(v).trim().replace(/\s+/g, "_"))
+    .filter(Boolean);
+  return candidates.some((c) => NAME_PATTERNS.some((re) => re.test(c)));
 }
 
 /**
@@ -88,7 +108,7 @@ export function buildLookupView(
 
   // 이름은 정의된 항목 중 이름처럼 생긴 것들을 **폼 순서대로** 이어 붙인다.
   const name = config.fields
-    .filter((f) => looksLikeName(f.key))
+    .filter((f) => looksLikeName(f))
     .map((f) => str(data[f.key]))
     .filter(Boolean)
     .join(" ");

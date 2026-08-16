@@ -113,6 +113,44 @@ describe("내보내는 정보", () => {
     expect(buildLookupView(noQr, record)?.showQr).toBe(false);
   });
 
+  /**
+   * **적대적 리뷰가 잡은 것.** key 는 운영자가 손으로 적는 자유 문자열이고 빌더 기본값은
+   * `field`·`field_2` 다 — key 만 보면 라벨을 제대로 적은 폼에서도 이름이 사라진다.
+   */
+  it("key 가 기본값이어도 라벨로 이름을 찾는다", () => {
+    const labelOnly = normalizeCollectForm({
+      ...base,
+      fields: [
+        { id: "a", key: "field", label: { en: "First name" }, type: "text", enabled: true },
+        { id: "b", key: "field_2", label: { en: "Last name" }, type: "text", enabled: true },
+      ],
+      lookup: { enabled: true, fields: ["email"], logic: "or", showQr: true },
+    });
+    const view = buildLookupView(labelOnly, {
+      registrationNo: "1234567890128",
+      data: { field: "Jane", field_2: "Doe" },
+    });
+    expect(view?.name).toBe("Jane Doe");
+  });
+
+  /** 앵커가 없으면 참관 인원수·회사명이 티켓의 이름 자리에 인쇄된다(§10.2 위반). */
+  it("이름처럼 생겼을 뿐인 항목은 잡지 않는다", () => {
+    const trap = normalizeCollectForm({
+      ...base,
+      fields: [
+        { id: "a", key: "family_members", label: { en: "Family members" }, type: "text", enabled: true },
+        { id: "b", key: "first_visit_company_name", label: { en: "Company" }, type: "text", enabled: true },
+        { id: "c", key: "given_referral", label: { en: "Referral" }, type: "text", enabled: true },
+      ],
+      lookup: { enabled: true, fields: ["email"], logic: "or", showQr: true },
+    });
+    const view = buildLookupView(trap, {
+      registrationNo: "1234567890128",
+      data: { family_members: "4", first_visit_company_name: "Acme", given_referral: "friend" },
+    });
+    expect(view?.name).toBe("");
+  });
+
   it("이름 항목이 없으면 빈 문자열 — 화면에서 생략한다", () => {
     const noName = normalizeCollectForm({
       ...base,

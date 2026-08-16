@@ -31,7 +31,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ regN
     return new NextResponse("Not Found", { status: 404 });
   }
 
-  const rl = await rateLimitAsync(`collect-qr:${getClientIp(request)}`, { limit: 60, windowMs: 60_000 });
+  /**
+   * (IP, 번호)로 센다 — IP 만 쓰면 전시장 와이파이 뒤 수백 명이 한 버킷을 나눠 쓰게 되어
+   * 입장 줄에서 QR 이 안 뜬다(티켓 페이지와 같은 이유·같은 규칙).
+   */
+  const rl = await rateLimitAsync(`collect-qr:${getClientIp(request)}:${value}`, { limit: 60, windowMs: 60_000 });
   if (!rl.allowed) {
     return new NextResponse("Too Many Requests", {
       status: 429,

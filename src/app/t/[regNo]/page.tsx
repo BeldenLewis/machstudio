@@ -9,6 +9,12 @@
  * 등록번호가 곧 티켓이기 때문이다. 13자리 난수 + 체크digit 이라 추측할 수 없고, 여기서
  * 보여 주는 것은 **이름·유형·번호·QR 뿐**이다(§10.2 와 같은 최소 노출 규칙). 연락처나
  * 다른 문항 답변은 넣지 않는다.
+ *
+ * ── 문구가 영어인 이유 ────────────────────────────────────────────────
+ * 이 화면은 등록 폼·완료 화면·등록 확인에서 이어지는 **같은 흐름의 마지막 칸**이고,
+ * 그 셋이 전부 영어다(LA 파일럿, §2 "영어 단일로 만들되"). 여기만 한국어면 미국 방문자가
+ * "Open my ticket page" 를 눌렀을 때 갑자기 읽을 수 없는 화면에 도착한다.
+ * 다국어는 §11 에서 로케일 맵으로 한 번에 얹는다 — 그때 이 문구들도 같이 옮긴다.
  */
 import type { Metadata } from "next";
 import { headers } from "next/headers";
@@ -41,16 +47,27 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
    */
   if (!isValidRegistrationNo(regNo)) notFound();
 
+  /**
+   * 한도를 **IP 가 아니라 (IP, 등록번호)** 로 센다.
+   *
+   * 현장 와이파이와 통신사 CGNAT 뒤에서는 수백 명이 한 공인 IP 를 공유한다 — IP 만으로
+   * 세면 입구 줄에서 31번째 사람부터 자기 티켓이 안 열리고, 문구는 "너무 많이 열었어요"
+   * 라 본인 잘못으로 읽혀 스태프에게 몰린다. **한도가 곧 줄이 되는** 실패다.
+   *
+   * 막으려는 것은 "한 사람이 번호를 바꿔 가며 훑는 것" 이지 "여러 사람이 각자 티켓을
+   * 여는 것" 이 아니다. 번호를 키에 넣으면 전자만 걸린다 — 무작위 탐색은 매 시도가
+   * 새 번호라 애초에 체크digit 과 13자리 공간이 막고, 같은 번호 반복은 여기서 막힌다.
+   */
   const h = await headers();
   const ip = getClientIp(new Request("https://x", { headers: h }));
-  const { allowed } = await rateLimitAsync(`collect-ticket:${ip}`, { limit: 30, windowMs: 60_000 });
+  const { allowed } = await rateLimitAsync(`collect-ticket:${ip}:${regNo}`, { limit: 30, windowMs: 60_000 });
   if (!allowed) {
     return (
       <div className="grid min-h-dvh place-items-center bg-neutral-100 p-6">
         <div className="max-w-xs rounded-2xl bg-white p-6 text-center shadow-sm">
-          <p className="text-sm font-semibold text-neutral-900">잠시 후 다시 열어 주세요</p>
+          <p className="text-sm font-semibold text-neutral-900">Please try again in a moment</p>
           <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-            짧은 시간에 너무 많이 열었어요. 티켓은 그대로 있습니다.
+            Too many requests just now. Your ticket is still here.
           </p>
         </div>
       </div>
@@ -70,16 +87,33 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
     return (
       <div className="grid min-h-dvh place-items-center bg-neutral-100 p-6" style={{ colorScheme: "light" }}>
         <div className="max-w-xs rounded-2xl bg-white p-6 text-center shadow-sm">
-          <p className="text-sm font-semibold text-neutral-900">잠시 후 다시 열어 주세요</p>
+          <p className="text-sm font-semibold text-neutral-900">Please try again in a moment</p>
           <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-            티켓을 불러오지 못했어요. 등록은 그대로 있습니다.
+            We couldn&apos;t load your ticket. Your registration is safe.
           </p>
           <p className="mt-3 font-mono text-xs tracking-widest text-neutral-400">{regNo}</p>
         </div>
       </div>
     );
   }
-  if (!record || record.source.deletedAt) notFound();
+  /**
+   * 체크digit 은 맞는데 DB 에 없는 번호 — 캡처를 보고 손으로 옮겨 적다 두 자리를 바꿔
+   * 적어도 Luhn 을 통과하는 조합이 있다. Next 기본 404("This page could not be found")는
+   * **무엇이 잘못됐는지도, 어디로 가야 하는지도** 알려 주지 않는다.
+   */
+  if (!record || record.source.deletedAt) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-neutral-100 p-6" style={{ colorScheme: "light" }}>
+        <div className="max-w-xs rounded-2xl bg-white p-6 text-center shadow-sm">
+          <p className="text-sm font-semibold text-neutral-900">We couldn&apos;t find that ticket</p>
+          <p className="mt-1 text-xs leading-relaxed text-neutral-500">
+            Check the number below, or look up your registration with the email you used.
+          </p>
+          <p className="mt-3 font-mono text-xs tracking-widest text-neutral-400">{regNo}</p>
+        </div>
+      </div>
+    );
+  }
 
   const config = normalizeCollectForm(record.source.formConfig);
   const view = buildLookupView(config, record);
@@ -121,11 +155,11 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
           <p className="mt-4 font-mono text-lg font-bold tracking-[0.14em] text-neutral-900">
             {view.registrationNo}
           </p>
-          <p className="mt-1 text-[11px] text-neutral-500">현장에서 이 QR 을 보여 주세요</p>
+          <p className="mt-1 text-[11px] text-neutral-500">Show this at the venue</p>
         </div>
 
         <p className="mt-4 text-center text-[11px] leading-relaxed text-neutral-500">
-          이 주소를 저장해 두시면 언제든 다시 열 수 있어요. 화면을 캡처해 두셔도 됩니다.
+          Save this page to open your ticket any time. A screenshot works too.
         </p>
       </main>
     </div>

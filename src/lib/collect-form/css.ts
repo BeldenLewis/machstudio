@@ -166,7 +166,15 @@ export const COLLECT_FORM_CSS = `
  * box-sizing:border-box 때문에 패딩이 그 안을 먹어 실제 QR 은 180px 로 그려진다(실측).
  * 카드는 내용에 맞추고 이미지에 크기를 준다.
  */
-.msf-qr img{display:block;width:200px;height:200px;image-rendering:pixelated}
+/* 호스트의 img{max-width:100%} 는 경쟁 선언이 없으면 그대로 먹는다 — 좁은 칸(사이드바
+   위젯)에서 폭만 줄고 높이는 200px 로 남아 QR 이 찌그러진다. filter 를 거는 테마도 있다
+   (스캔 대비가 무너진다). 스캔 요건이라 !important 로 못 박는다. */
+.msf-qr img{
+  display:block;image-rendering:pixelated;
+  width:200px !important;height:200px !important;
+  max-width:none !important;min-width:200px !important;
+  filter:none !important;opacity:1 !important;
+}
 
 /* ── 등록 확인(Find My QR) ──────────────────── */
 .msf-lookup{display:flex;flex-direction:column;gap:14px}
