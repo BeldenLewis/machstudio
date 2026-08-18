@@ -14,6 +14,35 @@
 import { NOTICE_SHELL_CSS } from "./shell-css";
 
 const SECTION_CSS = `
+/**
+ * ── 운영자가 넣은 줄바꿈을 보존한다 ──
+ *
+ * 공고의 문구는 **사람이 쓴 글**이라 어디서 줄을 바꿀지가 곧 의도다(일정 안내, 준비물 목록,
+ * 상금 조건처럼 한 항목 안에서 줄을 나눠 읽히게 쓰는 경우가 많다).
+ * 기본값 white-space: normal 은 그 줄바꿈을 공백 하나로 뭉갠다 — 편집기에서 엔터를 쳐도
+ * 화면에서는 앞뒤 문장이 그냥 이어 붙는다.
+ *
+ * pre-line 을 쓰는 이유(pre 가 아니라): 들여쓰기·연속 공백은 그대로 접고 **줄바꿈만** 살린다.
+ * 붙여넣기로 들어온 앞뒤 공백이 레이아웃을 밀지 않는다.
+ *
+ * 값을 넣는 자리 전부에 건다 — 한 곳만 빠져도 "여기만 안 되네" 가 된다.
+ * (AGENTS.md 공통: "사용자 텍스트(설명 등)는 줄바꿈을 보존해 표시".)
+ */
+.lnd .hero-subtitle,
+.lnd .hero-note,
+.lnd .hero-fact dd,
+.lnd .section-desc,
+.lnd .nt-concept-body p,
+.lnd .nt-stat-value,
+.lnd .nt-stat-value small,
+.lnd .nt-tl-body p,
+.lnd .nt-step-list li,
+.lnd .nt-elig-item > span:last-child,
+.lnd .nt-round-note,
+.lnd .nt-crit-desc,
+.lnd .nt-prize-desc,
+.lnd .nt-faq-a { white-space: pre-line; }
+
 /* ── 섹션 머리 ── */
 .lnd .section-kicker { display: block; font-size: 11.5px; font-weight: 800; letter-spacing: .16em;
   text-transform: uppercase; color: var(--primary); margin-bottom: 12px; }
