@@ -1,0 +1,73 @@
+import { describe, expect, it } from "vitest";
+import { normalizeCompetitionConfig } from "@/lib/competition-config";
+import { normalizeNoticePageConfig } from "@/lib/notice/config";
+
+/**
+ * 저장 왕복 — **공고 내용이 저장하면서 사라지지 않는가.**
+ *
+ * PATCH /api/competitions/[id] 는 normalizeCompetitionConfig 의 **결과를 그대로 저장한다.**
+ * 그래서 그 함수가 모르는 키는 저장 시점에 조용히 없어진다. 실제로 그랬다 — 공고 편집 탭을
+ * 만들고 저장을 눌렀더니 입력한 내용이 통째로 날아갔고, 화면에는 "저장했어요" 가 떴다.
+ *
+ * 화면 테스트로는 안 잡히는 종류라(저장은 성공하고 다음 로드에서야 빈 값이 보인다) 계약 수준에서 막는다.
+ */
+
+const filled = {
+  notice: { heroTitle: "옛 블록 빌더", blocks: [] },
+  form: { title: "참가 신청" },
+  noticePage: {
+    enabled: true,
+    colors: { lightBg: "#ffffff", darkBg: "#000000" },
+    sectionBg: { hero: "light", concept: "dark" },
+    hero: {
+      brand: "K-EXPO LA",
+      titleLines: ["Own", "the Stage."],
+      subtitle: "부제",
+      ctaLabel: "참가 신청하기",
+      secondaryLabel: "일정 보기",
+      facts: [{ label: "결선", value: "10/24" }],
+      media: { type: "image", url: "https://example.com/hero.jpg" },
+    },
+    timeline: {
+      enabled: true,
+      title: "모집 일정",
+      items: [{ date: "9/1", title: "접수 시작", description: "", emphasis: true }],
+    },
+    prizes: { enabled: true, items: [{ rank: "1st", title: "대상", description: "", amount: "$1,000" }] },
+  },
+};
+
+describe("대회 설정 저장 왕복", () => {
+  it("공고 페이지가 정규화를 통과해도 남는다", () => {
+    const saved = normalizeCompetitionConfig(filled, { includeDisabled: true });
+    expect(saved.noticePage.enabled).toBe(true);
+    expect(saved.noticePage.hero.titleLines).toEqual(["Own", "the Stage."]);
+    expect(saved.noticePage.hero.media).toEqual({ type: "image", url: "https://example.com/hero.jpg" });
+    expect(saved.noticePage.timeline.items).toHaveLength(1);
+    expect(saved.noticePage.prizes.items[0].amount).toBe("$1,000");
+  });
+
+  it("두 번 정규화해도 값이 안 줄어든다 — 저장·로드를 반복해도 같아야 한다", () => {
+    const once = normalizeCompetitionConfig(filled, { includeDisabled: true });
+    const twice = normalizeCompetitionConfig(once, { includeDisabled: true });
+    expect(twice.noticePage).toEqual(once.noticePage);
+  });
+
+  it("예전 블록 빌더 내용도 함께 남는다 — 새 빌더가 옛 대회를 지우면 안 된다", () => {
+    const saved = normalizeCompetitionConfig(filled, { includeDisabled: true });
+    expect(saved.notice.heroTitle).toBe("옛 블록 빌더");
+  });
+
+  it("공고 설정이 아예 없던 대회도 완전한 기본값을 받는다", () => {
+    const saved = normalizeCompetitionConfig({ form: {} }, { includeDisabled: true });
+    expect(saved.noticePage.enabled).toBe(false);
+    expect(saved.noticePage.sectionBg.hero).toBe("dark");
+    expect(saved.noticePage.colors.darkBg).toMatch(/^#[0-9a-f]{6}$/i);
+  });
+
+  it("섹션 정규화가 competition-config 를 거칠 때와 직접 부를 때 같다", () => {
+    expect(normalizeCompetitionConfig(filled, { includeDisabled: true }).noticePage).toEqual(
+      normalizeNoticePageConfig(filled, { keepEmptyRows: true }),
+    );
+  });
+});

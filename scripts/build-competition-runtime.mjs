@@ -23,6 +23,13 @@ function sourceHash() {
     join(root, "src/lib/competition-render.ts"),
     join(root, "src/lib/competition-config.ts"),
     join(root, "src/lib/competition-status.ts"),
+    join(root, "src/lib/notice/mount.ts"),
+    join(root, "src/lib/notice/css.ts"),
+    join(root, "src/lib/notice/shell-css.ts"),
+    join(root, "src/lib/notice/build-model.ts"),
+    join(root, "src/lib/notice/view-hero.ts"),
+    join(root, "src/lib/notice/view-sections.ts"),
+    join(root, "src/lib/notice/config.ts"),
   ];
   const hash = createHash("sha256");
   for (const f of files) hash.update(readFileSync(f));

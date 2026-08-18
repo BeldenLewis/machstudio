@@ -1,0 +1,126 @@
+/**
+ * 공고 렌더 모델 — 조건 판단과 폴백을 여기서 전부 끝낸다.
+ *
+ * 뷰에 분기가 흩어지면 "미리보기에서는 보였는데 실물에서는 안 보인다"가 반드시 생긴다.
+ * 섹션 노출(이중 게이트), auto/manual 해소, CTA 상태 문구가 전부 이 파일의 일이다.
+ */
+import { onAccentColor } from "@/lib/competition-render";
+import { NOTICE_SECTIONS, type NoticeCriterionItem, type NoticePageConfig, type NoticeSectionKey, type NoticeSelectionRound } from "./config";
+import type { NoticeCompetition, NoticeModel, NoticeRound, NoticeTocItem } from "./types";
+
+export interface BuildNoticeModelOptions {
+  uid: string;
+  embedded: boolean;
+  isPreview: boolean;
+}
+
+/** 라운드에서 선발 방식 막대를 만든다 — 대중:심사 비율이 곧 막대다. */
+function selectionFromRounds(rounds: NoticeRound[]): NoticeSelectionRound[] {
+  return rounds
+    .filter((round) => round.publicWeight > 0 || round.judgeWeight > 0)
+    .map((round) => ({
+      title: round.name,
+      note: round.kind === "prelim" ? "본선 진출자를 정합니다" : "최종 순위를 정합니다",
+      bars: [
+        { label: "관람객 투표", percent: round.publicWeight },
+        { label: "심사단 점수", percent: round.judgeWeight },
+      ].filter((bar) => bar.percent > 0),
+    }));
+}
+
+/**
+ * 심사 기준은 **본선 우선**이다. 관객이 공고에서 궁금한 건 "무대에서 뭘 보나"이고,
+ * 예선 항목(서류·영상 심사)은 본선과 다른 경우가 많다. 본선이 비어 있으면 예선으로 떨어진다.
+ */
+function criteriaFromRounds(rounds: NoticeRound[]): NoticeCriterionItem[] {
+  const final = rounds.find((r) => r.kind === "final" && r.criteria.length > 0);
+  if (final) return final.criteria;
+  const prelim = rounds.find((r) => r.criteria.length > 0);
+  return prelim ? prelim.criteria : [];
+}
+
+export function buildNoticeModel(
+  competition: NoticeCompetition,
+  np: NoticePageConfig,
+  opts: BuildNoticeModelOptions,
+): NoticeModel {
+  const { uid, embedded, isPreview } = opts;
+  const sectionId = (base: string) => `${base}-${uid}`;
+
+  const accent = competition.theme?.accentColor || "#6d28d9";
+
+  // auto 면 machstudio 안의 값을, manual 이면 공고에 적은 값을 쓴다.
+  const selectionRounds =
+    np.selection.source === "manual" ? np.selection.rounds : selectionFromRounds(competition.rounds);
+  const criteriaItems =
+    np.criteria.source === "manual" ? np.criteria.items : criteriaFromRounds(competition.rounds);
+  const criteriaTotal = criteriaItems.reduce((sum, item) => sum + item.points, 0);
+
+  // 카운트다운은 접수 마감이 있어야 의미가 있다. 지난 시각이면 켜 둬도 안 그린다.
+  const closeAt = competition.recruitCloseAt ? new Date(competition.recruitCloseAt) : null;
+  const deadlineValid = !!closeAt && !Number.isNaN(closeAt.getTime()) && closeAt.getTime() > Date.now();
+  const deadline = deadlineValid ? competition.recruitCloseAt : null;
+
+  /** 토글 ON + 실제 데이터 있음. 빈 껍데기를 방문자에게 보여주지 않는다. */
+  const hasContent: Record<NoticeSectionKey, boolean> = {
+    concept: !!(np.concept.headline.trim() || np.concept.body.trim()),
+    snapshot: np.snapshot.items.length > 0,
+    timeline: np.timeline.items.length > 0,
+    apply: np.apply.items.length > 0,
+    eligibility: np.eligibility.items.length > 0,
+    selection: selectionRounds.length > 0,
+    criteria: criteriaItems.length > 0,
+    prizes: np.prizes.items.length > 0,
+    countdown: deadline !== null,
+    faq: np.faq.items.length > 0,
+    sponsors: np.sponsors.items.length > 0,
+  };
+
+  const show = {} as Record<NoticeSectionKey, boolean>;
+  for (const section of NOTICE_SECTIONS) {
+    show[section.key] = np[section.key].enabled && hasContent[section.key];
+  }
+
+  const tocItems: NoticeTocItem[] = NOTICE_SECTIONS.filter((section) => show[section.key]).map((section) => {
+    const cfg = np[section.key] as { title?: string };
+    return { id: `nt-${section.key}`, label: (cfg.title || "").trim() || section.label };
+  });
+
+  // 접수 중이 아니면 버튼을 잠그고 이유를 적는다. 눌리지 않는 버튼만 두면 계속 누른다.
+  const ctaEnabled = competition.canApply;
+  const ctaLabel = ctaEnabled
+    ? np.hero.ctaLabel
+    : competition.phase === "upcoming"
+      ? "접수 시작 전"
+      : "접수 마감";
+  const ctaNote = ctaEnabled
+    ? ""
+    : competition.phase === "upcoming"
+      ? competition.statusMessages.upcoming
+      : competition.statusMessages.closed;
+
+  return {
+    competition,
+    np,
+    uid,
+    accent,
+    onPrimary: onAccentColor(accent),
+    brand: np.hero.brand.trim() || competition.name,
+    titleLines: np.hero.titleLines.filter((line) => line.trim()).length
+      ? np.hero.titleLines
+      : [competition.name],
+    subtitle: np.hero.subtitle.trim() || (competition.description ?? "").split("\n")[0] || "",
+    ctaLabel,
+    ctaEnabled,
+    ctaNote,
+    tocItems,
+    show,
+    selectionRounds,
+    criteriaItems,
+    criteriaTotal,
+    deadline,
+    embedded,
+    isPreview,
+    sectionId,
+  };
+}
