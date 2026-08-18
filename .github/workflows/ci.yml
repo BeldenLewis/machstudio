@@ -1,0 +1,47 @@
+# 푸시·PR 마다 도는 관문.
+#
+# **왜 필요한가:** 이 저장소는 임베드 번들 생성물(src/generated/*-runtime.ts)을 커밋한다.
+# 라우트가 그 문자열을 그대로 서빙하기 때문이다. 그래서 소스를 고치고 번들을 다시 굽지
+# 않으면 **배포는 성공하는데 옛 코드가 돈다** — 로컬에서는 predev 가 매번 다시 구워 주므로
+# 개발자 화면에서는 멀쩡하다. 가장 알아채기 어려운 종류의 사고이고, 지금까지 이걸 잡는
+# 곳이 아무 데도 없었다.
+#
+# **린트는 아직 관문이 아니다.** 저장소에 기존 오류 123건이 남아 있어(생성물 제외) 지금
+# 켜면 모든 PR 이 막힌다. 따로 정리한 뒤 이 파일에 추가한다.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# 같은 브랜치에 연달아 푸시하면 앞의 실행은 취소한다 — 마지막 커밋만 검증하면 된다.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # src/generated/prisma 는 gitignore 대상이라 여기서 만들어야 타입이 선다.
+      # **번들은 굽지 않는다** — 여기서 구우면 stale 검사가 자기가 만든 것을 검사하게 되어
+      # 의미가 없다(그래서 prebuild 훅을 타는 npm run build 를 쓰지 않는다).
+      - name: Prisma 클라이언트 생성
+        run: npx prisma generate
+
+      - name: 타입 검사
+        run: npx tsc --noEmit -p tsconfig.json
+
+      # 이 안에 번들 stale 검사(src/lib/__tests__/embed-runtime.test.ts)가 들어 있다.
+      - name: 테스트
+        run: npx vitest run --exclude '.worktrees/**' src

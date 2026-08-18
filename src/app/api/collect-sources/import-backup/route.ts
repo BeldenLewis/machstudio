@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomBytes } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
@@ -58,6 +59,13 @@ export async function POST(request: Request) {
       webhookUrl: (src.webhookUrl as string) ?? null,
       notifyOnSubmit: !!src.notifyOnSubmit,
       allowedOrigins: Array.isArray(src.allowedOrigins) ? (src.allowedOrigins as string[]) : [],
+      // 빌더형 설정 복원. 없는(구 v1) 백업은 mode 가 없으므로 기본값 capture 로 떨어져
+      // 기존 복구 동작이 그대로다. 미리보기 토큰은 복원하지 않는다 — 새 소스는 새 링크다.
+      mode: src.mode === "builder" ? "builder" : "capture",
+      ...(src.mode === "builder" && { previewToken: randomBytes(24).toString("base64url") }),
+      formConfig: (src.formConfig ?? null) as never,
+      emailConfig: (src.emailConfig ?? null) as never,
+      venueConfig: (src.venueConfig ?? null) as never,
       fieldMappings: {
         create: fieldMappings.map((f, i) => ({
           index: (f.index as number) ?? i,

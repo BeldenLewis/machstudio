@@ -12,7 +12,7 @@
  */
 
 import { safeHttpUrl } from "@/lib/webinar-config";
-import { cx, h, svg } from "./h";
+import { cx, h, svg } from "@/lib/dom/h";
 import type { LandingModel } from "./types";
 import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
 

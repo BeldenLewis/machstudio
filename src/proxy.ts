@@ -12,6 +12,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/api/webinar/") ||
     pathname.startsWith("/api/webinar-embed/") || // 임베드 공개 설정/비콘 (webinar-embed-sites 어드민 CRUD는 제외)
     pathname.startsWith("/w/") || // 웨비나 로더 (외부 사이트 부착)
+    pathname.startsWith("/f/") || // 등록 폼·등록 확인 로더 (외부 사이트 부착 — 설계 §17)
+    pathname.startsWith("/t/") || // 티켓 페이지 (등록번호가 곧 티켓 — 설계 §9.2)
     pathname === "/webinar/sample" ||
     pathname === "/live-preview" || // 라이브 페이지 상태별 디자인 프리뷰(목업 데이터, 공개)
     pathname.match(/^\/webinar\/[^/]+\/live/) ||
@@ -40,6 +42,9 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/share") ||
     pathname.startsWith("/s/") ||
     pathname.startsWith("/r/") ||
+    // 빌더형 등록 폼 미리보기(/p/{previewToken}) — 검토자는 워크스페이스 멤버가 아니다.
+    // 권한은 추측 불가능한 토큰이 대신하고, 페이지 자체가 조회 외의 부작용을 갖지 않는다.
+    pathname.startsWith("/p/") ||
     pathname.startsWith("/api/cron") ||
     // 개발 전용 하니스(/dev/*) — 로그인 뒤에 있는 컴포넌트를 격리해 검증할 때 쓴다.
     // 프로덕션에서는 이 조건이 false 이고, 각 페이지도 notFound() 로 한 번 더 막는다.

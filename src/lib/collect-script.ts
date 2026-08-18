@@ -7,6 +7,7 @@
  * GTM 스타일 short loader (`/s/{id}`)와 inline copy 양쪽에서 동일한 본문을 사용한다.
  */
 import { ATTRIBUTION_CORE_JS } from "./attribution-core";
+import { safeRedirectTarget } from "./collect-redirect";
 
 export type CollectFieldMapping = {
   index: number;
@@ -73,11 +74,23 @@ ${utmCore}
   };
 })();`;
 
+  /**
+   * 완료 후 이동 주소를 **스크립트를 굽기 전에 한 번 거른다**(collect-redirect).
+   *
+   * 이 값은 인증된 운영자가 넣지만 방문자 브라우저의 location 에 그대로 들어간다.
+   * 연동형 저장 경로에는 스킴 검사가 없어서, javascript: 스킴이면 파트너 오리진에서
+   * 임의 JS 가 돌고 프로토콜 상대 주소면 오픈 리다이렉트가 된다.
+   * 상대경로(슬래시로 시작)는 살아 있는 소스에 실제로 저장돼 있으므로 통과시킨다 —
+   * 절대 URL 만 허용하면 그 소스들의 이동이 조용히 끊긴다.
+   */
+  const redirectUrl = safeRedirectTarget(source.redirectUrl ?? "") ?? "";
+
   const script = `(function() {
   var COLLECT_URL = ${JSON.stringify(collectUrl)};
   var API_KEY = ${JSON.stringify(source.apiKey)};
   var SUCCESS_TRIGGER = ${JSON.stringify(source.successTrigger)};
-  var REDIRECT_URL = ${JSON.stringify(source.redirectUrl ?? "")};
+  // 이동 주소는 아래 script 를 만들기 전에 safeRedirectTarget 으로 이미 걸렀다.
+  var REDIRECT_URL = ${JSON.stringify(redirectUrl)};
   // 폼 감지가 활성화될 페이지 경로 패턴 (glob). 빈 배열 = 모든 페이지.
   var FORM_PAGE_PATTERNS = ${JSON.stringify(source.formPagePatterns ?? [])};
 

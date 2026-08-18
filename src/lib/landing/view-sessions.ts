@@ -14,7 +14,7 @@
 import { isPauseSession, sessionHasSpeaker, sessionTypeMeta } from "@/lib/webinar-sessions";
 import { normalizeSpeakerLinks, type SpeakerLink } from "@/lib/webinar-speaker-links";
 import { safeHttpUrl } from "@/lib/webinar-config";
-import { cx, h, svg } from "./h";
+import { cx, h, svg } from "@/lib/dom/h";
 import { parseSpeaker } from "./model";
 import type { LandingModel, LandingSession } from "./types";
 import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";

@@ -57,11 +57,28 @@ export function rateLimitPeek(key: string, opts: { limit: number; windowMs: numb
 }
 
 // Redis 비동기 인터페이스 — 새 코드에서 사용 권장
+/**
+ * Redis 폴백을 **한 번은 알린다.**
+ *
+ * 인메모리 폴백은 서버리스에서 인스턴스마다 따로 세므로 실효 한도가 인스턴스 수만큼
+ * 곱해진다 — 부하가 클수록 느슨해지는 방향이다. 유일한 남용 방어선이 조용히 약해지는데
+ * 로그가 없으면 아무도 모른다. 요청마다 찍으면 로그가 잠기므로 프로세스당 1회만 남긴다.
+ */
+let fallbackWarned = false;
+function warnFallback(why: string): void {
+  if (fallbackWarned) return;
+  fallbackWarned = true;
+  console.warn(`[ratelimit] 인메모리 폴백으로 동작합니다 (${why}) — 인스턴스별로 따로 세므로 실효 한도가 느슨해집니다.`);
+}
+
 export async function rateLimitAsync(
   key: string,
   opts: { limit: number; windowMs: number },
 ): Promise<{ allowed: boolean; remaining: number; retryAfterMs: number }> {
-  if (!useRedis) return memoryRateLimit(key, opts);
+  if (!useRedis) {
+    warnFallback("UPSTASH_REDIS_REST_URL/TOKEN 미설정");
+    return memoryRateLimit(key, opts);
+  }
   try {
     const now = Date.now();
     const windowKey = `rl:${key}:${Math.floor(now / opts.windowMs)}`;

@@ -104,7 +104,8 @@ export interface WebinarRegistrationFormConfig {
   successRedirectUrl: string;
 }
 
-const FIELD_TYPES: readonly WebinarFieldType[] = ["text", "email", "tel", "select", "checkbox", "multiple"];
+/** 항목 형식의 단일 출처 — 사전등록 빌더(collect-form-config)도 이걸 import 한다. */
+export const FIELD_TYPES: readonly WebinarFieldType[] = ["text", "email", "tel", "select", "checkbox", "multiple"];
 
 /**
  * 복수 선택 답변을 한 문자열로 합친다 / 되읽는다.
