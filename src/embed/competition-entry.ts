@@ -18,6 +18,8 @@ import {
   type CompetitionTheme,
 } from "@/lib/competition-render";
 import type { CompetitionPhase } from "@/lib/competition-status";
+import { mountNotice } from "@/lib/notice/mount";
+import type { NoticeRound } from "@/lib/notice/types";
 
 interface BootPayload {
   competitionId: string;
@@ -29,6 +31,13 @@ interface BootPayload {
   config: CompetitionConfig;
   /** 미리보기 모드 — 제출·업로드를 실제로 하지 않는다. */
   preview?: boolean;
+
+  /* ── 공고 상세페이지(섹션 빌더)용 ── 구 블록 빌더만 쓰는 대회에는 없을 수 있다. */
+  description?: string | null;
+  recruitOpenAt?: string | null;
+  recruitCloseAt?: string | null;
+  /** 선발 방식·심사 기준의 auto 소스. 투표 설정과 심사단 탭에서 온다. */
+  rounds?: NoticeRound[];
 }
 
 const STYLE_ID = "mc-styles";
@@ -82,7 +91,43 @@ function render(payload: BootPayload) {
     warn("마운트 지점을 찾지 못했어요 — <div data-mach-competition></div> 를 넣어주세요.");
     return;
   }
+  // 신청 팝업 CSS 는 어느 쪽으로 그리든 필요하다(공고 렌더러와 별개).
   injectStyles(payload.theme);
+
+  /**
+   * 공고를 두 가지로 그린다.
+   *
+   * **섹션 빌더(noticePage)를 켰으면 그쪽**, 아니면 예전 블록 빌더로 떨어진다.
+   * 새 렌더러로 통째로 갈아타지 않는 이유: 이미 블록으로 만들어 운영 중인 대회가 있고,
+   * 그 대회들의 공고가 어느 날 갑자기 빈 화면이 되면 안 된다. 공고 탭의 "공고 공개"
+   * 토글이 곧 전환 스위치다.
+   *
+   * **미리보기(/cp)도 같은 조건을 쓴다.** 미리보기가 방문자와 다른 렌더러를 쓰면 이 링크의
+   * 존재 이유가 없어진다 — 구 블록 대회를 열었을 때 실제 내용 대신 빈 새 페이지가 보였다.
+   * 켜기 전의 새 페이지는 공고 탭 옆칸 미리보기에서 본다(거기는 꺼 둬도 그려 준다).
+   */
+  if (payload.config.noticePage?.enabled) {
+    mountNotice({
+      mount,
+      competition: {
+        id: payload.competitionId,
+        name: payload.competitionName,
+        description: payload.description ?? null,
+        theme: payload.theme as unknown as Record<string, string>,
+        recruitOpenAt: payload.recruitOpenAt ?? null,
+        recruitCloseAt: payload.recruitCloseAt ?? null,
+        phase: payload.phase,
+        canApply: payload.canApply,
+        statusMessages: payload.config.statusMessages,
+        rounds: payload.rounds ?? [],
+      },
+      config: payload.config,
+      embedded: true,
+      isPreview: !!payload.preview,
+      onApply: () => openForm(payload),
+    });
+    return;
+  }
 
   mount.innerHTML = renderNoticeHtml({
     config: payload.config,

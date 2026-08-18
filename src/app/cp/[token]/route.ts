@@ -13,6 +13,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeCompetitionConfig } from "@/lib/competition-config";
+import { normalizeCriteria } from "@/lib/competition-scoring";
 import { escapeHtml } from "@/lib/competition-render";
 import { resolveCompetitionStatus, type CompetitionPhase } from "@/lib/competition-status";
 import { COMPETITION_RUNTIME_JS } from "@/generated/competition-runtime";
@@ -69,6 +70,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
   const phase = requested && (PHASES as string[]).includes(requested) ? (requested as CompetitionPhase) : status.phase;
   const canApply = requested ? phase === "recruiting" : status.canApply;
 
+  // 공고의 선발 방식·심사 기준은 투표 설정·심사단 탭 값을 그대로 그린다(auto 소스).
+  const rounds = await prisma.competitionRound.findMany({
+    where: { competitionId: competition.id },
+    orderBy: { sortOrder: "asc" },
+    select: { kind: true, name: true, publicWeight: true, judgeWeight: true, judgeCriteria: true },
+  });
+
   const payload = {
     competitionId: competition.id,
     competitionName: competition.name,
@@ -78,6 +86,20 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
     theme: competition.theme,
     config: normalizeCompetitionConfig(competition.config),
     preview: true,
+    description: competition.description,
+    recruitOpenAt: competition.recruitOpenAt,
+    recruitCloseAt: competition.recruitCloseAt,
+    rounds: rounds.map((round) => ({
+      kind: round.kind === "final" ? ("final" as const) : ("prelim" as const),
+      name: round.name,
+      publicWeight: round.publicWeight,
+      judgeWeight: round.judgeWeight,
+      criteria: normalizeCriteria(round.judgeCriteria).map((c) => ({
+        name: c.label,
+        description: "",
+        points: c.maxScore,
+      })),
+    })),
   };
 
   const html = `<!doctype html>
@@ -88,10 +110,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
 <meta name="robots" content="noindex">
 <title>${escapeHtml(competition.name)} — 미리보기</title>
 <style>body{margin:0;background:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
-.mc-wrap{max-width:860px;margin:0 auto;padding:0 20px 60px}</style>
+.mc-wrap{max-width:860px;margin:0 auto;padding:0 20px 60px}
+/* 섹션 빌더 공고는 화면 폭을 다 쓰는 페이지다 — 860px 래퍼에 가두면 히어로·배경이 잘린다. */
+.mc-wrap.full{max-width:none;padding:0}</style>
 </head>
 <body>
-<div class="mc-wrap"><div data-mach-competition></div></div>
+<div class="mc-wrap${payload.config.noticePage?.enabled ? " full" : ""}"><div data-mach-competition></div></div>
 <script>${COMPETITION_RUNTIME_JS}</script>
 <script>__msCompetition.boot(${jsonForScript(payload)});</script>
 </body>

@@ -8,6 +8,7 @@
  * 필드 타입은 웨비나 등록 폼과 같은 것을 쓴다(WebinarRegistrationField) — 두 벌로 갈라지면
  * 폼 빌더 UI 도 두 벌이 된다. 대회에만 필요한 첨부 타입만 확장한다.
  */
+import { normalizeNoticePageConfig, type NoticePageConfig } from "@/lib/notice/config";
 import type { WebinarRegistrationField } from "./webinar-config";
 
 /** 대회 신청 폼에만 있는 추가 타입 — 사진 업로드와 YouTube 링크. */
@@ -56,6 +57,14 @@ export interface CompetitionConfig {
     upcoming: string;
     closed: string;
   };
+  /**
+   * 공고 상세페이지(섹션 빌더). 예전 블록 빌더(notice)와 **함께** 산다 —
+   * 이미 블록으로 만든 대회의 내용을 지우지 않으려고 둘 다 남겨 둔다.
+   *
+   * 이 정규화 함수가 만드는 객체가 곧 저장되는 값이라(PATCH 가 결과를 그대로 쓴다),
+   * 여기 빠진 키는 **저장 시점에 조용히 사라진다**. 실제로 그렇게 한 번 날렸다.
+   */
+  noticePage: NoticePageConfig;
 }
 
 export const COMPETITION_MEDIA = {
@@ -201,6 +210,8 @@ export function normalizeCompetitionConfig(
       upcoming: str(statusRaw.upcoming, "접수 시작 전이에요."),
       closed: str(statusRaw.closed, "접수가 마감되었어요."),
     },
+    // 공고 상세페이지는 자기 정규화 함수가 소유한다 — 여기서 다시 풀어 쓰면 두 벌이 된다.
+    noticePage: normalizeNoticePageConfig(source, { keepEmptyRows: options.includeDisabled }),
   };
 }
 

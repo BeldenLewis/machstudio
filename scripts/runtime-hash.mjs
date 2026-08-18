@@ -16,7 +16,10 @@ import { join } from "node:path";
 
 function hashFiles(files) {
   const hash = createHash("sha256");
-  for (const f of files) hash.update(readFileSync(f));
+  // 줄바꿈을 통일해서 넣는다. Windows 체크아웃은 CRLF 라 바이트로 해시하면 리눅스(CI)와
+  // 값이 갈린다 — 개발자 기계에서는 stale 검사가 늘 빨갛고, predev 가 번들을 다시 구우면
+  // 해시 한 줄만 바뀐 diff 가 매번 생긴다(실측: landing-runtime 이 dev 때마다 수정됨).
+  for (const f of files) hash.update(readFileSync(f, "utf8").split("\r\n").join("\n"));
   return "sha256:" + hash.digest("hex").slice(0, 32);
 }
 

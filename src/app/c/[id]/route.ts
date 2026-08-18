@@ -14,6 +14,7 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeCompetitionConfig } from "@/lib/competition-config";
+import { normalizeCriteria } from "@/lib/competition-scoring";
 import { resolveCompetitionStatus } from "@/lib/competition-status";
 import { COMPETITION_RUNTIME_JS } from "@/generated/competition-runtime";
 
@@ -60,6 +61,28 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   // 공개 페이로드에는 공개용 config 만 싣는다(꺼 둔 블록·항목 제외). 참가자 개인정보는 애초에 없다.
   const config = normalizeCompetitionConfig(competition.config);
 
+  /**
+   * 공고의 선발 방식·심사 기준은 **투표 설정과 심사단 탭의 값을 그대로 그린다**(auto 소스).
+   * 공고에 손으로 옮겨 적게 하면 배점을 바꿨을 때 공고만 옛 숫자로 남는다.
+   * 심사 항목은 공개 정보다 — 참가자가 무엇으로 평가받는지 알아야 준비할 수 있다.
+   */
+  const rounds = await prisma.competitionRound.findMany({
+    where: { competitionId: competition.id },
+    orderBy: { sortOrder: "asc" },
+    select: { kind: true, name: true, publicWeight: true, judgeWeight: true, judgeCriteria: true },
+  });
+  const noticeRounds = rounds.map((round) => ({
+    kind: round.kind === "final" ? ("final" as const) : ("prelim" as const),
+    name: round.name,
+    publicWeight: round.publicWeight,
+    judgeWeight: round.judgeWeight,
+    criteria: normalizeCriteria(round.judgeCriteria).map((c) => ({
+      name: c.label,
+      description: "",
+      points: c.maxScore,
+    })),
+  }));
+
   const body =
     `/* mach competition */\n` +
     COMPETITION_RUNTIME_JS +
@@ -71,6 +94,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       canApply: status.canApply,
       theme: competition.theme,
       config,
+      description: competition.description,
+      recruitOpenAt: competition.recruitOpenAt,
+      recruitCloseAt: competition.recruitCloseAt,
+      rounds: noticeRounds,
     })});\n`;
 
   // ETag 필수 — 검증자가 없으면 브라우저가 재검증을 못 해 낡은 스크립트를 계속 실행한다.

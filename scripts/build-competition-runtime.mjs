@@ -23,9 +23,18 @@ function sourceHash() {
     join(root, "src/lib/competition-render.ts"),
     join(root, "src/lib/competition-config.ts"),
     join(root, "src/lib/competition-status.ts"),
+    join(root, "src/lib/notice/mount.ts"),
+    join(root, "src/lib/notice/css.ts"),
+    join(root, "src/lib/notice/shell-css.ts"),
+    join(root, "src/lib/notice/build-model.ts"),
+    join(root, "src/lib/notice/view-hero.ts"),
+    join(root, "src/lib/notice/view-sections.ts"),
+    join(root, "src/lib/notice/config.ts"),
   ];
   const hash = createHash("sha256");
-  for (const f of files) hash.update(readFileSync(f));
+  // 줄바꿈을 통일해서 넣는다 — Windows 체크아웃은 CRLF 라 그대로 해시하면
+  // 리눅스(CI)와 값이 갈리고, 생성물이 매번 바뀐 것처럼 보인다.
+  for (const f of files) hash.update(readFileSync(f, "utf8").split("\r\n").join("\n"));
   return "sha256:" + hash.digest("hex").slice(0, 32);
 }
 
