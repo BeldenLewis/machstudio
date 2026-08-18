@@ -4,7 +4,7 @@
  * 껍데기의 스타일·효과를 그대로 쓴다. 웨비나 랜딩과 **같은 클래스·같은 변수 계약**이라
  * 스크롤 리빌·세로 목차·배경 모드가 별도 구현 없이 걸린다.
  */
-import { clearNode, h } from "@/lib/landing/h";
+import { clearNode, h } from "@/lib/dom/h";
 import { attachReveal, attachTocSpy, attachTocVisibility } from "@/lib/landing/effects";
 import { createTocLayer, releaseLayer } from "@/lib/landing/overlay";
 import { NOTICE_CSS } from "./css";

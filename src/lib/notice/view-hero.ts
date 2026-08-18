@@ -7,7 +7,7 @@
  * 문자열 HTML 을 쓰지 않는다: 이 코드는 외부 사이트(아임웹) 문서 안에서 돈다.
  * 운영자가 넣은 문구는 전부 텍스트 노드로만 들어간다.
  */
-import { h } from "@/lib/landing/h";
+import { h } from "@/lib/dom/h";
 import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
 import type { NoticeModel } from "./types";
 

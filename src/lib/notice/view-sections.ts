@@ -8,7 +8,7 @@
  *  - 문자열 HTML 금지. 운영자 입력은 텍스트 노드로만 들어간다.
  *  - `rv` 클래스는 스크롤 리빌 대상 표시(effects.attachReveal 이 집는다).
  */
-import { h, svg } from "@/lib/landing/h";
+import { h, svg } from "@/lib/dom/h";
 import type { NoticeModel } from "./types";
 
 /** 섹션 껍데기 — 키커 + 제목 + 설명. 모든 섹션이 같은 머리 구조를 쓴다. */

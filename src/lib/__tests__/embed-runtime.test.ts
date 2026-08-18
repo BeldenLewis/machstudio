@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 import { LANDING_RUNTIME_JS, LANDING_RUNTIME_SRC_HASH } from "@/generated/landing-runtime";
 import { FORM_RUNTIME_JS, FORM_RUNTIME_SRC_HASH } from "@/generated/form-runtime";
@@ -80,7 +80,9 @@ function tsFilesUnder(rel: string): string[] {
     }
     if (name.name.endsWith(".ts") || name.name.endsWith(".tsx")) out.push(join(rel, name.name));
   }
-  return out;
+  // Windows 에서는 join 이 역슬래시를 준다 — 예외 목록(KNOWN_VIOLATIONS)은 슬래시 표기라
+  // 그대로 두면 목록이 아무것도 못 걸러 **개발자 기계에서만** 4건이 실패한다(CI 는 리눅스라 통과).
+  return out.map((f) => f.split(sep).join("/"));
 }
 
 describe("호스트 문서에 마운트되는 코드는 HTML 문자열을 쓰지 않는다", () => {
