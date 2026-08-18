@@ -128,6 +128,24 @@ export function primaryFieldKey(
  */
 export { isValidCollectEmail, normalizeEmail } from "@/lib/collect-email";
 
+/**
+ * 요청 본문 → `SubmissionInput` 한 곳에서 만든다.
+ *
+ * **왜 함수로 뽑나.** 라우트가 손으로 필드를 골라 담고 있었는데, `SubmissionInput` 에
+ * 항목을 하나 더해도 라우트를 같이 고치지 않으면 **조용히 떨어진다** — 타입 오류도 안 난다
+ * (선택 필드라서). 실제로 phoneCountries 가 그렇게 빠졌다: 클라이언트는 보내고 순수
+ * 함수는 받는데 라우트가 안 넘겨, 방문자가 고른 국가가 서버에서 무시됐다.
+ * 단위 테스트가 있는 함수 하나로 모으면 그 실패가 다시 생기지 않는다.
+ */
+export function submissionInputFromBody(body: Record<string, unknown>): SubmissionInput {
+  return {
+    values: (body.values ?? {}) as Record<string, unknown>,
+    consent: body.consent as SubmissionInput["consent"],
+    locale: body.locale,
+    phoneCountries: body.phoneCountries,
+  };
+}
+
 export function prepareBuilderSubmission(
   config: CollectFormConfig,
   input: SubmissionInput,

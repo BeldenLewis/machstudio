@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { normalizeCollectForm } from "@/lib/collect-form-config";
 import { isValidRegistrationNo } from "@/lib/collect-registration-no";
-import { isValidCollectEmail, normalizeEmail, prepareBuilderSubmission, primaryFieldKey } from "@/lib/collect-submit";
+import { isValidCollectEmail, normalizeEmail, prepareBuilderSubmission, primaryFieldKey, submissionInputFromBody } from "@/lib/collect-submit";
 
 /**
  * 저장 직전까지의 모든 판정 — 서버 라우트와 미리보기가 **같은 함수**를 탄다(설계 §19).
@@ -171,6 +171,43 @@ describe("대표 항목 고르기", () => {
  * 방문자가 고른 국가로 번호를 읽는다(§6.3). LA 폼(기본 US)에 한국 참관객이 오는 것이
  * 파일럿의 기본 시나리오이므로, 이게 안 되면 그 사람들은 등록을 끝내지 못한다.
  */
+/**
+ * 요청 본문 → 입력 변환.
+ *
+ * **이 테스트가 막는 실패는 "빠뜨림" 이다.** 라우트가 손으로 필드를 골라 담던 때
+ * phoneCountries 가 조용히 떨어져, 방문자가 고른 국가가 서버에서 무시됐다 — 선택 필드라
+ * 타입 오류도 안 났고 순수 함수 테스트도 전부 통과했다(그쪽은 직접 넣어 호출하니까).
+ * 프로덕션에 실제로 쏴 보고서야 드러났다.
+ */
+describe("요청 본문 → 제출 입력", () => {
+  it("보낸 항목을 하나도 빠뜨리지 않는다", () => {
+    const body = {
+      values: { email: "a@b.com" },
+      consent: { privacy: true, marketing: false },
+      locale: "en",
+      phoneCountries: { phone: "KR" },
+    };
+    expect(submissionInputFromBody(body)).toEqual(body);
+  });
+
+  /**
+   * SubmissionInput 에 항목이 늘면 여기도 늘어야 한다. 목록을 못 박아 두면
+   * "추가했는데 라우트가 안 넘긴다" 가 이 테스트에서 먼저 걸린다.
+   */
+  it("변환이 다루는 항목 목록을 못 박는다", () => {
+    const full = submissionInputFromBody({
+      values: {}, consent: {}, locale: "en", phoneCountries: {},
+    });
+    expect(Object.keys(full).sort()).toEqual(["consent", "locale", "phoneCountries", "values"]);
+  });
+
+  it("본문이 비어도 안전한 기본값을 만든다", () => {
+    const empty = submissionInputFromBody({});
+    expect(empty.values).toEqual({});
+    expect(empty.consent).toBeUndefined();
+  });
+});
+
 describe("전화 국가 선택", () => {
   const phoneForm = normalizeCollectForm({
     fields: [{ id: "f1", key: "phone", label: { en: "Phone" }, type: "tel", required: true, enabled: true }],

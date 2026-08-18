@@ -16,7 +16,7 @@ import { prisma } from "@/lib/prisma";
 import { getClientIp, rateLimitAsync } from "@/lib/ratelimit";
 import { fireWebhook } from "@/lib/webhook";
 import { normalizeCollectForm } from "@/lib/collect-form-config";
-import { prepareBuilderSubmission } from "@/lib/collect-submit";
+import { submissionInputFromBody, prepareBuilderSubmission } from "@/lib/collect-submit";
 import { generateRegistrationNo } from "@/lib/collect-registration-no";
 
 function normalizeOrigin(s: string): string {
@@ -127,15 +127,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   // ── 검증 — 런타임과 **같은 함수** ───────────────────────────────────
   const config = normalizeCollectForm(source.formConfig);
-  const prep = prepareBuilderSubmission(
-    config,
-    {
-      values: (body.values ?? {}) as Record<string, unknown>,
-      consent: body.consent as { privacy?: unknown; marketing?: unknown } | undefined,
-      locale: body.locale,
-    },
-    new Date(),
-  );
+  // 본문 → 입력 변환은 collect-submit 한 곳에 있다. 여기서 손으로 고르면 항목이 늘 때 떨어진다.
+  const prep = prepareBuilderSubmission(config, submissionInputFromBody(body), new Date());
 
   if (!prep.ok) {
     if (prep.code === "closed") {
