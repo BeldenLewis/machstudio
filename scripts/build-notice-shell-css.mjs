@@ -37,9 +37,9 @@ const SHELL_REGIONS = [
   "스크롤 리빌",
 ];
 
-const source = readFileSync(SRC, "utf8");
-
-// LANDING_CSS = ` ... ` 안쪽만 다룬다.
+// 줄바꿈을 통일한 뒤 다룬다. Windows 체크아웃은 CRLF 라 그대로 뜨면 리눅스(CI)가 다시
+// 만든 결과와 **내용도 해시도 달라진다** — 실제로 CI 에서 그렇게 깨졌다.
+const source = readFileSync(SRC, "utf8").split("\r\n").join("\n");
 const open = source.indexOf("`", source.indexOf("export const LANDING_CSS"));
 const close = source.lastIndexOf("`");
 if (open < 0 || close <= open) throw new Error("LANDING_CSS 템플릿 리터럴을 찾지 못했어요");
