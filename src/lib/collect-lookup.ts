@@ -54,7 +54,22 @@ export function buildLookupCriteria(config: CollectFormConfig, input: LookupInpu
   return { emailNormalized, phoneE164, logic: config.lookup.logic };
 }
 
-/** 화면에 내보내는 것 — **이게 전부다**(§10.2 "표시 정보는 최소화"). */
+/**
+ * 번호로 직접 연 티켓 화면이 쓰는 것.
+ *
+ * **연락처가 없다.** 이 화면은 번호만 알면 열리므로, 가려서라도 연락처를 얹으면
+ * 번호를 주운 사람에게 단서를 준다. 조회 화면(LookupView)은 본인이 이메일이나 전화를
+ * 직접 입력해 통과한 뒤라 사정이 다르다 — 그래서 타입을 분리한다.
+ */
+export interface TicketView {
+  registrationNo: string;
+  /** 본인 확인용 표시 이름. 못 고르면 빈 문자열(화면에서 생략한다). */
+  name: string;
+  /** 참관객 유형 — 분기 기준 항목의 값. 분기가 없으면 빈 문자열. */
+  visitorType: string;
+}
+
+/** 조회 화면에 내보내는 것 — **이게 전부다**(§10.2 "표시 정보는 최소화"). */
 export interface LookupView {
   /**
    * **showQr 이 꺼져 있으면 null 이다.**
@@ -70,6 +85,40 @@ export interface LookupView {
   visitorType: string;
   /** QR 을 보여줄 것인가. false 면 "메일로 재발송" 만 안내한다(§10.1). */
   showQr: boolean;
+  /**
+   * 본인 확인용 **가려진** 연락처. 없으면 빈 문자열.
+   *
+   * §10.2 는 "연락처는 절대 넣지 않는다" 였다. 그런데 이름만으로는 동명이인이 흔하고,
+   * 줄에 서서 "이게 내 거 맞나" 를 확인할 방법이 없다는 실제 불편이 있었다.
+   * 그래서 **가려서** 내보낸다 — h•••@gmail.com / •••••••1198.
+   *
+   * 가리는 게 핵심이다. 조회는 `or` 로 열어 둘 수 있어서 **이메일 하나만 아는 사람에게도
+   * 열린다.** 그대로 실어 보내면 그 사람이 남의 전화번호를 가져간다. 가려 두면 본인은
+   * "내 거 맞네" 를 알아보고, 모르는 쪽 연락처는 여전히 새어 나가지 않는다.
+   */
+  maskedEmail: string;
+  maskedPhone: string;
+}
+
+/**
+ * 이메일 가리기 — 첫 글자와 도메인만 남긴다(hajar…@gmail.com → h•••@gmail.com).
+ * 도메인을 남기는 이유: 본인은 "지메일로 넣었지" 로 알아보는데, 도메인만으로는 사람을 못 찾는다.
+ */
+export function maskEmail(value: string): string {
+  const raw = value.trim();
+  const at = raw.lastIndexOf("@");
+  if (at < 1) return "";
+  return `${raw[0]}•••${raw.slice(at)}`;
+}
+
+/**
+ * 전화 가리기 — **뒤 4자리만** 남긴다. 본인 확인은 뒷자리로 하고, 앞자리는 지역·통신사라
+ * 정보량이 거의 없다. 4자리 미만이면 아예 안 보여 준다(가릴 게 없으면 가린 게 아니다).
+ */
+export function maskPhone(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length < 8) return "";
+  return `•••••• ${digits.slice(-4)}`;
 }
 
 /**
@@ -110,11 +159,21 @@ export function buildLookupView(
 ): LookupView | null {
   const base = buildTicketView(config, record);
   if (!base) return null;
+
+  const data = (record.data && typeof record.data === "object" ? record.data : {}) as Record<string, unknown>;
+  const pick = (type: string) => {
+    const field = config.fields.find((f) => f.type === type);
+    const value = field ? data[field.key] : undefined;
+    return typeof value === "string" ? value : "";
+  };
+
   return {
     ...base,
     // 화면이 안 쓰는 값은 내보내지도 않는다(lookup-mount 는 showQr 가 false 면 번호를 그리지 않는다).
     registrationNo: config.lookup.showQr ? base.registrationNo : null,
     showQr: config.lookup.showQr,
+    maskedEmail: maskEmail(pick("email")),
+    maskedPhone: maskPhone(pick("tel")),
   };
 }
 
@@ -129,7 +188,7 @@ export function buildLookupView(
 export function buildTicketView(
   config: CollectFormConfig,
   record: { registrationNo: string | null; data: unknown },
-): (Omit<LookupView, "registrationNo" | "showQr"> & { registrationNo: string }) | null {
+): TicketView | null {
   if (!record.registrationNo) return null;
   const data = (record.data && typeof record.data === "object" ? record.data : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
