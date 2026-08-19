@@ -65,6 +65,42 @@ const SECTION_CSS = `
 }
 .lnd .hero-cta:hover { box-shadow: 0 20px 42px color-mix(in srgb, var(--btn) 46%, transparent); }
 
+/**
+ * ── 섹션 배경 이미지 ──
+ *
+ * 켠 섹션에만 붙는다(.section.has-bg). 히어로와 같은 구조 — 감싸는 상자 + 안쪽 img.
+ *
+ * **화면 폭 전체로 깐다.** .section 은 min(100%-36px, 960px) 로 가운데 정렬된 글 상자라,
+ * 배경을 그 안에 가두면 좌우에 색 띠가 남아 "카드에 사진을 붙인" 꼴이 된다.
+ * 섹션이 자기 배경을 칠할 때 쓰는 것과 같은 수법으로 넓힌다(left/right: calc(50% - 50vw)).
+ *
+ * **스크림은 선택이 아니다.** 사진 위에 글자를 얹는 순간 밝은 부분에서 글이 사라진다.
+ * 섹션 배경색(--sec-bg)으로 덮으므로 라이트/다크 어느 쪽이든 글자 대비가 유지된다.
+ */
+.lnd .nt-bg {
+  position: absolute; z-index: -1; top: 0; bottom: 0;
+  left: calc(50% - 50vw); right: calc(50% - 50vw);
+  overflow: hidden;
+}
+.lnd .nt-bg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lnd .nt-bg::after {
+  content: ""; position: absolute; inset: 0;
+  background: color-mix(in srgb, var(--sec-bg) 72%, transparent);
+}
+
+/**
+ * ── 배경 초점 ──
+ *
+ * 가로 사진을 세로 화면에 깔면 좌우가 크게 잘린다. 기본값 가운데(50% 50%)가 하필 인물이나
+ * 로고를 비껴가는 일이 흔해서, 운영자가 어디를 보여 줄지 고르게 한다.
+ *
+ * **데스크톱과 모바일 값을 따로 둔다.** 잘리는 방향이 반대라(가로 화면은 위아래가,
+ * 세로 화면은 좌우가 잘린다) 값 하나로는 양쪽을 동시에 맞출 수 없다.
+ * 값은 인라인 CSS 변수로 온다(media-focus.ts) — 인라인 스타일로는 미디어 쿼리를 못 쓴다.
+ */
+.lnd .nt-bg img,
+.lnd .hero-media img { object-position: var(--fx, 50%) var(--fy, 50%); }
+
 /* ── 섹션 머리 ── */
 /* 색은 위 "보조 색" 블록이 갖는다 — 여기서 다시 선언하면 뒤에 와서 그걸 덮는다. */
 .lnd .section-kicker { display: block; font-size: 11.5px; font-weight: 800; letter-spacing: .16em;
@@ -297,6 +333,9 @@ const SECTION_CSS = `
      .hero-inner 의 아래 여백을 150px 로 잡는다. 이 파일이 껍데기보다 **뒤에** 붙으므로
      여기서 다시 선언하지 않으면 위의 124px 이 그 값을 덮어 팩트 줄이 버튼 위로 내려앉는다. */
   .lnd .hero-inner { padding-bottom: 150px; }
+  /* 좁은 화면에서는 모바일 초점으로 바꾼다 — 위 "배경 초점" 주석 참고. */
+  .lnd .nt-bg img,
+  .lnd .hero-media img { object-position: var(--mfx, 50%) var(--mfy, 50%); }
 }
 `;
 

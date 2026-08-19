@@ -41,7 +41,24 @@ export interface NoticePrizeItem { rank: string; title: string; description: str
 export interface NoticeFaqItem { question: string; answer: string }
 export interface NoticeSponsorItem { tier: string; name: string; logoUrl: string; url: string }
 
-export type NoticeHeroMedia = { type: "image" | "video"; url: string } | null;
+/**
+ * 배경 미디어 + **초점**.
+ *
+ * focus 는 object-position 이다(0~100%). 가로 사진을 모바일 세로 화면에 깔면 좌우가 크게
+ * 잘리는데, 기본값 가운데(50/50)가 하필 인물이나 로고를 비껴가는 일이 흔하다 — 실제로
+ * 데스크톱은 멀쩡한데 모바일만 엉뚱한 데가 보였다.
+ *
+ * **데스크톱과 모바일을 따로 둔다.** 잘리는 방향이 반대라(가로 화면은 위아래가, 세로
+ * 화면은 좌우가 잘린다) 값 하나로는 양쪽을 동시에 맞출 수 없다.
+ */
+export interface NoticeMediaFocus { x: number; y: number }
+export type NoticeHeroMedia =
+  | { type: "image" | "video"; url: string; focus: NoticeMediaFocus; mobileFocus: NoticeMediaFocus }
+  | null;
+
+/** 섹션 배경 — 없으면 색만 칠한다(기본). 어울리는 섹션에만 켠다. */
+export type NoticeSectionMedia = { url: string; focus: NoticeMediaFocus; mobileFocus: NoticeMediaFocus } | null;
+export type NoticeSectionMediaMap = Partial<Record<NoticeBgKey, NoticeSectionMedia>>;
 
 export interface NoticeHero {
   media: NoticeHeroMedia;
@@ -106,6 +123,11 @@ export interface NoticePageConfig {
    */
   colors: { lightBg: string; darkBg: string; accentAlt: string; button: string };
   sectionBg: NoticeSectionBgMap;
+  /**
+   * 섹션별 배경 이미지 — **선택**이다. 어울리는 섹션이 있고 아닌 섹션이 있어서
+   * 전부에 까는 기본값을 두지 않는다. 켠 섹션은 글자 뒤에 스크림이 함께 깔린다(css.ts).
+   */
+  sectionMedia: NoticeSectionMediaMap;
   concept: { enabled: boolean; kicker: string; headline: string; highlight: string; body: string };
   snapshot: { enabled: boolean; kicker: string; title: string; items: NoticeStatItem[] };
   timeline: { enabled: boolean; kicker: string; title: string; description: string; items: NoticeTimelineItem[] };
@@ -157,13 +179,26 @@ export function normalizeNoticePageConfig(config: unknown, opts?: NormalizeNotic
   const sectionBg = { hero: bgOf("hero") } as NoticeSectionBgMap;
   for (const item of NOTICE_SECTIONS) sectionBg[item.key] = bgOf(item.key);
 
+  /** 0~100 사이로 자른다. object-position 백분율이라 밖으로 나가면 이미지가 화면에서 사라진다. */
+  const focusOf = (v: unknown, fallback = 50): NoticeMediaFocus => {
+    const o = obj(v);
+    const n = (x: unknown) =>
+      typeof x === "number" && Number.isFinite(x) ? Math.max(0, Math.min(100, Math.round(x))) : fallback;
+    return { x: n(o.x), y: n(o.y) };
+  };
+
   const heroRaw = obj(np.hero);
   const mediaRaw = obj(heroRaw.media);
   const mediaUrl = str(mediaRaw.url).trim();
   const hero: NoticeHero = {
     media:
       mediaUrl && (mediaRaw.type === "image" || mediaRaw.type === "video")
-        ? { type: mediaRaw.type, url: mediaUrl }
+        ? {
+            type: mediaRaw.type,
+            url: mediaUrl,
+            focus: focusOf(mediaRaw.focus),
+            mobileFocus: focusOf(mediaRaw.mobileFocus),
+          }
         : null,
     brand: str(heroRaw.brand),
     titleLines: arr(heroRaw.titleLines).map(str).filter((line) => keep || line.trim()),
@@ -196,6 +231,18 @@ export function normalizeNoticePageConfig(config: unknown, opts?: NormalizeNotic
       button: hex(obj(np.colors).button, ""),
     },
     sectionBg,
+    sectionMedia: (() => {
+      const raw = obj(np.sectionMedia);
+      const out: NoticeSectionMediaMap = {};
+      for (const key of ["hero", ...NOTICE_SECTIONS.map((x) => x.key)] as NoticeBgKey[]) {
+        const item = obj(raw[key]);
+        const url = str(item.url).trim();
+        // 주소가 없으면 아예 키를 만들지 않는다 — "켜 뒀는데 빈 배경" 같은 상태를 안 만든다.
+        if (!url) continue;
+        out[key] = { url, focus: focusOf(item.focus), mobileFocus: focusOf(item.mobileFocus) };
+      }
+      return out;
+    })(),
 
     concept: {
       enabled: on("concept"),
