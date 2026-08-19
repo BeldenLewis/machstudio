@@ -8,6 +8,7 @@ import { InlineError } from "@/components/ui/inline-error";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Switch } from "@/components/ui/switch";
 import { btnCls, FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
+import { PreviewFrame } from "@/components/ui/PreviewFrame";
 import { formatKst } from "@/lib/datetime";
 import { normalizeShowConfig, SHOW_MODES, type ShowConfig } from "@/lib/competition-show";
 import type { CompetitionDetail } from "./page";
@@ -291,6 +292,21 @@ function ResultPublishCard({
           저장하지 않은 변경이 있어요. 공개 상태는 <b>저장된 내용</b>을 기준으로 보여집니다.
         </p>
       )}
+
+      {/*
+        결과 페이지는 **공개 전에도** 운영자만 미리 볼 수 있다(결과 API 가 previewToken 을
+        확인한다). 공개를 누른 뒤에야 처음 보면 오타를 고칠 자리가 없다.
+      */}
+      {competition.previewToken && (
+        <div className="mt-4 border-t border-border pt-4">
+          <PreviewFrame
+            title="결과 페이지 미리보기"
+            src={`/cp/${competition.previewToken}?view=result`}
+            note={published ? "지금 관람객에게 보이는 화면" : "공개 전이라 운영자만 볼 수 있어요"}
+            reloadKey={`${publishedAt ?? "none"}-${assignedCount}`}
+          />
+        </div>
+      )}
     </section>
   );
 }
@@ -442,6 +458,21 @@ function ShowCard({
           <p className="text-[11px] text-amber-700 dark:text-amber-400">
             리허설은 <b>가짜 결과</b>로 돕니다 — 연습 자리에 스태프만 있는 경우는 거의 없어서, 진짜 명단을 띄우면 그걸로 발표가 끝나요.
           </p>
+
+          {/*
+            **리허설로 띄운다.** 진짜 결과로 미리보기를 돌리면 어드민 화면 옆칸에 수상자
+            명단이 그대로 떠 있게 된다 — 발표 전에 누가 지나가다 볼 수 있는 자리다.
+            연출을 확인하는 게 목적이라 가짜 결과로 충분하다.
+          */}
+          <div className="border-t border-border pt-4">
+            <PreviewFrame
+              title="발표 화면 미리보기"
+              src={`/show/${competition.showToken}?rehearsal=1`}
+              note="리허설(가짜 결과)로 연출만 확인해요"
+              reloadKey={`${config.mode}-${config.showMedia}-${config.showScores}-${config.footnote}`}
+              openLabel="발표 화면 열기"
+            />
+          </div>
         </div>
       ) : (
         <p className="mt-4 border-t border-border pt-4 text-xs text-muted-foreground">

@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
+import { PreviewFrame } from "@/components/ui/PreviewFrame";
 import { Switch } from "@/components/ui/switch";
 import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
 import type { CompetitionDetail } from "./page";
@@ -91,6 +92,7 @@ export default function VoteSettingsTab({
         <RoundCard
           key={round.id}
           round={round}
+          previewToken={competition.previewToken}
           saving={saving === round.id}
           onPatch={(body, message) => patchRound(round, body, message)}
         />
@@ -101,10 +103,12 @@ export default function VoteSettingsTab({
 
 function RoundCard({
   round,
+  previewToken,
   saving,
   onPatch,
 }: {
   round: RoundDto;
+  previewToken: string | null;
   saving: boolean;
   onPatch: (body: Record<string, unknown>, message?: string) => Promise<boolean>;
 }) {
@@ -274,6 +278,23 @@ function RoundCard({
           {round.kind === "final" && " (본선은 진출 확정된 참가작만)"}.
         </p>
       </motion.div>
+
+      {/*
+        **이 설정이 실제로 어떤 화면이 되는지 여기서 본다.**
+        투표 화면은 참가작·득표를 실행 시점에 가져오므로 미리보기가 곧 실물이다 — 다만
+        preview 로 띄워 표는 들어가지 않는다. 설정은 즉시 저장되니 위 값을 바꾼 뒤
+        다시 불러오기(↻)를 누르면 그 설정으로 보인다.
+      */}
+      {previewToken && (
+        <div className="mt-4 border-t border-border pt-4">
+          <PreviewFrame
+            title={`${round.name} 투표 화면 미리보기`}
+            src={`/cp/${previewToken}?view=vote&round=${round.kind}`}
+            note="눌러도 표는 안 들어가요"
+            reloadKey={`${round.voteEnabled}-${round.maxVotesPerVoter}-${round.entryOrder}-${round.showLiveTally}-${round.allowVoteUndo}`}
+          />
+        </div>
+      )}
     </section>
   );
 }
