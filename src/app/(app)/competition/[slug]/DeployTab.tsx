@@ -70,6 +70,17 @@ export default function DeployTab({ competition, patch }: Props) {
           아임웹 코드블럭에 이 두 줄을 넣으면 공고 페이지와 신청 팝업이 그대로 나와요.
           machstudio에서 내용을 고치면 최대 30초 안에 반영됩니다.
         </p>
+        {/*
+          **어느 공고가 나가는지 여기서 알려 준다.** 설치 코드는 그대로인데 공고 탭 스위치가
+          꺼져 있으면 예전 블록 빌더 공고가 나간다 — 붙여 놓고 "왜 옛날 게 나오지" 로
+          시간을 버리는 자리가 정확히 여기다. 코드를 복사하는 화면에서 짚어 준다.
+        */}
+        {!competition.config.noticePage?.enabled && (
+          <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+            지금은 <b>예전 공고(블록 빌더)</b>가 나가요. 공고 페이지 탭에서 “이 페이지로 내보내기”를
+            켜고 저장해야 새로 만든 페이지가 나갑니다.
+          </p>
+        )}
         <div className="mt-4">
           <CopyRow
             label="아임웹 코드블럭"

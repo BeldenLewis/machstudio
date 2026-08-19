@@ -133,13 +133,27 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
         {/* ── 공개 · 색 ────────────────────────────────────────── */}
         <section className={`bg-background p-5 ${R.panel} ${FINISH.s1}`}>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold">공고 페이지</h2>
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold">이 페이지로 내보내기</h2>
+              {/*
+                이 스위치는 **공개 여부가 아니라 렌더러 선택**이다. 예전 설명은 "끄면
+                '아직 공개되지 않았어요'만 보여요" 라고 적혀 있었는데 사실이 아니었다 —
+                꺼 두면 외부 사이트에는 **예전 블록 빌더 공고가 그대로 나간다**.
+                그래서 여기서 아무리 고쳐도 "옛날 공고만 나온다" 가 됐고, 켤 이유도 없어 보였다.
+                지금 무엇이 나가는지를 문장으로 못박는다.
+              */}
               <p className="mt-1 text-xs text-muted-foreground">
-                끄면 외부 사이트에 붙여 둬도 &quot;아직 공개되지 않았어요&quot;만 보여요.
+                {np.enabled ? (
+                  <>지금 붙여 둔 곳에는 <b className="text-foreground">이 탭에서 만든 페이지</b>가 나가요.</>
+                ) : (
+                  <>
+                    지금 붙여 둔 곳에는 <b className="text-amber-600 dark:text-amber-400">예전 공고(블록 빌더)</b>가
+                    나가요. 여기서 만든 페이지를 내보내려면 켜고 저장하세요.
+                  </>
+                )}
               </p>
             </div>
-            <Switch checked={np.enabled} onChange={(v) => update({ enabled: v })} label="공고 공개" />
+            <Switch checked={np.enabled} onChange={(v) => update({ enabled: v })} label="이 페이지로 내보내기" />
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
