@@ -3,6 +3,7 @@
 // allowedMimeTypes 를 자기가 아는 목록으로 덮어써서, 다른 라우트가 새 형식을 허용해도
 // 여기 업로드 한 번에 지워졌다(그 뒤 새 형식만 Supabase 단계에서 실패 — 원인이 안 보인다).
 import { randomUUID } from "node:crypto";
+import { downscaleUpload, extensionForContentType } from "@/lib/image-downscale";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
@@ -44,9 +45,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     const admin = await ensureAssetBucket();
-    const path = `${webinar.workspaceId}/${webinar.id}/landing/${randomUUID()}.${extension}`;
-    const { error } = await admin.storage.from(ASSET_BUCKET).upload(path, file, {
-      contentType: file.type,
+    /*
+      저장 전에 줄인다 — 이유는 image-downscale.ts 주석. 요약하면 Supabase 이미지
+      변환은 유료라 안 켜져 있고(변환 URL 이 403), 그렇다고 원본을 그대로 서빙하면
+      예전처럼 egress 쿼터를 태운다. 저장된 것 자체를 작게 만들어 둘 다 피한다.
+    */
+    const downscaled = await downscaleUpload(file);
+    // 형식이 바뀌면(webp) 경로 확장자도 따라가야 한다 — 안 그러면 .jpg 인데 내용은 webp 다.
+    const storedExt = extensionForContentType(downscaled.contentType, extension);
+    const path = `${webinar.workspaceId}/${webinar.id}/landing/${randomUUID()}.${storedExt}`;
+    const { error } = await admin.storage.from(ASSET_BUCKET).upload(path, downscaled.body, {
+      contentType: downscaled.contentType,
       cacheControl: "31536000",
       upsert: false,
     });
