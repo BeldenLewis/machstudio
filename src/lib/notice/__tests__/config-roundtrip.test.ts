@@ -25,6 +25,8 @@ const filled = {
       titleLines: ["Own", "the Stage."],
       subtitle: "부제",
       ctaLabel: "참가 신청하기",
+      upcomingLabel: "Opens Sep 1",
+      upcomingNote: "Doors open at 9am PT.",
       secondaryLabel: "일정 보기",
       facts: [{ label: "결선", value: "10/24" }],
       media: { type: "image", url: "https://example.com/hero.jpg" },
@@ -48,6 +50,9 @@ describe("대회 설정 저장 왕복", () => {
     expect(saved.noticePage.prizes.items[0].amount).toBe("$1,000");
     // 언어도 저장을 통과해야 한다 — 이게 빠지면 저장할 때마다 공고가 한글로 되돌아간다.
     expect(saved.noticePage.language).toBe("en");
+    // 접수 상태 문구도 저장을 통과해야 한다 — 정규화가 모르는 키는 저장 시점에 사라진다.
+    expect(saved.noticePage.hero.upcomingLabel).toBe("Opens Sep 1");
+    expect(saved.noticePage.hero.upcomingNote).toBe("Doors open at 9am PT.");
   });
 
   it("언어를 안 적었으면 한국어 — 기존 대회가 저장 한 번에 영어로 바뀌면 안 된다", () => {
