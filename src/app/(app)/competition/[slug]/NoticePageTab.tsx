@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { ImagePlus, Loader2, Moon, Sun, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { FIELD_CLS, FINISH, R, btnCls } from "@/components/ui/primitives";
+import { BRAND_PRESETS, ColorField } from "@/components/ui/ColorField";
 import { Switch } from "@/components/ui/switch";
 import {
   NOTICE_SECTIONS,
@@ -14,6 +15,7 @@ import {
   type NoticeSectionKey,
 } from "@/lib/notice/config";
 import { noticeStrings } from "@/lib/notice/strings";
+import { DEFAULT_COMPETITION_THEME } from "@/lib/competition-config";
 import { DEFAULT_ROUND_NAME, resolveCompetitionStatus } from "@/lib/competition-status";
 import type { NoticeCompetition } from "@/lib/notice/types";
 import NoticePreviewPane from "./NoticePreviewPane";
@@ -48,6 +50,16 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
   const [np, setNp] = useState<NoticePageConfig>(() =>
     normalizeNoticePageConfig(competition.config, { keepEmptyRows: true }),
   );
+  /**
+   * 키컬러는 config 가 아니라 **Competition.theme** 에 있다(신청 폼·투표·결과가 함께 쓴다).
+   * 저장 전에도 미리보기가 따라와야 하므로 여기서 편집 중인 값을 들고 있다가 함께 PATCH 한다.
+   */
+  const [theme, setTheme] = useState<Record<string, string>>(() => ({
+    // 키컬러가 비어 있는 예전 대회가 있다. 렌더러 기본값(보라)을 채워 넣어야 색 칸이
+    // "지금 실제로 나가는 색"을 보여 준다 — 빈 칸이면 무슨 색인지 알 수 없다.
+    accentColor: DEFAULT_COMPETITION_THEME.accentColor,
+    ...competition.theme,
+  }));
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -55,6 +67,10 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
 
   const update = (patchNp: Partial<NoticePageConfig>) => {
     setNp((prev) => ({ ...prev, ...patchNp }));
+    setDirty(true);
+  };
+  const updateTheme = (patchTheme: Record<string, string>) => {
+    setTheme((prev) => ({ ...prev, ...patchTheme }));
     setDirty(true);
   };
   const section = <K extends NoticeSectionKey>(key: K, patchSection: Partial<NoticePageConfig[K]>) =>
@@ -77,7 +93,7 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
       id: competition.id,
       name: competition.name,
       description: competition.description,
-      theme: competition.theme,
+      theme,
       recruitOpenAt: competition.recruitOpenAt,
       recruitCloseAt: competition.recruitCloseAt,
       phase: status.phase,
@@ -94,7 +110,7 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
         criteria: criteriaOf(round),
       })),
     }),
-    [competition, rounds, status.phase, status.canApply],
+    [competition, rounds, status.phase, status.canApply, theme],
   );
 
   const previewConfig = useMemo(() => ({ ...competition.config, noticePage: np }), [competition.config, np]);
@@ -102,7 +118,10 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
   const save = async () => {
     setSaving(true);
     try {
-      const ok = await patch({ config: { ...competition.config, noticePage: np } }, "공고 페이지를 저장했어요");
+      const ok = await patch(
+        { config: { ...competition.config, noticePage: np }, theme },
+        "공고 페이지를 저장했어요",
+      );
       if (ok) setDirty(false);
     } finally {
       setSaving(false);
@@ -156,43 +175,59 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
             <Switch checked={np.enabled} onChange={(v) => update({ enabled: v })} label="이 페이지로 내보내기" />
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="space-y-1.5">
-              <span className="text-xs font-medium text-muted-foreground">라이트 모드 배경</span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={np.colors.lightBg}
-                  onChange={(e) => update({ colors: { ...np.colors, lightBg: e.target.value } })}
-                  className="h-8 w-12 cursor-pointer rounded border border-border bg-transparent"
-                />
-                <input
-                  value={np.colors.lightBg}
-                  onChange={(e) => update({ colors: { ...np.colors, lightBg: e.target.value } })}
-                  className={`${FIELD_CLS} h-8 font-mono text-xs`}
-                />
-              </div>
-            </label>
-            <label className="space-y-1.5">
-              <span className="text-xs font-medium text-muted-foreground">다크 모드 배경</span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={np.colors.darkBg}
-                  onChange={(e) => update({ colors: { ...np.colors, darkBg: e.target.value } })}
-                  className="h-8 w-12 cursor-pointer rounded border border-border bg-transparent"
-                />
-                <input
-                  value={np.colors.darkBg}
-                  onChange={(e) => update({ colors: { ...np.colors, darkBg: e.target.value } })}
-                  className={`${FIELD_CLS} h-8 font-mono text-xs`}
-                />
-              </div>
-            </label>
+          {/*
+            색 패널.
+
+            키컬러는 **여기가 아니라 Competition.theme 에 산다** — 공고·신청 폼·투표·결과가
+            같이 쓰는 브랜드색이라, 공고만 따로 들고 있으면 같은 대회가 화면마다 다른 제품처럼
+            보인다. 그래서 이 칸만 theme 을 고치고, 그 사실을 문장으로 적어 둔다.
+            (예전에는 "키컬러는 기본정보 탭에서 정합니다" 라고 안내했는데 **그런 칸이 없었다** —
+            어디서도 고칠 수 없어 모든 대회가 기본 보라로 나갔다.)
+          */}
+          <div className="mt-4 space-y-3 border-t border-border pt-4">
+            <ColorField
+              label="키컬러"
+              note="히어로 링·비율 막대·강조 — 신청 폼과 투표 화면에도 같이 적용돼요"
+              value={theme.accentColor}
+              onChange={(v) => updateTheme({ accentColor: v })}
+              presets={BRAND_PRESETS}
+            />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ColorField
+                label="보조 컬러"
+                note="제목 강조줄·섹션 라벨"
+                value={np.colors.accentAlt}
+                onChange={(v) => update({ colors: { ...np.colors, accentAlt: v } })}
+                allowInherit
+                inheritedFrom={theme.accentColor}
+                presets={BRAND_PRESETS}
+              />
+              <ColorField
+                label="버튼 컬러"
+                note="신청 버튼"
+                value={np.colors.button}
+                onChange={(v) => update({ colors: { ...np.colors, button: v } })}
+                allowInherit
+                inheritedFrom={theme.accentColor}
+                presets={BRAND_PRESETS}
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ColorField
+                label="라이트 모드 배경"
+                value={np.colors.lightBg}
+                onChange={(v) => update({ colors: { ...np.colors, lightBg: v } })}
+              />
+              <ColorField
+                label="다크 모드 배경"
+                value={np.colors.darkBg}
+                onChange={(v) => update({ colors: { ...np.colors, darkBg: v } })}
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              글자·선·카드 색과 버튼 글자색은 배경·버튼 밝기에서 자동으로 따라와요 — 대비가 깨지지 않게요.
+            </p>
           </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">
-            글자·선·카드 색은 배경 밝기에서 자동으로 따라와요. 키컬러는 기본정보 탭에서 정합니다.
-          </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
             <span className="text-xs font-medium">전체 모드</span>

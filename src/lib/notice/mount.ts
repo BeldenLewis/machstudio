@@ -4,6 +4,7 @@
  * 껍데기의 스타일·효과를 그대로 쓴다. 웨비나 랜딩과 **같은 클래스·같은 변수 계약**이라
  * 스크롤 리빌·세로 목차·배경 모드가 별도 구현 없이 걸린다.
  */
+import { onAccentColor } from "@/lib/competition-render";
 import { clearNode, h } from "@/lib/dom/h";
 import { attachReveal, attachTocSpy, attachTocVisibility } from "@/lib/landing/effects";
 import { createTocLayer, releaseLayer } from "@/lib/landing/overlay";
@@ -146,6 +147,14 @@ export function mountNotice(opts: MountNoticeOptions): NoticeHandle {
     style: {
       "--primary": m.accent,
       "--on-primary": m.onPrimary,
+      /*
+        비우면 키컬러를 따른다 — 빈 값을 그대로 넣으면 var() 가 무효가 되어 상속으로
+        떨어지므로, 여기서 키컬러로 확정해 준다. 버튼 글자색도 버튼 배경에서 다시 계산한다
+        (키컬러는 흰 글자인데 버튼만 노랑으로 바꾸면 글자가 사라진다).
+      */
+      "--primary-alt": np.colors.accentAlt || m.accent,
+      "--btn": np.colors.button || m.accent,
+      "--on-btn": onAccentColor(np.colors.button || m.accent),
       "--bg-light": np.colors.lightBg,
       "--bg-dark": np.colors.darkBg,
       "--paper-light": paperFor(np.colors.lightBg),

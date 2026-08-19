@@ -43,9 +43,32 @@ const SECTION_CSS = `
 .lnd .nt-prize-desc,
 .lnd .nt-faq-a { white-space: pre-line; }
 
+/**
+ * ── 보조 색 · 버튼 색 ──
+ *
+ * 껍데기는 전부 --primary 하나로 그린다. 공고는 여기서 두 자리만 떼어 낸다:
+ *
+ *   --primary-alt : **글자 강조** — 제목 둘째 줄, 섹션 라벨, 강조구
+ *   --btn         : **눌리는 것** — 신청 버튼
+ *
+ * 둘 다 비우면 mount 가 키컬러로 확정해 넣으므로, 안 쓰면 지금과 똑같이 보인다.
+ * 링·비율 막대·상금 강조처럼 "면"을 칠하는 자리는 키컬러로 남긴다 — 거기까지 갈라 놓으면
+ * 색이 네 개가 되어 페이지가 산만해진다.
+ */
+.lnd .hero-line-accent,
+.lnd .section-kicker,
+.lnd .nt-concept-accent { color: var(--primary-alt); }
+.lnd .hero-cta {
+  background: var(--btn);
+  color: var(--on-btn) !important;
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--btn) 34%, transparent);
+}
+.lnd .hero-cta:hover { box-shadow: 0 20px 42px color-mix(in srgb, var(--btn) 46%, transparent); }
+
 /* ── 섹션 머리 ── */
+/* 색은 위 "보조 색" 블록이 갖는다 — 여기서 다시 선언하면 뒤에 와서 그걸 덮는다. */
 .lnd .section-kicker { display: block; font-size: 11.5px; font-weight: 800; letter-spacing: .16em;
-  text-transform: uppercase; color: var(--primary); margin-bottom: 12px; }
+  text-transform: uppercase; margin-bottom: 12px; }
 .lnd .section-head { max-width: 640px; margin-bottom: 44px; }
 /* 껍데기의 .section-title 은 **가운데 정렬**이다(랜딩은 제목이 페이지 폭 전체를 쓴다).
    공고는 제목을 왼쪽 640px 상자에 넣으므로 그 규칙이 그대로 걸리면 짧은 제목만
@@ -61,7 +84,6 @@ const SECTION_CSS = `
 .lnd .nt-concept-grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 56px; align-items: start;
   width: min(100% - 40px, var(--max)); margin-inline: auto; }
 .lnd .nt-concept-headline { font-size: clamp(26px, 3.4vw, 40px); line-height: 1.16; margin: 0; word-break: keep-all; }
-.lnd .nt-concept-accent { color: var(--primary); }
 .lnd .nt-concept-body p { margin: 0 0 16px; font-size: 15.5px; line-height: 1.75;
   color: color-mix(in srgb, var(--paper) 74%, transparent); word-break: keep-all; }
 .lnd .nt-concept-body p:last-child { margin-bottom: 0; }
@@ -222,7 +244,6 @@ const SECTION_CSS = `
   border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase;
   color: var(--primary); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 45%, transparent); }
 .lnd .hero-line { display: block; }
-.lnd .hero-line-accent { color: var(--primary); }
 .lnd .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
 .lnd .hero-secondary { display: inline-flex; align-items: center; justify-content: center;
   padding: 13px 22px; border-radius: 999px; font-size: 14px; font-weight: 800; text-decoration: none;

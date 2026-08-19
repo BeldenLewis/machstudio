@@ -94,7 +94,17 @@ export interface NoticePageConfig {
   enabled: boolean;
   language: NoticeLanguage;
   hero: NoticeHero;
-  colors: { lightBg: string; darkBg: string };
+  /**
+   * 색.
+   *
+   * **키컬러는 여기 없다** — Competition.theme.accentColor 다. 그건 공고뿐 아니라 신청 폼·
+   * 투표·결과 화면이 함께 쓰는 브랜드색이라, 공고만 따로 들고 있으면 같은 대회가 화면마다
+   * 다른 제품처럼 보인다. 여기 두 색은 공고 전용 **덮어쓰기**이고, 비우면 키컬러를 따른다.
+   *
+   * - accentAlt : 글자 강조 자리(제목 둘째 줄·섹션 라벨·강조구)
+   * - button    : 신청 버튼 등 눌리는 것
+   */
+  colors: { lightBg: string; darkBg: string; accentAlt: string; button: string };
   sectionBg: NoticeSectionBgMap;
   concept: { enabled: boolean; kicker: string; headline: string; highlight: string; body: string };
   snapshot: { enabled: boolean; kicker: string; title: string; items: NoticeStatItem[] };
@@ -181,6 +191,9 @@ export function normalizeNoticePageConfig(config: unknown, opts?: NormalizeNotic
     colors: {
       lightBg: hex(obj(np.colors).lightBg, DEFAULT_NOTICE_COLORS.lightBg),
       darkBg: hex(obj(np.colors).darkBg, DEFAULT_NOTICE_COLORS.darkBg),
+      // 빈 문자열 = "키컬러를 따른다". 기본값을 넣어 두면 키컬러를 바꿔도 여기가 안 따라온다.
+      accentAlt: hex(obj(np.colors).accentAlt, ""),
+      button: hex(obj(np.colors).button, ""),
     },
     sectionBg,
 
