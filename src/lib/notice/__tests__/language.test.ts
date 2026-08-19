@@ -21,8 +21,9 @@ const competition: NoticeCompetition = {
   canApply: false,
   statusMessages: { upcoming: "Applications open soon.", closed: "Applications are closed." },
   rounds: [
-    { kind: "prelim", name: "Preliminary", publicWeight: 20, judgeWeight: 80, criteria: [] },
-    { kind: "final", name: "Finals", publicWeight: 50, judgeWeight: 50, criteria: [] },
+    // 대회를 만들 때 우리가 넣는 기본 이름 그대로 — 운영자가 손대지 않은 상태다.
+    { kind: "prelim", name: "예선", publicWeight: 20, judgeWeight: 80, criteria: [] },
+    { kind: "final", name: "본선", publicWeight: 50, judgeWeight: 50, criteria: [] },
   ],
 };
 
@@ -53,9 +54,29 @@ describe("공고 문구 언어", () => {
     expect(build("ko").ctaLabel).toBe("접수 시작 전");
   });
 
-  it("라운드 이름은 번역하지 않는다 — 운영자가 쓴 글이다", () => {
-    const m = build("en");
-    expect(m.selectionRounds.map((r) => r.title)).toEqual(["Preliminary", "Finals"]);
+  /**
+   * 대회를 만들 때 넣어 둔 "예선"/"본선" 은 **우리 글**이다. 영문 공고에서 그 두 글자만
+   * 한글로 남아, 운영자 눈에는 바꿀 수 없는 하드코딩으로 보였다.
+   */
+  it("손대지 않은 기본 라운드 이름은 언어를 따라간다", () => {
+    expect(build("en").selectionRounds.map((r) => r.title)).toEqual(["Preliminary", "Finals"]);
+    expect(build("ko").selectionRounds.map((r) => r.title)).toEqual(["예선", "본선"]);
+  });
+
+  it("운영자가 바꾼 이름은 번역하지 않는다 — 그건 운영자가 쓴 글이다", () => {
+    const renamed = {
+      ...competition,
+      rounds: [
+        { kind: "prelim" as const, name: "1차 온라인", publicWeight: 20, judgeWeight: 80, criteria: [] },
+        { kind: "final" as const, name: "Stage Final", publicWeight: 50, judgeWeight: 50, criteria: [] },
+      ],
+    };
+    const m = buildNoticeModel(
+      renamed,
+      normalizeNoticePageConfig({ noticePage: { enabled: true, language: "en", selection: { enabled: true } } }),
+      { uid: "u1", embedded: false, isPreview: true },
+    );
+    expect(m.selectionRounds.map((r) => r.title)).toEqual(["1차 온라인", "Stage Final"]);
   });
 
   it("모르는 값이면 한국어 — 기존 대회가 조용히 영어가 되면 안 된다", () => {

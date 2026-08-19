@@ -42,6 +42,15 @@ export const COMPETITION_PHASE_META: Record<CompetitionPhase, { label: string; t
   closed: { label: "종료", tone: "bg-secondary text-muted-foreground" },
 };
 
+/**
+ * 대회를 만들 때 넣어 두는 라운드 기본 이름.
+ *
+ * 이건 **우리가 넣은 시드**지 운영자가 쓴 글이 아니다. 그래서 공고를 영어로 두면 이 이름도
+ * 따라 바뀌어야 한다 — 미국 행사 공고에 "예선/본선" 두 글자만 한글로 남는 일이 실제로 있었다.
+ * 운영자가 한 번이라도 이름을 바꿨다면 그건 운영자의 글이니 그대로 둔다(비교 기준이 이 상수다).
+ */
+export const DEFAULT_ROUND_NAME: Record<"prelim" | "final", string> = { prelim: "예선", final: "본선" };
+
 export function isCompetitionPhaseOverride(value: unknown): value is CompetitionPhaseOverride {
   return typeof value === "string" && (COMPETITION_PHASE_OVERRIDES as readonly string[]).includes(value);
 }
