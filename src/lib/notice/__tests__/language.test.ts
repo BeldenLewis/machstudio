@@ -26,12 +26,12 @@ const competition: NoticeCompetition = {
   ],
 };
 
-const build = (language: string) =>
+const build = (language: string, hero: Record<string, unknown> = {}) =>
   buildNoticeModel(
     competition,
     // 정규화는 **대회 config 전체**를 받아 그 안의 noticePage 를 읽는다. 벗겨서 넘기면
     // 전부 기본값(=한국어)이 되어 테스트가 통과해도 아무것도 검증하지 못한다.
-    normalizeNoticePageConfig({ noticePage: { enabled: true, language, selection: { enabled: true } } }),
+    normalizeNoticePageConfig({ noticePage: { enabled: true, language, hero, selection: { enabled: true } } }),
     { uid: "u1", embedded: false, isPreview: true },
   );
 
@@ -60,5 +60,34 @@ describe("공고 문구 언어", () => {
 
   it("모르는 값이면 한국어 — 기존 대회가 조용히 영어가 되면 안 된다", () => {
     expect(build("fr").ctaLabel).toBe("접수 시작 전");
+  });
+});
+
+/**
+ * 접수 전·마감 후 문구.
+ *
+ * 이 자리는 손댈 수 없었다 — 시스템이 넣은 "접수 시작 전 / 접수 시작 전이에요." 가 영문
+ * 공고에도 그대로 떴고, 대회 설정의 statusMessages 는 신청 폼과 함께 쓰는 값이라
+ * 공고만 바꾸려고 건드릴 수도 없었다.
+ */
+describe("접수 상태 문구", () => {
+  it("공고에 적은 문구가 사전 기본값을 이긴다", () => {
+    const m = build("en", { upcomingLabel: "Opens Sep 1", upcomingNote: "Doors open at 9am PT." });
+    expect(m.ctaLabel).toBe("Opens Sep 1");
+    expect(m.ctaNote).toBe("Doors open at 9am PT.");
+  });
+
+  it("안 적으면 언어에 맞는 기본 문구", () => {
+    expect(build("en").ctaLabel).toBe("Applications open soon");
+    expect(build("ko").ctaLabel).toBe("접수 시작 전");
+  });
+
+  /**
+   * statusMessages 는 대회 설정에 있는 **한글** 문구다. 영문 공고에서 폴백으로 쓰면
+   * 버튼만 영어고 그 아래 한 줄이 한글인 화면이 나온다 — 실제로 그렇게 보였다.
+   */
+  it("영문 공고는 대회 설정의 한글 안내로 떨어지지 않는다", () => {
+    expect(build("en").ctaNote).toBe("");
+    expect(build("ko").ctaNote).toBe("Applications open soon.");
   });
 });

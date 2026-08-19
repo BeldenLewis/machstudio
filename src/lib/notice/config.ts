@@ -52,6 +52,18 @@ export interface NoticeHero {
   subtitle: string;
   /** 주 버튼 — 신청 팝업을 연다 */
   ctaLabel: string;
+  /**
+   * 접수 전·마감 후에 버튼과 그 아래에 뜨는 문구.
+   *
+   * 이 자리는 원래 손댈 수 없었다 — 시스템이 "접수 시작 전" / "접수 시작 전이에요." 를
+   * 넣었고, 영문 공고에서도 그대로 한글이 떴다. 대회마다 하고 싶은 말이 다른 자리라
+   * (사전 등록 안내, 다음 회차 링크) 사전 기본값을 두되 덮어쓸 수 있게 연다.
+   * 비우면 언어 사전의 기본값을 쓴다.
+   */
+  upcomingLabel: string;
+  upcomingNote: string;
+  closedLabel: string;
+  closedNote: string;
   /** 보조 버튼 — 켜 둔 첫 섹션으로 스크롤. 비우면 안 그린다 */
   secondaryLabel: string;
   /** 히어로 하단 가로 팩트 — 결선일·장소·정원·상금 같은 것 */
@@ -149,6 +161,10 @@ export function normalizeNoticePageConfig(config: unknown, opts?: NormalizeNotic
     /* 비워 두면 build-model 이 언어에 맞는 기본값을 넣는다. 여기서 한글로 굳히면
        영어 공고에서 버튼만 한글로 남고 되돌릴 방법이 없다. */
     ctaLabel: str(heroRaw.ctaLabel),
+    upcomingLabel: str(heroRaw.upcomingLabel),
+    upcomingNote: str(heroRaw.upcomingNote),
+    closedLabel: str(heroRaw.closedLabel),
+    closedNote: str(heroRaw.closedNote),
     secondaryLabel: str(heroRaw.secondaryLabel),
     facts: arr(heroRaw.facts)
       .map((f) => ({ label: str(obj(f).label), value: str(obj(f).value) }))

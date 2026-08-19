@@ -15,8 +15,11 @@ import type { NoticeCompetition } from "@/lib/notice/types";
  * 저장을 기다리지 않는다: 편집 중인 config 를 그대로 넘겨 즉시 다시 마운트한다. 웨비나 랜딩
  * 미리보기는 저장 뒤 새로고침이라 색 하나 보려고 저장을 눌러야 했는데, 그게 편집 리듬을 끊는다.
  *
- * 폭을 축소해서 보여준다 — 380px 칸에 1280px 페이지를 그대로 넣으면 전부 모바일 레이아웃으로
- * 접혀서 정작 확인하려는 데스크톱 배치가 안 보인다.
+ * **iframe 안에 그린다.** 예전에는 div 에 그리고 transform 으로 줄였는데, 그러면 공고 CSS 의
+ * vw 와 미디어 쿼리가 프레임이 아니라 **브라우저 창 폭**을 본다. 그래서 모바일 미리보기가
+ * 390px 인데도 데스크톱 규칙이 걸려, 제목이 clamp(44px, 7vw, 92px) 의 92px 로 잡히고
+ * 바닥에 절대 배치된 팩트 줄이 제목을 뚫고 올라오는 화면이 나왔다 — 실물은 멀쩡한데
+ * 미리보기만 깨져 보이는, 가장 나쁜 종류의 거짓말이었다.
  */
 export default function NoticePreviewPane({
   competition,
@@ -25,13 +28,12 @@ export default function NoticePreviewPane({
   competition: NoticeCompetition;
   config: unknown;
 }) {
-  const hostRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [box, setBox] = useState(0);
-  const [contentHeight, setContentHeight] = useState(0);
 
-  // 칸 폭이 바뀌면 축소 배율을 다시 잡는다(사이드바 접기·창 크기).
+  // 칸 폭이 바뀌면 배율을 다시 잡는다(사이드바 접기·창 크기).
   useEffect(() => {
     const el = boxRef.current;
     if (!el) return;
@@ -42,38 +44,53 @@ export default function NoticePreviewPane({
   }, []);
 
   /**
-   * 축소된 내용의 실제 높이를 잰다.
+   * 프레임은 **기기 화면 크기 그대로**다 — 내용 높이로 늘리면 안 된다.
    *
-   * transform: scale 은 **레이아웃 박스를 줄이지 않는다** — 그대로 두면 스크롤 영역 아래로
-   * 원본 높이만큼 빈 공간이 남는다(1280px 페이지를 30%로 줄이면 70%가 허공).
-   * 그래서 잰 높이 × 배율을 껍데기 높이로 준다.
+   * 히어로는 min-height: 100svh 라, iframe 높이를 내용 높이로 주면 되먹임이 걸린다:
+   * 높이 ↑ → svh ↑ → 히어로 ↑ → 내용 높이 ↑ … 실측으로 히어로가 5408px 까지 자랐다.
+   * 화면 높이를 고정하고 스크롤은 프레임 안에서 하게 두면, 그게 방문자가 보는 것과 같다.
    */
-  useEffect(() => {
-    const el = hostRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver(() => setContentHeight(el.scrollHeight));
-    observer.observe(el);
-    setContentHeight(el.scrollHeight);
-    return () => observer.disconnect();
-  }, []);
+  const [frameWidth, frameHeight] = device === "desktop" ? [1280, 800] : [390, 844];
+  /**
+   * 배율에 상한을 두지 않는다.
+   *
+   * 예전에는 `Math.min(1, …)` 였다. 그러면 칸(≈460px)이 모바일 프레임(390px)보다 넓을 때
+   * 축소가 안 걸려 프레임이 왼쪽에 붙고 남는 70px 이 오른쪽에만 검게 남았다 — "화면 오른쪽이
+   * 잘렸다"로 보인다. 확대를 허용하면 칸을 꽉 채우면서도 **실제 폰 폭(390px)의 레이아웃**을
+   * 그대로 본다. 검은 여백을 없애려고 프레임을 460px 로 넓히면 폰이 아닌 폭을 보게 된다.
+   */
+  const scale = box > 0 ? box / frameWidth : 0.3;
 
-  const frameWidth = device === "desktop" ? 1280 : 390;
-  const scale = box > 0 ? Math.min(1, box / frameWidth) : 0.3;
-
   useEffect(() => {
-    const mount = hostRef.current;
-    if (!mount) return;
+    const frame = frameRef.current;
+    if (!frame) return;
+    const doc = frame.contentDocument;
+    if (!doc) return;
+
+    // about:blank 문서를 우리 것으로 갈아 끼운다. viewport 메타가 있어야 프레임 폭이
+    // 그대로 CSS 픽셀이 된다.
+    doc.open();
+    doc.write(
+      '<!doctype html><html><head><meta charset="utf-8">' +
+        '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+        "</head><body></body></html>",
+    );
+    doc.close();
+    doc.body.style.margin = "0";
+
     const handle = mountNotice({
-      mount,
+      mount: doc.body,
       competition,
       config,
       embedded: false,
       isPreview: true,
       // 미리보기에서 신청을 눌러도 아무 일도 없어야 한다 — 여기서 참가작이 생기면 안 된다.
       onApply: () => {},
-      // 목차는 position:fixed 로 body 에 붙는다 → 어드민 화면 위로 떠서 편집을 가린다.
+      // 목차는 position:fixed 다. iframe 안에서는 프레임 밖으로 못 나가지만, 좁은 미리보기
+      // 폭에서 본문을 가리므로 그대로 끈다.
       attachToc: false,
     });
+
     return () => handle.destroy();
   }, [competition, config]);
 
@@ -100,34 +117,27 @@ export default function NoticePreviewPane({
         </div>
       </div>
 
+      {/* transform 은 레이아웃 박스를 줄이지 않는다 — 껍데기에 축소된 크기를 직접 준다. */}
       <div ref={boxRef} className={`overflow-hidden bg-black ${R.panel} ${FINISH.s1}`}>
-        <div className="max-h-[72vh] overflow-y-auto">
-          {/*
-            축소는 transform 으로 한다 — width/zoom 으로 줄이면 미디어 쿼리가 다시 걸려
-            정작 확인하려던 데스크톱 배치가 모바일로 접힌다.
-
-            대신 transform 은 **레이아웃 박스를 줄이지 않으므로** 껍데기에 축소된 크기를
-            직접 준다. 폭까지 줘야 하는 이유: overflow-x:hidden + overflow-y:auto 조합은
-            CSS 규칙상 x 축이 auto 로 승격돼 가로 스크롤이 생긴다(실측 1311 > 652).
-          */}
-          {/*
-            가운데로 모은다. 모바일 프레임(390px)은 배율 상한이 1 이라 패널이 그보다 넓으면
-            축소되지 않고 폭이 남는데, 왼쪽에 붙여 두면 그 남는 폭이 오른쪽에만 검게 몰려
-            "화면 오른쪽이 잘렸다"로 보인다(실측: 패널 460px - 프레임 390px = 15%).
-          */}
-          <div
-            className="mx-auto"
-            style={{ width: frameWidth * scale, height: contentHeight * scale, overflow: "hidden" }}
-          >
-            <div style={{ width: frameWidth, transform: `scale(${scale})`, transformOrigin: "top left" }}>
-              <div ref={hostRef} />
-            </div>
-          </div>
+        <div style={{ width: box || undefined, height: frameHeight * scale, overflow: "hidden" }}>
+          <iframe
+            ref={frameRef}
+            title="공고 미리보기"
+            style={{
+              width: frameWidth,
+              height: frameHeight,
+              border: 0,
+              display: "block",
+              transform: `scale(${scale})`,
+              transformOrigin: "top left",
+            }}
+          />
         </div>
       </div>
 
       <p className="text-[11px] text-muted-foreground">
-        편집 중인 내용이 저장 전에도 바로 보여요 · {frameWidth}px 폭을 {Math.round(scale * 100)}%로 축소
+        편집 중인 내용이 저장 전에도 바로 보여요 · {frameWidth}×{frameHeight} 화면을{" "}
+        {Math.round(scale * 100)}%로 · 스크롤은 미리보기 안에서
       </p>
     </div>
   );

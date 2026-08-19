@@ -197,7 +197,10 @@ const SECTION_CSS = `
   display: flex; flex-direction: column;
   padding-bottom: 124px;
 }
-.lnd .hero-copy { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; }
+/* align-items 를 반드시 적는다. 세로 흐름을 flex 로 바꾸면 기본값 stretch 가 걸려
+   inline-flex 인 자식(.hero-brand 알약, .hero-actions)이 **한 줄 폭 전체로 늘어난다** —
+   가운데 정렬된 알약이 좌우로 찢어진 테두리 상자가 됐다. */
+.lnd .hero-copy { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; align-items: center; }
 
 /* 넓은 화면에서는 팩트 줄을 **바닥 줄로 뺀다** — 원본 디자인처럼 왼쪽에 팩트, 오른쪽에 CTA.
    흐름에 두면 아래쪽만 두꺼워져(아래 여백 124 + 팩트 81 vs 위 여백 96) 카피가 실제

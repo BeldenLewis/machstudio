@@ -54,21 +54,28 @@ export interface NoticeHandle {
   destroy(): void;
 }
 
-function ensureStyles(): void {
-  if (document.getElementById(STYLE_ID)) return;
-  const style = document.createElement("style");
+/**
+ * 스타일은 **마운트 대상이 속한 문서**에 넣는다.
+ *
+ * 어드민 미리보기는 공고를 iframe 안에 그린다 — 그래야 vw 와 미디어 쿼리가 브라우저 창이
+ * 아니라 기기 폭을 본다. 여기서 전역 document 를 쓰면 CSS 는 바깥 문서에만 들어가고
+ * iframe 안은 **스타일 없는 맨 HTML** 이 된다.
+ */
+function ensureStyles(doc: Document): void {
+  if (doc.getElementById(STYLE_ID)) return;
+  const style = doc.createElement("style");
   style.id = STYLE_ID;
   style.textContent = NOTICE_CSS;
-  document.head.appendChild(style);
+  doc.head.appendChild(style);
 }
 
-function ensureFont(): void {
-  if (document.getElementById(FONT_ID)) return;
-  const link = document.createElement("link");
+function ensureFont(doc: Document): void {
+  if (doc.getElementById(FONT_ID)) return;
+  const link = doc.createElement("link");
   link.id = FONT_ID;
   link.rel = "stylesheet";
   link.href = FONT_HREF;
-  document.head.appendChild(link);
+  doc.head.appendChild(link);
 }
 
 /**
@@ -126,8 +133,9 @@ export function mountNotice(opts: MountNoticeOptions): NoticeHandle {
   const { mount, competition, embedded, isPreview, onApply } = opts;
   const uid = nextUid();
 
-  ensureStyles();
-  ensureFont();
+  const doc = mount.ownerDocument ?? document;
+  ensureStyles(doc);
+  ensureFont(doc);
 
   const np = normalizeNoticePageConfig(opts.config);
   const m = buildNoticeModel(competition, np, { uid, embedded, isPreview });

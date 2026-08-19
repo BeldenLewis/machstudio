@@ -110,6 +110,7 @@ function RoundCard({
 }) {
   const [openAt, setOpenAt] = useState(round.voteOpenAt ? kstDateTimeLocalInput(round.voteOpenAt) : "");
   const [closeAt, setCloseAt] = useState(round.voteCloseAt ? kstDateTimeLocalInput(round.voteCloseAt) : "");
+  const [name, setName] = useState(round.name);
   const [maxVotes, setMaxVotes] = useState(round.maxVotesPerVoter);
   const [ipLimit, setIpLimit] = useState(round.ipVoteLimit ?? 0);
 
@@ -119,9 +120,29 @@ function RoundCard({
     <section className={`bg-background p-5 ${R.panel} ${FINISH.s1}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold">{round.name}</h2>
+          {/*
+            라운드 이름은 **공고에 그대로 나간다**(선발 방식 섹션). 대회를 만들 때 "예선"/"본선"
+            로 만들어 두는데 여기서 고칠 칸이 없어서, 영문 대회에서도 그 두 글자만 한글로
+            남았다. 아래 회색 알약은 이름이 아니라 **종류**(예선/본선 규칙)라 그대로 둔다 —
+            이름을 Preliminary 로 바꿔도 동점 규칙은 예선 규칙을 쓴다는 걸 보여야 한다.
+          */}
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => {
+              const next = name.trim();
+              if (!next || next === round.name) { setName(round.name); return; }
+              onPatch({ name: next }, "라운드 이름을 바꿨어요");
+            }}
+            aria-label="라운드 이름"
+            placeholder="라운드 이름"
+            title="공고의 선발 방식 섹션에 이 이름이 그대로 나가요"
+            /* 인라인 편집이지만 **고칠 수 있다는 게 보여야** 한다 — 제목처럼 생긴 칸은
+               아무도 클릭하지 않는다. 평소엔 조용하고 hover·focus 에서 칸이 드러난다. */
+            className="w-44 rounded bg-transparent px-1.5 py-0.5 text-sm font-semibold outline-none transition-colors hover:bg-secondary focus:bg-secondary"
+          />
           <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">
-            {round.kind === "prelim" ? "예선" : "본선"}
+            {round.kind === "prelim" ? "예선" : "본선"} 규칙
           </span>
         </div>
         <label className="flex items-center gap-2 text-xs">

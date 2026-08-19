@@ -93,18 +93,25 @@ export function buildNoticeModel(
     return { id: `nt-${section.key}`, label: (cfg.title || "").trim() || t.sectionLabel[section.key] };
   });
 
-  // 접수 중이 아니면 버튼을 잠그고 이유를 적는다. 눌리지 않는 버튼만 두면 계속 누른다.
+  /*
+   * 접수 중이 아니면 버튼을 잠그고 이유를 적는다. 눌리지 않는 버튼만 두면 계속 누른다.
+   *
+   * 우선순위: 공고에 적은 문구 → 언어 사전 기본값.
+   * 대회 설정의 statusMessages 는 **폴백으로만** 쓴다 — 그건 신청 폼·임베드가 함께 쓰는
+   * 값이라 공고 문구를 바꾸려고 건드리면 다른 화면까지 따라 바뀐다.
+   */
   const ctaEnabled = competition.canApply;
+  const upcoming = competition.phase === "upcoming";
   const ctaLabel = ctaEnabled
     ? np.hero.ctaLabel.trim() || t.ctaApply
-    : competition.phase === "upcoming"
-      ? t.ctaUpcoming
-      : t.ctaClosed;
+    : upcoming
+      ? np.hero.upcomingLabel.trim() || t.ctaUpcoming
+      : np.hero.closedLabel.trim() || t.ctaClosed;
   const ctaNote = ctaEnabled
     ? ""
-    : competition.phase === "upcoming"
-      ? competition.statusMessages.upcoming
-      : competition.statusMessages.closed;
+    : upcoming
+      ? np.hero.upcomingNote.trim() || (np.language === "ko" ? competition.statusMessages.upcoming : "")
+      : np.hero.closedNote.trim() || (np.language === "ko" ? competition.statusMessages.closed : "");
 
   return {
     competition,

@@ -311,6 +311,37 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
                 placeholder="보조 버튼 문구 (비우면 안 보임)" className={`${FIELD_CLS} h-8`} />
             </div>
 
+            {/*
+              접수 전·마감 후에는 버튼이 잠기고 문구가 상태 안내로 바뀐다. 그 자리를 손댈 수
+              없어서 영문 공고에도 "접수 시작 전 / 접수 시작 전이에요." 가 그대로 떴다.
+              현재 상태에 해당하는 칸에는 표시를 달아 둔다 — 지금 화면에 뭐가 나가는지
+              모른 채 네 칸을 다 채우게 하면 안 된다.
+            */}
+            <div className="space-y-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                접수 전 · 마감 후 문구 <span className="font-normal">— 비우면 언어에 맞는 기본 문구</span>
+              </span>
+              {([
+                ["upcoming", "접수 전", "upcomingLabel", "upcomingNote"],
+                ["closed", "마감 후", "closedLabel", "closedNote"],
+              ] as const).map(([phase, label, labelKey, noteKey]) => (
+                <div key={phase} className="grid gap-1.5 sm:grid-cols-[64px_1fr_1fr] sm:items-center">
+                  <span className="text-[11px] text-muted-foreground">
+                    {label}
+                    {!status.canApply && status.phase === phase && (
+                      <span className="ml-1 text-violet-500" title="지금 이 문구가 나가요">●</span>
+                    )}
+                  </span>
+                  <input value={np.hero[labelKey]} className={`${FIELD_CLS} h-8`}
+                    placeholder={phase === "upcoming" ? "버튼 문구 (예: Opens Sep 1)" : "버튼 문구 (예: Applications closed)"}
+                    onChange={(e) => update({ hero: { ...np.hero, [labelKey]: e.target.value } })} />
+                  <input value={np.hero[noteKey]} className={`${FIELD_CLS} h-8`}
+                    placeholder="버튼 아래 안내 (비우면 안 보임)"
+                    onChange={(e) => update({ hero: { ...np.hero, [noteKey]: e.target.value } })} />
+                </div>
+              ))}
+            </div>
+
             <div className="space-y-1.5">
               <span className="text-xs font-medium text-muted-foreground">하단 팩트 — 결선일·장소·정원 같은 것</span>
               {np.hero.facts.map((fact, index) => (
