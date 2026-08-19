@@ -18,7 +18,7 @@ const filled = {
   noticePage: {
     enabled: true,
     language: "en",
-    colors: { lightBg: "#ffffff", darkBg: "#000000" },
+    colors: { lightBg: "#ffffff", darkBg: "#000000", accentAlt: "#22c55e", button: "#2563eb" },
     sectionBg: { hero: "light", concept: "dark" },
     hero: {
       brand: "K-EXPO LA",
@@ -53,6 +53,18 @@ describe("대회 설정 저장 왕복", () => {
     // 접수 상태 문구도 저장을 통과해야 한다 — 정규화가 모르는 키는 저장 시점에 사라진다.
     expect(saved.noticePage.hero.upcomingLabel).toBe("Opens Sep 1");
     expect(saved.noticePage.hero.upcomingNote).toBe("Doors open at 9am PT.");
+    expect(saved.noticePage.colors.accentAlt).toBe("#22c55e");
+    expect(saved.noticePage.colors.button).toBe("#2563eb");
+  });
+
+  /**
+   * 안 정한 색은 **빈 문자열로 남아야** 한다. 여기서 키컬러를 복사해 넣어 버리면
+   * 나중에 키컬러를 바꿔도 보조·버튼만 옛날 색으로 남는다 — 화면을 봐야만 아는 종류다.
+   */
+  it("보조·버튼 색을 안 정하면 비어 있다 — 키컬러를 따라가야 한다", () => {
+    const saved = normalizeCompetitionConfig({ noticePage: { enabled: true } }, { includeDisabled: true });
+    expect(saved.noticePage.colors.accentAlt).toBe("");
+    expect(saved.noticePage.colors.button).toBe("");
   });
 
   it("언어를 안 적었으면 한국어 — 기존 대회가 저장 한 번에 영어로 바뀌면 안 된다", () => {
