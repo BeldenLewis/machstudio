@@ -185,8 +185,42 @@ export const COLLECT_FORM_CSS = `
 /* ── 등록 확인(Find My QR) ──────────────────── */
 .msf-lookup{display:flex;flex-direction:column;gap:14px}
 .msf-found{text-align:center;background:var(--msf-soft);border-radius:var(--msf-radius);padding:22px 20px}
-.msf-found-name{font-size:16px;font-weight:700}
+.msf-found-name{font-size:18px;font-weight:800}
 .msf-found-type{font-size:12px;color:var(--msf-muted);margin-top:2px}
+
+/* 참관객 유형 배지 — 유형마다 입장 동선이 다르다. 이름보다 먼저 눈에 들어와야 한다.
+   키컬러를 그대로 칠하지 않고 옅게 깐다: QR 카드가 주인공이라 배지가 그걸 이기면 안 된다. */
+.msf-badge{
+  display:inline-block;margin-bottom:10px;padding:6px 16px;border-radius:999px;
+  font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--msf-accent);background:color-mix(in srgb, var(--msf-accent) 12%, #fff);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--msf-accent) 28%, transparent);
+}
+
+/* 본인 확인 줄 — 가려진 연락처(collect-lookup 의 maskEmail/maskPhone). */
+.msf-idcheck{
+  display:grid;grid-template-columns:auto 1fr;gap:6px 16px;
+  margin:14px 0 0;padding:12px 14px;border-radius:var(--msf-radius);
+  background:var(--msf-bg);text-align:left;font-size:13px;
+}
+.msf-idcheck dt{color:var(--msf-muted)}
+.msf-idcheck dd{margin:0;text-align:right;font-weight:700;word-break:break-all}
+
+/* QR 저장 — 캡처가 안 되는 기기(일부 사내폰·키오스크)가 있어 파일로도 준다. */
+.msf-save{
+  display:block;width:100%;margin-top:16px;padding:14px 18px;border:0;border-radius:var(--msf-radius);
+  background:var(--msf-accent);color:var(--msf-accent-fg);font:inherit;font-weight:800;cursor:pointer;
+}
+.msf-save:hover{filter:brightness(1.08)}
+.msf-save-hint{margin-top:8px;font-size:11px;color:var(--msf-muted)}
+
+/* 다시 찾기 — 일행 것을 이어서 찾는 경우가 많다(가족·팀 단위 등록). */
+.msf-again{
+  display:block;width:100%;margin-top:10px;padding:12px 18px;border-radius:var(--msf-radius);
+  border:0;box-shadow:inset 0 0 0 1px var(--msf-accent);
+  background:transparent;color:var(--msf-accent);font:inherit;font-weight:700;cursor:pointer;
+}
+.msf-again:hover{background:color-mix(in srgb, var(--msf-accent) 8%, transparent)}
 
 /* ── 미리보기 배너 ─────────────────────────── */
 /* 없으면 담당자가 미리보기에서 등록하고 "왜 명단에 없냐"고 묻는다(설계 §16.1). */

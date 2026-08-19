@@ -138,8 +138,17 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
             <p className="mt-1 text-xs text-neutral-500">{dates.join(" · ")}</p>
           )}
 
-          {view.name && <p className="mt-4 text-lg font-bold text-neutral-900">{view.name}</p>}
-          {view.visitorType && <p className="mt-0.5 text-xs text-neutral-500">{view.visitorType}</p>}
+          {/*
+            유형을 배지로 올린다 — 입장 동선이 유형마다 다르므로 이름보다 먼저 눈에 들어와야 한다.
+            **연락처는 여기 넣지 않는다.** 이 화면은 번호만 알면 열린다(§10.2) — 조회 화면은
+            본인이 이메일이나 전화를 직접 넣어 통과한 뒤라 가려서 보여 주지만, 여기는 그 관문이 없다.
+          */}
+          {view.visitorType && (
+            <p className="mt-4 inline-block rounded-full bg-neutral-900/5 px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.08em] text-neutral-700 ring-1 ring-neutral-900/10">
+              {view.visitorType}
+            </p>
+          )}
+          {view.name && <p className="mt-2 text-xl font-bold text-neutral-900">{view.name}</p>}
 
           {/* 흰 배경·검은 모듈·200px 이상 — 세 조건 모두 §9.2 의 스캔 요건이다. */}
           <div className="mx-auto mt-5 w-[220px] rounded-2xl bg-white p-2.5">
@@ -157,6 +166,22 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
             {view.registrationNo}
           </p>
           <p className="mt-1 text-[11px] text-neutral-500">Show this at the venue</p>
+
+          {/*
+            파일로도 받게 한다 — 캡처가 막힌 기기(일부 사내폰·키오스크)가 있고,
+            캡처는 화면 밝기 자동 조절 때문에 QR 대비가 낮게 저장되는 경우가 있다.
+            같은 출처라 download 속성이 그대로 듣는다(임베드 조회 화면은 교차 출처라 blob 으로 받는다).
+          */}
+          <a
+            href={`/api/collect/qr/${encodeURIComponent(view.registrationNo)}`}
+            download={`ticket-${view.registrationNo}.png`}
+            className="mt-5 block w-full rounded-xl bg-neutral-900 px-4 py-3 text-sm font-bold text-white"
+          >
+            Save as Image
+          </a>
+          <p className="mt-2 text-[11px] text-neutral-500">
+            * If the button doesn&apos;t work, please take a screenshot.
+          </p>
         </div>
 
         <p className="mt-4 text-center text-[11px] leading-relaxed text-neutral-500">

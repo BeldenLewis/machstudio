@@ -90,15 +90,31 @@ describe("내보내는 정보", () => {
 
   /**
    * **§10.2 의 핵심.** or 로 열어 둔 화면은 이메일 하나만 아는 사람에게도 열린다 —
-   * 거기에 회사·연락처·응답이 딸려 나오면 그건 명단 유출이다.
+   * 거기에 회사·응답이 딸려 나오면 그건 명단 유출이다.
+   *
+   * 연락처는 **가려서만** 나간다. 이름만으로는 동명이인을 못 가려 "내 거 맞나" 를 확인할
+   * 수 없다는 실제 불편이 있어 열었지만, 가리는 것이 조건이다 — 이메일만 아는 사람이
+   * 남의 전화번호를 가져가면 안 된다.
    */
-  it("연락처·회사·다른 답변·동의 기록은 절대 나가지 않는다", () => {
+  it("회사·다른 답변·동의 기록은 절대 나가지 않는다", () => {
     const view = buildLookupView(orConfig, record)!;
     const serialized = JSON.stringify(view);
-    for (const leak of ["Acme", "jane@example.com", "__consent", "company", "email"]) {
+    for (const leak of ["Acme", "__consent", "company"]) {
       expect(serialized).not.toContain(leak);
     }
-    expect(Object.keys(view).sort()).toEqual(["name", "registrationNo", "showQr", "visitorType"]);
+    expect(Object.keys(view).sort()).toEqual([
+      "maskedEmail", "maskedPhone", "name", "registrationNo", "showQr", "visitorType",
+    ]);
+  });
+
+  it("연락처는 **원문 그대로 나가지 않는다** — 가린 형태만", () => {
+    const view = buildLookupView(orConfig, record)!;
+    const serialized = JSON.stringify(view);
+    // 원문이 통째로 들어 있으면 가린 게 아니다.
+    expect(serialized).not.toContain("jane@example.com");
+    expect(view.maskedEmail).toBe("j•••@example.com");
+    // 로컬파트는 첫 글자만 남아야 한다.
+    expect(view.maskedEmail).not.toContain("jane");
   });
 
   it("등록번호가 없으면 화면을 만들지 않는다 — 연동형 레코드가 섞여 들어와도 안전하다", () => {
