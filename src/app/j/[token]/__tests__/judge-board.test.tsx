@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { JudgeBoard } from "../page";
+import { JudgeBoard } from "../JudgePageClient";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
