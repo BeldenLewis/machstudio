@@ -33,6 +33,14 @@ const competition: NoticeCompetition = {
   rounds: [],
 };
 
+/** 초점 값이 CSS 변수로 실려 나가는가 — 인라인 스타일로는 미디어 쿼리를 못 쓴다. */
+const focusVarsOf = (el: Element | null) => {
+  const style = (el as HTMLElement | null)?.getAttribute("style") ?? "";
+  return Object.fromEntries(
+    style.split(";").map((d) => d.split(":").map((x) => x.trim())).filter((p) => p[0]?.startsWith("--")),
+  );
+};
+
 const heroWith = (media: unknown) =>
   renderHero(
     buildNoticeModel(
@@ -70,9 +78,47 @@ describe("히어로 배경", () => {
     expect(hero.querySelector("video.hero-media")).toBeNull();
   });
 
+  it("초점을 CSS 변수로 싣는다 — PC 와 모바일 값이 따로 나간다", () => {
+    const hero = heroWith({
+      type: "image", url: "https://example.com/a.jpg",
+      focus: { x: 20, y: 80 }, mobileFocus: { x: 65, y: 10 },
+    });
+    expect(focusVarsOf(hero.querySelector(".hero-media img"))).toEqual({
+      "--fx": "20%", "--fy": "80%", "--mfx": "65%", "--mfy": "10%",
+    });
+  });
+
+  it("범위를 벗어난 초점은 잘라 낸다 — 밖으로 나가면 이미지가 화면에서 사라진다", () => {
+    const hero = heroWith({
+      type: "image", url: "https://example.com/a.jpg",
+      focus: { x: -30, y: 900 }, mobileFocus: { x: 50, y: 50 },
+    });
+    const vars = focusVarsOf(hero.querySelector(".hero-media img"));
+    expect(vars["--fx"]).toBe("0%");
+    expect(vars["--fy"]).toBe("100%");
+  });
+
   /** CSS 쪽 계약 — 이 선택자가 사라지면 위 구조를 맞춰도 소용이 없다. */
   it("껍데기 CSS 는 여전히 자손 선택자로 크기를 준다", () => {
     expect(NOTICE_CSS).toMatch(/\.hero-media img[^{]*\{[^}]*object-fit:\s*cover/);
     expect(NOTICE_CSS).toMatch(/\.hero-media\.has-media::after/);
+  });
+
+  /**
+   * 좁은 화면에서 모바일 초점으로 갈아타는 규칙이 살아 있는가.
+   * 이게 없으면 값만 실려 나가고 화면은 그대로다 — 고쳐도 안 바뀌는 종류의 버그다.
+   */
+  it("좁은 화면에서는 모바일 초점 변수로 바꾼다", () => {
+    // 좁은 화면 블록은 **하나가 아니다** — 껍데기(추출본)와 이 파일의 것이 각각 있다.
+    // 첫 번째만 보면 규칙이 멀쩡히 있는데도 못 찾는다(실제로 그랬다).
+    const mobileBlocks = NOTICE_CSS.split("@media (max-width: 760px)").slice(1);
+    expect(mobileBlocks.length).toBeGreaterThan(0);
+    expect(mobileBlocks.some((block) => /object-position:\s*var\(--mfx/.test(block))).toBe(true);
+  });
+
+  /** 사진 위에 글자를 얹으면 밝은 부분에서 글이 사라진다 — 스크림은 선택이 아니다. */
+  it("섹션 배경에는 스크림이 깔린다", () => {
+    expect(NOTICE_CSS).toMatch(/\.nt-bg::after/);
+    expect(NOTICE_CSS).toMatch(/\.nt-bg img[^{]*\{[^}]*object-fit:\s*cover/);
   });
 });

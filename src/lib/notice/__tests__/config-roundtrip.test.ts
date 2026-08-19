@@ -45,7 +45,14 @@ describe("대회 설정 저장 왕복", () => {
     const saved = normalizeCompetitionConfig(filled, { includeDisabled: true });
     expect(saved.noticePage.enabled).toBe(true);
     expect(saved.noticePage.hero.titleLines).toEqual(["Own", "the Stage."]);
-    expect(saved.noticePage.hero.media).toEqual({ type: "image", url: "https://example.com/hero.jpg" });
+    // 초점이 함께 남아야 한다 — 모바일에서 어디를 보여 줄지 맞춰 둔 값이 저장에 사라지면
+    // 저장할 때마다 사진이 가운데로 돌아간다.
+    expect(saved.noticePage.hero.media).toEqual({
+      type: "image",
+      url: "https://example.com/hero.jpg",
+      focus: { x: 50, y: 50 },
+      mobileFocus: { x: 50, y: 50 },
+    });
     expect(saved.noticePage.timeline.items).toHaveLength(1);
     expect(saved.noticePage.prizes.items[0].amount).toBe("$1,000");
     // 언어도 저장을 통과해야 한다 — 이게 빠지면 저장할 때마다 공고가 한글로 되돌아간다.
@@ -55,6 +62,29 @@ describe("대회 설정 저장 왕복", () => {
     expect(saved.noticePage.hero.upcomingNote).toBe("Doors open at 9am PT.");
     expect(saved.noticePage.colors.accentAlt).toBe("#22c55e");
     expect(saved.noticePage.colors.button).toBe("#2563eb");
+  });
+
+  /** 섹션 배경과 초점도 저장을 통과해야 한다 — 정규화가 모르는 키는 저장 시점에 사라진다. */
+  it("섹션 배경 이미지와 초점이 저장에 남는다", () => {
+    const saved = normalizeCompetitionConfig(
+      {
+        noticePage: {
+          enabled: true,
+          sectionMedia: {
+            timeline: { url: "https://example.com/bg.jpg", focus: { x: 20, y: 80 }, mobileFocus: { x: 70, y: 10 } },
+            // 주소가 없으면 키를 만들지 않는다 — "켰는데 빈 배경" 상태를 안 만든다.
+            prizes: { url: "  ", focus: { x: 10, y: 10 } },
+          },
+        },
+      },
+      { includeDisabled: true },
+    );
+    expect(saved.noticePage.sectionMedia.timeline).toEqual({
+      url: "https://example.com/bg.jpg",
+      focus: { x: 20, y: 80 },
+      mobileFocus: { x: 70, y: 10 },
+    });
+    expect(saved.noticePage.sectionMedia.prizes).toBeUndefined();
   });
 
   /**

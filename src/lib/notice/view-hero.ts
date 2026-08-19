@@ -9,6 +9,7 @@
  */
 import { h } from "@/lib/dom/h";
 import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
+import { focusVars } from "./media-focus";
 import type { NoticeModel } from "./types";
 
 /**
@@ -69,6 +70,8 @@ export function renderHero(m: NoticeModel, onApply: () => void): HTMLElement {
           alt: "",
           loading: "eager",
           fetchpriority: "high",
+          // 초점 — CSS 가 이 변수로 object-position 을 잡고, 좁은 화면에서는 모바일 값으로 바꾼다.
+          style: focusVars(media.focus, media.mobileFocus),
         })
       : media?.type === "video"
         ? h("video", {

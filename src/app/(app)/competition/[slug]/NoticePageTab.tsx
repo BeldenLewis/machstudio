@@ -11,6 +11,7 @@ import {
   NOTICE_SECTIONS,
   normalizeNoticePageConfig,
   type NoticePageConfig,
+  type NoticeBgKey,
   type NoticeSectionBg,
   type NoticeSectionKey,
 } from "@/lib/notice/config";
@@ -19,6 +20,7 @@ import { DEFAULT_COMPETITION_THEME } from "@/lib/competition-config";
 import { DEFAULT_ROUND_NAME, resolveCompetitionStatus } from "@/lib/competition-status";
 import type { NoticeCompetition } from "@/lib/notice/types";
 import NoticePreviewPane from "./NoticePreviewPane";
+import { SectionBackgroundField, type BackgroundValue } from "./SectionBackgroundField";
 import { AddRow, HeadFields, Row, SectionCard, moveItem } from "./NoticeSectionEditors";
 import type { CompetitionDetail } from "./page";
 import type { RoundDto } from "./VoteSettingsTab";
@@ -75,6 +77,14 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
   };
   const section = <K extends NoticeSectionKey>(key: K, patchSection: Partial<NoticePageConfig[K]>) =>
     update({ [key]: { ...np[key], ...patchSection } } as Partial<NoticePageConfig>);
+  /** 배경을 빼면 키 자체를 지운다 — 빈 값이 남으면 "켰는데 안 보이는" 상태가 생긴다. */
+  const setSectionMedia = (key: NoticeBgKey, value: BackgroundValue | null) => {
+    const next = { ...np.sectionMedia };
+    if (value) next[key] = value;
+    else delete next[key];
+    update({ sectionMedia: next });
+  };
+
   const setBg = (key: keyof NoticePageConfig["sectionBg"], value: NoticeSectionBg) =>
     update({ sectionBg: { ...np.sectionBg, [key]: value } });
 
@@ -136,7 +146,18 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
       const res = await fetch(`/api/competitions/${competition.id}/notice-media`, { method: "POST", body });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { toast.error(data.error ?? "업로드에 실패했어요"); return; }
-      update({ hero: { ...np.hero, media: { type: data.type, url: data.url } } });
+      update({
+        hero: {
+          ...np.hero,
+          // 초점은 기존 값을 이어받는다 — 사진만 바꿔 끼울 때 맞춰 둔 위치가 날아가면 안 된다.
+          media: {
+            type: data.type,
+            url: data.url,
+            focus: np.hero.media?.focus ?? { x: 50, y: 50 },
+            mobileFocus: np.hero.media?.mobileFocus ?? { x: 50, y: 50 },
+          },
+        },
+      });
       toast.success("배경을 올렸어요");
     } finally {
       setUploading(false);
@@ -322,6 +343,31 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
               배경을 넣으면 글자는 항상 밝게 나가요 — 사진 위 어두운 막 때문에 검은 글자는 안 읽혀요.
             </p>
 
+            {/*
+              **초점은 히어로에서 제일 급하다.** 가로 사진이 모바일 세로 화면에서 좌우로 크게
+              잘리는데, 히어로는 첫 화면이라 그게 곧 첫인상이다. 영상은 object-position 이
+              먹지 않으므로 이미지일 때만 보여 준다.
+            */}
+            {np.hero.media?.type === "image" && (
+              <SectionBackgroundField
+                label="배경 초점"
+                competitionId={competition.id}
+                value={{
+                  url: np.hero.media.url,
+                  focus: np.hero.media.focus,
+                  mobileFocus: np.hero.media.mobileFocus,
+                }}
+                onChange={(next) =>
+                  update({
+                    hero: {
+                      ...np.hero,
+                      media: next ? { type: "image", ...next } : null,
+                    },
+                  })
+                }
+              />
+            )}
+
             <input value={np.hero.brand} onChange={(e) => update({ hero: { ...np.hero, brand: e.target.value } })}
               placeholder="상단 작은 라벨 (비우면 대회 이름)" className={`${FIELD_CLS} h-8`} />
 
@@ -437,6 +483,16 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
             onToggle={(v) => section(key, { enabled: v } as never)}
             onBg={(v) => setBg(key, v)}
           >
+            {/*
+              배경은 **선택**이다 — 어울리는 섹션이 있고 아닌 섹션이 있다. 그래서 섹션마다
+              따로 켜고, 안 켠 섹션은 지금처럼 색만 칠한다.
+            */}
+            <SectionBackgroundField
+              label="배경 이미지 (선택)"
+              competitionId={competition.id}
+              value={np.sectionMedia[key] ?? null}
+              onChange={(next) => setSectionMedia(key, next)}
+            />
             <SectionBody sectionKey={key} np={np} section={section} rounds={rounds} />
           </SectionCard>
         ))}

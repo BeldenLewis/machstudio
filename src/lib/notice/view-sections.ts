@@ -9,7 +9,34 @@
  *  - `rv` 클래스는 스크롤 리빌 대상 표시(effects.attachReveal 이 집는다).
  */
 import { h, svg } from "@/lib/dom/h";
+import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
+import { focusVars } from "./media-focus";
+import type { NoticeBgKey } from "./config";
 import type { NoticeModel } from "./types";
+
+/**
+ * 섹션 배경 이미지 — **켠 섹션에만** 그린다.
+ *
+ * 히어로와 같은 구조(감싸는 상자 + 안쪽 img)를 쓴다. 그 구조여야 CSS 의 자손 선택자가
+ * 걸려 크기·object-fit·스크림이 먹는다 — 예전에 히어로에서 클래스를 img 에 직접 걸었다가
+ * 이미지가 찌그러지고 스크림이 안 생겨 "배경이 적용 안 된 것처럼" 보인 적이 있다.
+ *
+ * 스크림은 선택이 아니다. 사진 위에 글자를 얹는 순간 밝은 부분에서 글이 사라진다.
+ */
+function sectionBackground(m: NoticeModel, key: string): HTMLElement | null {
+  const media = m.np.sectionMedia[key as NoticeBgKey];
+  if (!media) return null;
+  return h(
+    "div",
+    { class: "nt-bg", "aria-hidden": "true" },
+    h("img", {
+      src: transformedImageUrl(media.url, IMAGE_PRESETS.heroBackground),
+      alt: "",
+      loading: "lazy",
+      style: focusVars(media.focus, media.mobileFocus),
+    }),
+  );
+}
 
 /** 섹션 껍데기 — 키커 + 제목 + 설명. 모든 섹션이 같은 머리 구조를 쓴다. */
 function sectionShell(
@@ -22,11 +49,12 @@ function sectionShell(
   return h(
     "section",
     {
-      class: "section",
+      class: `section${m.np.sectionMedia[key as NoticeBgKey] ? " has-bg" : ""}`,
       id: m.sectionId(`nt-${key}`),
       "data-bg": m.np.sectionBg[key as keyof typeof m.np.sectionBg],
       "aria-labelledby": titleId,
     },
+    sectionBackground(m, key),
     h(
       "div",
       { class: "section-head rv" },
