@@ -74,6 +74,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
    */
   if (url.searchParams.get("view") === "vote") {
     const round = url.searchParams.get("round") === "final" ? "final" : "prelim";
+    // 기본은 **열린 화면**이다 — 확인하고 싶은 건 보통 그쪽이고, 닫힌 화면은 한 줄이라 언제든 본다.
+    const previewState = url.searchParams.get("state") === "closed" ? "closed" : "open";
     return htmlResponse(`<!doctype html>
 <html lang="ko">
 <head>
@@ -87,7 +89,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
 <body>
 <div class="mc-wrap"><div data-mach-competition-vote></div></div>
 <script>${COMPETITION_VOTE_RUNTIME_JS}</script>
-<script>__msCompetitionVote.boot(${jsonForScript({ competitionId: competition.id, origin, round, preview: true })});</script>
+<script>__msCompetitionVote.boot(${jsonForScript({ competitionId: competition.id, origin, round, preview: true, previewToken: token, previewState })});</script>
 </body>
 </html>`);
   }

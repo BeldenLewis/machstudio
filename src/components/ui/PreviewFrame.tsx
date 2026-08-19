@@ -27,6 +27,7 @@ export function PreviewFrame({
   note,
   reloadKey,
   openLabel = "새 탭에서 열기",
+  controls,
 }: {
   title: string;
   src?: string;
@@ -36,6 +37,8 @@ export function PreviewFrame({
   /** 값이 바뀌면 다시 불러온다 — 설정을 고친 뒤 미리보기를 맞추는 용도. */
   reloadKey?: string | number;
   openLabel?: string;
+  /** 제목 줄에 끼워 넣을 선택기 — 한 패널에서 여러 화면을 번갈아 볼 때(예선/본선, 결과/발표). */
+  controls?: React.ReactNode;
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -90,7 +93,10 @@ export function PreviewFrame({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold">{title}</h2>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h2 className="shrink-0 text-sm font-semibold">{title}</h2>
+          {controls}
+        </div>
         <div className="flex items-center gap-1">
           {src && (
             <>
