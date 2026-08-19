@@ -47,6 +47,14 @@ const SECTION_CSS = `
 .lnd .section-kicker { display: block; font-size: 11.5px; font-weight: 800; letter-spacing: .16em;
   text-transform: uppercase; color: var(--primary); margin-bottom: 12px; }
 .lnd .section-head { max-width: 640px; margin-bottom: 44px; }
+/* 껍데기의 .section-title 은 **가운데 정렬**이다(랜딩은 제목이 페이지 폭 전체를 쓴다).
+   공고는 제목을 왼쪽 640px 상자에 넣으므로 그 규칙이 그대로 걸리면 짧은 제목만
+   상자 안에서 가운데로 밀려 "제목만 들여쓴" 모양이 된다(실측: ELIGIBILITY 가 눈금
+   52px 대신 85px). 머리글 안에서는 왼쪽 정렬로 되돌리고, 아래 설명과의 간격도
+   껍데기의 큰 여백(최대 70px) 대신 한 덩어리로 읽히게 좁힌다. */
+.lnd .section-head .section-title { margin: 0; text-align: left; font-size: clamp(28px, 3.6vw, 42px); }
+.lnd .section-head .section-desc { margin-top: 14px; font-size: 15.5px; line-height: 1.7;
+  color: color-mix(in srgb, var(--paper) 74%, transparent); word-break: keep-all; }
 .lnd .nt-foot { margin-top: 22px; }
 
 /* ── 개념 ── */
@@ -176,6 +184,31 @@ const SECTION_CSS = `
 .lnd .nt-final-cta { position: static; transform: none; margin-inline: auto; }
 .lnd .nt-final-cta:hover { transform: translateY(-2px); }
 
+/* ── 히어로 세로 정렬 ──
+   껍데기의 .hero-inner 는 grid + place-items:center 다. 랜딩은 그 안에 카피 한 덩어리뿐이라
+   가운데에 놓였지만, 공고는 **카피 + 팩트 줄** 둘이라 암묵 행이 두 개가 된다. grid 의
+   align-content 기본값(normal→stretch)이 남는 높이를 두 행에 반씩 나눠 주므로 카피는
+   위쪽 절반의 가운데 = 화면 중앙보다 한참 위에 걸린다.
+
+   흐름을 명시한다: 카피가 남는 높이를 전부 먹고 그 안에서 가운데, 팩트 줄은 바닥.
+   아래 여백은 절대 배치된 .hero-cta(bottom:48px, 높이 58px)가 앉을 자리로 비워 둔다 —
+   안 비우면 팩트 줄과 버튼이 겹친다. */
+.lnd .hero-inner {
+  display: flex; flex-direction: column;
+  padding-bottom: 124px;
+}
+.lnd .hero-copy { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; }
+
+/* 넓은 화면에서는 팩트 줄을 **바닥 줄로 뺀다** — 원본 디자인처럼 왼쪽에 팩트, 오른쪽에 CTA.
+   흐름에 두면 아래쪽만 두꺼워져(아래 여백 124 + 팩트 81 vs 위 여백 96) 카피가 실제
+   가운데보다 54px 위에 걸린다(실측 1280×900). 껍데기가 .hero-meta 에 쓰는 것과 같은 수법이다.
+   위아래 여백을 같게 맞춰야 남은 공간이 대칭이 되고, 그래야 카피가 정말 가운데에 온다.
+   오른쪽 236px 은 CTA(최소 폭 210 + 여유)가 앉을 자리다. */
+@media (min-width: 761px) {
+  .lnd .hero-inner { padding-top: 124px; }
+  .lnd .hero-facts { position: absolute; left: 0; right: 236px; bottom: 46px; }
+}
+
 /* ── 히어로 팩트 줄 ── */
 .lnd .hero-facts { display: flex; flex-wrap: wrap; gap: 26px; margin: 0; padding-top: 26px;
   border-top: 1px solid color-mix(in srgb, var(--paper) 16%, transparent); }
@@ -236,6 +269,10 @@ const SECTION_CSS = `
   .lnd .nt-tl-date { grid-column: 1 / -1; margin-bottom: 8px; padding-top: 0; }
   .lnd .hero-facts { gap: 18px; }
   .lnd .hero-fact dd { font-size: 18px; }
+  /* 껍데기는 좁은 폭에서 CTA 를 바닥 가운데(bottom:36px, 폭 최대 320px)로 내리고
+     .hero-inner 의 아래 여백을 150px 로 잡는다. 이 파일이 껍데기보다 **뒤에** 붙으므로
+     여기서 다시 선언하지 않으면 위의 124px 이 그 값을 덮어 팩트 줄이 버튼 위로 내려앉는다. */
+  .lnd .hero-inner { padding-bottom: 150px; }
 }
 `;
 

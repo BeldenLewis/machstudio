@@ -11,6 +11,12 @@
 export interface JudgeCriterion {
   key: string;
   label: string;
+  /**
+   * 이 항목에서 무엇을 보는지. 심사 화면과 공고의 "심사 기준" 에 함께 나간다.
+   * 항목 이름만으로는 심사위원마다 다르게 해석한다("완성도" 가 안무인지 편집인지) —
+   * 채점표가 갈리는 가장 흔한 원인이라 한 줄을 붙일 자리를 둔다. 비워도 된다.
+   */
+  description: string;
   maxScore: number;
 }
 
@@ -22,8 +28,9 @@ export function normalizeCriteria(raw: unknown): JudgeCriterion[] {
       const c = item as Record<string, unknown>;
       const key = typeof c.key === "string" && c.key.trim() ? c.key.trim() : `c${index + 1}`;
       const label = typeof c.label === "string" ? c.label : key;
+      const description = typeof c.description === "string" ? c.description : "";
       const maxScore = typeof c.maxScore === "number" && c.maxScore > 0 ? Math.floor(c.maxScore) : 10;
-      return { key, label, maxScore };
+      return { key, label, description, maxScore };
     })
     .filter((c): c is JudgeCriterion => c !== null);
 }

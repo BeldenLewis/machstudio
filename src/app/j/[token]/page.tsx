@@ -10,7 +10,7 @@ import { CheckCircle2, Loader2, Lock, Star } from "lucide-react";
  * 운영자만 풀 수 있다 — 제출 후에도 계속 고칠 수 있으면 언제 확정인지가 사라진다.
  */
 
-interface Criterion { key: string; label: string; maxScore: number }
+interface Criterion { key: string; label: string; description: string; maxScore: number }
 interface MediaItem { kind: "image" | "youtube"; url?: string; videoId?: string }
 interface Entry {
   id: string; entryNo: string; title: string; teamName: string | null;
@@ -284,6 +284,15 @@ export function JudgeBoard({ token, state }: { token: string; state: JudgeState 
                           {typeof value === "number" ? value : "-"} / {criterion.maxScore}
                         </span>
                       </div>
+                      {/*
+                        항목 이름만 보여주면 심사위원마다 다르게 해석한다 — 채점표가 갈리는
+                        가장 흔한 원인이라, 운영자가 적어 둔 기준을 슬라이더 바로 위에 붙인다.
+                      */}
+                      {criterion.description && (
+                        <p className="mb-1.5 whitespace-pre-line text-[11px] leading-relaxed text-neutral-500">
+                          {criterion.description}
+                        </p>
+                      )}
                       <input
                         type="range"
                         min={0}

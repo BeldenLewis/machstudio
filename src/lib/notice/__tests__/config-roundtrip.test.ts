@@ -17,6 +17,7 @@ const filled = {
   form: { title: "참가 신청" },
   noticePage: {
     enabled: true,
+    language: "en",
     colors: { lightBg: "#ffffff", darkBg: "#000000" },
     sectionBg: { hero: "light", concept: "dark" },
     hero: {
@@ -45,6 +46,13 @@ describe("대회 설정 저장 왕복", () => {
     expect(saved.noticePage.hero.media).toEqual({ type: "image", url: "https://example.com/hero.jpg" });
     expect(saved.noticePage.timeline.items).toHaveLength(1);
     expect(saved.noticePage.prizes.items[0].amount).toBe("$1,000");
+    // 언어도 저장을 통과해야 한다 — 이게 빠지면 저장할 때마다 공고가 한글로 되돌아간다.
+    expect(saved.noticePage.language).toBe("en");
+  });
+
+  it("언어를 안 적었으면 한국어 — 기존 대회가 저장 한 번에 영어로 바뀌면 안 된다", () => {
+    const saved = normalizeCompetitionConfig({ noticePage: { enabled: true } }, { includeDisabled: true });
+    expect(saved.noticePage.language).toBe("ko");
   });
 
   it("두 번 정규화해도 값이 안 줄어든다 — 저장·로드를 반복해도 같아야 한다", () => {

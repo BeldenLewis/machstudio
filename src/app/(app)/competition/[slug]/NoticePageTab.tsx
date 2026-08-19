@@ -13,6 +13,7 @@ import {
   type NoticeSectionBg,
   type NoticeSectionKey,
 } from "@/lib/notice/config";
+import { noticeStrings } from "@/lib/notice/strings";
 import { resolveCompetitionStatus } from "@/lib/competition-status";
 import type { NoticeCompetition } from "@/lib/notice/types";
 import NoticePreviewPane from "./NoticePreviewPane";
@@ -189,6 +190,31 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
             </button>
             <span className="text-[11px] text-muted-foreground">섹션마다 따로 고를 수도 있어요</span>
           </div>
+
+          {/*
+            **시스템이 만들어 넣는 문구**의 언어. 운영자가 쓴 글은 그대로 둔다.
+            영문 대회를 열면 선발 방식·심사 기준만 설정에서 한글로 끌려와 페이지 하나에
+            두 언어가 섞였다 — 손댈 칸이 없는 자리라 더 답답한 종류였다.
+          */}
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
+            <span className="text-xs font-medium">문구 언어</span>
+            {([["ko", "한국어"], ["en", "English"]] as const).map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => update({ language: value })}
+                className={`px-2.5 py-1.5 text-[11px] transition-colors ${R.control} ${
+                  np.language === value ? "bg-violet-500 text-white" : "bg-secondary text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+            <span className="text-[11px] text-muted-foreground">
+              신청 버튼·카운트다운 단위·비율 라벨처럼 <b>우리가 자동으로 넣는 문구</b>만 바뀌어요.
+              라운드 이름과 심사 항목 이름은 설정에 적힌 그대로 나가니, 다른 언어로 쓰려면
+              해당 섹션을 “직접 입력”으로 바꾸고 <b>설정값 불러오기</b>로 복사해 고치세요.
+            </span>
+          </div>
         </section>
 
         {/* ── 히어로 ──────────────────────────────────────────── */}
@@ -347,6 +373,39 @@ function SectionBody({
   section: <K extends NoticeSectionKey>(key: K, patch: Partial<NoticePageConfig[K]>) => void;
   rounds: RoundDto[];
 }) {
+  /** 배열의 한 칸만 갈아 끼운다. 중첩(라운드 안의 비율 막대)까지 같은 모양으로 쓴다. */
+  const patchAt = <T,>(list: T[], index: number, patch: Partial<T>): T[] =>
+    list.map((item, i) => (i === index ? { ...item, ...patch } : item));
+
+  /**
+   * 설정에서 값을 복사해 온다 — auto 와 **같은 규칙**이어야 한다.
+   * 다르면 "가져오기를 눌렀는데 미리보기랑 다르네"가 된다. auto 의 판단은 build-model 이
+   * 하므로, 여기서는 그 입력(라운드 목록)만 같은 모양으로 옮긴다.
+   *
+   * 라운드 이름·항목 이름은 그대로 둔다 — 번역은 운영자가 이 칸에서 직접 한다.
+   */
+  const selectionFromSettings = () => {
+    // 라벨·설명은 **골라 둔 언어**로 채운다. 한글로 부어 놓으면 영어 공고에서 불러오기를
+    // 누른 직후 다시 전부 지워 써야 해서, 불러오기가 오히려 일을 늘린다.
+    const t = noticeStrings(np.language);
+    return rounds
+      .filter((round) => round.publicWeight > 0 || round.judgeWeight > 0)
+      .map((round) => ({
+        title: round.name,
+        note: round.kind === "prelim" ? t.roundNotePrelim : t.roundNoteFinal,
+        bars: [
+          { label: t.barPublic, percent: round.publicWeight },
+          { label: t.barJudge, percent: round.judgeWeight },
+        ].filter((bar) => bar.percent > 0),
+      }));
+  };
+
+  /** 심사 기준도 auto 와 같이 **본선 우선**, 본선이 비면 예선. */
+  const criteriaFromSettings = () => {
+    const final = rounds.find((r) => r.kind === "final" && criteriaOf(r).length > 0);
+    return criteriaOf(final ?? rounds.find((r) => criteriaOf(r).length > 0));
+  };
+
   const head = (key: NoticeSectionKey, showDescription = true) => {
     const cfg = np[key] as { kicker: string; title: string; description?: string };
     return (
@@ -474,9 +533,63 @@ function SectionBody({
           autoNote={`투표 설정의 대중:심사 비율을 그대로 그려요 (${rounds.map((r) => `${r.name} ${r.publicWeight}:${r.judgeWeight}`).join(" · ") || "라운드 없음"})`}
         />
         {s.source === "manual" && (
-          <p className="text-[11px] text-amber-700 dark:text-amber-400">
-            직접 입력은 투표 설정과 따로 놀아요 — 비율을 바꾸면 여기도 같이 고쳐야 합니다.
-          </p>
+          <>
+            <p className="text-[11px] text-amber-700 dark:text-amber-400">
+              직접 입력은 투표 설정과 따로 놀아요 — 비율을 바꾸면 여기도 같이 고쳐야 합니다.
+            </p>
+            {/*
+              **빈 칸에서 시작하지 않게 한다.** 직접 입력으로 바꾸는 가장 흔한 이유는
+              "가져온 값이 마음에 안 든다"(영문 대회인데 라운드 이름이 한글이라든지)이지
+              처음부터 다시 쓰고 싶어서가 아니다. 설정값을 그대로 부어 주고 고치게 한다.
+            */}
+            <AddRow
+              label={s.rounds.length > 0 ? "설정값 다시 불러오기 (덮어써요)" : "설정값 불러오기"}
+              onClick={() => section("selection", { rounds: selectionFromSettings() })}
+            />
+            {s.rounds.map((round, index) => (
+              <Row key={index} index={index} count={s.rounds.length}
+                onMove={(from, to) => section("selection", { rounds: moveItem(s.rounds, from, to) })}
+                onRemove={(i) => section("selection", { rounds: s.rounds.filter((_, n) => n !== i) })}>
+                <input value={round.title} placeholder="라운드 이름 (예: Preliminary)"
+                  className={`${FIELD_CLS} h-8`}
+                  onChange={(e) => section("selection", { rounds: patchAt(s.rounds, index, { title: e.target.value }) })} />
+                <input value={round.note} placeholder="한 줄 설명 (예: Decides who advances)"
+                  className={`${FIELD_CLS} h-8`}
+                  onChange={(e) => section("selection", { rounds: patchAt(s.rounds, index, { note: e.target.value }) })} />
+                {round.bars.map((bar, barIndex) => (
+                  <div key={barIndex} className="flex items-center gap-1.5">
+                    <div className="min-w-0 flex-1">
+                      <input value={bar.label} placeholder="항목 (예: Audience vote)" className={`${FIELD_CLS} h-8`}
+                        onChange={(e) => section("selection", {
+                          rounds: patchAt(s.rounds, index, { bars: patchAt(round.bars, barIndex, { label: e.target.value }) }),
+                        })} />
+                    </div>
+                    <div className="w-16 shrink-0">
+                      <input type="number" min={0} max={100} value={bar.percent} className={`${FIELD_CLS} h-8`}
+                        onChange={(e) => section("selection", {
+                          rounds: patchAt(s.rounds, index, {
+                            bars: patchAt(round.bars, barIndex, { percent: Math.max(0, Math.min(100, Number(e.target.value) || 0)) }),
+                          }),
+                        })} />
+                    </div>
+                    <span className="w-3 shrink-0 text-[11px] text-muted-foreground">%</span>
+                    <button aria-label="비율 삭제" className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-red-500"
+                      onClick={() => section("selection", {
+                        rounds: patchAt(s.rounds, index, { bars: round.bars.filter((_, n) => n !== barIndex) }),
+                      })}>
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+                <AddRow label="비율 추가" onClick={() => section("selection", {
+                  rounds: patchAt(s.rounds, index, { bars: [...round.bars, { label: "", percent: 0 }] }),
+                })} />
+              </Row>
+            ))}
+            <AddRow label="라운드 추가" onClick={() => section("selection", {
+              rounds: [...s.rounds, { title: "", note: "", bars: [{ label: "", percent: 0 }] }],
+            })} />
+          </>
         )}
         <input value={s.footnote} onChange={(e) => section("selection", { footnote: e.target.value })}
           placeholder="각주 (선택)" className={`${FIELD_CLS} h-8`} />
@@ -496,9 +609,36 @@ function SectionBody({
           autoNote={`심사단 탭의 항목·배점을 그대로 그려요 (본선 우선${finalRound ? "" : " · 본선 항목 없으면 예선"})`}
         />
         {c.source === "manual" && (
-          <p className="text-[11px] text-amber-700 dark:text-amber-400">
-            직접 입력은 심사단 탭과 따로 놀아요 — 배점을 바꾸면 여기도 같이 고쳐야 합니다.
-          </p>
+          <>
+            <p className="text-[11px] text-amber-700 dark:text-amber-400">
+              직접 입력은 심사단 탭과 따로 놀아요 — 배점을 바꾸면 여기도 같이 고쳐야 합니다.
+            </p>
+            <AddRow
+              label={c.items.length > 0 ? "설정값 다시 불러오기 (덮어써요)" : "설정값 불러오기"}
+              onClick={() => section("criteria", { items: criteriaFromSettings() })}
+            />
+            {c.items.map((item, index) => (
+              <Row key={index} index={index} count={c.items.length}
+                onMove={(from, to) => section("criteria", { items: moveItem(c.items, from, to) })}
+                onRemove={(i) => section("criteria", { items: c.items.filter((_, n) => n !== i) })}>
+                <div className="flex items-start gap-1.5">
+                  <div className="min-w-0 flex-1">
+                    <input value={item.name} placeholder="제목 (예: Creativity)" className={`${FIELD_CLS} h-8`}
+                      onChange={(e) => section("criteria", { items: patchAt(c.items, index, { name: e.target.value }) })} />
+                  </div>
+                  <div className="w-20 shrink-0">
+                    <input type="number" min={0} value={item.points} placeholder="배점" className={`${FIELD_CLS} h-8`}
+                      onChange={(e) => section("criteria", { items: patchAt(c.items, index, { points: Math.max(0, Number(e.target.value) || 0) }) })} />
+                  </div>
+                </div>
+                <input value={item.description} placeholder="내용 — 이 항목에서 무엇을 보는지" className={`${FIELD_CLS} h-8`}
+                  onChange={(e) => section("criteria", { items: patchAt(c.items, index, { description: e.target.value }) })} />
+              </Row>
+            ))}
+            <AddRow label="항목 추가" onClick={() => section("criteria", {
+              items: [...c.items, { name: "", description: "", points: 0 }],
+            })} />
+          </>
         )}
       </>
     );

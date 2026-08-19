@@ -318,16 +318,16 @@ export function renderCountdown(m: NoticeModel, onApply: () => void): HTMLElemen
       h(
         "div",
         { class: "nt-countdown", "data-countdown": m.deadline ?? "" },
-        box("days", "일"),
-        box("hours", "시간"),
-        box("mins", "분"),
-        box("secs", "초"),
+        box("days", m.t.cdDays),
+        box("hours", m.t.cdHours),
+        box("mins", m.t.cdMins),
+        box("secs", m.t.cdSecs),
       ),
       m.ctaEnabled &&
         h(
           "button",
           { type: "button", class: "hero-cta nt-final-cta", onclick: onApply },
-          c.ctaLabel.trim() || m.np.hero.ctaLabel,
+          c.ctaLabel.trim() || m.ctaLabel,
         ),
     ),
   );

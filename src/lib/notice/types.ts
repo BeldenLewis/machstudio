@@ -5,6 +5,7 @@
  * 랜딩(LandingModel)과 같은 규약: 파생·조건 판단은 전부 여기서 끝내고, 뷰는 값을 읽기만
  * 한다. 미리보기와 실물이 같은 결론을 보게 하려는 목적이다.
  */
+import type { NoticeStrings } from "./strings";
 import type { CompetitionPhase } from "@/lib/competition-status";
 import type {
   NoticeCriterionItem,
@@ -50,6 +51,8 @@ export interface NoticeTocItem {
 export interface NoticeModel {
   competition: NoticeCompetition;
   np: NoticePageConfig;
+  /** 시스템 생성 문구 사전 — np.language 에서 고른다. 뷰는 한글을 직접 쓰지 않는다. */
+  t: NoticeStrings;
   /** 인스턴스 고유 접두 — 한 페이지에 공고가 둘 이상 붙어도 id 가 안 부딪히게. */
   uid: string;
   accent: string;
