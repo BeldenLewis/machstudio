@@ -1234,12 +1234,23 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                         )}
                         {source.fieldMappings.map((f) => {
                           const colWidth = f.type === "email" ? "max-w-[240px]"
-                            : (f.type === "select" || f.type === "checkbox") ? "max-w-[80px]"
+                            : (f.type === "select" || f.type === "checkbox") ? "max-w-[140px]"
                             : "max-w-[200px]";
+                          /*
+                            머리글도 잘라야 한다. max-w 만 주고 넘침 처리를 안 하면
+                            whitespace-nowrap 인 긴 문항 제목이 칸을 넘어 **옆 열 위에 겹쳐 그려진다**
+                            — 본문 td 에는 truncate 가 있어 데이터만 멀쩡하고 머리글만 뭉개졌다.
+                            잘린 제목은 마우스를 올리면 전체가 보이게 title 을 단다.
+                          */
                           return (
-                          <th key={f.id} className={`text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap ${colWidth}`}>
-                            <button onClick={() => cycleSort("field", f.key)} className="flex items-center gap-1 hover:text-foreground transition-colors">
-                              {f.label} {sortIcon("field", f.key)}
+                          <th key={f.id} className={`text-left px-4 py-2.5 text-xs font-medium text-muted-foreground ${colWidth}`}>
+                            <button
+                              onClick={() => cycleSort("field", f.key)}
+                              title={f.label}
+                              className="flex w-full items-center gap-1 hover:text-foreground transition-colors"
+                            >
+                              <span className="truncate">{f.label}</span>
+                              <span className="shrink-0">{sortIcon("field", f.key)}</span>
                             </button>
                           </th>
                           );
