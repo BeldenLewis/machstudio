@@ -65,8 +65,22 @@ export interface NoticeHero {
  */
 export type NoticeSource = "auto" | "manual";
 
+/**
+ * 공고에 **시스템이 만들어 넣는 문구**의 언어.
+ *
+ * 운영자가 직접 쓴 글은 건드리지 않는다 — 여기서 바뀌는 건 우리가 생성하는 것뿐이다:
+ * 선발 방식 막대의 "관람객 투표 / 심사단 점수", 라운드 설명, 카운트다운의 일·시간·분·초,
+ * 신청 버튼 기본값. LA 처럼 영어 대회를 열면 설정에서 끌어온 값만 한글로 남아
+ * 페이지 하나에 두 언어가 섞인다 — 실제로 그렇게 나왔다.
+ *
+ * 라운드 이름·심사 항목 이름은 **DB 에 있는 운영자의 글**이라 자동 번역하지 않는다.
+ * 그 자리는 해당 섹션을 manual 로 돌리고 "설정값 불러오기" 로 복사해 고쳐 쓴다.
+ */
+export type NoticeLanguage = "ko" | "en";
+
 export interface NoticePageConfig {
   enabled: boolean;
+  language: NoticeLanguage;
   hero: NoticeHero;
   colors: { lightBg: string; darkBg: string };
   sectionBg: NoticeSectionBgMap;
@@ -132,7 +146,9 @@ export function normalizeNoticePageConfig(config: unknown, opts?: NormalizeNotic
     brand: str(heroRaw.brand),
     titleLines: arr(heroRaw.titleLines).map(str).filter((line) => keep || line.trim()),
     subtitle: str(heroRaw.subtitle),
-    ctaLabel: str(heroRaw.ctaLabel) || "참가 신청하기",
+    /* 비워 두면 build-model 이 언어에 맞는 기본값을 넣는다. 여기서 한글로 굳히면
+       영어 공고에서 버튼만 한글로 남고 되돌릴 방법이 없다. */
+    ctaLabel: str(heroRaw.ctaLabel),
     secondaryLabel: str(heroRaw.secondaryLabel),
     facts: arr(heroRaw.facts)
       .map((f) => ({ label: str(obj(f).label), value: str(obj(f).value) }))
@@ -144,6 +160,7 @@ export function normalizeNoticePageConfig(config: unknown, opts?: NormalizeNotic
 
   return {
     enabled: bool(np.enabled, false),
+    language: np.language === "en" ? "en" : "ko",
     hero,
     colors: {
       lightBg: hex(obj(np.colors).lightBg, DEFAULT_NOTICE_COLORS.lightBg),

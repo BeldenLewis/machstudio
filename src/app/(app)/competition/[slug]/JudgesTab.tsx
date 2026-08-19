@@ -345,41 +345,66 @@ function CriteriaForm({
   return (
     <>
       <div className="mt-3 space-y-1.5">
-        {criteria.map((criterion, index) => (
-          <div key={index} className="flex items-center gap-1.5">
-            <input
-              value={criterion.label}
-              onChange={(e) => {
-                const next = [...criteria];
-                next[index] = { ...next[index], label: e.target.value, key: next[index].key || `c${index + 1}` };
-                setCriteria(next);
-              }}
-              placeholder="항목 이름 (예: 창의성)"
-              className={`${FIELD_CLS} h-8 flex-1`}
-            />
-            <input
-              type="number"
-              min={1}
-              value={criterion.maxScore}
-              onChange={(e) => {
-                const next = [...criteria];
-                next[index] = { ...next[index], maxScore: Math.max(1, Number(e.target.value) || 1) };
-                setCriteria(next);
-              }}
-              className={`${FIELD_CLS} h-8 w-20`}
-            />
-            <button
-              onClick={() => setCriteria(criteria.filter((_, i) => i !== index))}
-              className="rounded p-1 text-muted-foreground hover:text-red-500"
-              aria-label="항목 삭제"
-            >
-              <Trash2 className="h-3 w-3" />
-            </button>
+        {/*
+          폭은 **래퍼가 갖고 입력은 w-full 을 유지한다**(primitives.tsx 의 FIELD_CLS 주석).
+          `${FIELD_CLS} w-20` 처럼 덧붙이면 컴파일된 CSS 순서 때문에 .w-full 이 이겨서
+          아무 효과가 없다 — 실제로 이 화면에서 제목 칸이 찌그러져 입력이 안 됐다.
+        */}
+        {criteria.length > 0 && (
+          <div className="flex items-center gap-1.5 px-0.5 text-[10px] font-medium text-muted-foreground">
+            <span className="w-40 shrink-0">제목</span>
+            <span className="min-w-0 flex-1">내용</span>
+            <span className="w-20 shrink-0">배점</span>
+            <span className="w-5 shrink-0" />
           </div>
-        ))}
+        )}
+        {criteria.map((criterion, index) => {
+          const patch = (next: Partial<(typeof criteria)[number]>) => {
+            const list = [...criteria];
+            list[index] = { ...list[index], key: list[index].key || `c${index + 1}`, ...next };
+            setCriteria(list);
+          };
+          return (
+            <div key={index} className="flex items-start gap-1.5">
+              <div className="w-40 shrink-0">
+                <input
+                  value={criterion.label}
+                  onChange={(e) => patch({ label: e.target.value })}
+                  placeholder="제목 (예: 창의성)"
+                  className={`${FIELD_CLS} h-8`}
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <input
+                  value={criterion.description}
+                  onChange={(e) => patch({ description: e.target.value })}
+                  placeholder="내용 — 이 항목에서 무엇을 보는지 (심사위원·공고에 함께 보여요)"
+                  className={`${FIELD_CLS} h-8`}
+                />
+              </div>
+              <div className="w-20 shrink-0">
+                <input
+                  type="number"
+                  min={1}
+                  value={criterion.maxScore}
+                  onChange={(e) => patch({ maxScore: Math.max(1, Number(e.target.value) || 1) })}
+                  placeholder="배점"
+                  className={`${FIELD_CLS} h-8`}
+                />
+              </div>
+              <button
+                onClick={() => setCriteria(criteria.filter((_, i) => i !== index))}
+                className="mt-1.5 rounded p-1 text-muted-foreground transition-colors hover:text-red-500"
+                aria-label="항목 삭제"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+          );
+        })}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setCriteria([...criteria, { key: `c${criteria.length + 1}`, label: "", maxScore: 10 }])}
+            onClick={() => setCriteria([...criteria, { key: `c${criteria.length + 1}`, label: "", description: "", maxScore: 10 }])}
             className={`flex items-center gap-1 bg-secondary px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground ${R.control}`}
           >
             <Plus className="h-3 w-3" /> 항목 추가

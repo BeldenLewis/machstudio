@@ -12,8 +12,8 @@ const state = {
   competitionName: "테스트 대회",
   round: { id: "round-1", kind: "prelim", name: "예선" },
   criteria: [
-    { key: "creativity", label: "창의성", maxScore: 40 },
-    { key: "impact", label: "임팩트", maxScore: 30 },
+    { key: "creativity", label: "창의성", description: "안무 구성이 얼마나 새로운가", maxScore: 40 },
+    { key: "impact", label: "임팩트", description: "", maxScore: 30 },
   ],
   criteriaMax: 70,
   entries: [{ id: "entry-1", entryNo: "1", title: "참가작 1", teamName: "팀 1", summary: null, media: [] }],
@@ -83,6 +83,14 @@ describe("심사 화면 자동저장", () => {
     act(() => { slide(impact, "7"); });
 
     expect(el.textContent).toContain("합계 19 / 70");
+  });
+
+  it("항목 설명을 심사위원에게 보여준다 — 이름만으로는 저마다 다르게 해석한다", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ total: 0, submitted: false }) }));
+    const el = render();
+    expect(el.textContent).toContain("안무 구성이 얼마나 새로운가");
+    // 설명이 빈 항목에까지 빈 줄을 만들지 않는다.
+    expect(el.querySelectorAll("p.whitespace-pre-line").length).toBe(1);
   });
 
   it("모든 항목을 채우기 전에는 제출할 수 없다", () => {

@@ -96,7 +96,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
       judgeWeight: round.judgeWeight,
       criteria: normalizeCriteria(round.judgeCriteria).map((c) => ({
         name: c.label,
-        description: "",
+        description: c.description,
         points: c.maxScore,
       })),
     })),

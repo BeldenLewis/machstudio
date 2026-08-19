@@ -23,8 +23,10 @@ const ENTRIES = [
 describe("심사 항목", () => {
   it("깨진 항목은 버리고 빠진 값은 기본값으로 채운다", () => {
     expect(normalizeCriteria([{ label: "창의성" }, null, "x", { key: "b", maxScore: -3 }])).toEqual([
-      { key: "c1", label: "창의성", maxScore: 10 },
-      { key: "b", label: "b", maxScore: 10 },
+      // 설명은 선택 항목이라 없으면 빈 문자열로 채운다 — undefined 를 그대로 두면
+      // 심사 화면과 공고에서 매번 타입 가드를 다시 써야 한다.
+      { key: "c1", label: "창의성", description: "", maxScore: 10 },
+      { key: "b", label: "b", description: "", maxScore: 10 },
     ]);
     expect(criteriaMaxTotal(CRITERIA)).toBe(100);
   });

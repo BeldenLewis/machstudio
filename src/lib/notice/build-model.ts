@@ -6,6 +6,7 @@
  */
 import { onAccentColor } from "@/lib/competition-render";
 import { NOTICE_SECTIONS, type NoticeCriterionItem, type NoticePageConfig, type NoticeSectionKey, type NoticeSelectionRound } from "./config";
+import { noticeStrings, type NoticeStrings } from "./strings";
 import type { NoticeCompetition, NoticeModel, NoticeRound, NoticeTocItem } from "./types";
 
 export interface BuildNoticeModelOptions {
@@ -14,16 +15,21 @@ export interface BuildNoticeModelOptions {
   isPreview: boolean;
 }
 
-/** 라운드에서 선발 방식 막대를 만든다 — 대중:심사 비율이 곧 막대다. */
-function selectionFromRounds(rounds: NoticeRound[]): NoticeSelectionRound[] {
+/**
+ * 라운드에서 선발 방식 막대를 만든다 — 대중:심사 비율이 곧 막대다.
+ *
+ * 라벨과 설명은 사전에서 온다(영어 대회 대응). 다만 **라운드 이름(title)은 그대로 둔다** —
+ * DB 에 있는 운영자의 글이라 우리가 번역할 자리가 아니다.
+ */
+function selectionFromRounds(rounds: NoticeRound[], t: NoticeStrings): NoticeSelectionRound[] {
   return rounds
     .filter((round) => round.publicWeight > 0 || round.judgeWeight > 0)
     .map((round) => ({
       title: round.name,
-      note: round.kind === "prelim" ? "본선 진출자를 정합니다" : "최종 순위를 정합니다",
+      note: round.kind === "prelim" ? t.roundNotePrelim : t.roundNoteFinal,
       bars: [
-        { label: "관람객 투표", percent: round.publicWeight },
-        { label: "심사단 점수", percent: round.judgeWeight },
+        { label: t.barPublic, percent: round.publicWeight },
+        { label: t.barJudge, percent: round.judgeWeight },
       ].filter((bar) => bar.percent > 0),
     }));
 }
@@ -48,10 +54,11 @@ export function buildNoticeModel(
   const sectionId = (base: string) => `${base}-${uid}`;
 
   const accent = competition.theme?.accentColor || "#6d28d9";
+  const t = noticeStrings(np.language);
 
   // auto 면 machstudio 안의 값을, manual 이면 공고에 적은 값을 쓴다.
   const selectionRounds =
-    np.selection.source === "manual" ? np.selection.rounds : selectionFromRounds(competition.rounds);
+    np.selection.source === "manual" ? np.selection.rounds : selectionFromRounds(competition.rounds, t);
   const criteriaItems =
     np.criteria.source === "manual" ? np.criteria.items : criteriaFromRounds(competition.rounds);
   const criteriaTotal = criteriaItems.reduce((sum, item) => sum + item.points, 0);
@@ -83,16 +90,16 @@ export function buildNoticeModel(
 
   const tocItems: NoticeTocItem[] = NOTICE_SECTIONS.filter((section) => show[section.key]).map((section) => {
     const cfg = np[section.key] as { title?: string };
-    return { id: `nt-${section.key}`, label: (cfg.title || "").trim() || section.label };
+    return { id: `nt-${section.key}`, label: (cfg.title || "").trim() || t.sectionLabel[section.key] };
   });
 
   // 접수 중이 아니면 버튼을 잠그고 이유를 적는다. 눌리지 않는 버튼만 두면 계속 누른다.
   const ctaEnabled = competition.canApply;
   const ctaLabel = ctaEnabled
-    ? np.hero.ctaLabel
+    ? np.hero.ctaLabel.trim() || t.ctaApply
     : competition.phase === "upcoming"
-      ? "접수 시작 전"
-      : "접수 마감";
+      ? t.ctaUpcoming
+      : t.ctaClosed;
   const ctaNote = ctaEnabled
     ? ""
     : competition.phase === "upcoming"
@@ -102,6 +109,7 @@ export function buildNoticeModel(
   return {
     competition,
     np,
+    t,
     uid,
     accent,
     onPrimary: onAccentColor(accent),

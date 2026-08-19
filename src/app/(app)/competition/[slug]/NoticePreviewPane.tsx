@@ -110,7 +110,15 @@ export default function NoticePreviewPane({
             직접 준다. 폭까지 줘야 하는 이유: overflow-x:hidden + overflow-y:auto 조합은
             CSS 규칙상 x 축이 auto 로 승격돼 가로 스크롤이 생긴다(실측 1311 > 652).
           */}
-          <div style={{ width: frameWidth * scale, height: contentHeight * scale, overflow: "hidden" }}>
+          {/*
+            가운데로 모은다. 모바일 프레임(390px)은 배율 상한이 1 이라 패널이 그보다 넓으면
+            축소되지 않고 폭이 남는데, 왼쪽에 붙여 두면 그 남는 폭이 오른쪽에만 검게 몰려
+            "화면 오른쪽이 잘렸다"로 보인다(실측: 패널 460px - 프레임 390px = 15%).
+          */}
+          <div
+            className="mx-auto"
+            style={{ width: frameWidth * scale, height: contentHeight * scale, overflow: "hidden" }}
+          >
             <div style={{ width: frameWidth, transform: `scale(${scale})`, transformOrigin: "top left" }}>
               <div ref={hostRef} />
             </div>

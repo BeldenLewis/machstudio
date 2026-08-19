@@ -22,7 +22,7 @@ export function renderToc(m: NoticeModel, onNavigate?: (sectionId: string) => vo
   if (m.tocItems.length < 2) return null;
   return h(
     "nav",
-    { class: "toc", "aria-label": "섹션 목차" },
+    { class: "toc", "aria-label": m.t.tocLabel },
     m.tocItems.map((item) => {
       const fullId = m.sectionId(item.id);
       return h(
