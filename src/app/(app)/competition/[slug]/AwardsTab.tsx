@@ -97,7 +97,8 @@ export default function AwardsTab({
   const published = !!publishedAt;
 
   return (
-    <div className="space-y-4">
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_460px]">
+      <div className="min-w-0 space-y-4">
       <ResultPublishCard
         competition={competition}
         publishedAt={publishedAt}
@@ -212,7 +213,72 @@ export default function AwardsTab({
           </button>
         )}
       </section>
+      </div>
+
+      <div className="min-w-0 xl:sticky xl:top-6 xl:self-start">
+        <AwardsPreviewPane competition={competition} publishedAt={publishedAt} />
+      </div>
     </div>
+  );
+}
+
+/**
+ * 우측 고정 미리보기 — 결과 페이지와 발표 화면을 번갈아 본다.
+ *
+ * **발표 화면은 리허설(가짜 결과)로 띄운다.** 진짜 결과로 돌리면 어드민 옆칸에 수상자
+ * 명단이 계속 떠 있게 된다 — 발표 전에 누가 지나가다 볼 수 있는 자리다.
+ * 결과 페이지는 공개 전에도 운영자만 볼 수 있다(결과 API 가 previewToken 을 확인한다) —
+ * 공개를 누른 뒤에야 처음 보면 오타를 고칠 자리가 없다.
+ */
+function AwardsPreviewPane({
+  competition,
+  publishedAt,
+}: {
+  competition: CompetitionDetail;
+  publishedAt: string | null;
+}) {
+  const [view, setView] = useState<"result" | "show">("result");
+
+  const chip = (active: boolean) =>
+    `px-2 py-0.5 text-[11px] transition-colors ${R.control} ${
+      active ? "bg-violet-500 text-white" : "bg-secondary text-muted-foreground hover:text-foreground"
+    }`;
+
+  const controls = (
+    <div className="flex items-center gap-1">
+      <button onClick={() => setView("result")} className={chip(view === "result")}>결과 페이지</button>
+      <button onClick={() => setView("show")} className={chip(view === "show")} disabled={!competition.showToken}>
+        발표 화면
+      </button>
+    </div>
+  );
+
+  if (view === "show") {
+    if (!competition.showToken) {
+      return <p className="text-xs text-muted-foreground">발표 링크가 아직 없어요. 왼쪽에서 발급하세요.</p>;
+    }
+    return (
+      <PreviewFrame
+        title="발표 화면"
+        src={`/show/${competition.showToken}?rehearsal=1`}
+        note="리허설(가짜 결과)로 연출만 확인해요"
+        openLabel="발표 화면 열기"
+        controls={controls}
+      />
+    );
+  }
+
+  if (!competition.previewToken) {
+    return <p className="text-xs text-muted-foreground">미리보기 링크가 아직 없어요. 배포 탭에서 발급하세요.</p>;
+  }
+  return (
+    <PreviewFrame
+      title="결과 페이지"
+      src={`/cp/${competition.previewToken}?view=result`}
+      note={publishedAt ? "지금 관람객에게 보이는 화면" : "공개 전이라 운영자만 볼 수 있어요"}
+      reloadKey={publishedAt ?? "none"}
+      controls={controls}
+    />
   );
 }
 
@@ -293,20 +359,6 @@ function ResultPublishCard({
         </p>
       )}
 
-      {/*
-        결과 페이지는 **공개 전에도** 운영자만 미리 볼 수 있다(결과 API 가 previewToken 을
-        확인한다). 공개를 누른 뒤에야 처음 보면 오타를 고칠 자리가 없다.
-      */}
-      {competition.previewToken && (
-        <div className="mt-4 border-t border-border pt-4">
-          <PreviewFrame
-            title="결과 페이지 미리보기"
-            src={`/cp/${competition.previewToken}?view=result`}
-            note={published ? "지금 관람객에게 보이는 화면" : "공개 전이라 운영자만 볼 수 있어요"}
-            reloadKey={`${publishedAt ?? "none"}-${assignedCount}`}
-          />
-        </div>
-      )}
     </section>
   );
 }
@@ -459,20 +511,6 @@ function ShowCard({
             리허설은 <b>가짜 결과</b>로 돕니다 — 연습 자리에 스태프만 있는 경우는 거의 없어서, 진짜 명단을 띄우면 그걸로 발표가 끝나요.
           </p>
 
-          {/*
-            **리허설로 띄운다.** 진짜 결과로 미리보기를 돌리면 어드민 화면 옆칸에 수상자
-            명단이 그대로 떠 있게 된다 — 발표 전에 누가 지나가다 볼 수 있는 자리다.
-            연출을 확인하는 게 목적이라 가짜 결과로 충분하다.
-          */}
-          <div className="border-t border-border pt-4">
-            <PreviewFrame
-              title="발표 화면 미리보기"
-              src={`/show/${competition.showToken}?rehearsal=1`}
-              note="리허설(가짜 결과)로 연출만 확인해요"
-              reloadKey={`${config.mode}-${config.showMedia}-${config.showScores}-${config.footnote}`}
-              openLabel="발표 화면 열기"
-            />
-          </div>
         </div>
       ) : (
         <p className="mt-4 border-t border-border pt-4 text-xs text-muted-foreground">

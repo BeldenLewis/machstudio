@@ -87,28 +87,85 @@ export default function VoteSettingsTab({
   };
 
   return (
-    <div className="space-y-4">
-      {rounds.map((round) => (
-        <RoundCard
-          key={round.id}
-          round={round}
-          previewToken={competition.previewToken}
-          saving={saving === round.id}
-          onPatch={(body, message) => patchRound(round, body, message)}
-        />
-      ))}
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_460px]">
+      {/* min-w-0 — 그리드 항목은 기본이 min-width:auto 라 안쪽이 칸보다 넓으면 삐져나간다. */}
+      <div className="min-w-0 space-y-4">
+        {rounds.map((round) => (
+          <RoundCard
+            key={round.id}
+            round={round}
+            saving={saving === round.id}
+            onPatch={(body, message) => patchRound(round, body, message)}
+          />
+        ))}
+      </div>
+
+      <div className="min-w-0 xl:sticky xl:top-6 xl:self-start">
+        <VotePreviewPane competition={competition} rounds={rounds} />
+      </div>
     </div>
+  );
+}
+
+/**
+ * 우측 고정 미리보기 — 라운드와 투표 창 상태를 여기서 고른다.
+ *
+ * 라운드 카드마다 미리보기를 하나씩 두면 화면이 길어져 정작 **설정과 결과를 나란히 볼 수
+ * 없다**(스크롤해야 만난다). 공고 탭과 같은 배치로, 왼쪽에서 고치고 오른쪽에서 바로 본다.
+ */
+function VotePreviewPane({ competition, rounds }: { competition: CompetitionDetail; rounds: RoundDto[] }) {
+  const [kind, setKind] = useState<"prelim" | "final">("prelim");
+  const [state, setState] = useState<"open" | "closed">("open");
+  const round = rounds.find((r) => r.kind === kind);
+
+  if (!competition.previewToken) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        미리보기 링크가 아직 없어요. <b>배포</b> 탭에서 발급하면 여기서 투표 화면을 볼 수 있습니다.
+      </p>
+    );
+  }
+
+  const chip = (active: boolean) =>
+    `px-2 py-0.5 text-[11px] transition-colors ${R.control} ${
+      active ? "bg-violet-500 text-white" : "bg-secondary text-muted-foreground hover:text-foreground"
+    }`;
+
+  return (
+    <PreviewFrame
+      title="투표 화면"
+      src={`/cp/${competition.previewToken}?view=vote&round=${kind}&state=${state}`}
+      note={
+        state === "open"
+          ? "실제로 안 열렸어도 열린 화면으로 보여요 · 눌러도 표는 안 들어가요"
+          : "지금 설정대로면 방문자에게 보이는 화면"
+      }
+      reloadKey={round ? `${round.voteEnabled}-${round.maxVotesPerVoter}-${round.entryOrder}-${round.showLiveTally}-${round.allowVoteUndo}-${round.name}` : kind}
+      controls={
+        <div className="flex flex-wrap items-center gap-1">
+          {rounds.map((r) => (
+            <button key={r.id} onClick={() => setKind(r.kind)} className={chip(kind === r.kind)}>
+              {r.name}
+            </button>
+          ))}
+          <span className="mx-0.5 text-muted-foreground">·</span>
+          {([["open", "열린 화면"], ["closed", "지금 상태"]] as const).map(([value, label]) => (
+            <button key={value} onClick={() => setState(value)} className={chip(state === value)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      }
+    />
   );
 }
 
 function RoundCard({
   round,
-  previewToken,
   saving,
   onPatch,
 }: {
   round: RoundDto;
-  previewToken: string | null;
   saving: boolean;
   onPatch: (body: Record<string, unknown>, message?: string) => Promise<boolean>;
 }) {
@@ -279,22 +336,6 @@ function RoundCard({
         </p>
       </motion.div>
 
-      {/*
-        **이 설정이 실제로 어떤 화면이 되는지 여기서 본다.**
-        투표 화면은 참가작·득표를 실행 시점에 가져오므로 미리보기가 곧 실물이다 — 다만
-        preview 로 띄워 표는 들어가지 않는다. 설정은 즉시 저장되니 위 값을 바꾼 뒤
-        다시 불러오기(↻)를 누르면 그 설정으로 보인다.
-      */}
-      {previewToken && (
-        <div className="mt-4 border-t border-border pt-4">
-          <PreviewFrame
-            title={`${round.name} 투표 화면 미리보기`}
-            src={`/cp/${previewToken}?view=vote&round=${round.kind}`}
-            note="눌러도 표는 안 들어가요"
-            reloadKey={`${round.voteEnabled}-${round.maxVotesPerVoter}-${round.entryOrder}-${round.showLiveTally}-${round.allowVoteUndo}`}
-          />
-        </div>
-      )}
     </section>
   );
 }

@@ -17,6 +17,13 @@ interface BootPayload {
   origin: string;
   round: "prelim" | "final";
   preview?: boolean;
+  /**
+   * 미리보기에서만 넘어온다. 서버가 이 토큰을 확인해 투표 창을 열린 것으로 보여 주고,
+   * 공개된 참가작이 없으면 샘플을 채운다 — 접수 전에도 화면을 볼 수 있게.
+   */
+  previewToken?: string;
+  /** "open" 이면 닫혀 있어도 열린 화면으로 그린다. 닫힌 화면도 봐야 하므로 값으로 구분한다. */
+  previewState?: "open" | "closed";
 }
 
 interface MediaItem {
@@ -124,7 +131,9 @@ async function start(payload: BootPayload) {
   let state: StateDto;
   try {
     const res = await fetch(
-      `${payload.origin}/api/competitions/${payload.competitionId}/votes?round=${payload.round}&deviceId=${encodeURIComponent(deviceId)}`,
+      `${payload.origin}/api/competitions/${payload.competitionId}/votes?round=${payload.round}&deviceId=${encodeURIComponent(deviceId)}` +
+        (payload.previewToken ? `&previewToken=${encodeURIComponent(payload.previewToken)}` : "") +
+        (payload.previewState ? `&state=${payload.previewState}` : ""),
       { cache: "no-store" },
     );
     if (!res.ok) throw new Error(String(res.status));

@@ -40,6 +40,26 @@ async function loadContext(competitionId: string, roundKind: string) {
   return { competition, round };
 }
 
+/**
+ * 미리보기 전용 샘플 참가작.
+ *
+ * 접수 전에는 공개된 참가작이 0건이라 투표 화면이 "아직 공개된 참가작이 없어요" 한 줄만
+ * 그린다 — 정작 확인하고 싶은 카드 배치·영상 썸네일·투표 버튼을 **행사 당일까지 볼 수 없다**.
+ * 발표 화면의 리허설(가짜 결과)과 같은 취지로, 미리보기에서만 가짜 팀을 채운다.
+ * id 에 접두사를 붙여 실제 참가작 id 와 절대 섞이지 않게 한다(투표 POST 는 어차피 막힌다).
+ */
+const SAMPLE_ENTRIES = Array.from({ length: 6 }, (_, i) => ({
+  id: `preview-sample-${i + 1}`,
+  entryNo: String(i + 1).padStart(3, "0"),
+  title: `연습용 크루 ${i + 1}`,
+  teamName: `Sample Crew ${i + 1}`,
+  summary:
+    i % 2 === 0
+      ? "미리보기용 가짜 참가작이에요. 실제 접수가 시작되면 이 자리에 진짜 팀이 들어옵니다."
+      : "카드 배치와 버튼 위치를 확인하는 용도예요.",
+  media: [],
+}));
+
 /** 투표 화면이 처음 뜰 때 — 참가작 목록 + 내가 이미 찍은 것 + 남은 표. */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -50,6 +70,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const ctx = await loadContext(id, roundKind);
   if ("error" in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status, headers: CORS_HEADERS });
   const { competition, round } = ctx;
+
+  /*
+   * 미리보기 — previewToken 이 맞을 때만 열린다(/cp 와 결과 API 가 쓰는 것과 같은 토큰).
+   * 여기서 하는 일은 **보여주는 것뿐**이다: 투표 창을 열린 것으로 보이게 하고, 공개된
+   * 참가작이 없으면 가짜 팀을 채운다. 표는 POST 가 따로 막으므로 이 경로로 득표가 늘지 않는다.
+   */
+  const previewToken = url.searchParams.get("previewToken");
+  const isPreview = !!previewToken && !!competition.previewToken && previewToken === competition.previewToken;
+  // 닫힌 화면도 확인해야 하므로 강제로 여는 건 state=open 일 때만.
+  const forceOpen = isPreview && url.searchParams.get("state") === "open";
 
   const window = resolveVoteWindow(round);
   const ip = getClientIp(request);
@@ -107,9 +137,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         voterIdentity: round.voterIdentity,
         showLiveTally: round.showLiveTally,
       },
-      open: window.open,
-      message: VOTE_WINDOW_MESSAGE[window.reason],
-      entries: ordered.map((entry) => ({
+      open: forceOpen || window.open,
+      message: forceOpen ? "" : VOTE_WINDOW_MESSAGE[window.reason],
+      /*
+        샘플은 **열린 화면(state=open)에서만** 채운다. "지금 상태" 미리보기는 방문자가
+        보는 그대로여야 하므로, 참가작이 없으면 없는 대로 "아직 공개된 참가작이 없어요"가
+        나와야 한다 — 거기에 가짜 팀을 섞으면 미리보기가 다시 거짓말을 한다.
+      */
+      entries: (ordered.length === 0 && forceOpen ? SAMPLE_ENTRIES : ordered).map((entry) => ({
         id: entry.id,
         entryNo: entry.entryNo,
         title: entry.title,
