@@ -72,13 +72,47 @@ function isSvg(url: string): boolean {
 }
 
 /**
+ * Supabase 이미지 변환을 쓸 수 있는가.
+ *
+ * **이 기능은 유료 플랜에서만 켜진다.** 안 켜진 프로젝트에서 변환 URL 을 부르면 이미지가
+ * 아니라 403 JSON 이 온다:
+ *
+ *   {"statusCode":"403","error":"FeatureNotEnabled","message":"feature not enabled for this tenant"}
+ *
+ * 그러면 업로드는 멀쩡한데(원본 URL 은 200) **화면에서는 아무것도 안 보인다.** 실제로
+ * 공고 히어로 배경이 그랬고, 같은 이유로 웨비나 랜딩 히어로·연사 사진·라이브 화면까지
+ * 전부 안 나오고 있었다 — 업로드가 성공하니 원인이 눈에 안 띈다.
+ *
+ * 그래서 **기본값은 꺼짐**이다. 켠 프로젝트에서만 환경변수로 켠다.
+ * 끈 상태에서는 원본 URL 을 그대로 쓴다 — 용량은 크지만 **보이기는 한다**.
+ */
+const TRANSFORM_ENABLED = process.env.NEXT_PUBLIC_SUPABASE_IMAGE_TRANSFORM === "on";
+
+/**
  * 표시용 변환 URL. 바꿀 수 없는 입력이면 **원본을 그대로 돌려준다**(빈 화면보다 낫다):
+ *   · 변환 기능이 꺼져 있음(기본값 — 위 주석 참고)
  *   · 우리 Storage 공개 URL 이 아님(어드민이 붙여넣은 외부 이미지 등)
  *   · 이미 변환 URL(중복 변환 방지)
  *   · SVG
  *   · 빈 값
  */
 export function transformedImageUrl(
+  url: string | null | undefined,
+  preset: ImageTransform,
+): string {
+  // 게이트만 여기서 본다 — 변환 규칙 자체는 buildTransformUrl 이 갖는다(테스트가 그쪽을 찌른다).
+  if (!TRANSFORM_ENABLED) return typeof url === "string" ? url.trim() : "";
+  return buildTransformUrl(url, preset);
+}
+
+/**
+ * 변환 URL 만드는 규칙 — **게이트와 분리해 둔다.**
+ *
+ * 변환을 꺼 두면 transformedImageUrl 은 원본을 그대로 돌려주므로, 그 함수로는 크롭 사고
+ * 방지(resize=contain) 같은 규칙을 검사할 수 없다. 플랜을 올려 기능을 켜는 날 그 규칙이
+ * 살아 있어야 하므로, 규칙은 이 함수에 두고 테스트가 직접 찌른다.
+ */
+export function buildTransformUrl(
   url: string | null | undefined,
   preset: ImageTransform,
 ): string {
