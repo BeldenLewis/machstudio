@@ -18,6 +18,7 @@ import { escapeHtml } from "@/lib/competition-render";
 import { resolveCompetitionStatus, type CompetitionPhase } from "@/lib/competition-status";
 import { COMPETITION_RUNTIME_JS } from "@/generated/competition-runtime";
 import { COMPETITION_RESULT_RUNTIME_JS } from "@/generated/competition-result-runtime";
+import { COMPETITION_VOTE_RUNTIME_JS } from "@/generated/competition-vote-runtime";
 
 const PHASES: CompetitionPhase[] = ["upcoming", "recruiting", "prelim", "judging", "final", "announced", "closed"];
 
@@ -60,6 +61,33 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
 <div class="mc-wrap"><div data-mach-competition-result></div></div>
 <script>${COMPETITION_RESULT_RUNTIME_JS}</script>
 <script>__msCompetitionResult.boot(${jsonForScript({ competitionId: competition.id, origin, previewToken: token })});</script>
+</body>
+</html>`);
+  }
+
+  /*
+   * ?view=vote&round=prelim|final — 투표 화면.
+   *
+   * 참가작·득표는 런타임이 실행 시점에 /votes 로 가져온다(설정 스냅샷을 싣지 않는다).
+   * 그래서 투표 설정을 바꾸고 미리보기를 다시 부르면 바로 그 설정으로 보인다.
+   * preview:true 를 넘겨 실제로는 표가 들어가지 않게 한다.
+   */
+  if (url.searchParams.get("view") === "vote") {
+    const round = url.searchParams.get("round") === "final" ? "final" : "prelim";
+    return htmlResponse(`<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>${escapeHtml(competition.name)} — 투표 미리보기</title>
+<style>body{margin:0;background:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
+.mc-wrap{max-width:1100px;margin:0 auto;padding:0 20px 60px}</style>
+</head>
+<body>
+<div class="mc-wrap"><div data-mach-competition-vote></div></div>
+<script>${COMPETITION_VOTE_RUNTIME_JS}</script>
+<script>__msCompetitionVote.boot(${jsonForScript({ competitionId: competition.id, origin, round, preview: true })});</script>
 </body>
 </html>`);
   }
