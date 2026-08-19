@@ -48,10 +48,23 @@ export function renderHero(m: NoticeModel, onApply: () => void): HTMLElement {
   const media = m.np.hero.media;
   const bg = m.np.sectionBg.hero;
 
-  const mediaNode =
+  /**
+   * 배경은 **감싸는 상자 + 안쪽 미디어**다 — 껍데기 CSS 가 그 구조를 전제로 쓰였다:
+   *
+   *   .hero-media          { position:absolute; inset:0; overflow:hidden }
+   *   .hero-media img      { width:100%; height:100%; object-fit:cover }
+   *   .hero-media.has-media::after { …어두운 스크림… }
+   *
+   * 예전에는 class="hero-media" 를 **이미지에 직접** 걸었다. 그러면 자손 선택자가 하나도
+   * 안 걸려서 (1) 크기·object-fit 이 안 먹고(실측: 1265×844 를 fill 로 늘림, 히어로는 720)
+   * (2) 스크림이 아예 안 생겨 밝은 사진 위 흰 글자가 읽히지 않는다. 배경을 올려도
+   * "적용이 안 된 것처럼" 보이던 이유다. 랜딩과 같은 구조로 맞춘다.
+   */
+  const mediaNode = h(
+    "div",
+    { class: media ? "hero-media has-media" : "hero-media", "aria-hidden": "true" },
     media?.type === "image"
       ? h("img", {
-          class: "hero-media",
           src: transformedImageUrl(media.url, IMAGE_PRESETS.heroBackground),
           alt: "",
           loading: "eager",
@@ -59,15 +72,14 @@ export function renderHero(m: NoticeModel, onApply: () => void): HTMLElement {
         })
       : media?.type === "video"
         ? h("video", {
-            class: "hero-media",
             src: media.url,
             autoplay: "",
             muted: "",
             loop: "",
             playsinline: "",
-            "aria-hidden": "true",
           })
-        : null;
+        : null,
+  );
 
   const cta = h(
     "button",
