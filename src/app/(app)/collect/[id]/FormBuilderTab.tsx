@@ -15,6 +15,11 @@ import { useAutosave } from "@/components/ui/use-autosave";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { btnCls, R, FINISH } from "@/components/ui/primitives";
 import { CollectFieldCard, keyFromLabel } from "@/components/form-builder/CollectFieldCard";
+import {
+  CollectBranchEditor,
+  branchOptionValues,
+  reconcileBranchGroups,
+} from "@/components/form-builder/CollectBranchEditor";
 import { CollectFormRuntime } from "@/components/form-builder/CollectFormRuntime";
 import { CollectFormSections } from "@/components/form-builder/CollectFormSections";
 import {
@@ -64,7 +69,25 @@ export default function FormBuilderTab({
 
   const patch = (next: Partial<CollectFormConfig>) => setConfig((c) => ({ ...c, ...next }));
   const setFields = (updater: CollectField[] | ((prev: CollectField[]) => CollectField[])) =>
-    setConfig((c) => ({ ...c, fields: typeof updater === "function" ? updater(c.fields) : updater }));
+    setConfig((c) => {
+      const fields = typeof updater === "function" ? updater(c.fields) : updater;
+      if (!c.branch.enabled) return { ...c, fields };
+
+      const before = c.fields.find((field) => field.key === c.branch.fieldKey);
+      const after = fields.find((field) => field.id === before?.id || field.key === c.branch.fieldKey);
+      if (!before || !after) return { ...c, fields };
+      const previousValues = branchOptionValues(before);
+      const nextValues = branchOptionValues(after);
+      return {
+        ...c,
+        fields,
+        branch: {
+          ...c.branch,
+          fieldKey: after.key,
+          groups: reconcileBranchGroups(c.branch, previousValues, nextValues),
+        },
+      };
+    });
 
   const rows = useMemo(() => withRowKeys(config.fields), [config.fields]);
 
@@ -104,24 +127,49 @@ export default function FormBuilderTab({
             </button>
           )}
           autoFocusNewRow
-          renderRow={({ item, handle, removeButton }) => (
-            <CollectFieldCard
-              field={item}
-              setFields={setFields}
-              handle={handle}
-              removeButton={removeButton}
-              isBranchKey={config.branch.enabled && config.branch.fieldKey === item.key}
-              onMakeBranch={item.type === "select"
-                ? (on) => patch({
-                    branch: on
-                      ? { enabled: true, fieldKey: item.key, groups: config.branch.groups }
-                      : { ...config.branch, enabled: false },
-                  })
-                : null}
-              // 자기 자신은 빼고 본다 — 안 그러면 모든 항목이 "중복" 이라고 나온다.
-              takenKeys={new Set(config.fields.filter((f) => f.id !== item.id).map((f) => f.key))}
-            />
-          )}
+          renderRow={({ item, handle, removeButton }) => {
+            const isBranchKey = config.branch.enabled && config.branch.fieldKey === item.key;
+            return (
+              <div className="space-y-2">
+                <CollectFieldCard
+                  field={item}
+                  setFields={setFields}
+                  handle={handle}
+                  removeButton={removeButton}
+                  isBranchKey={isBranchKey}
+                  onMakeBranch={item.type === "select"
+                    ? (on) => patch({
+                        branch: on
+                          ? {
+                              enabled: true,
+                              fieldKey: item.key,
+                              groups: reconcileBranchGroups(
+                                {
+                                  enabled: true,
+                                  fieldKey: item.key,
+                                  groups: config.branch.fieldKey === item.key ? config.branch.groups : [],
+                                },
+                                config.branch.fieldKey === item.key ? branchOptionValues(item) : [],
+                                branchOptionValues(item),
+                              ),
+                            }
+                          : { ...config.branch, enabled: false },
+                      })
+                    : null}
+                  // 자기 자신은 빼고 본다 — 안 그러면 모든 항목이 "중복" 이라고 나온다.
+                  takenKeys={new Set(config.fields.filter((f) => f.id !== item.id).map((f) => f.key))}
+                />
+                {isBranchKey && (
+                  <CollectBranchEditor
+                    trigger={item}
+                    branch={config.branch}
+                    allFields={config.fields}
+                    onChange={(branch) => patch({ branch })}
+                  />
+                )}
+              </div>
+            );
+          }}
         />
 
         {/* 항목 아래에 나머지 설정 — 순서가 곧 폼이 그려지는 순서다(개요 → 항목 → 안내 → 동의). */}
