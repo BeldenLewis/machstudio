@@ -7,6 +7,7 @@ import {
   DEFAULT_COMPETITION_THEME,
   normalizeCompetitionConfig,
 } from "@/lib/competition-config";
+import { DEFAULT_ROUND_NAME } from "@/lib/competition-status";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -84,8 +85,8 @@ export async function POST(request: Request) {
     // 예선·본선 라운드를 함께 만든다. 라운드가 없으면 투표 설정 화면이 빈 껍데기가 된다.
     await prisma.competitionRound.createMany({
       data: [
-        { competitionId: competition.id, kind: "prelim", name: "예선", sortOrder: 0, entryOrder: "random" },
-        { competitionId: competition.id, kind: "final", name: "본선", sortOrder: 1, entryOrder: "submitted" },
+        { competitionId: competition.id, kind: "prelim", name: DEFAULT_ROUND_NAME.prelim, sortOrder: 0, entryOrder: "random" },
+        { competitionId: competition.id, kind: "final", name: DEFAULT_ROUND_NAME.final, sortOrder: 1, entryOrder: "submitted" },
       ],
     });
 

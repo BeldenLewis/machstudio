@@ -5,6 +5,7 @@
  * 섹션 노출(이중 게이트), auto/manual 해소, CTA 상태 문구가 전부 이 파일의 일이다.
  */
 import { onAccentColor } from "@/lib/competition-render";
+import { DEFAULT_ROUND_NAME } from "@/lib/competition-status";
 import { NOTICE_SECTIONS, type NoticeCriterionItem, type NoticePageConfig, type NoticeSectionKey, type NoticeSelectionRound } from "./config";
 import { noticeStrings, type NoticeStrings } from "./strings";
 import type { NoticeCompetition, NoticeModel, NoticeRound, NoticeTocItem } from "./types";
@@ -16,16 +17,28 @@ export interface BuildNoticeModelOptions {
 }
 
 /**
- * 라운드에서 선발 방식 막대를 만든다 — 대중:심사 비율이 곧 막대다.
+ * 공고에 나갈 라운드 이름.
  *
- * 라벨과 설명은 사전에서 온다(영어 대회 대응). 다만 **라운드 이름(title)은 그대로 둔다** —
- * DB 에 있는 운영자의 글이라 우리가 번역할 자리가 아니다.
+ * 대회를 만들 때 우리가 "예선"/"본선" 을 넣어 둔다. 그 상태 그대로면 **우리 글**이므로
+ * 공고 언어를 따라간다 — 안 그러면 영문 공고에 그 두 글자만 한글로 남는다(실제로 그랬고,
+ * 운영자 눈에는 하드코딩으로 보인다). 운영자가 한 번이라도 이름을 바꿨다면 그건 운영자의
+ * 글이니 손대지 않는다.
+ */
+function roundDisplayName(round: NoticeRound, t: NoticeStrings): string {
+  const untouched = round.name === DEFAULT_ROUND_NAME[round.kind === "final" ? "final" : "prelim"];
+  if (!untouched) return round.name;
+  return round.kind === "final" ? t.roundNameFinal : t.roundNamePrelim;
+}
+
+/**
+ * 라운드에서 선발 방식 막대를 만든다 — 대중:심사 비율이 곧 막대다.
+ * 라벨과 설명은 사전에서 온다(영어 대회 대응).
  */
 function selectionFromRounds(rounds: NoticeRound[], t: NoticeStrings): NoticeSelectionRound[] {
   return rounds
     .filter((round) => round.publicWeight > 0 || round.judgeWeight > 0)
     .map((round) => ({
-      title: round.name,
+      title: roundDisplayName(round, t),
       note: round.kind === "prelim" ? t.roundNotePrelim : t.roundNoteFinal,
       bars: [
         { label: t.barPublic, percent: round.publicWeight },

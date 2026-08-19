@@ -14,7 +14,7 @@ import {
   type NoticeSectionKey,
 } from "@/lib/notice/config";
 import { noticeStrings } from "@/lib/notice/strings";
-import { resolveCompetitionStatus } from "@/lib/competition-status";
+import { DEFAULT_ROUND_NAME, resolveCompetitionStatus } from "@/lib/competition-status";
 import type { NoticeCompetition } from "@/lib/notice/types";
 import NoticePreviewPane from "./NoticePreviewPane";
 import { AddRow, HeadFields, Row, SectionCard, moveItem } from "./NoticeSectionEditors";
@@ -210,9 +210,10 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
               </button>
             ))}
             <span className="text-[11px] text-muted-foreground">
-              신청 버튼·카운트다운 단위·비율 라벨처럼 <b>우리가 자동으로 넣는 문구</b>만 바뀌어요.
-              라운드 이름과 심사 항목 이름은 설정에 적힌 그대로 나가니, 다른 언어로 쓰려면
-              해당 섹션을 “직접 입력”으로 바꾸고 <b>설정값 불러오기</b>로 복사해 고치세요.
+              신청 버튼·카운트다운 단위·비율 라벨처럼 <b>우리가 자동으로 넣는 문구</b>가 바뀌어요.
+              대회를 만들 때 넣어 둔 라운드 이름(예선·본선)도 함께 바뀝니다 — 투표 설정 탭에서
+              직접 바꾼 이름은 그대로 두고요. <b>심사 항목 이름</b>은 심사단 탭에 적으신 그대로
+              나가니, 그건 심사단 탭에서 고쳐 주세요.
             </span>
           </div>
         </section>
@@ -304,11 +305,21 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
             <textarea value={np.hero.subtitle} onChange={(e) => update({ hero: { ...np.hero, subtitle: e.target.value } })}
               rows={2} placeholder="부제 (비우면 대회 설명 첫 줄)" className={`${FIELD_CLS} h-auto py-2`} />
 
-            <div className="grid gap-1.5 sm:grid-cols-2">
-              <input value={np.hero.ctaLabel} onChange={(e) => update({ hero: { ...np.hero, ctaLabel: e.target.value } })}
-                placeholder="신청 버튼 문구" className={`${FIELD_CLS} h-8`} />
-              <input value={np.hero.secondaryLabel} onChange={(e) => update({ hero: { ...np.hero, secondaryLabel: e.target.value } })}
-                placeholder="보조 버튼 문구 (비우면 안 보임)" className={`${FIELD_CLS} h-8`} />
+            {/*
+              열 이름을 띄운다. placeholder 는 **채우고 나면 사라져서** 어느 칸이 어느 버튼인지
+              알 수 없다 — 실제로 두 칸을 헷갈려 값을 바꿔 넣은 화면을 봤다.
+            */}
+            <div className="space-y-1.5">
+              <div className="grid gap-1.5 text-[10px] font-medium text-muted-foreground sm:grid-cols-2">
+                <span>주 버튼 — 신청 폼을 엽니다</span>
+                <span>보조 버튼 — 첫 섹션으로 이동 (비우면 안 보임)</span>
+              </div>
+              <div className="grid gap-1.5 sm:grid-cols-2">
+                <input value={np.hero.ctaLabel} onChange={(e) => update({ hero: { ...np.hero, ctaLabel: e.target.value } })}
+                  placeholder="예: Apply now" className={`${FIELD_CLS} h-8`} />
+                <input value={np.hero.secondaryLabel} onChange={(e) => update({ hero: { ...np.hero, secondaryLabel: e.target.value } })}
+                  placeholder="예: See the schedule" className={`${FIELD_CLS} h-8`} />
+              </div>
             </div>
 
             {/*
@@ -321,6 +332,11 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
               <span className="text-xs font-medium text-muted-foreground">
                 접수 전 · 마감 후 문구 <span className="font-normal">— 비우면 언어에 맞는 기본 문구</span>
               </span>
+              <div className="grid gap-1.5 text-[10px] font-medium text-muted-foreground sm:grid-cols-[64px_1fr_1fr]">
+                <span />
+                <span>주 버튼 자리에 뜨는 문구 (잠김)</span>
+                <span>그 바로 아래 한 줄</span>
+              </div>
               {([
                 ["upcoming", "접수 전", "upcomingLabel", "upcomingNote"],
                 ["closed", "마감 후", "closedLabel", "closedNote"],
@@ -422,7 +438,11 @@ function SectionBody({
     return rounds
       .filter((round) => round.publicWeight > 0 || round.judgeWeight > 0)
       .map((round) => ({
-        title: round.name,
+        // auto 와 같은 규칙 — 우리가 넣어 둔 기본 이름이면 언어를 따르고, 운영자가 바꿨으면 그대로.
+        title:
+          round.name === DEFAULT_ROUND_NAME[round.kind === "final" ? "final" : "prelim"]
+            ? round.kind === "final" ? t.roundNameFinal : t.roundNamePrelim
+            : round.name,
         note: round.kind === "prelim" ? t.roundNotePrelim : t.roundNoteFinal,
         bars: [
           { label: t.barPublic, percent: round.publicWeight },

@@ -15,6 +15,13 @@
 import type { NoticeLanguage, NoticeSectionKey } from "./config";
 
 export interface NoticeStrings {
+  /**
+   * 선발 방식 — 라운드 이름.
+   * **대회를 만들 때 우리가 넣어 둔 기본 이름일 때만** 쓴다(DEFAULT_ROUND_NAME 과 비교).
+   * 운영자가 한 번이라도 바꿨다면 그건 운영자의 글이라 번역하지 않는다.
+   */
+  roundNamePrelim: string;
+  roundNameFinal: string;
   /** 선발 방식 — 라운드 종류별 한 줄 설명 */
   roundNotePrelim: string;
   roundNoteFinal: string;
@@ -37,6 +44,8 @@ export interface NoticeStrings {
 }
 
 const KO: NoticeStrings = {
+  roundNamePrelim: "예선",
+  roundNameFinal: "본선",
   roundNotePrelim: "본선 진출자를 정합니다",
   roundNoteFinal: "최종 순위를 정합니다",
   barPublic: "관람객 투표",
@@ -65,6 +74,8 @@ const KO: NoticeStrings = {
 };
 
 const EN: NoticeStrings = {
+  roundNamePrelim: "Preliminary",
+  roundNameFinal: "Finals",
   roundNotePrelim: "Decides who advances to the finals",
   roundNoteFinal: "Decides the final ranking",
   barPublic: "Audience vote",
