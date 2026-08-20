@@ -1,0 +1,83 @@
+import type { NoticeLanguage } from "@/lib/notice/config";
+
+/**
+ * 신청 폼에서 **시스템이 넣는 문구**의 언어별 사전.
+ *
+ * 운영자가 쓴 글(항목 이름·안내·동의 문구)은 여기 없다 — 여기 있는 건 우리가 대신 써 주는
+ * 것뿐이다: 파일 크기 안내, 유튜브 공개 설정 안내, 버튼, 오류 메시지.
+ *
+ * 왜 필요했나: 항목 이름은 영어로 바꿀 수 있는데 그 밑에 붙는 안내는 한글로 굳어 있어서,
+ * 영문 폼에 "Team image" 아래 "장당 4MB 이하, 최대 3장" 이 나왔다. 운영자가 손댈 수 없는
+ * 자리라 더 답답한 종류다(공고에서 겪은 것과 같은 문제).
+ */
+export interface CompetitionFormStrings {
+  required: string;
+  choosePlaceholder: string;
+  /** 이미지 항목 아래 안내. {max} 를 장수로 바꿔 쓴다. */
+  imageHint: (max: number) => string;
+  youtubeHint: string;
+  modalTitle: string;
+  submit: string;
+  submitting: string;
+  close: string;
+  consent: string;
+  terms: string;
+  agreeRequired: string;
+  submitted: string;
+  submitFailed: string;
+  networkError: string;
+  uploadFailed: string;
+  uploadNetworkError: string;
+  previewBanner: string;
+  previewSubmitted: string;
+  /** 접수 완료 문구에 붙는 참가번호 라벨 */
+  entryNoLabel: string;
+}
+
+const KO: CompetitionFormStrings = {
+  required: " (필수)",
+  choosePlaceholder: "선택해주세요",
+  imageHint: (max) => `장당 4MB 이하, 최대 ${max}장`,
+  youtubeHint: "비공개(Private) 영상은 심사·투표 화면에서 재생되지 않아요. 미등록(Unlisted) 또는 공개로 설정해주세요.",
+  modalTitle: "참가 신청",
+  submit: "신청서 제출",
+  submitting: "제출 중...",
+  close: "닫기",
+  consent: "동의",
+  terms: "약관",
+  agreeRequired: "개인정보 수집 및 이용에 동의해주세요.",
+  submitted: "신청이 접수되었어요.",
+  submitFailed: "접수에 실패했어요. 잠시 후 다시 시도해주세요.",
+  networkError: "네트워크 오류가 발생했어요.",
+  uploadFailed: "업로드에 실패했어요.",
+  uploadNetworkError: "업로드 중 네트워크 오류가 발생했어요.",
+  previewBanner: "미리보기입니다. 신청해도 저장되지 않아요.",
+  previewSubmitted: "미리보기라 저장되지 않았어요. 실제 배포 후에는 정상 접수됩니다.",
+  entryNoLabel: "참가번호",
+};
+
+const EN: CompetitionFormStrings = {
+  required: " (required)",
+  choosePlaceholder: "Please select",
+  imageHint: (max) => `Up to 4MB each, ${max} file${max > 1 ? "s" : ""} max`,
+  youtubeHint: "Private videos won't play on the judging and voting screens. Please set your video to Unlisted or Public.",
+  modalTitle: "Apply",
+  submit: "Submit application",
+  submitting: "Submitting…",
+  close: "Close",
+  consent: "Consent",
+  terms: "Terms",
+  agreeRequired: "Please agree to the collection and use of personal data.",
+  submitted: "Your application has been received.",
+  submitFailed: "Submission failed. Please try again in a moment.",
+  networkError: "A network error occurred.",
+  uploadFailed: "Upload failed.",
+  uploadNetworkError: "A network error occurred during upload.",
+  previewBanner: "This is a preview. Applications are not saved.",
+  previewSubmitted: "Not saved — this is a preview. Real submissions work once published.",
+  entryNoLabel: "Entry no.",
+};
+
+export function competitionFormStrings(language: NoticeLanguage): CompetitionFormStrings {
+  return language === "en" ? EN : KO;
+}
