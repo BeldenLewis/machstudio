@@ -9,6 +9,7 @@
  *
  * 전체 try/catch — 실패해도 호스트 페이지를 건드리지 않고 조용히 끝낸다.
  */
+import { competitionFormStrings } from "@/lib/competition-strings";
 import type { CompetitionConfig } from "@/lib/competition-config";
 import {
   buildCompetitionCss,
@@ -50,7 +51,14 @@ function warn(message: string, error?: unknown) {
   }
 }
 
+/**
+ * 시스템 문구 사전. **boot 에서 확정한다** — 이 런타임은 페이지당 한 번 뜨고 대회 하나만
+ * 그리므로 전역 하나로 충분하다. 기본값을 한국어로 두어, 혹시 boot 전에 불려도 안 깨진다.
+ */
+let t = competitionFormStrings("ko");
+
 export function boot(payload: BootPayload) {
+  t = competitionFormStrings(payload.config.language);
   try {
     render(payload);
   } catch (error) {
@@ -245,12 +253,12 @@ function bindImageInputs(form: HTMLFormElement, payload: BootPayload): Map<strin
           body.append("file", file);
           const res = await fetch(`${payload.origin}/api/competitions/${payload.competitionId}/entry-image`, { method: "POST", body });
           const data = await res.json().catch(() => ({}));
-          if (!res.ok) { alert(data.error || "업로드에 실패했어요."); continue; }
+          if (!res.ok) { alert(data.error || t.uploadFailed); continue; }
           current.push(data.url);
           uploaded.set(key, current);
           renderThumbs(gallery, key, uploaded);
         } catch {
-          alert("업로드 중 네트워크 오류가 발생했어요.");
+          alert(t.uploadNetworkError);
         }
       }
     });
@@ -295,7 +303,7 @@ function bindSubmit(
     if (!submitBtn || submitBtn.disabled) return;
 
     const privacy = form.querySelector<HTMLInputElement>("[data-mc-privacy]");
-    if (privacy && !privacy.checked) { show("error", "개인정보 수집 및 이용에 동의해주세요."); return; }
+    if (privacy && !privacy.checked) { show("error", t.agreeRequired); return; }
 
     const data: Record<string, string> = {};
     for (const field of payload.config.form.fields) {
@@ -323,13 +331,13 @@ function bindSubmit(
     );
 
     if (payload.preview) {
-      show("success", "미리보기라 저장되지 않았어요. 실제 배포 후에는 정상 접수됩니다.");
+      show("success", t.previewSubmitted);
       return;
     }
 
     submitBtn.disabled = true;
     const originalLabel = submitBtn.textContent;
-    submitBtn.textContent = "제출 중...";
+    submitBtn.textContent = t.submitting;
     try {
       const res = await fetch(`${payload.origin}/api/competitions/${payload.competitionId}/entries`, {
         method: "POST",
@@ -344,18 +352,18 @@ function bindSubmit(
       });
       const result = await res.json().catch(() => ({}));
       if (!res.ok) {
-        show("error", result.error || "접수에 실패했어요. 잠시 후 다시 시도해주세요.");
+        show("error", result.error || t.submitFailed);
         submitBtn.disabled = false;
         submitBtn.textContent = originalLabel;
         return;
       }
-      show("success", `${result.message || "신청이 접수되었어요."} (참가번호 ${result.entryNo})`);
+      show("success", `${result.message || t.submitted} (${t.entryNoLabel} ${result.entryNo})`);
       form.querySelectorAll("input,select,textarea,button").forEach((node) => {
         (node as HTMLInputElement).disabled = true;
       });
       setTimeout(close, 2500);
     } catch {
-      show("error", "네트워크 오류가 발생했어요.");
+      show("error", t.networkError);
       submitBtn.disabled = false;
       submitBtn.textContent = originalLabel;
     }

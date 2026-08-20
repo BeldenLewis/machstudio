@@ -8,6 +8,7 @@
  * 문자열 HTML 로 만드는 이유: 임베드 쪽은 React 가 없다. 양쪽이 공유하려면 최소 공통분모인
  * HTML 문자열이어야 한다. 사용자 입력은 전부 escapeHtml 을 통과한다(주입 방지).
  */
+import { competitionFormStrings } from "./competition-strings";
 import type { CompetitionConfig, CompetitionNoticeBlock } from "./competition-config";
 import type { CompetitionPhase } from "./competition-status";
 
@@ -225,10 +226,11 @@ export function renderNoticeHtml({ config, competitionName, phase, canApply, pre
  * renderNoticeHtml 을 공유하고 있다.
  */
 export function renderFormModalHtml(config: CompetitionConfig): string {
+  const t = competitionFormStrings(config.language);
   return `
     <div class="mc-modal-head">
-      <h3 class="mc-modal-title">${escapeHtml(config.form.title || "참가 신청")}</h3>
-      <button type="button" class="mc-modal-close" aria-label="닫기">&times;</button>
+      <h3 class="mc-modal-title">${escapeHtml(config.form.title || t.modalTitle)}</h3>
+      <button type="button" class="mc-modal-close" aria-label="${escapeHtml(t.close)}">&times;</button>
     </div>
     <div class="mc-modal-body">
       ${config.form.description ? `<p class="mc-hint" style="margin-bottom:14px">${escapeHtml(config.form.description)}</p>` : ""}
@@ -238,6 +240,8 @@ export function renderFormModalHtml(config: CompetitionConfig): string {
 
 /** 신청 폼 본문(모달 안). 파일·YouTube 항목은 런타임이 이벤트를 붙일 수 있게 data 속성을 단다. */
 export function renderFormFieldsHtml(config: CompetitionConfig): string {
+  // 시스템 문구는 사전에서 — 운영자가 손댈 수 없는 자리라 언어를 못 맞추면 방법이 없다.
+  const t = competitionFormStrings(config.language);
   const parts = config.form.fields
     .filter((f) => f.enabled)
     .map((field) => {
@@ -249,13 +253,13 @@ export function renderFormFieldsHtml(config: CompetitionConfig): string {
         const max = field.maxFiles ?? 3;
         return `<div class="mc-field">${label}
           <input type="file" accept="image/jpeg,image/png,image/webp" multiple ${common} data-mc-image data-mc-max="${max}" class="mc-input">
-          <p class="mc-hint">장당 4MB 이하, 최대 ${max}장</p>
+          <p class="mc-hint">${escapeHtml(t.imageHint(max))}</p>
           <div class="mc-files" data-mc-files></div></div>`;
       }
       if (field.type === "youtube") {
         return `<div class="mc-field">${label}
           <input type="url" ${common} class="mc-input" placeholder="${escapeHtml(field.placeholder || "https://youtube.com/watch?v=...")}">
-          <p class="mc-hint">비공개(Private) 영상은 심사·투표 화면에서 재생되지 않아요. 미등록(Unlisted) 또는 공개로 설정해주세요.</p></div>`;
+          <p class="mc-hint">${escapeHtml(t.youtubeHint)}</p></div>`;
       }
       if (field.type === "select" || field.type === "multiple") {
         const options = field.options
@@ -264,13 +268,13 @@ export function renderFormFieldsHtml(config: CompetitionConfig): string {
           .join("");
         return `<div class="mc-field">${label}
           <select ${common} class="mc-select" ${field.type === "multiple" ? "multiple" : ""}>
-            ${field.type === "select" ? '<option value="">선택해주세요</option>' : ""}${options}
+            ${field.type === "select" ? `<option value="">${escapeHtml(t.choosePlaceholder)}</option>` : ""}${options}
           </select></div>`;
       }
       if (field.type === "checkbox") {
         return `<div class="mc-field"><label class="mc-check"><input type="checkbox" ${common}><span>${escapeHtml(
           field.label,
-        )}${field.required ? " (필수)" : ""}</span></label></div>`;
+        )}${field.required ? t.required : ""}</span></label></div>`;
       }
       if (field.key === "summary") {
         return `<div class="mc-field">${label}<textarea ${common} class="mc-textarea" placeholder="${escapeHtml(
@@ -292,6 +296,6 @@ export function renderFormFieldsHtml(config: CompetitionConfig): string {
   return `${parts.join("")}${consent}
     <input type="text" data-mc-hp tabindex="-1" autocomplete="off" aria-hidden="true"
       style="position:absolute;left:-9999px;top:-9999px;height:1px;width:1px;opacity:0">
-    <button type="submit" class="mc-btn mc-submit" data-mc-submit>${escapeHtml(config.form.submitLabel)}</button>
+    <button type="submit" class="mc-btn mc-submit" data-mc-submit>${escapeHtml(config.form.submitLabel || t.submit)}</button>
     <p class="mc-msg" data-mc-msg></p>`;
 }

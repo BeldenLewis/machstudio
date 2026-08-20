@@ -8,7 +8,7 @@
  * 필드 타입은 웨비나 등록 폼과 같은 것을 쓴다(WebinarRegistrationField) — 두 벌로 갈라지면
  * 폼 빌더 UI 도 두 벌이 된다. 대회에만 필요한 첨부 타입만 확장한다.
  */
-import { normalizeNoticePageConfig, type NoticePageConfig } from "@/lib/notice/config";
+import { normalizeNoticePageConfig, type NoticeLanguage, type NoticePageConfig } from "@/lib/notice/config";
 import type { WebinarRegistrationField } from "./webinar-config";
 
 /** 대회 신청 폼에만 있는 추가 타입 — 사진 업로드와 YouTube 링크. */
@@ -65,6 +65,14 @@ export interface CompetitionConfig {
    * 여기 빠진 키는 **저장 시점에 조용히 사라진다**. 실제로 그렇게 한 번 날렸다.
    */
   noticePage: NoticePageConfig;
+  /**
+   * 대회 **전체**의 문구 언어 — 공고·신청 폼이 함께 쓴다.
+   *
+   * 처음에는 공고에만 두었는데(noticePage.language), 그러면 공고는 영어인데 신청 폼 안내는
+   * 한글로 남는다. 방문자에게는 같은 한 흐름이라 화면마다 언어가 달라질 이유가 없다.
+   * 기존 대회가 리셋되지 않게 **noticePage.language 를 폴백으로 읽는다**.
+   */
+  language: NoticeLanguage;
 }
 
 export const COMPETITION_MEDIA = {
@@ -185,6 +193,8 @@ export function normalizeCompetitionConfig(
     ? formRaw.fields.map(normalizeField).filter((f): f is CompetitionFormField => f !== null)
     : DEFAULT_COMPETITION_FIELDS;
 
+  const notice = normalizeNoticePageConfig(source, { keepEmptyRows: options.includeDisabled });
+
   return {
     notice: {
       heroTitle: str(noticeRaw.heroTitle),
@@ -194,10 +204,12 @@ export function normalizeCompetitionConfig(
       blocks: options.includeDisabled ? savedBlocks : savedBlocks.filter((b) => b.enabled),
     },
     form: {
-      title: str(formRaw.title, "참가 신청"),
+      /* 기본값을 한글로 굳히지 않는다 — 굳히면 언어를 영어로 바꿔도 이 자리만 한글로 남고
+         되돌릴 방법이 없다(공고 CTA 에서 같은 함정에 걸렸다). 비면 렌더러가 사전값을 쓴다. */
+      title: str(formRaw.title),
       description: str(formRaw.description),
       fields: options.includeDisabled ? savedFields : savedFields.filter((f) => f.enabled),
-      submitLabel: str(formRaw.submitLabel, "신청서 제출"),
+      submitLabel: str(formRaw.submitLabel),
       privacyText: str(formRaw.privacyText, "[필수] 개인정보 수집 및 이용에 동의합니다"),
       privacyBody: str(formRaw.privacyBody),
       privacyDefaultChecked: bool(formRaw.privacyDefaultChecked),
@@ -211,7 +223,9 @@ export function normalizeCompetitionConfig(
       closed: str(statusRaw.closed, "접수가 마감되었어요."),
     },
     // 공고 상세페이지는 자기 정규화 함수가 소유한다 — 여기서 다시 풀어 쓰면 두 벌이 된다.
-    noticePage: normalizeNoticePageConfig(source, { keepEmptyRows: options.includeDisabled }),
+    noticePage: notice,
+    // 위로 올린 값. 예전에 공고에만 정해 둔 대회는 그 값을 그대로 이어받는다.
+    language: source.language === "en" || source.language === "ko" ? source.language : notice.language,
   };
 }
 
