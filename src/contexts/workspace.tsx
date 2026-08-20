@@ -19,6 +19,8 @@ interface Workspace {
    */
   privacyBodyTemplate?: string | null;
   marketingBodyTemplate?: string | null;
+  /** 법률 문구 생성기의 조직 정보(회사명·주소·담당 이메일) — WorkspaceLegalProfile 모양. */
+  legalProfile?: unknown;
 }
 
 interface WorkspaceContextType {

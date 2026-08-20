@@ -143,6 +143,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           contactEmail,
           contactPhone: data.phone || null,
           sortOrder: count + attempt,
+          // 검증만 하고 버리던 값이었다 — 여기서부터 실제로 남긴다(§compliance).
+          agreePrivacy: true,
+          agreeMarketing: body.agreeMarketing === true,
+          agreeThirdParty: body.agreeThirdParty === true,
         },
       });
       return NextResponse.json(

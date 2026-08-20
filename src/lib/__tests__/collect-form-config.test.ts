@@ -87,6 +87,32 @@ describe("normalizeCollectForm — 어떤 쓰레기가 와도 던지지 않는�
     expect(cfg({ consent: { privacy: { defaultChecked: true } } }).consent.privacy.defaultChecked).toBe(true);
   });
 
+  it("제3자 제공 동의는 기본 꺼짐 — 모든 소스가 제3자에게 정보를 주는 게 아니다", () => {
+    expect(cfg({}).consent.thirdParty.enabled).toBe(false);
+    expect(cfg({ consent: { thirdParty: { enabled: true, defaultChecked: true } } }).consent.thirdParty.enabled).toBe(true);
+    // 마케팅과 같은 규칙 — 사전 체크는 명시적 true 일 때만.
+    expect(cfg({ consent: { thirdParty: { defaultChecked: "yes" } } }).consent.thirdParty.defaultChecked).toBe(false);
+  });
+
+  it("legal.country 는 지원 국가만 통과하고, 모르는 값은 기본(US)으로 — 화면이 비면 안 된다", () => {
+    expect(cfg({}).legal.country).toBe("us");
+    expect(cfg({ legal: { country: "kr" } }).legal.country).toBe("kr");
+    expect(cfg({ legal: { country: "de" } }).legal.country).toBe("us");
+  });
+
+  it("legal.thirdParties 는 이름 없는 항목을 거른다 — 빈 카드가 문서에 안 남게", () => {
+    const c = cfg({
+      legal: { thirdParties: [{ name: "Sponsor Co.", purpose: "경품 발송" }, { name: "", purpose: "이름 없음" }] },
+    });
+    expect(c.legal.thirdParties).toEqual([{ name: "Sponsor Co.", purpose: "경품 발송" }]);
+  });
+
+  it("legal.onSitePhotography 는 명시적 true 일 때만", () => {
+    expect(cfg({}).legal.onSitePhotography).toBe(false);
+    expect(cfg({ legal: { onSitePhotography: "yes" } }).legal.onSitePhotography).toBe(false);
+    expect(cfg({ legal: { onSitePhotography: true } }).legal.onSitePhotography).toBe(true);
+  });
+
   it("읽을 수 없는 접수 창 시각은 제한 없음(null)으로 — 폼이 잠기지 않게", () => {
     const c = cfg({ eventInfo: { registrationWindow: { opensAt: "언젠가", closesAt: "2026-09-01T00:00:00Z" } } });
     expect(c.eventInfo.registrationWindow.opensAt).toBeNull();

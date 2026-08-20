@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft, Award, BarChart3, FileText, Loader2, Scale, Send, Share2, Trophy, Users, Vote } from "lucide-react";
 import { toast } from "sonner";
 import { InlineError } from "@/components/ui/inline-error";
+import { useWorkspace } from "@/contexts/workspace";
 import { COMPETITION_PHASE_META, resolveCompetitionStatus } from "@/lib/competition-status";
 import type { CompetitionConfig } from "@/lib/competition-config";
 import BasicInfoTab from "./BasicInfoTab";
@@ -53,6 +54,7 @@ type TabId = (typeof TABS)[number]["id"];
 
 export default function CompetitionDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
+  const { workspace } = useWorkspace();
   const [competition, setCompetition] = useState<CompetitionDetail | null>(null);
   const [entryCount, setEntryCount] = useState(0);
   const [rounds, setRounds] = useState<RoundDto[]>([]);
@@ -162,7 +164,7 @@ export default function CompetitionDetailPage({ params }: { params: Promise<{ sl
 
       {tab === "basic" && <BasicInfoTab competition={competition} patch={patch} />}
       {tab === "notice" && <NoticePageTab competition={competition} rounds={rounds} patch={patch} />}
-      {tab === "form" && <EntryFormTab competition={competition} patch={patch} />}
+      {tab === "form" && <EntryFormTab competition={competition} patch={patch} workspaceId={workspace?.id} />}
       {tab === "entries" && <EntriesTab competition={competition} onCountChange={setEntryCount} />}
       {tab === "vote" && <VoteSettingsTab competition={competition} rounds={rounds} onRoundsChange={setRounds} />}
       {tab === "judges" && <JudgesTab competition={competition} rounds={rounds} onRoundsChange={setRounds} />}

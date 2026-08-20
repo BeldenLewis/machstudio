@@ -192,7 +192,10 @@ function bindConsentPopups(form: HTMLFormElement, payload: BootPayload) {
       event.preventDefault();
       event.stopPropagation();
       const kind = node.getAttribute("data-mc-terms");
-      const body = kind === "privacy" ? payload.config.form.privacyBody : payload.config.form.marketingBody;
+      const body =
+        kind === "privacy" ? payload.config.form.privacyBody
+        : kind === "marketing" ? payload.config.form.marketingBody
+        : payload.config.form.thirdPartyBody;
       if (!body) return;
       const checkbox = node.parentElement?.querySelector<HTMLInputElement>("input[type=checkbox]");
 
@@ -347,6 +350,7 @@ function bindSubmit(
           media,
           agreePrivacy: true,
           agreeMarketing: form.querySelector<HTMLInputElement>("[data-mc-marketing]")?.checked ?? false,
+          agreeThirdParty: form.querySelector<HTMLInputElement>("[data-mc-third-party]")?.checked ?? false,
           _hp: form.querySelector<HTMLInputElement>("[data-mc-hp]")?.value ?? "",
         }),
       });

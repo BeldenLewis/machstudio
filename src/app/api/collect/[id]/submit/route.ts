@@ -151,7 +151,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     workspaceId: source.workspaceId,
     // 동의는 항목 키와 섞지 않는다 — CSV 열이 뒤죽박죽이 되고, 나중에 필수 동의를 항목으로
     // 착각해 지우는 사고가 난다. 예약 접두를 붙여 한 칸에 같이 둔다.
-    data: { ...p.data, __consent_privacy: p.consent.privacy, __consent_marketing: p.consent.marketing } as never,
+    data: {
+      ...p.data,
+      __consent_privacy: p.consent.privacy,
+      __consent_marketing: p.consent.marketing,
+      __consent_thirdParty: p.consent.thirdParty,
+    } as never,
     emailNormalized: p.emailNormalized,
     phoneE164: p.phoneE164,
     locale: p.locale,

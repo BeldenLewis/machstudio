@@ -291,7 +291,9 @@ export function renderFormFieldsHtml(config: CompetitionConfig): string {
     <label class="mc-check"><input type="checkbox" data-mc-privacy${config.form.privacyDefaultChecked ? " checked" : ""}>
       <span${config.form.privacyBody ? ' class="mc-consent-link" data-mc-terms="privacy"' : ""}>${escapeHtml(config.form.privacyText)}</span></label>
     <label class="mc-check"><input type="checkbox" data-mc-marketing${config.form.marketingDefaultChecked ? " checked" : ""}>
-      <span${config.form.marketingBody ? ' class="mc-consent-link" data-mc-terms="marketing"' : ""}>${escapeHtml(config.form.marketingText)}</span></label>`;
+      <span${config.form.marketingBody ? ' class="mc-consent-link" data-mc-terms="marketing"' : ""}>${escapeHtml(config.form.marketingText)}</span></label>
+    ${config.form.thirdPartyEnabled ? `<label class="mc-check"><input type="checkbox" data-mc-third-party${config.form.thirdPartyDefaultChecked ? " checked" : ""}>
+      <span${config.form.thirdPartyBody ? ' class="mc-consent-link" data-mc-terms="third-party"' : ""}>${escapeHtml(config.form.thirdPartyText)}</span></label>` : ""}`;
 
   return `${parts.join("")}${consent}
     <input type="text" data-mc-hp tabindex="-1" autocomplete="off" aria-hidden="true"

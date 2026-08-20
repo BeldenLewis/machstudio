@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@/generated/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
@@ -26,6 +27,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       // 약관 전문 템플릿 — 워크스페이스 설정에서 편집하고 등록 폼이 상속한다.
       privacyBodyTemplate: membership.workspace.privacyBodyTemplate,
       marketingBodyTemplate: membership.workspace.marketingBodyTemplate,
+      // 법률 문구 생성기의 조직 정보(회사명·주소·담당 이메일) — WorkspaceLegalProfile 모양.
+      legalProfile: membership.workspace.legalProfile,
     },
     projects: membership.workspace.projects,
   });
@@ -38,7 +41,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const { id } = await params;
   const body = await request.json();
-  const { name, privacyBodyTemplate, marketingBodyTemplate } = body ?? {};
+  const { name, privacyBodyTemplate, marketingBodyTemplate, legalProfile } = body ?? {};
 
   /**
    * 이름과 약관 템플릿은 **따로 저장된다** — 템플릿만 바꾸는 호출에 이름을 요구하면
@@ -47,7 +50,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
    */
   const wantsName = name !== undefined;
   const wantsTemplates = privacyBodyTemplate !== undefined || marketingBodyTemplate !== undefined;
-  if (!wantsName && !wantsTemplates) {
+  const wantsLegalProfile = legalProfile !== undefined;
+  if (!wantsName && !wantsTemplates && !wantsLegalProfile) {
     return NextResponse.json({ error: "바꿀 값이 없어요" }, { status: 400 });
   }
   if (wantsName && !name?.trim()) {
@@ -55,6 +59,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   // 빈 문자열은 "템플릿 없음"(null)으로 저장한다 — 상속 판정이 trim 기준이라 저장도 같은 기준.
   const asTemplate = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  // 객체가 아니면 "설정 안 함". Json 컬럼을 비우는 건 그냥 null 이 아니라 Prisma.DbNull 이다.
+  const asLegalProfile = (v: unknown): Prisma.InputJsonValue | typeof Prisma.DbNull =>
+    v && typeof v === "object" ? (v as Prisma.InputJsonValue) : Prisma.DbNull;
 
   const membership = await prisma.workspaceMember.findUnique({
     where: { userId_workspaceId: { userId: user.id, workspaceId: id } },
@@ -71,6 +78,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(wantsName && { name: name.trim() }),
       ...(privacyBodyTemplate !== undefined && { privacyBodyTemplate: asTemplate(privacyBodyTemplate) }),
       ...(marketingBodyTemplate !== undefined && { marketingBodyTemplate: asTemplate(marketingBodyTemplate) }),
+      ...(wantsLegalProfile && { legalProfile: asLegalProfile(legalProfile) }),
     },
   });
 
@@ -92,6 +100,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         privacy: privacyBodyTemplate !== undefined,
         marketing: marketingBodyTemplate !== undefined,
       },
+    });
+  }
+  if (wantsLegalProfile) {
+    await logActivity({
+      workspaceId: id,
+      userId: user.id,
+      action: "workspace.legal_profile_updated",
+      meta: {},
     });
   }
 
