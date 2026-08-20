@@ -103,6 +103,74 @@ const EN: NoticeStrings = {
   },
 };
 
+
+const FR: NoticeStrings = {
+  roundNamePrelim: "Présélection",
+  roundNameFinal: "Finale",
+  roundNotePrelim: "Détermine qui accède à la finale",
+  roundNoteFinal: "Détermine le classement final",
+  barPublic: "Vote du public",
+  barJudge: "Note du jury",
+  cdDays: "j",
+  cdHours: "h",
+  cdMins: "min",
+  cdSecs: "s",
+  ctaApply: "Participer",
+  ctaUpcoming: "Inscriptions bientôt ouvertes",
+  ctaClosed: "Inscriptions closes",
+  tocLabel: "Sections",
+  sectionLabel: {
+    concept: "À propos",
+    snapshot: "En bref",
+    timeline: "Calendrier",
+    apply: "Comment participer",
+    eligibility: "Conditions",
+    selection: "Comment les gagnants sont choisis",
+    criteria: "Critères d'évaluation",
+    prizes: "Prix",
+    countdown: "Date limite",
+    faq: "FAQ",
+    sponsors: "Organisateurs et partenaires",
+  },
+};
+
+const JA: NoticeStrings = {
+  roundNamePrelim: "予選",
+  roundNameFinal: "本選",
+  roundNotePrelim: "本選進出者を決めます",
+  roundNoteFinal: "最終順位を決めます",
+  barPublic: "観客投票",
+  barJudge: "審査員スコア",
+  cdDays: "日",
+  cdHours: "時間",
+  cdMins: "分",
+  cdSecs: "秒",
+  ctaApply: "エントリーする",
+  ctaUpcoming: "受付開始前",
+  ctaClosed: "受付終了",
+  tocLabel: "セクション",
+  sectionLabel: {
+    concept: "概要",
+    snapshot: "ひと目でわかる",
+    timeline: "スケジュール",
+    apply: "応募方法",
+    eligibility: "応募資格",
+    selection: "選考方法",
+    criteria: "審査基準",
+    prizes: "賞金・表彰",
+    countdown: "締切",
+    faq: "よくある質問",
+    sponsors: "主催・協賛",
+  },
+};
+
+/**
+ * **Record 로 둔다.** `language === "en" ? EN : KO` 식이면 언어를 늘렸을 때 새 언어가
+ * 조용히 한국어로 떨어진다 — 고를 수는 있는데 안 바뀌는 상태가 되고, 타입 검사도 통과한다.
+ * 여기 한 줄이 비면 컴파일이 깨진다.
+ */
+const DICT: Record<NoticeLanguage, NoticeStrings> = { ko: KO, en: EN, fr: FR, ja: JA };
+
 export function noticeStrings(language: NoticeLanguage): NoticeStrings {
-  return language === "en" ? EN : KO;
+  return DICT[language] ?? KO;
 }

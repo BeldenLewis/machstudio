@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { normalizeCompetitionConfig } from "@/lib/competition-config";
 import { renderFormFieldsHtml, renderFormModalHtml } from "@/lib/competition-render";
+import { competitionFormStrings } from "@/lib/competition-strings";
+import { NOTICE_LANGUAGES } from "@/lib/notice/config";
+import { noticeStrings } from "@/lib/notice/strings";
 
 /**
  * 신청 폼의 **시스템 문구**가 언어를 따르는가.
@@ -57,5 +60,50 @@ describe("신청 폼 문구 언어", () => {
 
   it("아무 데도 안 적혔으면 한국어", () => {
     expect(configFor().language).toBe("ko");
+  });
+});
+
+/**
+ * 언어를 늘렸을 때 **조용히 빠지는 것**이 없는가.
+ *
+ * 가장 흔한 사고는 사전 한 곳만 채우고 다른 곳을 잊는 것이다 — 고를 수는 있는데
+ * 그 화면만 한국어로 남고, 타입 검사도 테스트도 통과한다. 목록을 돌며 전부 확인한다.
+ */
+describe("지원 언어 전수 점검", () => {
+  it.each(NOTICE_LANGUAGES.map((l) => [l.label, l.value] as const))(
+    "%s — 폼과 공고 사전이 모두 채워져 있다",
+    (_label, language) => {
+      const form = competitionFormStrings(language);
+      const notice = noticeStrings(language);
+      for (const [key, value] of Object.entries(form)) {
+        if (typeof value === "function") continue;
+        expect(value, `form.${key}`).toBeTruthy();
+      }
+      for (const [key, value] of Object.entries(notice)) {
+        if (typeof value === "object") continue;
+        expect(value, `notice.${key}`).toBeTruthy();
+      }
+      // 섹션 이름 11개도 빠짐없이.
+      for (const [key, value] of Object.entries(notice.sectionLabel)) {
+        expect(value, `sectionLabel.${key}`).toBeTruthy();
+      }
+    },
+  );
+
+  /** 한국어 아닌 언어가 한국어 사전을 그대로 돌려주면 "고를 수는 있는데 안 바뀌는" 상태다. */
+  it.each(NOTICE_LANGUAGES.filter((l) => l.value !== "ko").map((l) => [l.label, l.value] as const))(
+    "%s — 한국어와 실제로 다르다",
+    (_label, language) => {
+      expect(competitionFormStrings(language).submit).not.toBe(competitionFormStrings("ko").submit);
+      expect(noticeStrings(language).barPublic).not.toBe(noticeStrings("ko").barPublic);
+    },
+  );
+
+  it("저장 왕복에서 프랑스어·일본어도 살아남는다", () => {
+    for (const language of ["fr", "ja"] as const) {
+      expect(normalizeCompetitionConfig({ language }, { includeDisabled: true }).language).toBe(language);
+    }
+    // 모르는 값은 한국어로 — 오타 하나로 화면이 비면 안 된다.
+    expect(normalizeCompetitionConfig({ language: "de" }, { includeDisabled: true }).language).toBe("ko");
   });
 });

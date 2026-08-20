@@ -120,7 +120,25 @@ export type NoticeSource = "auto" | "manual";
  * 라운드 이름·심사 항목 이름은 **DB 에 있는 운영자의 글**이라 자동 번역하지 않는다.
  * 그 자리는 해당 섹션을 manual 로 돌리고 "설정값 불러오기" 로 복사해 고쳐 쓴다.
  */
-export type NoticeLanguage = "ko" | "en";
+export type NoticeLanguage = "ko" | "en" | "fr" | "ja";
+
+/**
+ * 고를 수 있는 언어. **한 곳에서만 정의한다** — 사전과 선택 UI 가 각자 목록을 들면
+ * 하나에만 추가했을 때 "고를 수는 있는데 안 바뀌는" 언어가 생긴다.
+ *
+ * 라벨은 **그 언어로** 적는다(English/Français/日本語). 프랑스어 담당자가 한국어 화면에서
+ * 자기 언어를 찾을 때 "프랑스어" 보다 "Français" 가 빠르다.
+ */
+export const NOTICE_LANGUAGES = [
+  { value: "ko", label: "한국어" },
+  { value: "en", label: "English" },
+  { value: "fr", label: "Français" },
+  { value: "ja", label: "日本語" },
+] as const satisfies readonly { value: NoticeLanguage; label: string }[];
+
+export function isNoticeLanguage(value: unknown): value is NoticeLanguage {
+  return NOTICE_LANGUAGES.some((l) => l.value === value);
+}
 
 export interface NoticePageConfig {
   enabled: boolean;
@@ -240,7 +258,7 @@ export function normalizeNoticePageConfig(config: unknown, opts?: NormalizeNotic
 
   return {
     enabled: bool(np.enabled, false),
-    language: np.language === "en" ? "en" : "ko",
+    language: isNoticeLanguage(np.language) ? np.language : "ko",
     hero,
     colors: {
       lightBg: hex(obj(np.colors).lightBg, DEFAULT_NOTICE_COLORS.lightBg),
