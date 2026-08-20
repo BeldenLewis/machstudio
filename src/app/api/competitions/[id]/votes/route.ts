@@ -10,6 +10,8 @@ import { prisma } from "@/lib/prisma";
 import { getClientIp, rateLimit } from "@/lib/ratelimit";
 import { normalizeCompetitionConfig, normalizeMedia } from "@/lib/competition-config";
 import { resolveCompetitionStatus } from "@/lib/competition-status";
+import { roundDisplayName } from "@/lib/notice/build-model";
+import { noticeStrings } from "@/lib/notice/strings";
 import {
   deriveVoterKey,
   orderEntries,
@@ -132,7 +134,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       competition: { id: competition.id, name: competition.name, theme: competition.theme, language },
       round: {
         kind: round.kind,
-        name: round.name,
+        // 대회를 만들 때 우리가 넣어 둔 "예선"/"본선" 기본값이면 언어를 따른다(공고와 같은 규칙).
+        // 운영자가 이름을 한 번이라도 바꿨다면 그건 운영자의 글이라 손대지 않는다.
+        name: roundDisplayName(round, noticeStrings(language)),
         maxVotesPerVoter: round.maxVotesPerVoter,
         allowVoteUndo: round.allowVoteUndo,
         voterIdentity: round.voterIdentity,

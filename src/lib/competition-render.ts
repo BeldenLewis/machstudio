@@ -11,6 +11,7 @@
 import { competitionFormStrings } from "./competition-strings";
 import type { CompetitionConfig, CompetitionNoticeBlock } from "./competition-config";
 import type { CompetitionPhase } from "./competition-status";
+import { COUNTRY_DIALS, flagEmoji, isKnownCountry } from "./collect-country";
 
 export interface CompetitionTheme {
   accentColor?: string;
@@ -112,6 +113,13 @@ export function buildCompetitionCss(theme: CompetitionTheme): string {
   background: transparent; border:1px solid rgba(120,120,128,.35); border-radius: 10px; outline: none; }
 .mc-input:focus, .mc-select:focus, .mc-textarea:focus { border-color: var(--mc-accent); }
 .mc-textarea { min-height: 84px; resize: vertical; }
+/* 전화 — 국가코드 칸 + 번호 칸 (사전등록 msf-tel 과 같은 계약) */
+.mc-tel { display:flex; gap:8px; align-items:stretch; }
+.mc-tel-cc { flex: 0 0 auto; max-width: 44%; padding: 0 8px; font-size: 14px; font-weight: 600;
+  background: transparent; border: 1px solid rgba(120,120,128,.35); border-radius: 10px; color: inherit;
+  white-space: nowrap; cursor: pointer; min-height: 44px; }
+.mc-tel-cc:focus { border-color: var(--mc-accent); }
+.mc-tel .mc-input { flex: 1 1 auto; min-width: 0; }
 .mc-hint { margin-top: 5px; font-size: 11.5px; opacity: .62; }
 .mc-check { display:flex; align-items:flex-start; gap:8px; font-size:13px; line-height:1.5; margin-bottom:8px; cursor:pointer; }
 .mc-check input { margin-top: 2px; flex: none; }
@@ -281,7 +289,19 @@ export function renderFormFieldsHtml(config: CompetitionConfig): string {
           field.placeholder,
         )}"></textarea></div>`;
       }
-      const inputType = field.type === "email" ? "email" : field.type === "tel" ? "tel" : "text";
+      if (field.type === "tel") {
+        // 국가 선택(사전등록과 같은 계약, §6.3). 값은 국가번호를 붙여 보내지 않고 고른 국가를
+        // 그대로 보낸다 — 앞 0 처리 규칙이 나라마다 달라(한국은 떼고 이탈리아는 안 뗀다) 붙이면 틀린다.
+        const defaultCountry = config.form.defaultCountry;
+        const options = COUNTRY_DIALS.map(
+          (c) =>
+            `<option value="${c.code}"${isKnownCountry(defaultCountry) && c.code === defaultCountry.toUpperCase() ? " selected" : ""}>${flagEmoji(c.code)} +${c.dial} ${escapeHtml(c.name)}</option>`,
+        ).join("");
+        return `<div class="mc-field">${label}<div class="mc-tel">
+          <select class="mc-tel-cc" data-mc-cc="${escapeHtml(field.key)}" aria-label="${escapeHtml(field.label)} — country">${options}</select>
+          <input type="tel" inputmode="tel" ${common} class="mc-input" placeholder="${escapeHtml(field.placeholder)}"></div></div>`;
+      }
+      const inputType = field.type === "email" ? "email" : "text";
       return `<div class="mc-field">${label}<input type="${inputType}" ${common} class="mc-input" placeholder="${escapeHtml(
         field.placeholder,
       )}"></div>`;

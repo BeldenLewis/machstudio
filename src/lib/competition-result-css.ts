@@ -5,7 +5,8 @@
  * 1위를 크게, 나머지를 작게 — 결과 페이지는 훑는 화면이지 비교하는 화면이 아니다.
  */
 export const RESULT_CSS = `
-.mcr { padding: 20px 0 40px; }
+/* 투표 화면(.mcv)과 같은 최대 폭 — 임베드 화면 전체가 같은 리듬을 쓴다. */
+.mcr { max-width: 960px; margin: 0 auto; padding: 20px 20px 40px; box-sizing: border-box; }
 .mcr-head { text-align: center; margin-bottom: 22px; }
 .mcr-title { font-size: 22px; font-weight: 800; margin: 0; word-break: keep-all; }
 .mcr-sub { font-size: 13px; opacity: .65; margin: 6px 0 0; }
