@@ -24,7 +24,7 @@ export interface BuildNoticeModelOptions {
  * 운영자 눈에는 하드코딩으로 보인다). 운영자가 한 번이라도 이름을 바꿨다면 그건 운영자의
  * 글이니 손대지 않는다.
  */
-function roundDisplayName(round: NoticeRound, t: NoticeStrings): string {
+export function roundDisplayName(round: { kind: string; name: string }, t: NoticeStrings): string {
   const untouched = round.name === DEFAULT_ROUND_NAME[round.kind === "final" ? "final" : "prelim"];
   if (!untouched) return round.name;
   return round.kind === "final" ? t.roundNameFinal : t.roundNamePrelim;

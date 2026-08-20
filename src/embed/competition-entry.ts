@@ -180,7 +180,8 @@ function openForm(payload: BootPayload) {
 
   bindConsentPopups(form, payload);
   const uploaded = bindImageInputs(form, payload);
-  bindSubmit(form, payload, uploaded, close);
+  const phoneCountries = bindPhoneInputs(form);
+  bindSubmit(form, payload, uploaded, phoneCountries, close);
 
   form.querySelector<HTMLInputElement>("input,select,textarea")?.focus();
 }
@@ -286,10 +287,42 @@ function renderThumbs(gallery: HTMLElement | null | undefined, key: string, uplo
   });
 }
 
+/**
+ * 전화 항목 — 국가 선택 + 숫자만 입력(사전등록과 같은 계약, §6.3).
+ *
+ * 값에 국가번호를 붙이지 않고 **고른 국가를 그대로** phoneCountries 에 담아 제출과 함께
+ * 보낸다 — 앞 0 처리 규칙이 나라마다 달라(한국은 떼고 이탈리아는 안 뗀다) 서버(libphonenumber-js)
+ * 가 국가를 알아야 정확히 읽는다.
+ */
+function bindPhoneInputs(form: HTMLFormElement): Record<string, string> {
+  const phoneCountries: Record<string, string> = {};
+
+  form.querySelectorAll<HTMLSelectElement>("[data-mc-cc]").forEach((sel) => {
+    const key = sel.getAttribute("data-mc-cc") ?? "";
+    phoneCountries[key] = sel.value;
+    sel.addEventListener("change", () => { phoneCountries[key] = sel.value; });
+  });
+
+  form.querySelectorAll<HTMLInputElement>(".mc-tel .mc-input").forEach((input) => {
+    // 하이픈·괄호·공백은 타이핑 즉시 지운다(AGENTS.md "입력은 소스에서 정규화").
+    input.addEventListener("input", () => {
+      const digits = input.value.replace(/[^0-9+]/g, "");
+      if (input.value !== digits) {
+        const atEnd = input.selectionStart === input.value.length;
+        input.value = digits;
+        if (atEnd) input.setSelectionRange(digits.length, digits.length);
+      }
+    });
+  });
+
+  return phoneCountries;
+}
+
 function bindSubmit(
   form: HTMLFormElement,
   payload: BootPayload,
   uploaded: Map<string, string[]>,
+  phoneCountries: Record<string, string>,
   close: () => void,
 ) {
   const msg = form.querySelector<HTMLElement>("[data-mc-msg]");
@@ -348,6 +381,7 @@ function bindSubmit(
         body: JSON.stringify({
           data,
           media,
+          phoneCountries,
           agreePrivacy: true,
           agreeMarketing: form.querySelector<HTMLInputElement>("[data-mc-marketing]")?.checked ?? false,
           agreeThirdParty: form.querySelector<HTMLInputElement>("[data-mc-third-party]")?.checked ?? false,

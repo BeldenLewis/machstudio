@@ -43,6 +43,11 @@ export interface CompetitionConfig {
     title: string;
     description: string;
     fields: CompetitionFormField[];
+    /**
+     * 연락처(tel) 항목의 기본 국가(ISO 3166-1 alpha-2) — 사전등록(CollectSource)의
+     * validation.defaultCountry 와 같은 개념. 국가번호 없이 입력한 번호를 이 나라 기준으로 읽는다.
+     */
+    defaultCountry: string;
     submitLabel: string;
     /** 동의 — 웨비나 등록 폼과 같은 계약(문구·전문·기본 체크). */
     privacyText: string;
@@ -236,6 +241,9 @@ export function normalizeCompetitionConfig(
       title: str(formRaw.title),
       description: str(formRaw.description),
       fields: options.includeDisabled ? savedFields : savedFields.filter((f) => f.enabled),
+      // 모양만 본다(2글자) — 실재하는 코드인지는 collect-phone.isSupportedCountry 가 맡는다.
+      // 이 파일은 임베드 번들에 들어가므로 국가 메타데이터를 들이지 않는다(같은 이유 §6.3).
+      defaultCountry: /^[A-Za-z]{2}$/.test(str(formRaw.defaultCountry)) ? str(formRaw.defaultCountry).toUpperCase() : "US",
       submitLabel: str(formRaw.submitLabel),
       privacyText: str(formRaw.privacyText, "[필수] 개인정보 수집 및 이용에 동의합니다"),
       privacyBody: str(formRaw.privacyBody),

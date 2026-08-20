@@ -9,6 +9,7 @@ import {
   type CompetitionMediaItem,
 } from "@/lib/competition-config";
 import { resolveCompetitionStatus } from "@/lib/competition-status";
+import { toE164 } from "@/lib/collect-phone";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -81,6 +82,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const config = normalizeCompetitionConfig(competition.config);
   const incoming = (body.data && typeof body.data === "object" ? body.data : {}) as Record<string, unknown>;
 
+  const phoneCountries = (body.phoneCountries && typeof body.phoneCountries === "object" ? body.phoneCountries : {}) as Record<string, unknown>;
+
   // 정의에 없는 키는 저장하지 않는다(임의 필드 주입 차단). 필수 누락은 400.
   const data: Record<string, string> = {};
   for (const field of config.form.fields) {
@@ -90,7 +93,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (field.required && !value) {
       return NextResponse.json({ error: `${field.label} 항목을 입력해주세요.` }, { status: 400, headers: CORS_HEADERS });
     }
-    if (value) data[field.key] = value;
+    if (!value) continue;
+
+    // 전화 항목은 사전등록과 같은 계약으로 저장한다 — E.164 한 형태(설계 §6.3).
+    // 등록 확인처럼 이 값을 나중에 조회할 수 있어야 하므로 표기를 하나로 굳힌다.
+    if (field.type === "tel") {
+      const country = typeof phoneCountries[field.key] === "string" ? (phoneCountries[field.key] as string) : config.form.defaultCountry;
+      const e164 = toE164(value, country);
+      if (!e164) {
+        return NextResponse.json({ error: `${field.label} 항목의 번호를 확인해주세요.` }, { status: 400, headers: CORS_HEADERS });
+      }
+      data[field.key] = e164;
+      continue;
+    }
+
+    data[field.key] = value;
   }
 
   // 미디어 — 이미지 URL 은 업로드 라우트가 만든 것, 영상은 videoId 로 정규화해서 저장한다.
