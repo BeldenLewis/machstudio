@@ -86,7 +86,15 @@ function isSvg(url: string): boolean {
  * 그래서 **기본값은 꺼짐**이다. 켠 프로젝트에서만 환경변수로 켠다.
  * 끈 상태에서는 원본 URL 을 그대로 쓴다 — 용량은 크지만 **보이기는 한다**.
  */
-const TRANSFORM_ENABLED = process.env.NEXT_PUBLIC_SUPABASE_IMAGE_TRANSFORM === "on";
+/*
+  `typeof process` 로 감싼다 — **이 파일은 브라우저 번들에도 들어간다**(임베드 런타임).
+  esbuild 는 process.env.NODE_ENV 만 치환하므로, 다른 키를 그대로 쓰면 번들에 `process.env`
+  참조가 남아 로드 즉시 ReferenceError 로 런타임 전체가 죽는다 — 실제로 그렇게 라이브
+  랜딩이 검은 화면이 됐다. 서버에서는 여전히 환경변수로 켤 수 있고, 브라우저에서는
+  조건이 그냥 false 가 된다(어차피 지금은 꺼야 하는 값이다).
+*/
+const TRANSFORM_ENABLED =
+  typeof process !== "undefined" && process.env?.NEXT_PUBLIC_SUPABASE_IMAGE_TRANSFORM === "on";
 
 /**
  * 표시용 변환 URL. 바꿀 수 없는 입력이면 **원본을 그대로 돌려준다**(빈 화면보다 낫다):
