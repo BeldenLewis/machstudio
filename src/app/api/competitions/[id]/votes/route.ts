@@ -8,13 +8,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getClientIp, rateLimit } from "@/lib/ratelimit";
-import { normalizeMedia } from "@/lib/competition-config";
+import { normalizeCompetitionConfig, normalizeMedia } from "@/lib/competition-config";
 import { resolveCompetitionStatus } from "@/lib/competition-status";
 import {
-  VOTE_WINDOW_MESSAGE,
   deriveVoterKey,
   orderEntries,
   resolveVoteWindow,
+  voteWindowMessage,
 } from "@/lib/competition-vote";
 
 const CORS_HEADERS = {
@@ -83,6 +83,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const window = resolveVoteWindow(round);
   const ip = getClientIp(request);
+  const language = normalizeCompetitionConfig(competition.config).language;
 
   // 본선은 진출자만 보여준다. 예선은 노출 토글을 켠 참가작 전체.
   const entries = await prisma.competitionEntry.findMany({
@@ -128,7 +129,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   return NextResponse.json(
     {
-      competition: { id: competition.id, name: competition.name, theme: competition.theme },
+      competition: { id: competition.id, name: competition.name, theme: competition.theme, language },
       round: {
         kind: round.kind,
         name: round.name,
@@ -138,7 +139,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         showLiveTally: round.showLiveTally,
       },
       open: forceOpen || window.open,
-      message: forceOpen ? "" : VOTE_WINDOW_MESSAGE[window.reason],
+      message: forceOpen ? "" : voteWindowMessage(window.reason, language),
       /*
         샘플은 **열린 화면(state=open)에서만** 채운다. "지금 상태" 미리보기는 방문자가
         보는 그대로여야 하므로, 참가작이 없으면 없는 대로 "아직 공개된 참가작이 없어요"가
@@ -187,7 +188,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
   const window = resolveVoteWindow(round);
   if (!window.open) {
-    return NextResponse.json({ error: VOTE_WINDOW_MESSAGE[window.reason] }, { status: 403, headers: CORS_HEADERS });
+    const language = normalizeCompetitionConfig(competition.config).language;
+    return NextResponse.json({ error: voteWindowMessage(window.reason, language) }, { status: 403, headers: CORS_HEADERS });
   }
 
   const entryIds = Array.isArray(body.entryIds)
@@ -316,14 +318,15 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   const ctx = await loadContext(id, String(body.round ?? "prelim"));
   if ("error" in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status, headers: CORS_HEADERS });
-  const { round } = ctx;
+  const { competition, round } = ctx;
 
   if (!round.allowVoteUndo) {
     return NextResponse.json({ error: "이 투표는 취소할 수 없어요." }, { status: 403, headers: CORS_HEADERS });
   }
   const window = resolveVoteWindow(round);
   if (!window.open) {
-    return NextResponse.json({ error: VOTE_WINDOW_MESSAGE[window.reason] }, { status: 403, headers: CORS_HEADERS });
+    const language = normalizeCompetitionConfig(competition.config).language;
+    return NextResponse.json({ error: voteWindowMessage(window.reason, language) }, { status: 403, headers: CORS_HEADERS });
   }
 
   const { voterKey } = deriveVoterKey({

@@ -10,7 +10,7 @@
  */
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { normalizeMedia } from "@/lib/competition-config";
+import { normalizeCompetitionConfig, normalizeMedia } from "@/lib/competition-config";
 import { normalizeShowConfig, rehearsalPayload } from "@/lib/competition-show";
 import {
   combineScores,
@@ -24,18 +24,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
 
   const competition = await prisma.competition.findUnique({
     where: { showToken: token },
-    select: { id: true, name: true, theme: true, showConfig: true, scoringConfig: true },
+    select: { id: true, name: true, theme: true, config: true, showConfig: true, scoringConfig: true },
   });
   if (!competition) {
     return NextResponse.json({ error: "발표 링크를 찾을 수 없어요." }, { status: 404 });
   }
 
   const config = normalizeShowConfig(competition.showConfig);
+  // 리허설도 실제 언어를 따른다 — 더미 팀 이름만 연습용이고 무대 UI 언어는 실제 설정 그대로다.
+  const language = normalizeCompetitionConfig(competition.config).language;
 
   if (rehearsal) {
     const dummy = rehearsalPayload(competition.name);
     return NextResponse.json(
-      { ...dummy, competition: { name: dummy.competition.name, theme: competition.theme }, config },
+      { ...dummy, competition: { name: dummy.competition.name, theme: competition.theme, language }, config },
       { headers: { "Cache-Control": "no-store" } },
     );
   }
@@ -98,7 +100,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
 
   return NextResponse.json(
     {
-      competition: { name: competition.name, theme: competition.theme },
+      competition: { name: competition.name, theme: competition.theme, language },
       config,
       rehearsal: false,
       awards: awards
