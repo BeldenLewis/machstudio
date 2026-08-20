@@ -352,16 +352,22 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
               <SectionBackgroundField
                 label="배경 초점"
                 competitionId={competition.id}
+                showTone={false}
                 value={{
                   url: np.hero.media.url,
                   focus: np.hero.media.focus,
                   mobileFocus: np.hero.media.mobileFocus,
+                  // 히어로는 진하기 손잡이를 안 쓴다 — 껍데기가 그라데이션 스크림을 이미 잡는다.
+                  scrim: 72,
+                  panel: 88,
                 }}
                 onChange={(next) =>
                   update({
                     hero: {
                       ...np.hero,
-                      media: next ? { type: "image", ...next } : null,
+                      media: next
+                        ? { type: "image", url: next.url, focus: next.focus, mobileFocus: next.mobileFocus }
+                        : null,
                     },
                   })
                 }

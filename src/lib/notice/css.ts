@@ -85,8 +85,38 @@ const SECTION_CSS = `
 .lnd .nt-bg img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .lnd .nt-bg::after {
   content: ""; position: absolute; inset: 0;
-  background: color-mix(in srgb, var(--sec-bg) 72%, transparent);
+  background: color-mix(in srgb, var(--sec-bg) var(--scrim-a, 72%), transparent);
 }
+
+/**
+ * ── 사진 위의 카드 ──
+ *
+ * 카드들은 **평평한 색 위에 놓일 걸 전제로** --paper 5% 정도의 옅은 막으로 그려져 있다.
+ * 뒤에 사진이 깔리면 그 막은 사실상 투명해서 카드가 사라지고 안이 안 읽힌다 —
+ * 실제로 배경을 넣은 섹션에서 그렇게 보였다.
+ *
+ * 배경을 켠 섹션에서만 카드 바탕을 **섹션색**으로 바꾼다. --paper(글자색) 가 아니라
+ * --sec-bg(배경색)여야 라이트/다크 어느 쪽이든 글자와 대비가 유지된다.
+ * 진하기는 운영자가 정한다 — 사진마다 밝기가 달라 한 값으로는 못 맞춘다.
+ */
+.lnd .section.has-bg .nt-step,
+.lnd .section.has-bg .nt-round,
+.lnd .section.has-bg .nt-prize,
+.lnd .section.has-bg .nt-elig,
+.lnd .section.has-bg .nt-cd-box,
+.lnd .section.has-bg .nt-stat {
+  background: color-mix(in srgb, var(--sec-bg) var(--panel-a, 88%), transparent);
+}
+/* 1등 상금은 키컬러 그라데이션이 정체성이라 덮지 않고, 아래에 섹션색만 깔아 준다. */
+.lnd .section.has-bg .nt-prize.is-top {
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--primary) 16%, transparent), transparent 70%),
+    color-mix(in srgb, var(--sec-bg) var(--panel-a, 88%), transparent);
+}
+/* 구분선 격자(.nt-stats)는 칸 사이 1px 이 배경색이라, 사진이 그 틈으로 새어 나온다. */
+.lnd .section.has-bg .nt-stats { background: color-mix(in srgb, var(--sec-bg) var(--panel-a, 88%), transparent); }
+/* 막대 트랙도 마찬가지 — 사진이 비치면 채워진 길이가 안 보인다. */
+.lnd .section.has-bg .nt-bar-track { background: color-mix(in srgb, var(--sec-bg) var(--panel-a, 88%), transparent); }
 
 /**
  * ── 배경 초점 ──

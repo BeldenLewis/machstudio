@@ -71,7 +71,11 @@ describe("대회 설정 저장 왕복", () => {
         noticePage: {
           enabled: true,
           sectionMedia: {
-            timeline: { url: "https://example.com/bg.jpg", focus: { x: 20, y: 80 }, mobileFocus: { x: 70, y: 10 } },
+            timeline: {
+              url: "https://example.com/bg.jpg",
+              focus: { x: 20, y: 80 }, mobileFocus: { x: 70, y: 10 },
+              scrim: 40, panel: 95,
+            },
             // 주소가 없으면 키를 만들지 않는다 — "켰는데 빈 배경" 상태를 안 만든다.
             prizes: { url: "  ", focus: { x: 10, y: 10 } },
           },
@@ -83,6 +87,8 @@ describe("대회 설정 저장 왕복", () => {
       url: "https://example.com/bg.jpg",
       focus: { x: 20, y: 80 },
       mobileFocus: { x: 70, y: 10 },
+      scrim: 40,
+      panel: 95,
     });
     expect(saved.noticePage.sectionMedia.prizes).toBeUndefined();
   });

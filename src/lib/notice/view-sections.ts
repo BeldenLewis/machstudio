@@ -10,7 +10,7 @@
  */
 import { h, svg } from "@/lib/dom/h";
 import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
-import { focusVars } from "./media-focus";
+import { bgVars, focusVars } from "./media-focus";
 import type { NoticeBgKey } from "./config";
 import type { NoticeModel } from "./types";
 
@@ -51,6 +51,8 @@ function sectionShell(
     {
       class: `section${m.np.sectionMedia[key as NoticeBgKey] ? " has-bg" : ""}`,
       id: m.sectionId(`nt-${key}`),
+      // 사진 위 가독성 손잡이 두 개 — CSS 가 이 값으로 스크림과 카드 바탕을 계산한다.
+      style: bgVars(m.np.sectionMedia[key as NoticeBgKey]),
       "data-bg": m.np.sectionBg[key as keyof typeof m.np.sectionBg],
       "aria-labelledby": titleId,
     },

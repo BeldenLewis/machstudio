@@ -56,8 +56,23 @@ export type NoticeHeroMedia =
   | { type: "image" | "video"; url: string; focus: NoticeMediaFocus; mobileFocus: NoticeMediaFocus }
   | null;
 
-/** 섹션 배경 — 없으면 색만 칠한다(기본). 어울리는 섹션에만 켠다. */
-export type NoticeSectionMedia = { url: string; focus: NoticeMediaFocus; mobileFocus: NoticeMediaFocus } | null;
+/**
+ * 섹션 배경 — 없으면 색만 칠한다(기본). 어울리는 섹션에만 켠다.
+ *
+ * scrim/panel 은 **사진 위에서 글이 읽히게 하는 두 손잡이**다.
+ * 카드들은 원래 평평한 색 위에 놓일 걸 전제로 --paper 5% 정도의 옅은 막으로 그려져 있다.
+ * 그 뒤에 사진이 깔리면 카드가 거의 사라져서 안이 안 읽힌다 — 실제로 그렇게 보였다.
+ * 사진마다 밝기가 달라 한 값으로 못 맞추므로 운영자가 섹션마다 정한다.
+ */
+export type NoticeSectionMedia = {
+  url: string;
+  focus: NoticeMediaFocus;
+  mobileFocus: NoticeMediaFocus;
+  /** 배경 위에 덮는 섹션색의 진하기(0~100). 높을수록 사진이 흐려지고 글이 잘 읽힌다. */
+  scrim: number;
+  /** 카드·박스 바탕의 진하기(0~100). 높을수록 카드가 또렷해진다. */
+  panel: number;
+} | null;
 export type NoticeSectionMediaMap = Partial<Record<NoticeBgKey, NoticeSectionMedia>>;
 
 export interface NoticeHero {
@@ -179,6 +194,10 @@ export function normalizeNoticePageConfig(config: unknown, opts?: NormalizeNotic
   const sectionBg = { hero: bgOf("hero") } as NoticeSectionBgMap;
   for (const item of NOTICE_SECTIONS) sectionBg[item.key] = bgOf(item.key);
 
+  /** 0~100 사이 정수. 밖으로 나가면 색 계산이 무효가 되어 규칙 전체가 통째로 날아간다. */
+  const pctOf = (v: unknown, fallback: number) =>
+    typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.min(100, Math.round(v))) : fallback;
+
   /** 0~100 사이로 자른다. object-position 백분율이라 밖으로 나가면 이미지가 화면에서 사라진다. */
   const focusOf = (v: unknown, fallback = 50): NoticeMediaFocus => {
     const o = obj(v);
@@ -239,7 +258,13 @@ export function normalizeNoticePageConfig(config: unknown, opts?: NormalizeNotic
         const url = str(item.url).trim();
         // 주소가 없으면 아예 키를 만들지 않는다 — "켜 뒀는데 빈 배경" 같은 상태를 안 만든다.
         if (!url) continue;
-        out[key] = { url, focus: focusOf(item.focus), mobileFocus: focusOf(item.mobileFocus) };
+        out[key] = {
+          url,
+          focus: focusOf(item.focus),
+          mobileFocus: focusOf(item.mobileFocus),
+          scrim: pctOf(item.scrim, 72),
+          panel: pctOf(item.panel, 88),
+        };
       }
       return out;
     })(),
