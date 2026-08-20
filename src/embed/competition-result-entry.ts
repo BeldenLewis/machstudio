@@ -9,6 +9,8 @@
  */
 import { buildCompetitionCss, escapeHtml, type CompetitionTheme } from "@/lib/competition-render";
 import { RESULT_CSS } from "@/lib/competition-result-css";
+import { competitionResultStrings, type CompetitionResultStrings } from "@/lib/competition-result-strings";
+import type { NoticeLanguage } from "@/lib/notice/config";
 
 interface BootPayload {
   competitionId: string;
@@ -33,7 +35,7 @@ interface AwardDto {
 }
 
 interface ResultDto {
-  competition: { id: string; name: string; theme: CompetitionTheme };
+  competition: { id: string; name: string; theme: CompetitionTheme; language: NoticeLanguage };
   published: boolean;
   preview: boolean;
   publishedAt?: string;
@@ -41,6 +43,9 @@ interface ResultDto {
 }
 
 const STYLE_ID = "mc-result-styles";
+
+/** 시스템 문구 사전. 투표 런타임과 같은 이유로 상태 fetch 응답에서 확정한다. */
+let t: CompetitionResultStrings = competitionResultStrings("ko");
 
 function warn(message: string, error?: unknown) {
   try {
@@ -98,10 +103,11 @@ async function start(payload: BootPayload) {
     state = await res.json();
   } catch (error) {
     warn("결과를 불러오지 못했어요", error);
-    mount.innerHTML = `<div class="mc"><p class="mc-note">결과를 불러오지 못했어요. 잠시 후 새로고침해주세요.</p></div>`;
+    mount.innerHTML = `<div class="mc"><p class="mc-note">${escapeHtml(t.loadFailed)}</p></div>`;
     return;
   }
 
+  t = competitionResultStrings(state.competition.language);
   injectStyles(state.competition.theme);
   render(mount, state);
 }
@@ -114,7 +120,7 @@ function mediaHtml(entry: AwardDto["entry"]): string {
   const video = entry.media.find((m) => m.kind === "youtube" && m.videoId);
   if (video?.videoId) {
     // 목록에 iframe 을 다 붙이면 페이지가 느려진다 — 썸네일만 깔고 클릭 시 붙인다.
-    return `<div class="mcr-media"><button type="button" class="mcr-video" data-mcr-play="${escapeHtml(video.videoId)}" aria-label="영상 재생">
+    return `<div class="mcr-media"><button type="button" class="mcr-video" data-mcr-play="${escapeHtml(video.videoId)}" aria-label="${escapeHtml(t.playAriaLabel)}">
       <img class="mcr-thumb" src="https://img.youtube.com/vi/${escapeHtml(video.videoId)}/hqdefault.jpg" alt="" loading="lazy">
       <span class="mcr-play">▶</span></button></div>`;
   }
@@ -126,10 +132,10 @@ function render(mount: HTMLElement, state: ResultDto) {
 
   if (state.awards.length === 0) {
     mount.innerHTML = `<div class="mc mcr">
-      ${state.preview ? '<div class="mc-preview-banner">미리보기입니다. 아직 공개되지 않았어요.</div>' : ""}
+      ${state.preview ? `<div class="mc-preview-banner">${escapeHtml(t.previewBannerNotPublished)}</div>` : ""}
       <div class="mcr-empty">
-        <p class="mcr-empty-title">${notYet ? "결과 발표를 준비하고 있어요" : "공개된 수상 내역이 없어요"}</p>
-        <p class="mcr-empty-sub">${notYet ? "발표가 끝나면 이 자리에 수상작이 올라옵니다." : "잠시 후 다시 확인해주세요."}</p>
+        <p class="mcr-empty-title">${escapeHtml(notYet ? t.emptyTitleNotYet : t.emptyTitlePublishedNoAwards)}</p>
+        <p class="mcr-empty-sub">${escapeHtml(notYet ? t.emptySubNotYet : t.emptySubOther)}</p>
       </div>
     </div>`;
     return;
@@ -144,7 +150,7 @@ function render(mount: HTMLElement, state: ResultDto) {
           <span class="mcr-badge">${escapeHtml(award.name)}</span>
           <h3 class="mcr-name">${escapeHtml(entry.title)}</h3>
           ${entry.teamName ? `<p class="mcr-team">${escapeHtml(entry.teamName)}</p>` : ""}
-          <span class="mcr-no">참가번호 ${escapeHtml(entry.entryNo)}</span>
+          <span class="mcr-no">${escapeHtml(t.entryNo(entry.entryNo))}</span>
           ${award.description ? `<p class="mcr-desc">${escapeHtml(award.description)}</p>` : ""}
         </div>
       </article>`;
@@ -152,10 +158,10 @@ function render(mount: HTMLElement, state: ResultDto) {
     .join("");
 
   mount.innerHTML = `<div class="mc mcr">
-    ${state.preview && notYet ? '<div class="mc-preview-banner">미리보기입니다. 아직 관람객에게는 보이지 않아요.</div>' : ""}
+    ${state.preview && notYet ? `<div class="mc-preview-banner">${escapeHtml(t.previewBannerNotVisible)}</div>` : ""}
     <div class="mcr-head">
-      <h2 class="mcr-title">${escapeHtml(state.competition.name)} 수상 결과</h2>
-      <p class="mcr-sub">축하합니다!</p>
+      <h2 class="mcr-title">${escapeHtml(t.resultTitle(state.competition.name))}</h2>
+      <p class="mcr-sub">${escapeHtml(t.congrats)}</p>
     </div>
     <div class="mcr-list">${items}</div>
   </div>`;
@@ -169,7 +175,7 @@ function render(mount: HTMLElement, state: ResultDto) {
       frame.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1`;
       frame.allow = "accelerometer; autoplay; encrypted-media; picture-in-picture";
       frame.setAttribute("allowfullscreen", "");
-      frame.setAttribute("title", "수상작 영상");
+      frame.setAttribute("title", t.videoTitle);
       node.replaceWith(frame);
     });
   });

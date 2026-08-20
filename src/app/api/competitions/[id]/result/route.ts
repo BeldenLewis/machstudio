@@ -6,7 +6,7 @@
  */
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { normalizeMedia } from "@/lib/competition-config";
+import { normalizeCompetitionConfig, normalizeMedia } from "@/lib/competition-config";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -24,7 +24,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const competition = await prisma.competition.findUnique({
     where: { id },
-    select: { id: true, name: true, theme: true, resultPublishedAt: true, previewToken: true },
+    select: { id: true, name: true, theme: true, config: true, resultPublishedAt: true, previewToken: true },
   });
   if (!competition) {
     return NextResponse.json({ error: "대회를 찾을 수 없어요." }, { status: 404, headers: CORS_HEADERS });
@@ -32,9 +32,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const isPreview = !!previewToken && !!competition.previewToken && previewToken === competition.previewToken;
   const published = !!competition.resultPublishedAt;
+  const language = normalizeCompetitionConfig(competition.config).language;
 
   const base = {
-    competition: { id: competition.id, name: competition.name, theme: competition.theme },
+    competition: { id: competition.id, name: competition.name, theme: competition.theme, language },
     preview: isPreview,
   };
 

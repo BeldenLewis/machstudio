@@ -2,7 +2,9 @@
 
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { onAccentColor } from "@/lib/competition-render";
-import { SHOW_MODES, type ShowConfig, type ShowMode } from "@/lib/competition-show";
+import type { ShowConfig, ShowMode } from "@/lib/competition-show";
+import { competitionShowStrings, type CompetitionShowStrings } from "@/lib/competition-show-strings";
+import type { NoticeLanguage } from "@/lib/notice/config";
 import "./show.css";
 
 /**
@@ -29,7 +31,7 @@ interface RankRow {
   rank: number; combined: number; publicScore: number; judgeScore: number; tied: boolean;
 }
 interface ShowData {
-  competition: { name: string; theme: Record<string, string> };
+  competition: { name: string; theme: Record<string, string>; language: NoticeLanguage };
   config: ShowConfig;
   rehearsal: boolean;
   awards: AwardDto[];
@@ -66,6 +68,8 @@ export default function ShowPage({ params }: { params: Promise<{ token: string }
 
   const mode: ShowMode = forceStatic ? "static" : (data?.config.mode ?? "static");
   const scenes = useMemo(() => sceneCount(mode, data), [mode, data]);
+  // 언어는 대회 설정값 — 로드 전에는 한국어로 보여 두고 응답이 오면 확정한다.
+  const t = useMemo(() => competitionShowStrings(data?.competition.language ?? "ko"), [data?.competition.language]);
 
   const next = useCallback(() => setStep((s) => Math.min(scenes, s + 1)), [scenes]);
   const back = useCallback(() => setStep((s) => Math.max(0, s - 1)), []);
@@ -91,14 +95,14 @@ export default function ShowPage({ params }: { params: Promise<{ token: string }
     return (
       <main className="stage">
         <div className="stage-body">
-          <p className="stage-title">발표 링크를 열 수 없어요</p>
-          <p className="stage-hint">링크를 다시 확인하거나, 대회 설정에서 새로 발급해주세요.</p>
+          <p className="stage-title">{t.linkBroken}</p>
+          <p className="stage-hint">{t.linkBrokenHint}</p>
         </div>
       </main>
     );
   }
   if (!data) {
-    return <main className="stage"><div className="stage-body"><p className="stage-title">불러오는 중...</p></div></main>;
+    return <main className="stage"><div className="stage-body"><p className="stage-title">{t.loading}</p></div></main>;
   }
 
   const accent = data.competition.theme?.accentColor || "#7c3aed";
@@ -106,11 +110,11 @@ export default function ShowPage({ params }: { params: Promise<{ token: string }
 
   return (
     <main className="stage" style={style}>
-      {data.rehearsal && <div className="stage-flag">리허설 — 연습용 가짜 결과예요</div>}
-      {forceStatic && data.config.mode !== "static" && <div className="stage-flag">비상 결과판 (S 키로 해제)</div>}
+      {data.rehearsal && <div className="stage-flag">{t.rehearsalFlag}</div>}
+      {forceStatic && data.config.mode !== "static" && <div className="stage-flag">{t.staticFallbackFlag}</div>}
 
       <div className="stage-body">
-        <Scene mode={mode} step={step} data={data} />
+        <Scene mode={mode} step={step} data={data} t={t} />
       </div>
 
       {data.config.footnote && <p className="stage-foot">{data.config.footnote}</p>}
@@ -118,17 +122,17 @@ export default function ShowPage({ params }: { params: Promise<{ token: string }
       {/* 운영자 바 — 마우스를 올렸을 때만 나타난다. 관객이 보는 화면에 컨트롤이 늘 떠 있으면 안 된다. */}
       <div className="stage-bar">
         <span className="stage-progress">
-          {data.competition.name} · {SHOW_MODES.find((m) => m.value === mode)?.label} · {step} / {scenes}
+          {data.competition.name} · {t.modeLabel[mode]} · {step} / {scenes}
         </span>
         <div className="stage-bar-actions">
-          <button className="stage-btn" onClick={back} disabled={step === 0}>← 이전</button>
+          <button className="stage-btn" onClick={back} disabled={step === 0}>{t.prevBtn}</button>
           <button className="stage-btn is-key" onClick={next} disabled={step >= scenes}>
-            {step === 0 ? "시작" : step >= scenes ? "끝" : "다음 →"}
+            {step === 0 ? t.startBtn : step >= scenes ? t.endBtn : t.nextBtn}
           </button>
           <button className="stage-btn" onClick={() => setForceStatic((v) => !v)}>
-            {forceStatic ? "연출로" : "결과판"}
+            {forceStatic ? t.toShow : t.toStatic}
           </button>
-          <button className="stage-btn" onClick={() => setStep(0)}>처음으로</button>
+          <button className="stage-btn" onClick={() => setStep(0)}>{t.restartBtn}</button>
         </div>
       </div>
     </main>
@@ -147,29 +151,29 @@ function sceneCount(mode: ShowMode, data: ShowData | null): number {
   }
 }
 
-function Scene({ mode, step, data }: { mode: ShowMode; step: number; data: ShowData }) {
+function Scene({
+  mode, step, data, t,
+}: { mode: ShowMode; step: number; data: ShowData; t: CompetitionShowStrings }) {
   if (mode === "static" || step === 0) {
-    if (step === 0 && mode !== "static") return <Intro data={data} mode={mode} />;
-    return <StaticBoard data={data} />;
+    if (step === 0 && mode !== "static") return <Intro data={data} mode={mode} t={t} />;
+    return <StaticBoard data={data} t={t} />;
   }
   // key={step} — 장면이 바뀌면 새로 마운트한다. 안 그러면 앞 장면에서 뒤집어 둔 카드가
   // 다음 상에서도 열린 채로 나온다(= 답을 미리 보여준다).
-  if (mode === "card") return <CardReveal key={step} award={data.awards[step - 1]} config={data.config} />;
-  if (mode === "countdown") return <Countdown data={data} step={step} />;
-  if (mode === "roulette") return <Roulette key={step} award={data.awards[step - 1]} candidates={data.candidates} />;
-  if (mode === "bars") return <BarRace data={data} />;
-  return <StaticBoard data={data} />;
+  if (mode === "card") return <CardReveal key={step} award={data.awards[step - 1]} config={data.config} t={t} />;
+  if (mode === "countdown") return <Countdown data={data} step={step} t={t} />;
+  if (mode === "roulette") return <Roulette key={step} award={data.awards[step - 1]} candidates={data.candidates} t={t} />;
+  if (mode === "bars") return <BarRace data={data} t={t} />;
+  return <StaticBoard data={data} t={t} />;
 }
 
-function Intro({ data, mode }: { data: ShowData; mode: ShowMode }) {
+function Intro({ data, mode, t }: { data: ShowData; mode: ShowMode; t: CompetitionShowStrings }) {
   const total = sceneCount(mode, data);
   return (
     <div className="stage-winner stage-enter">
       <span className="stage-award">{data.competition.name}</span>
-      <p className="stage-team">시상식</p>
-      <p className="stage-hint">
-        {total > 0 ? `스페이스바 또는 → 를 누르면 시작합니다 (${total}개 장면)` : "공개할 수상 내역이 없어요"}
-      </p>
+      <p className="stage-team">{t.ceremony}</p>
+      <p className="stage-hint">{total > 0 ? t.introHint(total) : t.noAwards}</p>
     </div>
   );
 }
@@ -190,17 +194,19 @@ function MediaBlock({ entry, config }: { entry: AwardDto["entry"]; config: ShowC
   return null;
 }
 
-function CardReveal({ award, config }: { award: AwardDto | undefined; config: ShowConfig }) {
+function CardReveal({
+  award, config, t,
+}: { award: AwardDto | undefined; config: ShowConfig; t: CompetitionShowStrings }) {
   const [open, setOpen] = useState(false);
 
-  if (!award) return <p className="stage-title">공개할 수상 내역이 없어요</p>;
+  if (!award) return <p className="stage-title">{t.noAwards}</p>;
 
   return (
     <div className={`stage-card ${open ? "is-open" : ""}`} onClick={() => setOpen(true)} role="presentation">
       <div className="stage-card-inner">
         <div className="stage-card-face">
           <span className="stage-award">{award.name}</span>
-          <p className="stage-hint">카드를 누르면 공개됩니다</p>
+          <p className="stage-hint">{t.cardHint}</p>
         </div>
         <div className="stage-card-face stage-card-back">
           <div className="stage-winner">
@@ -217,18 +223,18 @@ function CardReveal({ award, config }: { award: AwardDto | undefined; config: Sh
 }
 
 /** 순위 역순 — n위부터 하나씩. 마지막 장면이 1위다. */
-function Countdown({ data, step }: { data: ShowData; step: number }) {
+function Countdown({ data, step, t }: { data: ShowData; step: number; t: CompetitionShowStrings }) {
   const rows = data.ranking;
   const row = rows[rows.length - step];
-  if (!row) return <p className="stage-title">공개할 순위가 없어요</p>;
+  if (!row) return <p className="stage-title">{t.noRanking}</p>;
   const isFirst = row.rank === 1;
 
   return (
     <div className="stage-winner stage-enter" key={row.entryNo}>
-      <div className={`stage-rank-no ${isFirst ? "is-first" : ""}`}>{row.rank}위</div>
+      <div className={`stage-rank-no ${isFirst ? "is-first" : ""}`}>{t.rank(row.rank)}</div>
       <p className="stage-team">{row.teamName ?? row.title}</p>
       {row.teamName && <p className="stage-work">{row.title}</p>}
-      {data.config.showScores && <p className="stage-desc">종합 {row.combined.toFixed(1)}점</p>}
+      {data.config.showScores && <p className="stage-desc">{t.combinedScore(row.combined.toFixed(1))}</p>}
     </div>
   );
 }
@@ -239,7 +245,9 @@ function Countdown({ data, step }: { data: ShowData; step: number }) {
  * requestAnimationFrame 으로 직접 감속시킨다. CSS 트랜지션으로는 "정확히 이 항목에서 멈춘다"를
  * 보장할 수 없는데, 무대에서 엉뚱한 이름에 멈추면 그건 사고다.
  */
-function Roulette({ award, candidates }: { award: AwardDto | undefined; candidates: string[] }) {
+function Roulette({
+  award, candidates, t,
+}: { award: AwardDto | undefined; candidates: string[]; t: CompetitionShowStrings }) {
   const stripRef = useRef<HTMLDivElement>(null);
   const [done, setDone] = useState(false);
 
@@ -288,18 +296,18 @@ function Roulette({ award, candidates }: { award: AwardDto | undefined; candidat
     const failsafe = setTimeout(settle, duration + 1200);
 
     const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / duration);
+      const progress = Math.min(1, (now - start) / duration);
       // easeOutQuint — 끝에서 확실히 느려져야 "멈췄다"가 읽힌다.
-      const eased = 1 - Math.pow(1 - t, 5);
+      const eased = 1 - Math.pow(1 - progress, 5);
       strip.style.transform = `translateY(-${target * eased}px)`;
-      if (t < 1) raf = requestAnimationFrame(tick);
+      if (progress < 1) raf = requestAnimationFrame(tick);
       else { clearTimeout(failsafe); setDone(true); }
     };
     raf = requestAnimationFrame(tick);
     return () => { cancelAnimationFrame(raf); clearTimeout(failsafe); };
   }, [items]);
 
-  if (!award) return <p className="stage-title">공개할 수상 내역이 없어요</p>;
+  if (!award) return <p className="stage-title">{t.noAwards}</p>;
 
   return (
     <div className="stage-winner">
@@ -317,7 +325,7 @@ function Roulette({ award, candidates }: { award: AwardDto | undefined; candidat
 }
 
 /** 점수 바 레이스 — 0에서 시작해 차오르며 순위가 드러난다. */
-function BarRace({ data }: { data: ShowData }) {
+function BarRace({ data, t }: { data: ShowData; t: CompetitionShowStrings }) {
   const [grown, setGrown] = useState(false);
   const rows = data.ranking;
   const top = Math.max(1, ...rows.map((r) => r.combined));
@@ -330,7 +338,7 @@ function BarRace({ data }: { data: ShowData }) {
     return () => clearTimeout(id);
   }, []);
 
-  if (rows.length === 0) return <p className="stage-title">집계된 순위가 없어요</p>;
+  if (rows.length === 0) return <p className="stage-title">{t.noRankingData}</p>;
 
   return (
     <div className="stage-bars">
@@ -348,18 +356,18 @@ function BarRace({ data }: { data: ShowData }) {
   );
 }
 
-function StaticBoard({ data }: { data: ShowData }) {
+function StaticBoard({ data, t }: { data: ShowData; t: CompetitionShowStrings }) {
   if (data.awards.length === 0) {
     return (
       <div className="stage-winner">
         <p className="stage-title">{data.competition.name}</p>
-        <p className="stage-hint">아직 배정된 수상작이 없어요.</p>
+        <p className="stage-hint">{t.staticNoAwards}</p>
       </div>
     );
   }
   return (
     <>
-      <p className="stage-title">{data.competition.name} 수상 결과</p>
+      <p className="stage-title">{t.staticResultTitle(data.competition.name)}</p>
       <div className="stage-static stage-enter">
         {data.awards.map((award, index) => (
           <div className={`stage-static-item ${index === 0 ? "is-top" : ""}`} key={award.id}>

@@ -11,6 +11,8 @@
  */
 import { buildCompetitionCss, escapeHtml, type CompetitionTheme } from "@/lib/competition-render";
 import { VOTE_CSS } from "@/lib/competition-vote-css";
+import { competitionVoteStrings, type CompetitionVoteStrings } from "@/lib/competition-vote-strings";
+import type { NoticeLanguage } from "@/lib/notice/config";
 
 interface BootPayload {
   competitionId: string;
@@ -42,7 +44,7 @@ interface EntryDto {
 }
 
 interface StateDto {
-  competition: { id: string; name: string; theme: CompetitionTheme };
+  competition: { id: string; name: string; theme: CompetitionTheme; language: NoticeLanguage };
   round: { kind: string; name: string; maxVotesPerVoter: number; allowVoteUndo: boolean; showLiveTally: boolean };
   open: boolean;
   message: string;
@@ -54,6 +56,12 @@ interface StateDto {
 
 const DEVICE_KEY = "mc_device_id";
 const STYLE_ID = "mc-vote-styles";
+
+/**
+ * 시스템 문구 사전. **상태를 가져온 뒤 확정한다** — 언어는 대회 설정값이라 실행 시점 fetch
+ * 응답(state.competition.language)에만 있다. 기본값을 한국어로 두어 fetch 전에 불려도 안 깨진다.
+ */
+let t: CompetitionVoteStrings = competitionVoteStrings("ko");
 
 function warn(message: string, error?: unknown) {
   try {
@@ -140,10 +148,11 @@ async function start(payload: BootPayload) {
     state = await res.json();
   } catch (error) {
     warn("상태를 불러오지 못했어요", error);
-    mount.innerHTML = `<div class="mc"><p class="mc-note">투표 정보를 불러오지 못했어요. 잠시 후 새로고침해주세요.</p></div>`;
+    mount.innerHTML = `<div class="mc"><p class="mc-note">${escapeHtml(t.loadFailed)}</p></div>`;
     return;
   }
 
+  t = competitionVoteStrings(state.competition.language);
   injectStyles(state.competition.theme);
   renderVote(mount, state, payload, deviceId);
 }
@@ -156,7 +165,7 @@ function mediaThumbHtml(entry: EntryDto): string {
   const video = entry.media.find((m) => m.kind === "youtube" && m.videoId);
   if (video?.videoId) {
     // 썸네일만 깔고 재생은 클릭 시 — 목록에 iframe 을 다 붙이면 페이지가 느려진다.
-    return `<button type="button" class="mcv-video" data-mcv-play="${escapeHtml(video.videoId)}" aria-label="영상 재생">
+    return `<button type="button" class="mcv-video" data-mcv-play="${escapeHtml(video.videoId)}" aria-label="${escapeHtml(t.playAriaLabel)}">
       <img class="mcv-thumb-img" src="https://img.youtube.com/vi/${escapeHtml(video.videoId)}/hqdefault.jpg" alt="" loading="lazy">
       <span class="mcv-play">▶</span></button>`;
   }
@@ -171,7 +180,9 @@ function renderVote(mount: HTMLElement, state: StateDto, payload: BootPayload, d
     .map((entry) => {
       const voted = selected.has(entry.id);
       const tallyText =
-        state.round.showLiveTally && state.tally ? `<span class="mcv-count">${state.tally[entry.id] ?? 0}표</span>` : "";
+        state.round.showLiveTally && state.tally
+          ? `<span class="mcv-count">${escapeHtml(t.voteCount(state.tally[entry.id] ?? 0))}</span>`
+          : "";
       return `<article class="mcv-card${voted ? " is-voted" : ""}" data-mcv-entry="${escapeHtml(entry.id)}">
         <div class="mcv-media">${mediaThumbHtml(entry)}</div>
         <div class="mcv-body">
@@ -180,7 +191,7 @@ function renderVote(mount: HTMLElement, state: StateDto, payload: BootPayload, d
           ${entry.teamName ? `<p class="mcv-team">${escapeHtml(entry.teamName)}</p>` : ""}
           ${entry.summary ? `<p class="mcv-summary">${escapeHtml(entry.summary)}</p>` : ""}
           <button type="button" class="mcv-btn" data-mcv-vote="${escapeHtml(entry.id)}">
-            ${voted ? "투표함" : "투표하기"}
+            ${voted ? escapeHtml(t.voteBtnVoted) : escapeHtml(t.voteBtnDefault)}
           </button>
         </div>
       </article>`;
@@ -188,13 +199,13 @@ function renderVote(mount: HTMLElement, state: StateDto, payload: BootPayload, d
     .join("");
 
   mount.innerHTML = `<div class="mc mcv">
-    ${payload.preview ? '<div class="mc-preview-banner">미리보기입니다. 투표해도 반영되지 않아요.</div>' : ""}
+    ${payload.preview ? `<div class="mc-preview-banner">${escapeHtml(t.previewBanner)}</div>` : ""}
     <div class="mcv-bar">
       <span class="mcv-bar-title">${escapeHtml(state.round.name)}</span>
-      <span class="mcv-remain" data-mcv-remain>남은 표 ${remaining} / ${state.round.maxVotesPerVoter}</span>
+      <span class="mcv-remain" data-mcv-remain>${escapeHtml(t.remaining(remaining, state.round.maxVotesPerVoter))}</span>
     </div>
     ${state.open ? "" : `<p class="mc-note">${escapeHtml(state.message)}</p>`}
-    ${state.entries.length === 0 ? '<p class="mc-note">아직 공개된 참가작이 없어요.</p>' : `<div class="mcv-grid">${cards}</div>`}
+    ${state.entries.length === 0 ? `<p class="mc-note">${escapeHtml(t.emptyEntries)}</p>` : `<div class="mcv-grid">${cards}</div>`}
     <p class="mc-msg" data-mcv-msg></p>
   </div>`;
 
@@ -206,7 +217,7 @@ function renderVote(mount: HTMLElement, state: StateDto, payload: BootPayload, d
     msgNode.textContent = text;
   };
   const syncRemain = () => {
-    if (remainNode) remainNode.textContent = `남은 표 ${remaining} / ${state.round.maxVotesPerVoter}`;
+    if (remainNode) remainNode.textContent = t.remaining(remaining, state.round.maxVotesPerVoter);
   };
 
   // 영상 재생 — 클릭한 카드에만 iframe 을 붙인다.
@@ -219,7 +230,7 @@ function renderVote(mount: HTMLElement, state: StateDto, payload: BootPayload, d
       frame.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1`;
       frame.allow = "accelerometer; autoplay; encrypted-media; picture-in-picture";
       frame.setAttribute("allowfullscreen", "");
-      frame.setAttribute("title", "참가작 영상");
+      frame.setAttribute("title", t.videoTitle);
       node.replaceWith(frame);
     });
   });
@@ -229,22 +240,22 @@ function renderVote(mount: HTMLElement, state: StateDto, payload: BootPayload, d
       const entryId = button.getAttribute("data-mcv-vote");
       if (!entryId) return;
 
-      if (!state.open) { showMsg("error", state.message || "지금은 투표할 수 없어요."); return; }
+      if (!state.open) { showMsg("error", state.message || t.cannotVoteNow); return; }
 
       const card = button.closest<HTMLElement>(".mcv-card");
       const alreadyVoted = selected.has(entryId);
 
       if (alreadyVoted && !state.round.allowVoteUndo) {
-        showMsg("error", "이미 투표한 참가작이에요.");
+        showMsg("error", t.alreadyVoted);
         return;
       }
       if (!alreadyVoted && remaining <= 0) {
-        showMsg("error", `이 투표는 ${state.round.maxVotesPerVoter}표까지 할 수 있어요.`);
+        showMsg("error", t.limitReached(state.round.maxVotesPerVoter));
         return;
       }
 
       if (payload.preview) {
-        showMsg("success", "미리보기라 반영되지 않았어요.");
+        showMsg("success", t.previewNoEffect);
         return;
       }
 
@@ -261,7 +272,7 @@ function renderVote(mount: HTMLElement, state: StateDto, payload: BootPayload, d
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          showMsg("error", data.error || "처리에 실패했어요.");
+          showMsg("error", data.error || t.genericError);
           if (typeof data.remaining === "number") { remaining = data.remaining; syncRemain(); }
           return;
         }
@@ -269,18 +280,18 @@ function renderVote(mount: HTMLElement, state: StateDto, payload: BootPayload, d
         if (alreadyVoted) {
           selected.delete(entryId);
           card?.classList.remove("is-voted");
-          button.textContent = "투표하기";
-          showMsg("success", "투표를 취소했어요.");
+          button.textContent = t.voteBtnDefault;
+          showMsg("success", t.undone);
         } else {
           selected.add(entryId);
           card?.classList.add("is-voted");
-          button.textContent = "투표함";
-          showMsg("success", data.message || "투표했어요.");
+          button.textContent = t.voteBtnVoted;
+          showMsg("success", data.message || t.votedSuccess);
         }
         if (typeof data.remaining === "number") remaining = data.remaining;
         syncRemain();
       } catch {
-        showMsg("error", "네트워크 오류가 발생했어요.");
+        showMsg("error", t.networkError);
       } finally {
         button.disabled = false;
       }
