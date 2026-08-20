@@ -15,6 +15,8 @@
 // 항목 형식·URL 판정은 **웨비나 쪽 단일 출처를 그대로 쓴다.** 사본을 두면 유형을 하나 늘릴 때
 // 한쪽만 고쳐도 컴파일이 통과하고, 그 순간 빌더와 제출 경로가 서로 다른 목록을 보게 된다.
 import { FIELD_TYPES as WEBINAR_FIELD_TYPES, safeHttpUrl, type WebinarFieldType } from "@/lib/webinar-config";
+// 법률 문구 생성기(§legal)도 이 파일처럼 React·Next 에 의존하지 않는 순수 모듈이라 그대로 들여온다.
+import { isLegalCountry, type Country, type ThirdParty } from "@/lib/legal-templates/types";
 
 // ── 다국어 ────────────────────────────────────────────────────────────
 /**
@@ -186,15 +188,31 @@ export interface CollectLookup {
   showQr: boolean;
 }
 
+/**
+ * 법률 문구 생성기(§legal-templates)가 쓰는 "빈칸" — 국가·현장 촬영 여부·제3자 제공 대상 등
+ * 소스마다 다시 채워야 하는 값만 둔다. eventDates·venue 는 `eventInfo`에 이미 있어 여기서
+ * 중복으로 받지 않는다(생성기 호출부가 두 곳을 합쳐 넘긴다).
+ */
+export interface CollectEventLegal {
+  country: Country;
+  /** 문서에 쓸 행사명. 비면 생성기가 소스 이름으로 대신 채운다(호출부 책임). */
+  eventName: string;
+  onSitePhotography: boolean;
+  thirdParties: ThirdParty[];
+  dataRetentionNote: string;
+  effectiveDate: string;
+}
+
 export interface CollectFormConfig {
   fields: CollectField[];
   branch: CollectBranch;
   eventInfo: CollectEventInfo;
   notices: CollectNotice[];
   validation: CollectValidation;
-  consent: { privacy: CollectConsentItem; marketing: CollectConsentItem };
+  consent: { privacy: CollectConsentItem; marketing: CollectConsentItem; thirdParty: CollectConsentItem };
   completion: CollectCompletion;
   lookup: CollectLookup;
+  legal: CollectEventLegal;
   /** 제출 버튼 문구. 비면 렌더러 기본 문구. */
   submitLabel: Localized;
   defaultLocale: string;
@@ -228,12 +246,15 @@ export const EMPTY_FORM_CONFIG: CollectFormConfig = {
   consent: {
     privacy: { enabled: true, label: {}, body: {}, defaultChecked: false },
     marketing: { enabled: false, label: {}, body: {}, defaultChecked: false },
+    // 마케팅과 같은 이유로 기본 꺼짐 — 모든 행사가 제3자에게 정보를 제공하는 건 아니다.
+    thirdParty: { enabled: false, label: {}, body: {}, defaultChecked: false },
   },
   completion: { redirectUrlTemplate: "", showQr: true },
   /* 등록 확인은 **꺼진 채로 시작한다.** 켜면 이메일 하나만 아는 사람에게 남의 QR 티켓을
      보여 주는 화면이라, 운영자가 의식적으로 켜야 한다. 이 파일의 다른 토글도 전부 닫힘이 기본이다
      (eventInfo.enabled, consent.marketing.enabled, branch.enabled). or/showQr 은 켠 뒤의 기본값. */
   lookup: { enabled: false, fields: ["email", "phone"], logic: "or", showQr: true },
+  legal: { country: "us", eventName: "", onSitePhotography: false, thirdParties: [], dataRetentionNote: "", effectiveDate: "" },
   submitLabel: {},
   defaultLocale: DEFAULT_LOCALE,
   statusOverride: null,
@@ -411,6 +432,8 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
   const consentRaw = obj(c.consent);
   const completionRaw = obj(c.completion);
   const lookupRaw = obj(c.lookup);
+  const legalRaw = obj(c.legal);
+  const thirdPartiesRaw = Array.isArray(legalRaw.thirdParties) ? legalRaw.thirdParties : [];
 
   // 기본값은 **복사해서** 준다. 모듈 상수 배열을 그대로 돌려주면 호출부가 push/splice 하는
   // 순간(조회 항목 토글이 딱 그 모양이다) 상수 자체가 오염돼, 웜 람다에서 뒤이어 정규화되는
@@ -473,6 +496,7 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
     consent: {
       privacy: normalizeConsentItem(consentRaw.privacy, locale, EMPTY_FORM_CONFIG.consent.privacy),
       marketing: normalizeConsentItem(consentRaw.marketing, locale, EMPTY_FORM_CONFIG.consent.marketing),
+      thirdParty: normalizeConsentItem(consentRaw.thirdParty, locale, EMPTY_FORM_CONFIG.consent.thirdParty),
     },
     completion: {
       // 공개 완료 화면이 이 값으로 이동한다 — 저장소의 단일 URL 관문을 그대로 쓴다.
@@ -487,6 +511,19 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
       fields: lookupFields.length ? [...new Set(lookupFields)] : [...EMPTY_FORM_CONFIG.lookup.fields],
       logic: lookupRaw.logic === "and" ? "and" : "or",
       showQr: lookupRaw.showQr !== false,
+    },
+    legal: {
+      country: isLegalCountry(legalRaw.country) ? legalRaw.country : EMPTY_FORM_CONFIG.legal.country,
+      eventName: str(legalRaw.eventName),
+      onSitePhotography: legalRaw.onSitePhotography === true,
+      thirdParties: thirdPartiesRaw
+        .map((t) => {
+          const tr = obj(t);
+          return { name: str(tr.name), purpose: str(tr.purpose) };
+        })
+        .filter((t) => t.name !== ""),
+      dataRetentionNote: str(legalRaw.dataRetentionNote),
+      effectiveDate: str(legalRaw.effectiveDate),
     },
     submitLabel: toLocalized(c.submitLabel, locale),
     defaultLocale: locale,

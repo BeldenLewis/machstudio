@@ -21,6 +21,13 @@ import {
   type NoticeMode,
   type NoticePlacement,
 } from "@/lib/collect-form-config";
+import { CollectLegalGenerator } from "@/components/form-builder/CollectLegalGenerator";
+
+const CONSENT_KIND_META = {
+  privacy: { label: "개인정보 (필수)", noun: "개인정보", placeholder: "개인정보 수집·이용에 동의합니다" },
+  marketing: { label: "마케팅 (선택)", noun: "마케팅", placeholder: "마케팅 정보 수신에 동의합니다" },
+  thirdParty: { label: "제3자 제공 (선택)", noun: "제3자 제공", placeholder: "개인정보 제3자 제공에 동의합니다" },
+} as const;
 
 type Patch = (next: Partial<CollectFormConfig>) => void;
 
@@ -63,7 +70,9 @@ function Row({ label, children, hint }: { label: string; children: React.ReactNo
   );
 }
 
-export function CollectFormSections({ config, patch }: { config: CollectFormConfig; patch: Patch }) {
+export function CollectFormSections({
+  config, patch, workspaceId,
+}: { config: CollectFormConfig; patch: Patch; workspaceId?: string }) {
   const ev = config.eventInfo;
   const win = ev.registrationWindow;
   const countryBad = !isSupportedCountry(config.validation.defaultCountry);
@@ -242,29 +251,29 @@ export function CollectFormSections({ config, patch }: { config: CollectFormConf
 
       {/* ── 동의 ─────────────────────────────────────────────────── */}
       <Block title="동의" desc="사전 체크는 기본 꺼짐이에요 — GDPR 관할에서는 유효한 동의로 인정되지 않습니다.">
-        {(["privacy", "marketing"] as const).map((kind) => {
+        {(["privacy", "marketing", "thirdParty"] as const).map((kind) => {
           const item = config.consent[kind];
-          const isPrivacy = kind === "privacy";
+          const meta = CONSENT_KIND_META[kind];
           return (
             <div key={kind} className={`${R.surface} bg-secondary p-2 ${FINISH.s2} space-y-1`}>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold">{isPrivacy ? "개인정보 (필수)" : "마케팅 (선택)"}</span>
+                <span className="text-[11px] font-semibold">{meta.label}</span>
                 <span className="flex-1" />
                 <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                  사용<Switch checked={item.enabled} onChange={(v) => patch({ consent: { ...config.consent, [kind]: { ...item, enabled: v } } })} label={`${isPrivacy ? "개인정보" : "마케팅"} 동의 사용`} />
+                  사용<Switch checked={item.enabled} onChange={(v) => patch({ consent: { ...config.consent, [kind]: { ...item, enabled: v } } })} label={`${meta.noun} 동의 사용`} />
                 </label>
               </div>
               <input
                 value={localize(item.label, DEFAULT_LOCALE)}
                 onChange={(e) => patch({ consent: { ...config.consent, [kind]: { ...item, label: toLocalized(e.target.value) } } })}
-                placeholder={isPrivacy ? "개인정보 수집·이용에 동의합니다" : "마케팅 정보 수신에 동의합니다"}
+                placeholder={meta.placeholder}
                 aria-label={`${kind} 문구`}
                 className="w-full bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/50"
               />
               <textarea
                 value={localize(item.body, DEFAULT_LOCALE)}
                 onChange={(e) => patch({ consent: { ...config.consent, [kind]: { ...item, body: toLocalized(e.target.value) } } })}
-                placeholder="'자세히' 팝업 전문 (선택)"
+                placeholder="'자세히' 팝업 전문 (선택) — 아래 '법률 문구 생성기'로 채울 수 있어요"
                 aria-label={`${kind} 전문`}
                 rows={2}
                 className="w-full resize-y rounded-lg bg-background px-2 py-1.5 text-[12px] shadow-sm outline-none"
@@ -273,14 +282,14 @@ export function CollectFormSections({ config, patch }: { config: CollectFormConf
                 <Switch
                   checked={item.defaultChecked}
                   onChange={(v) => patch({ consent: { ...config.consent, [kind]: { ...item, defaultChecked: v } } })}
-                  label={`${isPrivacy ? "개인정보" : "마케팅"} 동의 사전 체크`}
+                  label={`${meta.noun} 동의 사전 체크`}
                 />
                 미리 체크해 두기
               </label>
               {item.defaultChecked && (
                 <p className="flex items-start gap-1.5 text-[11px] text-amber-600">
                   <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-                  {isPrivacy
+                  {kind === "privacy"
                     ? "필수 동의는 어차피 체크해야 제출돼요 — 사전 체크의 실익이 없습니다."
                     : "EU·국내에서는 사전 체크가 유효한 동의로 인정되지 않아요."}
                 </p>
@@ -289,6 +298,9 @@ export function CollectFormSections({ config, patch }: { config: CollectFormConf
           );
         })}
       </Block>
+
+      {/* ── 법률 문구 생성기 ─────────────────────────────────────── */}
+      <CollectLegalGenerator config={config} patch={patch} workspaceId={workspaceId} />
 
       {/* ── 완료 ─────────────────────────────────────────────────── */}
       <Block title="등록 완료 후" desc="비워 두면 이동하지 않고 그 자리에 완료 카드를 보여줘요.">

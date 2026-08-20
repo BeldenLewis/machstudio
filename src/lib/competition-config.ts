@@ -10,6 +10,7 @@
  */
 import { isNoticeLanguage, normalizeNoticePageConfig, type NoticeLanguage, type NoticePageConfig } from "@/lib/notice/config";
 import type { WebinarRegistrationField } from "./webinar-config";
+import { isLegalCountry, type Country, type ThirdParty } from "@/lib/legal-templates/types";
 
 /** 대회 신청 폼에만 있는 추가 타입 — 사진 업로드와 YouTube 링크. */
 export type CompetitionExtraFieldType = "image" | "youtube";
@@ -50,6 +51,14 @@ export interface CompetitionConfig {
     marketingText: string;
     marketingBody: string;
     marketingDefaultChecked: boolean;
+    /**
+     * 제3자 제공 동의 — privacy/marketing과 달리 **꺼져 있을 수 있다.** 모든 대회가 참가자
+     * 정보를 제3자(협찬사 등)에게 제공하는 게 아니라서, 이 항목만 enabled 스위치를 따로 둔다.
+     */
+    thirdPartyEnabled: boolean;
+    thirdPartyText: string;
+    thirdPartyBody: string;
+    thirdPartyDefaultChecked: boolean;
     successMessage: string;
   };
   /** 접수 기간 밖에서 폼 대신 보여줄 문구. */
@@ -73,6 +82,21 @@ export interface CompetitionConfig {
    * 기존 대회가 리셋되지 않게 **noticePage.language 를 폴백으로 읽는다**.
    */
   language: NoticeLanguage;
+  /**
+   * 법률 문구 생성기(§legal-templates)가 쓰는 "빈칸". CollectSource 와 달리 대회에는 구조화된
+   * 개최일·장소 필드가 없어(공고 블록은 자유 서술이다) eventName/eventDates/venue 를 여기서
+   * 따로 받는다 — 사전등록 쪽 legal 과 크기가 다른 이유다.
+   */
+  legal: {
+    country: Country;
+    eventName: string;
+    eventDates: string[];
+    venue: string;
+    onSitePhotography: boolean;
+    thirdParties: ThirdParty[];
+    dataRetentionNote: string;
+    effectiveDate: string;
+  };
 }
 
 export const COMPETITION_MEDIA = {
@@ -195,6 +219,9 @@ export function normalizeCompetitionConfig(
 
   const notice = normalizeNoticePageConfig(source, { keepEmptyRows: options.includeDisabled });
 
+  const legalRaw = (source.legal && typeof source.legal === "object" ? source.legal : {}) as Record<string, unknown>;
+  const thirdPartiesRaw = Array.isArray(legalRaw.thirdParties) ? legalRaw.thirdParties : [];
+
   return {
     notice: {
       heroTitle: str(noticeRaw.heroTitle),
@@ -216,6 +243,10 @@ export function normalizeCompetitionConfig(
       marketingText: str(formRaw.marketingText, "[선택] 마케팅 정보 수신에 동의합니다"),
       marketingBody: str(formRaw.marketingBody),
       marketingDefaultChecked: bool(formRaw.marketingDefaultChecked),
+      thirdPartyEnabled: bool(formRaw.thirdPartyEnabled),
+      thirdPartyText: str(formRaw.thirdPartyText, "[선택] 개인정보 제3자 제공에 동의합니다"),
+      thirdPartyBody: str(formRaw.thirdPartyBody),
+      thirdPartyDefaultChecked: bool(formRaw.thirdPartyDefaultChecked),
       successMessage: str(formRaw.successMessage, "신청이 접수되었어요."),
     },
     statusMessages: {
@@ -226,6 +257,21 @@ export function normalizeCompetitionConfig(
     noticePage: notice,
     // 위로 올린 값. 예전에 공고에만 정해 둔 대회는 그 값을 그대로 이어받는다.
     language: isNoticeLanguage(source.language) ? source.language : notice.language,
+    legal: {
+      country: isLegalCountry(legalRaw.country) ? legalRaw.country : "us",
+      eventName: str(legalRaw.eventName),
+      eventDates: strArray(legalRaw.eventDates).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)),
+      venue: str(legalRaw.venue),
+      onSitePhotography: bool(legalRaw.onSitePhotography),
+      thirdParties: thirdPartiesRaw
+        .map((t) => {
+          const tr = (t && typeof t === "object" ? t : {}) as Record<string, unknown>;
+          return { name: str(tr.name), purpose: str(tr.purpose) };
+        })
+        .filter((t) => t.name !== ""),
+      dataRetentionNote: str(legalRaw.dataRetentionNote),
+      effectiveDate: str(legalRaw.effectiveDate),
+    },
   };
 }
 

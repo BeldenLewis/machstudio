@@ -1374,6 +1374,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
               sourceId={source.id}
               initialConfig={source.formConfig}
               previewToken={source.previewToken}
+              workspaceId={workspace?.id}
             />
           )}
 

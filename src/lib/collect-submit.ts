@@ -40,7 +40,7 @@ export interface PreparedSubmission {
   locale: string;
   entryChannel: "online";
   /** 동의 기록 — data 안에 넣지 않는다. 항목 키와 섞이면 CSV 열이 뒤죽박죽이 된다. */
-  consent: { privacy: boolean; marketing: boolean };
+  consent: { privacy: boolean; marketing: boolean; thirdParty: boolean };
 }
 
 export type PrepareResult =
@@ -52,7 +52,7 @@ export type PrepareResult =
 
 export interface SubmissionInput {
   values: Record<string, unknown>;
-  consent?: { privacy?: unknown; marketing?: unknown };
+  consent?: { privacy?: unknown; marketing?: unknown; thirdParty?: unknown };
   locale?: unknown;
   /**
    * 전화 항목별로 방문자가 고른 국가(§6.3). `{ phone: "KR" }`.
@@ -178,6 +178,7 @@ export function prepareBuilderSubmission(
   const consent = {
     privacy: input.consent?.privacy === true,
     marketing: input.consent?.marketing === true,
+    thirdParty: input.consent?.thirdParty === true,
   };
   /**
    * 방문자가 고른 국가는 **아는 코드만** 받는다. 아무 문자열이나 통과시키면 toE164 가

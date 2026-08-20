@@ -10,12 +10,21 @@ import { NOTICE_LANGUAGES } from "@/lib/notice/config";
 import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 import { Switch } from "@/components/ui/switch";
 import type { CompetitionFieldType, CompetitionFormField } from "@/lib/competition-config";
+import { CompetitionLegalGenerator } from "./CompetitionLegalGenerator";
 import FormPreview from "./FormPreview";
 import type { CompetitionDetail } from "./page";
+
+const CONSENT_KIND_META = {
+  privacy: { label: "개인정보 수집·이용 (필수)", noun: "개인정보" },
+  marketing: { label: "마케팅 수신 (선택)", noun: "마케팅" },
+  thirdParty: { label: "제3자 제공 (선택)", noun: "제3자 제공" },
+} as const;
 
 interface Props {
   competition: CompetitionDetail;
   patch: (body: Record<string, unknown>, successMessage?: string) => Promise<boolean>;
+  /** 법률 문구 생성기가 워크스페이스 조직 정보를 읽어올 때만 쓴다 — 없으면 그 패널만 비활성. */
+  workspaceId?: string;
 }
 
 const TYPE_META: Record<CompetitionFieldType, { label: string; icon: typeof AlignLeft }> = {
@@ -32,7 +41,7 @@ const TYPE_META: Record<CompetitionFieldType, { label: string; icon: typeof Alig
 const TYPE_ORDER: CompetitionFieldType[] = ["text", "email", "tel", "select", "multiple", "checkbox", "image", "youtube"];
 const CHOICE_TYPES: CompetitionFieldType[] = ["select", "multiple"];
 
-export default function EntryFormTab({ competition, patch }: Props) {
+export default function EntryFormTab({ competition, patch, workspaceId }: Props) {
   const [form, setForm] = useState(competition.config.form);
   /**
    * 문구 언어는 **대회 전체 설정**이다(공고와 같은 값). 폼에서도 고를 수 있게 둔 이유는,
@@ -40,6 +49,7 @@ export default function EntryFormTab({ competition, patch }: Props) {
    * 발견한 자리에서 바로 고칠 수 있어야 한다.
    */
   const [language, setLanguage] = useState(competition.config.language);
+  const [legal, setLegal] = useState(competition.config.legal);
   const [saving, setSaving] = useState(false);
 
   const update = (next: Partial<typeof form>) => setForm((prev) => ({ ...prev, ...next }));
@@ -77,7 +87,7 @@ export default function EntryFormTab({ competition, patch }: Props) {
     }
     setSaving(true);
     try {
-      await patch({ config: { ...competition.config, form, language } }, "신청 폼을 저장했어요");
+      await patch({ config: { ...competition.config, form, language, legal } }, "신청 폼을 저장했어요");
     } finally {
       setSaving(false);
     }
@@ -264,18 +274,37 @@ export default function EntryFormTab({ competition, patch }: Props) {
           기본 체크는 꺼 두는 것을 권해요 — EU·한국에서는 사전 체크를 유효한 동의로 보지 않습니다.
         </p>
         <div className="mt-4 space-y-4">
-          {(["privacy", "marketing"] as const).map((kind) => {
-            const textKey = kind === "privacy" ? "privacyText" : "marketingText";
-            const bodyKey = kind === "privacy" ? "privacyBody" : "marketingBody";
-            const checkedKey = kind === "privacy" ? "privacyDefaultChecked" : "marketingDefaultChecked";
+          {(["privacy", "marketing", "thirdParty"] as const).map((kind) => {
+            const textKey = kind === "privacy" ? "privacyText" : kind === "marketing" ? "marketingText" : "thirdPartyText";
+            const bodyKey = kind === "privacy" ? "privacyBody" : kind === "marketing" ? "marketingBody" : "thirdPartyBody";
+            const checkedKey = kind === "privacy" ? "privacyDefaultChecked" : kind === "marketing" ? "marketingDefaultChecked" : "thirdPartyDefaultChecked";
+            const meta = CONSENT_KIND_META[kind];
+            // privacy·marketing 은 항상 폼에 뜬다(끌 수 없다). 제3자 제공만 대회마다 있고 없고가
+            // 갈려서 사용 스위치가 따로 있다 — 모든 대회가 협찬사와 정보를 나누는 게 아니다.
+            if (kind === "thirdParty" && !form.thirdPartyEnabled) {
+              return (
+                <div key={kind} className="flex items-center justify-between gap-2 rounded-lg bg-secondary/30 p-2">
+                  <span className="text-xs font-medium text-muted-foreground">{meta.label} — 사용 안 함</span>
+                  <Switch checked={form.thirdPartyEnabled} onChange={(v) => update({ thirdPartyEnabled: v })} label="제3자 제공 동의 사용" />
+                </div>
+              );
+            }
             return (
               <div key={kind} className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium">{kind === "privacy" ? "개인정보 수집·이용 (필수)" : "마케팅 수신 (선택)"}</span>
-                  <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    기본 체크
-                    <Switch checked={form[checkedKey]} onChange={(v) => update({ [checkedKey]: v } as Partial<typeof form>)} label="기본 체크" />
-                  </label>
+                  <span className="text-xs font-medium">{meta.label}</span>
+                  <div className="flex items-center gap-3">
+                    {kind === "thirdParty" && (
+                      <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        사용
+                        <Switch checked={form.thirdPartyEnabled} onChange={(v) => update({ thirdPartyEnabled: v })} label="제3자 제공 동의 사용" />
+                      </label>
+                    )}
+                    <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      기본 체크
+                      <Switch checked={form[checkedKey]} onChange={(v) => update({ [checkedKey]: v } as Partial<typeof form>)} label="기본 체크" />
+                    </label>
+                  </div>
                 </div>
                 <input
                   value={form[textKey]}
@@ -295,6 +324,14 @@ export default function EntryFormTab({ competition, patch }: Props) {
         </div>
       </section>
 
+      <CompetitionLegalGenerator
+        form={form}
+        legal={legal}
+        onFormChange={(next) => update(next)}
+        onLegalChange={(next) => setLegal((prev) => ({ ...prev, ...next }))}
+        workspaceId={workspaceId}
+      />
+
       <div className="flex justify-end">
         <motion.button
           whileTap={{ scale: 0.96 }}
@@ -309,7 +346,7 @@ export default function EntryFormTab({ competition, patch }: Props) {
 
       {/* 편집 중인 값(form)을 그대로 넘긴다 — 저장 전에도 바뀌는 게 보여야 미리보기다. */}
       <div className="xl:sticky xl:top-6 xl:self-start">
-        <FormPreview config={{ ...competition.config, form, language }} theme={competition.theme} />
+        <FormPreview config={{ ...competition.config, form, language, legal }} theme={competition.theme} />
       </div>
     </div>
   );

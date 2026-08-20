@@ -42,11 +42,14 @@ export default function FormBuilderTab({
   sourceId,
   initialConfig,
   previewToken,
+  workspaceId,
 }: {
   sourceId: string;
   initialConfig: unknown;
   /** /p/{token} 미리보기 링크. 빌더형이면 항상 있지만, 예전 소스는 null 일 수 있다. */
   previewToken: string | null;
+  /** 법률 문구 생성기가 워크스페이스 조직 정보를 읽어올 때만 쓴다 — 없으면 그 패널만 비활성. */
+  workspaceId?: string;
 }) {
   // 저장된 값은 어떤 모양이든 올 수 있다 — 화면은 정규화된 것만 본다.
   const [config, setConfig] = useState<CollectFormConfig>(() => normalizeCollectForm(initialConfig));
@@ -173,7 +176,7 @@ export default function FormBuilderTab({
         />
 
         {/* 항목 아래에 나머지 설정 — 순서가 곧 폼이 그려지는 순서다(개요 → 항목 → 안내 → 동의). */}
-        <CollectFormSections config={config} patch={patch} />
+        <CollectFormSections config={config} patch={patch} workspaceId={workspaceId} />
       </div>
 
       {/* 미리보기는 임베드와 같은 모델·가시성 규칙을 읽는다 — 각자 그리면 반드시 갈라진다. */}

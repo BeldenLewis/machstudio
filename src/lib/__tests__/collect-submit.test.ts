@@ -136,9 +136,18 @@ describe("정규화 컬럼", () => {
     const r = prepareBuilderSubmission(OPEN, { values: ok, consent: { privacy: true, marketing: true } }, NOW);
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.prepared.consent).toEqual({ privacy: true, marketing: true });
+      expect(r.prepared.consent).toEqual({ privacy: true, marketing: true, thirdParty: false });
       expect(r.prepared.data).not.toHaveProperty("privacy");
     }
+  });
+
+  it("제3자 제공 동의도 같은 방식으로 실린다 — 명시적 true 일 때만", () => {
+    const r = prepareBuilderSubmission(OPEN, { values: ok, consent: { privacy: true, thirdParty: true } }, NOW);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.prepared.consent.thirdParty).toBe(true);
+
+    const r2 = prepareBuilderSubmission(OPEN, { values: ok, consent: { privacy: true, thirdParty: "yes" } }, NOW);
+    if (r2.ok) expect(r2.prepared.consent.thirdParty).toBe(false);
   });
 
   /** 아무 문자열이나 저장하면 언어별 재발송이 그 값으로 갈라져 보낼 수 없는 언어가 생긴다. */

@@ -195,6 +195,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
   const consent = {
     privacy: config.consent.privacy.defaultChecked,
     marketing: config.consent.marketing.defaultChecked,
+    thirdParty: config.consent.thirdParty.defaultChecked,
   };
   let issues: SubmissionIssue[] = [];
   let submitting = false;
@@ -941,6 +942,12 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
       consentHost.appendChild(
         renderConsentRow(config.consent.marketing, false, "Send me updates", "consent_marketing",
           (v) => { consent.marketing = v; }, consent.marketing),
+      );
+    }
+    if (config.consent.thirdParty.enabled) {
+      consentHost.appendChild(
+        renderConsentRow(config.consent.thirdParty, false, "Share my information with event partners", "consent_thirdParty",
+          (v) => { consent.thirdParty = v; }, consent.thirdParty),
       );
     }
   }

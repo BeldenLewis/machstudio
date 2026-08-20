@@ -55,6 +55,10 @@ model Workspace {
   /// null = 아직 설정 안 함(기존 웨비나 값은 그대로 살아 있다 — 이 컬럼은 순수 추가다).
   privacyBodyTemplate   String?
   marketingBodyTemplate String?
+  /// 법률 문구 생성기(legal-templates)의 조직 정보 — 회사명·주소·개인정보 담당 연락처.
+  /// 위 두 필드와 같은 이유로 워크스페이스 자산이다. { default: OrgProfile, byCountry?: {...} }
+  /// 모양(WorkspaceLegalProfile, src/lib/legal-templates/types.ts). null = 아직 설정 안 함.
+  legalProfile Json?
 
   members              WorkspaceMember[]
   projects             Project[]
@@ -1127,6 +1131,13 @@ model CompetitionEntry {
   contactName  String?
   contactEmail String?
   contactPhone String?
+
+  /// 동의 기록 — WebinarRegistration.agreePrivacy/agreeMarketing 과 같은 이유로 컬럼을 둔다.
+  /// 예전에는 체크박스 상태를 검증만 하고 어디에도 저장하지 않았다(마케팅 수신 동의 여부가
+  /// 통째로 유실됐다) — 법률 문구 생성기로 제3자 제공 동의를 추가하며 함께 메운다.
+  agreePrivacy    Boolean @default(true)
+  agreeMarketing  Boolean @default(false)
+  agreeThirdParty Boolean @default(false)
 
   status      String  @default("submitted") // submitted|approved|rejected
   isPublished Boolean @default(false) // 투표 노출 토글
