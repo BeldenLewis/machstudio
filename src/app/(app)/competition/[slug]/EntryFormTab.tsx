@@ -6,6 +6,7 @@ import {
   AlignLeft, ImageIcon, ListChecks, ListPlus, Mail, Phone, Plus, SquareCheck, Trash2, Video,
 } from "lucide-react";
 import { toast } from "sonner";
+import { NOTICE_LANGUAGES } from "@/lib/notice/config";
 import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 import { Switch } from "@/components/ui/switch";
 import type { CompetitionFieldType, CompetitionFormField } from "@/lib/competition-config";
@@ -96,7 +97,7 @@ export default function EntryFormTab({ competition, patch }: Props) {
         */}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium">문구 언어</span>
-          {([["ko", "한국어"], ["en", "English"]] as const).map(([value, label]) => (
+          {NOTICE_LANGUAGES.map(({ value, label }) => (
             <button
               key={value}
               onClick={() => setLanguage(value)}

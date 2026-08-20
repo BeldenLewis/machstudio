@@ -78,6 +78,59 @@ const EN: CompetitionFormStrings = {
   entryNoLabel: "Entry no.",
 };
 
+
+const FR: CompetitionFormStrings = {
+  required: " (obligatoire)",
+  choosePlaceholder: "Veuillez choisir",
+  imageHint: (max) => `4 Mo maximum par fichier, ${max} fichier${max > 1 ? "s" : ""} au total`,
+  youtubeHint:
+    "Les vidéos privées ne peuvent pas être lues sur les écrans de vote et du jury. Choisissez « Non répertoriée » ou « Publique ».",
+  modalTitle: "Inscription",
+  submit: "Envoyer ma candidature",
+  submitting: "Envoi en cours…",
+  close: "Fermer",
+  consent: "Consentement",
+  terms: "Conditions",
+  agreeRequired: "Veuillez accepter la collecte et l'utilisation de vos données personnelles.",
+  submitted: "Votre candidature a bien été reçue.",
+  submitFailed: "L'envoi a échoué. Merci de réessayer dans un instant.",
+  networkError: "Une erreur réseau est survenue.",
+  uploadFailed: "Le téléversement a échoué.",
+  uploadNetworkError: "Une erreur réseau est survenue pendant le téléversement.",
+  previewBanner: "Ceci est un aperçu. Les candidatures ne sont pas enregistrées.",
+  previewSubmitted: "Non enregistré — ceci est un aperçu. Les envois fonctionneront après publication.",
+  entryNoLabel: "N° de dossier",
+};
+
+const JA: CompetitionFormStrings = {
+  required: "（必須）",
+  choosePlaceholder: "選択してください",
+  imageHint: (max) => `1枚あたり4MB以下、最大${max}枚`,
+  youtubeHint:
+    "非公開（Private）の動画は審査・投票画面で再生されません。限定公開（Unlisted）または公開に設定してください。",
+  modalTitle: "エントリー",
+  submit: "応募する",
+  submitting: "送信中…",
+  close: "閉じる",
+  consent: "同意",
+  terms: "利用規約",
+  agreeRequired: "個人情報の収集・利用にご同意ください。",
+  submitted: "応募を受け付けました。",
+  submitFailed: "受付に失敗しました。しばらくしてからもう一度お試しください。",
+  networkError: "ネットワークエラーが発生しました。",
+  uploadFailed: "アップロードに失敗しました。",
+  uploadNetworkError: "アップロード中にネットワークエラーが発生しました。",
+  previewBanner: "プレビューです。応募しても保存されません。",
+  previewSubmitted: "プレビューのため保存されていません。公開後は正常に受け付けられます。",
+  entryNoLabel: "エントリー番号",
+};
+
+/**
+ * **Record 로 둔다.** 삼항으로 고르면 언어를 늘렸을 때 새 언어가 조용히 한국어로 떨어진다 —
+ * 고를 수는 있는데 안 바뀌는 상태가 되고 타입 검사도 통과한다. 여기 한 줄이 비면 컴파일이 깨진다.
+ */
+const DICT: Record<NoticeLanguage, CompetitionFormStrings> = { ko: KO, en: EN, fr: FR, ja: JA };
+
 export function competitionFormStrings(language: NoticeLanguage): CompetitionFormStrings {
-  return language === "en" ? EN : KO;
+  return DICT[language] ?? KO;
 }

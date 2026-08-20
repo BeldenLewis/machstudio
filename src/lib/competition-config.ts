@@ -8,7 +8,7 @@
  * 필드 타입은 웨비나 등록 폼과 같은 것을 쓴다(WebinarRegistrationField) — 두 벌로 갈라지면
  * 폼 빌더 UI 도 두 벌이 된다. 대회에만 필요한 첨부 타입만 확장한다.
  */
-import { normalizeNoticePageConfig, type NoticeLanguage, type NoticePageConfig } from "@/lib/notice/config";
+import { isNoticeLanguage, normalizeNoticePageConfig, type NoticeLanguage, type NoticePageConfig } from "@/lib/notice/config";
 import type { WebinarRegistrationField } from "./webinar-config";
 
 /** 대회 신청 폼에만 있는 추가 타입 — 사진 업로드와 YouTube 링크. */
@@ -225,7 +225,7 @@ export function normalizeCompetitionConfig(
     // 공고 상세페이지는 자기 정규화 함수가 소유한다 — 여기서 다시 풀어 쓰면 두 벌이 된다.
     noticePage: notice,
     // 위로 올린 값. 예전에 공고에만 정해 둔 대회는 그 값을 그대로 이어받는다.
-    language: source.language === "en" || source.language === "ko" ? source.language : notice.language,
+    language: isNoticeLanguage(source.language) ? source.language : notice.language,
   };
 }
 

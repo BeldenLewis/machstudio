@@ -8,6 +8,7 @@ import { FIELD_CLS, FINISH, R, btnCls } from "@/components/ui/primitives";
 import { BRAND_PRESETS, ColorField } from "@/components/ui/ColorField";
 import { Switch } from "@/components/ui/switch";
 import {
+  NOTICE_LANGUAGES,
   NOTICE_SECTIONS,
   normalizeNoticePageConfig,
   type NoticePageConfig,
@@ -268,7 +269,7 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
           */}
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
             <span className="text-xs font-medium">문구 언어</span>
-            {([["ko", "한국어"], ["en", "English"]] as const).map(([value, label]) => (
+            {NOTICE_LANGUAGES.map(({ value, label }) => (
               <button
                 key={value}
                 onClick={() => update({ language: value })}

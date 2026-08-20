@@ -79,8 +79,15 @@ describe("공고 문구 언어", () => {
     expect(m.selectionRounds.map((r) => r.title)).toEqual(["1차 온라인", "Stage Final"]);
   });
 
-  it("모르는 값이면 한국어 — 기존 대회가 조용히 영어가 되면 안 된다", () => {
-    expect(build("fr").ctaLabel).toBe("접수 시작 전");
+  it("지원하는 언어는 그대로 쓴다", () => {
+    expect(build("fr").ctaLabel).toBe("Inscriptions bientôt ouvertes");
+    expect(build("ja").ctaLabel).toBe("受付開始前");
+  });
+
+  /** 오타 하나로 화면이 비거나 엉뚱한 언어가 되면 안 된다. */
+  it("모르는 값이면 한국어 — 기존 대회가 조용히 다른 언어가 되면 안 된다", () => {
+    expect(build("de").ctaLabel).toBe("접수 시작 전");
+    expect(build("").ctaLabel).toBe("접수 시작 전");
   });
 });
 
