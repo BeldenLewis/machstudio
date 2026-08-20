@@ -11,6 +11,10 @@ export interface BackgroundValue {
   url: string;
   focus: NoticeMediaFocus;
   mobileFocus: NoticeMediaFocus;
+  /** 배경 위에 덮는 섹션색의 진하기(0~100) */
+  scrim: number;
+  /** 카드·박스 바탕의 진하기(0~100) */
+  panel: number;
 }
 
 /**
@@ -29,11 +33,17 @@ export function SectionBackgroundField({
   competitionId,
   value,
   onChange,
+  showTone = true,
 }: {
   label: string;
   competitionId: string;
   value: BackgroundValue | null;
   onChange: (next: BackgroundValue | null) => void;
+  /**
+   * 진하기 손잡이를 보일지. 히어로는 끈다 — 그 위에는 카드가 없고, 스크림은 껍데기가
+   * 그라데이션으로 이미 잡아 둬서(위는 옅게, 아래는 진하게) 한 값으로 덮으면 오히려 나빠진다.
+   */
+  showTone?: boolean;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -50,9 +60,11 @@ export function SectionBackgroundField({
       if (data.type !== "image") { toast.error("배경은 이미지만 넣을 수 있어요"); return; }
       onChange({
         url: data.url,
-        // 사진만 바꿔 끼울 때 맞춰 둔 초점이 날아가면 안 된다.
+        // 사진만 바꿔 끼울 때 맞춰 둔 값이 날아가면 안 된다.
         focus: value?.focus ?? { x: 50, y: 50 },
         mobileFocus: value?.mobileFocus ?? { x: 50, y: 50 },
+        scrim: value?.scrim ?? 72,
+        panel: value?.panel ?? 88,
       });
       toast.success("배경을 올렸어요");
     } finally {
@@ -148,8 +160,55 @@ export function SectionBackgroundField({
               style={{ left: `${focus.x}%`, top: `${focus.y}%` }}
             />
           </div>
+
+          {/*
+            **사진 위에서 글이 읽히게 하는 두 손잡이.**
+            카드들은 평평한 색 위에 놓일 걸 전제로 옅은 막으로 그려져 있어서, 뒤에 사진이
+            깔리면 거의 사라진다. 사진마다 밝기가 달라 한 값으로는 못 맞추므로 여기서 정한다.
+          */}
+          {showTone && (
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Slider
+              label="배경 어둡기"
+              hint="높을수록 사진이 흐려져요"
+              value={value.scrim}
+              onChange={(n) => onChange({ ...value, scrim: n })}
+            />
+            <Slider
+              label="박스 진하기"
+              hint="높을수록 카드가 또렷해져요"
+              value={value.panel}
+              onChange={(n) => onChange({ ...value, panel: n })}
+            />
+          </div>
+          )}
         </>
       )}
     </div>
+  );
+}
+
+/** 0~100 손잡이 — 값이 곧 눈에 보이는 결과라 숫자를 옆에 붙여 둔다. */
+function Slider({
+  label, hint, value, onChange,
+}: {
+  label: string; hint: string; value: number; onChange: (next: number) => void;
+}) {
+  return (
+    <label className="space-y-1">
+      <span className="flex items-baseline justify-between gap-2">
+        <span className="text-[11px] font-medium">{label}</span>
+        <span className="text-[11px] tabular-nums text-muted-foreground">{value}%</span>
+      </span>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full accent-violet-500"
+      />
+      <span className="block text-[10px] text-muted-foreground">{hint}</span>
+    </label>
   );
 }

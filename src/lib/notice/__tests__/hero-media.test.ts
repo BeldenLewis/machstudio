@@ -121,4 +121,21 @@ describe("히어로 배경", () => {
     expect(NOTICE_CSS).toMatch(/\.nt-bg::after/);
     expect(NOTICE_CSS).toMatch(/\.nt-bg img[^{]*\{[^}]*object-fit:\s*cover/);
   });
+
+  /**
+   * 사진 위 카드가 읽히는가.
+   *
+   * 카드들은 평평한 색 위를 전제로 --paper 5% 옅은 막으로 그려져 있다. 뒤에 사진이 깔리면
+   * 그 막이 사실상 투명해서 카드가 사라진다 — 실제로 배경을 넣은 섹션이 그렇게 보였다.
+   * 배경을 켠 섹션에서만 **섹션색**으로 바꾸고, 진하기는 운영자가 정한다.
+   */
+  it("배경을 켠 섹션의 카드는 섹션색 바탕을 쓴다 — 진하기는 변수로 조절된다", () => {
+    // 정규식 대신 문자열로 본다 — 템플릿 리터럴 안의 \b 는 단어 경계가 아니라 백스페이스 문자다.
+    for (const card of ["nt-round", "nt-step", "nt-prize", "nt-elig", "nt-stat", "nt-cd-box"]) {
+      expect(NOTICE_CSS, card).toContain(`.section.has-bg .${card}`);
+    }
+    // 글자색(--paper)이 아니라 배경색(--sec-bg)이어야 라이트/다크 어느 쪽이든 대비가 산다.
+    expect(NOTICE_CSS).toMatch(/color-mix\(in srgb, var\(--sec-bg\) var\(--panel-a/);
+    expect(NOTICE_CSS).toMatch(/color-mix\(in srgb, var\(--sec-bg\) var\(--scrim-a/);
+  });
 });
