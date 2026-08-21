@@ -1295,7 +1295,11 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <Table2 className="w-8 h-8 text-muted-foreground/20 mb-3" />
                   <p className="text-sm text-muted-foreground">아직 수집된 데이터가 없어요</p>
-                  <p className="text-xs text-muted-foreground/60 mt-1">스크립트를 설치하면 폼 제출 시 자동으로 수집돼요</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">
+                    {source.mode === "builder"
+                      ? "등록 폼 탭에서 폼을 만들고 코드를 붙이면 여기 쌓여요"
+                      : "스크립트를 설치하면 폼 제출 시 자동으로 수집돼요"}
+                  </p>
                 </div>
               ) : records.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
