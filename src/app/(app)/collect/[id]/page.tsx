@@ -823,7 +823,10 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   };
 
   const addField = () => {
-    const newIndex = fields.length;
+    // fields.length 가 아니라 "지금 있는 index 중 제일 큰 값 + 1" 을 쓴다 — 중간 항목을
+    // 지운 뒤라면(아래 removeField) 배열 길이가 실제 DOM 위치보다 작아서, length 를 그대로
+    // 쓰면 이미 쓰고 있는 index 와 겹친다.
+    const newIndex = fields.length > 0 ? Math.max(...fields.map((f) => f.index)) + 1 : 0;
     setFields((f) => [...f, {
       id: `new-${Date.now()}`,
       index: newIndex,
@@ -831,12 +834,20 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       label: "",
       type: "text",
       isRequired: false,
-      sortOrder: newIndex,
+      sortOrder: f.length,
     }]);
   };
 
+  /**
+   * index 는 화면 배열 순서가 아니라 **실제 사이트에서 필드 하나가 몇 번째인지**를 가리키는
+   * 값이다(연동형 스크립트가 `groups[field.index]` 로 그 자리를 찾는다). 그래서 항목 하나를
+   * 지운다고 나머지의 index 까지 당겨 버리면, 지운 자리 뒤의 모든 필드가 실제 DOM 과 하나씩
+   * 어긋난다 — "숨김 필드라 안 보이는 항목이니 지워도 되겠지" 하고 지운 순간 그 뒤의 필드가
+   * 전부 잘못된 값을 모으게 된다. sortOrder(화면에 보이는 순서)만 다시 매기고 index 는
+   * 그대로 둔다.
+   */
   const removeField = (idx: number) => {
-    setFields((f) => f.filter((_, i) => i !== idx).map((fld, i) => ({ ...fld, index: i, sortOrder: i })));
+    setFields((f) => f.filter((_, i) => i !== idx).map((fld, i) => ({ ...fld, sortOrder: i })));
   };
 
   const updateField = (idx: number, patch: Partial<FieldMapping>) => {
@@ -1495,6 +1506,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                           <option value="text">텍스트</option>
                           <option value="select">선택</option>
                           <option value="checkbox">체크박스</option>
+                          <option value="radio">라디오</option>
                         </select>
                         <button onClick={() => removeField(idx)}
                           className="p-1 rounded-lg hover:bg-red-500/10 hover:text-red-500 transition-colors text-muted-foreground shrink-0">
