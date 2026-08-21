@@ -207,6 +207,8 @@ function JudgeRow({
   onRemove: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  // 이번 승인 범위 밖인 심사위원 초대 링크는 현재 host 동작을 유지한다.
+  // eslint-disable-next-line no-restricted-syntax
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const link = `${origin}/j/${judge.accessToken}`;
 

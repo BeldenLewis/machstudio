@@ -456,6 +456,8 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => { selectAllMatchingRef.current = selectAllMatching; }, [selectAllMatching]);
 
   useEffect(() => { fetchSource(); }, [fetchSource]);
+  // 52,000건 capture 설치 경로와 localhost 경고는 현재 host를 함께 보여야 해 이번 범위에서 보존한다.
+  // eslint-disable-next-line no-restricted-syntax
   useEffect(() => { setBrowserOrigin(window.location.origin); }, []);
 
   // 프로젝트 컨텍스트 ↔ URL 의 소스 동기화

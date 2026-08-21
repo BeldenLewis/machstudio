@@ -279,6 +279,8 @@ function WebinarDetail({ id }: { id: string }) {
     navigate(target as Tab);
   };
 
+  // 이번 승인 범위 밖인 라이브 공유 링크는 현재 host 동작을 유지한다.
+  // eslint-disable-next-line no-restricted-syntax
   const liveUrl = webinar ? `${window.location.origin}/webinar/${webinar.slug}/live` : "";
 
   const copyLiveUrl = () => {

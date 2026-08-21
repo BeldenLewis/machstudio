@@ -20,17 +20,20 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://app.example.com/");
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   // 자동저장이 PATCH 를 쏜다 — 테스트에서 실제 네트워크로 나가지 않게 막는다.
   vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+  vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn() } });
 });
 
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 const CONFIG = {
@@ -68,6 +71,13 @@ describe("붙일 코드", () => {
     expect(check).toContain("<div data-mach-form-check></div>");
   });
 
+  it("폼과 등록 확인 스니펫은 설정된 공개 주소를 쓴다", () => {
+    render(CONFIG);
+    for (const snippet of snippets()) {
+      expect(snippet).toContain('src="https://app.example.com/f/src_1');
+    }
+  });
+
   /** 꺼진 기능의 코드를 주면 붙여 놓고 "안 나온다" 고 묻는다. */
   it("등록 확인을 끄면 그 코드는 사라지고 켜는 곳을 알려준다", () => {
     render({ ...CONFIG, lookup: { ...CONFIG.lookup, enabled: false } });
@@ -82,6 +92,14 @@ describe("미리보기 링크", () => {
     const hrefs = [...container.querySelectorAll("aside a")].map((a) => a.getAttribute("href"));
     expect(hrefs).toContain("/p/tok123");
     expect(hrefs).toContain("/p/tok123/check");
+  });
+
+  it("링크 복사는 설정된 공개 주소를 쓴다", () => {
+    render(CONFIG);
+    const copy = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("링크 복사"));
+    expect(copy).toBeTruthy();
+    act(() => copy?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("https://app.example.com/p/tok123");
   });
 
   /** 아이콘만 있는 링크는 이름이 없으면 스크린리더에서 "링크" 로만 읽힌다. */

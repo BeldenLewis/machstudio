@@ -5,6 +5,7 @@ import { Check, Copy, ExternalLink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { FINISH, R } from "@/components/ui/primitives";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { getPublicAppOrigin } from "@/lib/app-url";
 import type { CompetitionDetail } from "./page";
 
 interface Props {
@@ -45,7 +46,7 @@ function CopyRow({ label, value, hint }: { label: string; value: string; hint?: 
 
 export default function DeployTab({ competition, patch }: Props) {
   const confirm = useConfirm();
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const origin = getPublicAppOrigin();
   const snippet = `<script async src="${origin}/c/${competition.id}"></script>\n<div data-mach-competition></div>`;
   const voteSnippet = `<script async src="${origin}/c/${competition.id}/vote"></script>\n<div data-mach-competition-vote></div>`;
   const finalVoteSnippet = `<script async src="${origin}/c/${competition.id}/vote?round=final"></script>\n<div data-mach-competition-vote></div>`;

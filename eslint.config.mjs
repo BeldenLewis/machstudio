@@ -19,6 +19,18 @@ const eslintConfig = defineConfig([
      */
     "src/generated/**",
   ]),
+  {
+    files: ["src/app/(app)/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "MemberExpression[object.type='MemberExpression'][object.object.name='window'][object.property.name='location'][property.name='origin']",
+          message: "공개 URL·설치 코드는 getPublicAppOrigin()을 사용하세요. 예외는 이유와 함께 eslint-disable 하세요.",
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

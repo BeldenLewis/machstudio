@@ -30,6 +30,7 @@ import {
   type CollectFormConfig,
   type RegistrationStatus,
 } from "@/lib/collect-form-config";
+import { getPublicAppOrigin } from "@/lib/app-url";
 
 const PREVIEW_STATES: Array<{ id: RegistrationStatus | "auto"; label: string }> = [
   { id: "auto", label: "지금 상태" },
@@ -224,8 +225,9 @@ function PreviewLinkRow({ sourceId, initialToken }: { sourceId: string; initialT
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  // 서버에서 그릴 땐 origin 을 모른다 — 클라이언트에서만 절대 주소를 만든다.
-  const url = token ? `${typeof window === "undefined" ? "" : window.location.origin}/p/${token}` : "";
+  // 공개 링크는 현재 preview/localhost host가 아니라 설정된 서비스 주소로 고정한다.
+  const origin = getPublicAppOrigin();
+  const url = token ? `${origin}/p/${token}` : "";
 
   const regenerate = async () => {
     const ok = await confirm({
@@ -307,8 +309,7 @@ function PreviewLinkRow({ sourceId, initialToken }: { sourceId: string; initialT
  */
 function EmbedSnippetRow({ sourceId, lookupEnabled }: { sourceId: string; lookupEnabled: boolean }) {
   const [copied, setCopied] = useState<"form" | "check" | null>(null);
-  // 서버에서 그릴 땐 origin 을 모른다 — 클라이언트에서만 절대 주소를 만든다.
-  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  const origin = getPublicAppOrigin();
 
   const formSnippet = `<script async src="${origin}/f/${sourceId}"></script>\n<div data-mach-form></div>`;
   const checkSnippet = `<script async src="${origin}/f/${sourceId}/check"></script>\n<div data-mach-form-check></div>`;
