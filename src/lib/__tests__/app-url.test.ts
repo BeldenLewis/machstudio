@@ -42,6 +42,20 @@ describe("getPublicAppOrigin (server)", () => {
     expect(getPublicAppOrigin()).toBe("");
   });
 
+  it("terminal DNS dot이 있는 localhost도 outbound origin으로 쓰지 않는다", () => {
+    vi.stubEnv("NEXT_PUBLIC_CANONICAL_APP_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost.:3000");
+
+    expect(getPublicAppOrigin()).toBe("");
+  });
+
+  it("terminal DNS dot이 있는 localhost 하위 hostname도 outbound origin으로 쓰지 않는다", () => {
+    vi.stubEnv("NEXT_PUBLIC_CANONICAL_APP_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://preview.localhost.:3000");
+
+    expect(getPublicAppOrigin()).toBe("");
+  });
+
   it("설정이 없으면 빈 값으로 fail closed 한다", () => {
     vi.stubEnv("NEXT_PUBLIC_CANONICAL_APP_URL", "");
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
@@ -49,9 +63,16 @@ describe("getPublicAppOrigin (server)", () => {
     expect(getPublicAppOrigin()).toBe("");
   });
 
-  it("Vercel preview URL은 outbound origin으로 쓰지 않는다", () => {
-    vi.stubEnv("NEXT_PUBLIC_CANONICAL_APP_URL", "https://mach-studio-git-main-lynlea.vercel.app");
+  it("운영자가 명시한 Vercel canonical URL은 끝 슬래시를 정규화해 쓴다", () => {
+    vi.stubEnv("NEXT_PUBLIC_CANONICAL_APP_URL", "https://machstudio.vercel.app/");
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3000");
+
+    expect(getPublicAppOrigin()).toBe("https://machstudio.vercel.app");
+  });
+
+  it("legacy app URL의 Vercel preview host는 outbound origin으로 쓰지 않는다", () => {
+    vi.stubEnv("NEXT_PUBLIC_CANONICAL_APP_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://mach-studio-git-branch-team.vercel.app");
 
     expect(getPublicAppOrigin()).toBe("");
   });

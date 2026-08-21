@@ -17,11 +17,12 @@ SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
 # development can and should stay localhost.
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-# Durable public address for links and snippets copied to partner sites. This must
-# be a stable, non-local, non-preview URL (for example, a production custom domain).
+# Durable public address for links and snippets copied to partner sites. Setting
+# this explicitly is the operator's assertion that the host is stable (including
+# a production Vercel address), never a temporary preview deployment.
 # Copied outbound code is deliberately disabled until this is set or APP_URL is an
 # already-safe non-local fallback.
-NEXT_PUBLIC_CANONICAL_APP_URL=https://app.example.com
+NEXT_PUBLIC_CANONICAL_APP_URL=https://machstudio.vercel.app
 
 # Optional, defaults to the current request origin.
 SHORT_URL_BASE=https://go.example.com

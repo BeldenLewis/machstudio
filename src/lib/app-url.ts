@@ -1,19 +1,27 @@
-function isLocalOrPreviewHostname(hostname: string) {
-  const normalized = hostname.toLowerCase();
+function isLocalHostname(hostname: string) {
+  const normalized = hostname.toLowerCase().replace(/\.$/, "");
   return normalized === "localhost"
     || normalized.endsWith(".localhost")
     || normalized === "127.0.0.1"
     || normalized.startsWith("127.")
     || normalized === "0.0.0.0"
     || normalized === "[::1]"
-    || normalized.endsWith(".local")
-    // Vercel deployment hosts can be replaced on the next preview deploy. A stable
-    // partner-facing address must be declared explicitly with the canonical variable.
-    || normalized === "vercel.app"
-    || normalized.endsWith(".vercel.app");
+    || normalized.endsWith(".local");
 }
 
-function toCanonicalOutboundOrigin(value: string | undefined) {
+function isVercelDeploymentHostname(hostname: string) {
+  const normalized = hostname.toLowerCase().replace(/\.$/, "");
+  return normalized === "vercel.app" || normalized.endsWith(".vercel.app");
+}
+
+type OriginValidationOptions = {
+  rejectVercelDeploymentHost?: boolean;
+};
+
+function toCanonicalOutboundOrigin(
+  value: string | undefined,
+  { rejectVercelDeploymentHost = false }: OriginValidationOptions = {},
+) {
   const configured = value?.trim();
   if (!configured) return "";
 
@@ -26,7 +34,8 @@ function toCanonicalOutboundOrigin(value: string | undefined) {
       || url.pathname !== "/"
       || url.search
       || url.hash
-      || isLocalOrPreviewHostname(url.hostname)
+      || isLocalHostname(url.hostname)
+      || (rejectVercelDeploymentHost && isVercelDeploymentHostname(url.hostname))
     ) {
       return "";
     }
@@ -41,11 +50,12 @@ function toCanonicalOutboundOrigin(value: string | undefined) {
  *
  * This deliberately never falls back to the browser location: a local or preview
  * host copied once becomes a broken external integration later. `NEXT_PUBLIC_APP_URL`
- * remains a backwards-compatible fallback only when it is already a safe canonical URL.
+ * remains a backwards-compatible fallback only when it is already a safe canonical URL;
+ * Vercel hosts require the explicit operator assertion in the canonical variable.
  */
 export function getPublicAppOrigin() {
   return toCanonicalOutboundOrigin(process.env.NEXT_PUBLIC_CANONICAL_APP_URL)
-    || toCanonicalOutboundOrigin(process.env.NEXT_PUBLIC_APP_URL);
+    || toCanonicalOutboundOrigin(process.env.NEXT_PUBLIC_APP_URL, { rejectVercelDeploymentHost: true });
 }
 
 export function getAuthCallbackUrl() {
