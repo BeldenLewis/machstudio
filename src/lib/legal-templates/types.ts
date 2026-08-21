@@ -119,6 +119,14 @@ export interface EventLegalBlanks {
   dataRetentionNote: string;
   /** ISO 날짜. 비어 있으면 오늘 날짜를 쓴다(호출부 책임). */
   effectiveDate: string;
+  /**
+   * 성인(한국 기준 만 19세, 미국 기준 만 18세) 전용 대회·행사 여부. 기본값은 false —
+   * 끄지 않으면(= 대부분의 경우) 미성년자 참가자를 전제로 한 법정대리인 동의 안내 문단이
+   * 항상 포함된다. "조용히 빠지면 더 위험하다"([[OrgProfile.legalName]]과 같은 이유)는
+   * 원칙을 나이 조항에도 그대로 적용한 것 — 운영자가 실제로 성인 전용임을 명시했을 때만
+   * 그 문단을 짧은 "성인 전용" 고지로 바꾼다.
+   */
+  adultsOnly: boolean;
 }
 
 export function emptyEventLegalBlanks(): EventLegalBlanks {
@@ -131,6 +139,7 @@ export function emptyEventLegalBlanks(): EventLegalBlanks {
     thirdParties: [],
     dataRetentionNote: "",
     effectiveDate: "",
+    adultsOnly: false,
   };
 }
 

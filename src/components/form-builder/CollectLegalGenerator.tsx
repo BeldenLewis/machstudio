@@ -70,6 +70,7 @@ export function CollectLegalGenerator({
           thirdParties: legal.thirdParties,
           dataRetentionNote: legal.dataRetentionNote,
           effectiveDate: legal.effectiveDate,
+          adultsOnly: legal.adultsOnly,
         },
         collectedCategories,
         marketingOffered: config.consent.marketing.enabled,
@@ -160,6 +161,11 @@ export function CollectLegalGenerator({
       <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
         <Switch checked={legal.onSitePhotography} onChange={(v) => setLegal({ onSitePhotography: v })} label="현장 촬영·녹화 있음" />
         행사장에서 사진·영상 촬영이 있어요
+      </label>
+
+      <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+        <Switch checked={legal.adultsOnly} onChange={(v) => setLegal({ adultsOnly: v })} label="성인(만 19세 이상) 전용 행사" />
+        성인 전용이에요 — 꺼두면(기본) 미성년자 참가를 전제로 법정대리인 동의 안내가 들어가요
       </label>
 
       <ThirdPartiesEditor items={legal.thirdParties} onChange={(next) => setLegal({ thirdParties: next })} />

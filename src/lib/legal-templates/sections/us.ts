@@ -167,11 +167,36 @@ const PRIVACY_SECTIONS: Section[] = [
   {
     id: "children",
     purposes: "any",
-    render: () =>
-      `## Children's Privacy\n\n` +
-      `This registration is not directed at children under the age of 13, and we do not knowingly collect ` +
-      `personal information from children under 13. If you believe a child has provided us with personal ` +
-      `information, please contact us so we can delete it.`,
+    render: (ctx) => {
+      const coppa =
+        `### Children Under 13 (COPPA)\n\n` +
+        `This registration is not directed at children under the age of 13, and we do not knowingly collect ` +
+        `personal information from children under 13. If you believe a child under 13 has provided us with ` +
+        `personal information, please contact us using the information in "Contact Us" below so we can delete it.`;
+
+      if (ctx.event.adultsOnly) {
+        return (
+          `## Children's and Minors' Privacy\n\n${coppa}\n\n` +
+          `### Adults Only\n\n` +
+          `${eventName(ctx)} is open to adults only. If you are a minor under the age of majority in your ` +
+          `place of residence, please do not register — we may cancel or reject registrations where we ` +
+          `learn the registrant is a minor.`
+        );
+      }
+
+      return (
+        `## Children's and Minors' Privacy\n\n${coppa}\n\n` +
+        `### Minors Under the Age of Majority\n\n` +
+        `If you are entering ${eventName(ctx)} on behalf of, or together with, a participant who has not ` +
+        `yet reached the age of majority in their place of residence (commonly 18), we recommend that a ` +
+        `parent or legal guardian review this Privacy Policy and any entry agreement, and provide consent, ` +
+        `before the minor is registered. A minor's ability to enter into a binding agreement — including ` +
+        `consent to these terms, use of submitted media, or the receipt of prizes — may be limited under ` +
+        `the law of their state or country, and we may require parental or guardian consent (or a ` +
+        `co-signature) before accepting a minor's entry or releasing a prize to a minor. Requirements vary ` +
+        `by jurisdiction; consult applicable state or local law for specifics.`
+      );
+    },
   },
   {
     id: "rights",
