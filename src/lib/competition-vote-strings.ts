@@ -37,6 +37,10 @@ export interface CompetitionVoteStrings {
   undoNotAllowed: string;
   entryRequired: string;
   cannotIdentifyVoter: string;
+  /** 상단 상태 배지 — 문장이 아니라 한눈에 읽는 짧은 라벨이다("투표가 아직 열리지 않았어요" 와는 별개). */
+  statusOpen: string;
+  statusBefore: string;
+  statusClosed: string;
 }
 
 const KO: CompetitionVoteStrings = {
@@ -64,6 +68,9 @@ const KO: CompetitionVoteStrings = {
   undoNotAllowed: "이 투표는 취소할 수 없어요.",
   entryRequired: "참가작을 지정해주세요.",
   cannotIdentifyVoter: "투표자를 식별할 수 없어요.",
+  statusOpen: "투표 중",
+  statusBefore: "투표 예정",
+  statusClosed: "투표 마감",
 };
 
 const EN: CompetitionVoteStrings = {
@@ -91,6 +98,9 @@ const EN: CompetitionVoteStrings = {
   undoNotAllowed: "This vote can't be undone.",
   entryRequired: "Please specify an entry.",
   cannotIdentifyVoter: "We couldn't identify you as a voter.",
+  statusOpen: "Voting open",
+  statusBefore: "Voting soon",
+  statusClosed: "Voting closed",
 };
 
 const FR: CompetitionVoteStrings = {
@@ -118,6 +128,9 @@ const FR: CompetitionVoteStrings = {
   undoNotAllowed: "Ce vote ne peut pas être annulé.",
   entryRequired: "Merci d'indiquer une candidature.",
   cannotIdentifyVoter: "Nous n'avons pas pu vous identifier comme électeur.",
+  statusOpen: "Vote ouvert",
+  statusBefore: "Vote à venir",
+  statusClosed: "Vote fermé",
 };
 
 const JA: CompetitionVoteStrings = {
@@ -145,6 +158,9 @@ const JA: CompetitionVoteStrings = {
   undoNotAllowed: "この投票は取り消せません。",
   entryRequired: "参加作品を指定してください。",
   cannotIdentifyVoter: "投票者を識別できませんでした。",
+  statusOpen: "投票受付中",
+  statusBefore: "投票開始前",
+  statusClosed: "投票終了",
 };
 
 /**

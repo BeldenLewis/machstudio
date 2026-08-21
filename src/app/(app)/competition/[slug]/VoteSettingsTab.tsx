@@ -248,8 +248,9 @@ function VotePreviewPane({ competition, rounds }: { competition: CompetitionDeta
           : "지금 설정대로면 방문자에게 보이는 화면"
       }
       reloadKey={
-        (round ? `${round.voteEnabled}-${round.maxVotesPerVoter}-${round.entryOrder}-${round.showLiveTally}-${round.allowVoteUndo}-${round.name}` : kind) +
-        `-${JSON.stringify(competition.config.voteIntro)}`
+        (round
+          ? `${round.voteEnabled}-${round.voteOpenAt}-${round.voteCloseAt}-${round.maxVotesPerVoter}-${round.entryOrder}-${round.showLiveTally}-${round.allowVoteUndo}-${round.name}`
+          : kind) + `-${JSON.stringify(competition.config.voteIntro)}`
       }
       controls={
         <div className="flex flex-wrap items-center gap-1">
