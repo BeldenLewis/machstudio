@@ -47,11 +47,11 @@ function CopyRow({ label, value, hint }: { label: string; value: string; hint?: 
 export default function DeployTab({ competition, patch }: Props) {
   const confirm = useConfirm();
   const origin = getPublicAppOrigin();
-  const snippet = `<script async src="${origin}/c/${competition.id}"></script>\n<div data-mach-competition></div>`;
-  const voteSnippet = `<script async src="${origin}/c/${competition.id}/vote"></script>\n<div data-mach-competition-vote></div>`;
-  const finalVoteSnippet = `<script async src="${origin}/c/${competition.id}/vote?round=final"></script>\n<div data-mach-competition-vote></div>`;
-  const resultSnippet = `<script async src="${origin}/c/${competition.id}/result"></script>\n<div data-mach-competition-result></div>`;
-  const previewUrl = competition.previewToken ? `${origin}/cp/${competition.previewToken}` : "";
+  const snippet = origin ? `<script async src="${origin}/c/${competition.id}"></script>\n<div data-mach-competition></div>` : null;
+  const voteSnippet = origin ? `<script async src="${origin}/c/${competition.id}/vote"></script>\n<div data-mach-competition-vote></div>` : null;
+  const finalVoteSnippet = origin ? `<script async src="${origin}/c/${competition.id}/vote?round=final"></script>\n<div data-mach-competition-vote></div>` : null;
+  const resultSnippet = origin ? `<script async src="${origin}/c/${competition.id}/result"></script>\n<div data-mach-competition-result></div>` : null;
+  const previewUrl = origin && competition.previewToken ? `${origin}/cp/${competition.previewToken}` : null;
 
   const rotate = async () => {
     const ok = await confirm({
@@ -65,6 +65,11 @@ export default function DeployTab({ competition, patch }: Props) {
 
   return (
     <div className="space-y-4">
+      {!origin && (
+        <p role="alert" className={`bg-secondary/60 px-4 py-3 text-xs leading-relaxed text-muted-foreground ${R.control}`}>
+          공개 배포 주소가 설정되지 않아 설치 코드와 미리보기 링크를 복사할 수 없어요. NEXT_PUBLIC_CANONICAL_APP_URL을 설정하세요.
+        </p>
+      )}
       <section className={`bg-background p-5 ${R.panel} ${FINISH.s1}`}>
         <h2 className="text-sm font-semibold">설치 코드</h2>
         <p className="mt-1 text-xs text-muted-foreground">
@@ -82,13 +87,15 @@ export default function DeployTab({ competition, patch }: Props) {
             켜고 저장해야 새로 만든 페이지가 나갑니다.
           </p>
         )}
-        <div className="mt-4">
-          <CopyRow
-            label="아임웹 코드블럭"
-            value={snippet}
-            hint="두 번째 줄(div)을 빠뜨려도 스크립트 자리에 자동으로 붙어요."
-          />
-        </div>
+        {snippet && (
+          <div className="mt-4">
+            <CopyRow
+              label="아임웹 코드블럭"
+              value={snippet}
+              hint="두 번째 줄(div)을 빠뜨려도 스크립트 자리에 자동으로 붙어요."
+            />
+          </div>
+        )}
       </section>
 
       <section className={`bg-background p-5 ${R.panel} ${FINISH.s1}`}>
@@ -96,14 +103,16 @@ export default function DeployTab({ competition, patch }: Props) {
         <p className="mt-1 text-xs text-muted-foreground">
           투표 탭(또는 별도 페이지)에 넣으세요. <b>노출</b>을 켠 참가작만 보이고, 투표 설정 탭에서 연 뒤에 투표가 됩니다.
         </p>
-        <div className="mt-4 space-y-4">
-          <CopyRow label="예선 투표" value={voteSnippet} />
-          <CopyRow
-            label="본선 투표"
-            value={finalVoteSnippet}
-            hint="본선은 진출 확정된 참가작만 보여줘요."
-          />
-        </div>
+        {voteSnippet && finalVoteSnippet && (
+          <div className="mt-4 space-y-4">
+            <CopyRow label="예선 투표" value={voteSnippet} />
+            <CopyRow
+              label="본선 투표"
+              value={finalVoteSnippet}
+              hint="본선은 진출 확정된 참가작만 보여줘요."
+            />
+          </div>
+        )}
       </section>
 
       <section className={`bg-background p-5 ${R.panel} ${FINISH.s1}`}>
@@ -111,13 +120,15 @@ export default function DeployTab({ competition, patch }: Props) {
         <p className="mt-1 text-xs text-muted-foreground">
           미리 붙여 둬도 괜찮아요. <b>시상 · 결과</b> 탭에서 공개하기 전까지는 &quot;준비 중&quot;만 보입니다.
         </p>
-        <div className="mt-4">
-          <CopyRow
-            label="결과 발표"
-            value={resultSnippet}
-            hint="공개 버튼을 누른 뒤 관람객이 새로고침하면 바로 수상작이 나와요."
-          />
-        </div>
+        {resultSnippet && (
+          <div className="mt-4">
+            <CopyRow
+              label="결과 발표"
+              value={resultSnippet}
+              hint="공개 버튼을 누른 뒤 관람객이 새로고침하면 바로 수상작이 나와요."
+            />
+          </div>
+        )}
       </section>
 
       <section className={`bg-background p-5 ${R.panel} ${FINISH.s1}`}>
@@ -170,11 +181,11 @@ export default function DeployTab({ competition, patch }: Props) {
               </a>
             </div>
           </div>
-        ) : (
+        ) : origin ? (
           <p className="mt-4 text-xs text-muted-foreground">
             미리보기 링크가 아직 없어요. &quot;새로 만들기&quot;를 눌러 발급하세요.
           </p>
-        )}
+        ) : null}
       </section>
     </div>
   );

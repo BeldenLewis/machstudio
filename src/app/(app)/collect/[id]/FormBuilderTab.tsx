@@ -227,7 +227,7 @@ function PreviewLinkRow({ sourceId, initialToken }: { sourceId: string; initialT
 
   // 공개 링크는 현재 preview/localhost host가 아니라 설정된 서비스 주소로 고정한다.
   const origin = getPublicAppOrigin();
-  const url = token ? `${origin}/p/${token}` : "";
+  const url = token && origin ? `${origin}/p/${token}` : "";
 
   const regenerate = async () => {
     const ok = await confirm({
@@ -270,7 +270,13 @@ function PreviewLinkRow({ sourceId, initialToken }: { sourceId: string; initialT
       <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
         로그인 없이 열려요. 링크를 받은 사람도 상태·언어를 바꿔 볼 수 있고, 제출해도 저장되지 않습니다.
       </p>
-      <p className="mt-2 break-all rounded-lg bg-background px-2 py-1.5 font-mono text-[10px] leading-relaxed shadow-sm">/p/{token}</p>
+      {origin ? (
+        <p className="mt-2 break-all rounded-lg bg-background px-2 py-1.5 font-mono text-[10px] leading-relaxed shadow-sm">{url}</p>
+      ) : (
+        <p role="alert" className="mt-2 rounded-lg bg-secondary/60 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
+          공개 배포 주소가 설정되지 않아 링크를 복사할 수 없어요. NEXT_PUBLIC_CANONICAL_APP_URL을 설정하세요.
+        </p>
+      )}
       <div className="mt-2 flex items-center gap-1">
         <button
           type="button"
@@ -279,11 +285,13 @@ function PreviewLinkRow({ sourceId, initialToken }: { sourceId: string; initialT
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
           }}
+          disabled={!url}
           className={`${btnCls("ghost")} flex-1 justify-center`}
         >
           {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
           {copied ? "복사됨" : "링크 복사"}
         </button>
+        {/* 현재 앱에서 여는 상대 미리보기는 canonical 복사 주소와 별개로 계속 쓸 수 있다. */}
         <a href={`/p/${token}`} target="_blank" rel="noopener noreferrer" className={`${btnCls("ghost")} justify-center`}>
           <ExternalLink className="h-3.5 w-3.5" />열기
         </a>
@@ -310,6 +318,14 @@ function PreviewLinkRow({ sourceId, initialToken }: { sourceId: string; initialT
 function EmbedSnippetRow({ sourceId, lookupEnabled }: { sourceId: string; lookupEnabled: boolean }) {
   const [copied, setCopied] = useState<"form" | "check" | null>(null);
   const origin = getPublicAppOrigin();
+
+  if (!origin) {
+    return (
+      <div role="alert" className={`${R.surface} bg-secondary/40 p-3 text-[11px] leading-snug text-muted-foreground ${FINISH.s2}`}>
+        공개 배포 주소가 설정되지 않아 설치 코드를 복사할 수 없어요. NEXT_PUBLIC_CANONICAL_APP_URL을 설정하세요.
+      </div>
+    );
+  }
 
   const formSnippet = `<script async src="${origin}/f/${sourceId}"></script>\n<div data-mach-form></div>`;
   const checkSnippet = `<script async src="${origin}/f/${sourceId}/check"></script>\n<div data-mach-form-check></div>`;

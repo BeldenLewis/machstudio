@@ -13,8 +13,15 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<publishable-or-anon-key>
 DATABASE_URL=postgresql://...
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
 
-# App base URL. Local dev should stay localhost; production is set in Vercel.
+# Runtime app URL for local development and existing server loader routes. Local
+# development can and should stay localhost.
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Durable public address for links and snippets copied to partner sites. This must
+# be a stable, non-local, non-preview URL (for example, a production custom domain).
+# Copied outbound code is deliberately disabled until this is set or APP_URL is an
+# already-safe non-local fallback.
+NEXT_PUBLIC_CANONICAL_APP_URL=https://app.example.com
 
 # Optional, defaults to the current request origin.
 SHORT_URL_BASE=https://go.example.com

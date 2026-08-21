@@ -29,7 +29,8 @@ const competition = {
 } as CompetitionDetail;
 
 beforeEach(() => {
-  vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://app.example.com/");
+  vi.stubEnv("NEXT_PUBLIC_CANONICAL_APP_URL", "https://app.example.com/");
+  vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3000");
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -83,5 +84,15 @@ describe("대회 배포 코드", () => {
       await Promise.resolve();
     });
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("https://app.example.com/cp/preview-token");
+  });
+
+  it("공개 주소 설정이 없으면 localhost·상대 설치 코드와 링크 복사를 막는다", () => {
+    vi.stubEnv("NEXT_PUBLIC_CANONICAL_APP_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
+    render();
+
+    expect(container.textContent).toContain("공개 배포 주소가 설정되지 않아 설치 코드와 미리보기 링크를 복사할 수 없어요");
+    expect([...container.querySelectorAll("pre")].map((pre) => pre.textContent).join("\n")).not.toContain("<script");
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
   });
 });

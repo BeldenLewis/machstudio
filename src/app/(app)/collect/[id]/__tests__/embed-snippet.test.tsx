@@ -20,7 +20,8 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
-  vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://app.example.com/");
+  vi.stubEnv("NEXT_PUBLIC_CANONICAL_APP_URL", "https://app.example.com/");
+  vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3000");
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -78,6 +79,16 @@ describe("붙일 코드", () => {
     }
   });
 
+  it("local runtime URL만 있으면 상대·localhost 설치 코드를 만들지 않고 경고한다", () => {
+    vi.stubEnv("NEXT_PUBLIC_CANONICAL_APP_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3000");
+    render(CONFIG);
+
+    expect(container.textContent).toContain("공개 배포 주소가 설정되지 않아 설치 코드를 복사할 수 없어요");
+    expect(snippets()).toEqual([]);
+    expect(container.textContent).not.toContain('src="http://localhost:3000');
+  });
+
   /** 꺼진 기능의 코드를 주면 붙여 놓고 "안 나온다" 고 묻는다. */
   it("등록 확인을 끄면 그 코드는 사라지고 켜는 곳을 알려준다", () => {
     render({ ...CONFIG, lookup: { ...CONFIG.lookup, enabled: false } });
@@ -100,6 +111,21 @@ describe("미리보기 링크", () => {
     expect(copy).toBeTruthy();
     act(() => copy?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("https://app.example.com/p/tok123");
+  });
+
+  it("공개 주소 설정이 없으면 미리보기 링크 복사를 막고 경고한다", () => {
+    vi.stubEnv("NEXT_PUBLIC_CANONICAL_APP_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
+    render(CONFIG);
+    const copy = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("링크 복사")) as HTMLButtonElement | undefined;
+
+    expect(container.textContent).toContain("공개 배포 주소가 설정되지 않아 링크를 복사할 수 없어요");
+    expect(copy?.disabled).toBe(true);
+    const hrefs = [...container.querySelectorAll("aside a")].map((a) => a.getAttribute("href"));
+    expect(hrefs).toContain("/p/tok123");
+    expect(hrefs).toContain("/p/tok123/check");
+    copy?.click();
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
   });
 
   /** 아이콘만 있는 링크는 이름이 없으면 스크린리더에서 "링크" 로만 읽힌다. */

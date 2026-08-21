@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DeployTab from "../DeployTab";
+import { getPublicAppOrigin } from "@/lib/app-url";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -20,7 +21,7 @@ vi.mock("@/components/ui/confirm-dialog", () => ({
 }));
 
 vi.mock("@/lib/app-url", () => ({
-  getPublicAppOrigin: () => "https://app.example.com",
+  getPublicAppOrigin: vi.fn(),
 }));
 
 vi.mock("@/components/ui/use-autosave", () => ({
@@ -33,6 +34,7 @@ vi.mock("sonner", () => ({
 
 let host: HTMLDivElement | null = null;
 let root: Root | null = null;
+let siteResponse: { sites: unknown[] };
 
 async function flush() {
   await act(async () => {
@@ -41,7 +43,7 @@ async function flush() {
   });
 }
 
-function render() {
+function render({ projectId = "url-project" }: { projectId?: string } = {}) {
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
@@ -49,7 +51,7 @@ function render() {
     root?.render(
       <DeployTab
         webinarId="webinar-1"
-        projectId="url-project"
+        projectId={projectId}
         slug="url-webinar"
         webinarName="URL 웨비나"
         components={null}
@@ -61,10 +63,12 @@ function render() {
 }
 
 beforeEach(() => {
+  vi.mocked(getPublicAppOrigin).mockReturnValue("https://app.example.com");
+  siteResponse = { sites: [] };
   window.scrollTo = vi.fn();
   vi.stubGlobal("fetch", vi.fn((url: string) => Promise.resolve({
     ok: true,
-    json: async () => url.startsWith("/api/webinar-embed-sites") ? { sites: [] } : { webinar: null },
+    json: async () => url.startsWith("/api/webinar-embed-sites") ? siteResponse : { webinar: null },
   })));
 });
 
@@ -106,5 +110,37 @@ describe("배포 탭은 URL 웨비나의 프로젝트에만 사이트를 연결�
       projectId: "url-project",
       activeWebinarId: "webinar-1",
     });
+  });
+
+  it("공개 주소가 없으면 상대 설치 코드·링크를 숨기고 설정 경고를 보인다", async () => {
+    vi.mocked(getPublicAppOrigin).mockReturnValue("");
+    siteResponse = {
+      sites: [{
+        id: "site-1",
+        name: "행사 사이트",
+        siteUrl: null,
+        livePageUrl: null,
+        bannerPagePatterns: [],
+        lastSeenAt: null,
+        lastSeenOrigin: null,
+        isActive: true,
+        activeWebinar: null,
+      }],
+    };
+    const el = render();
+    await flush();
+
+    expect(el.textContent).toContain("공개 배포 주소가 설정되지 않아 랜딩 링크와 설치 코드를 복사할 수 없어요");
+    expect(el.textContent).toContain("공개 배포 주소가 설정되지 않아 이 사이트의 설치 코드를 복사할 수 없어요");
+    expect([...el.querySelectorAll("pre")].map((pre) => pre.textContent).join("\n")).not.toContain('src="/');
+  });
+
+  it("URL 웨비나에 프로젝트 소속이 없으면 목록 요청 없이 fail closed 상태를 보인다", async () => {
+    const el = render({ projectId: "" });
+    const fetchMock = vi.mocked(fetch);
+    await flush();
+
+    expect(el.textContent).toContain("프로젝트 정보를 확인할 수 없어요");
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/webinar-embed-sites"))).toBe(false);
   });
 });
