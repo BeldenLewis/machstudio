@@ -10,6 +10,7 @@ import {
 } from "@/lib/competition-config";
 import { resolveCompetitionStatus } from "@/lib/competition-status";
 import { toE164 } from "@/lib/collect-phone";
+import { competitionFormStrings } from "@/lib/competition-strings";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -57,10 +58,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const competition = await prisma.competition.findUnique({ where: { id } });
   if (!competition) return NextResponse.json({ error: "대회 없음" }, { status: 404, headers: CORS_HEADERS });
 
+  const config = normalizeCompetitionConfig(competition.config);
+  const t = competitionFormStrings(config.language);
+
   // 클라이언트만 막으면 마감 후에도 API 로 들어온다 — 서버가 단계를 본다.
   const status = resolveCompetitionStatus(competition);
   if (!status.canApply) {
-    return NextResponse.json({ error: "지금은 접수 기간이 아니에요." }, { status: 403, headers: CORS_HEADERS });
+    return NextResponse.json({ error: t.notAcceptingNow }, { status: 403, headers: CORS_HEADERS });
   }
 
   let body: Record<string, unknown>;
@@ -76,10 +80,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   if (body.agreePrivacy !== true) {
-    return NextResponse.json({ error: "개인정보 수집 및 이용에 동의해주세요." }, { status: 400, headers: CORS_HEADERS });
+    return NextResponse.json({ error: t.agreeRequired }, { status: 400, headers: CORS_HEADERS });
   }
 
-  const config = normalizeCompetitionConfig(competition.config);
   const incoming = (body.data && typeof body.data === "object" ? body.data : {}) as Record<string, unknown>;
 
   const phoneCountries = (body.phoneCountries && typeof body.phoneCountries === "object" ? body.phoneCountries : {}) as Record<string, unknown>;
@@ -91,7 +94,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const raw = incoming[field.key];
     const value = typeof raw === "string" ? raw.trim() : "";
     if (field.required && !value) {
-      return NextResponse.json({ error: `${field.label} 항목을 입력해주세요.` }, { status: 400, headers: CORS_HEADERS });
+      return NextResponse.json({ error: t.fieldRequired(field.label) }, { status: 400, headers: CORS_HEADERS });
     }
     if (!value) continue;
 
@@ -101,7 +104,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const country = typeof phoneCountries[field.key] === "string" ? (phoneCountries[field.key] as string) : config.form.defaultCountry;
       const e164 = toE164(value, country);
       if (!e164) {
-        return NextResponse.json({ error: `${field.label} 항목의 번호를 확인해주세요.` }, { status: 400, headers: CORS_HEADERS });
+        return NextResponse.json({ error: t.phoneInvalid(field.label) }, { status: 400, headers: CORS_HEADERS });
       }
       data[field.key] = e164;
       continue;
@@ -118,11 +121,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (rawUrl) {
       const videoId = extractYoutubeId(rawUrl);
       if (!videoId) {
-        return NextResponse.json({ error: "YouTube 링크를 확인해주세요." }, { status: 400, headers: CORS_HEADERS });
+        return NextResponse.json({ error: t.youtubeInvalid }, { status: 400, headers: CORS_HEADERS });
       }
       media.push({ kind: "youtube", videoId, sortOrder: media.length });
     } else if (youtubeField.required) {
-      return NextResponse.json({ error: `${youtubeField.label} 항목을 입력해주세요.` }, { status: 400, headers: CORS_HEADERS });
+      return NextResponse.json({ error: t.fieldRequired(youtubeField.label) }, { status: 400, headers: CORS_HEADERS });
     }
   }
 
@@ -136,7 +139,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
     if (already >= competition.maxEntriesPerApplicant) {
       return NextResponse.json(
-        { error: "이미 신청하셨어요.", duplicate: true },
+        { error: t.duplicateEntry, duplicate: true },
         { status: 409, headers: CORS_HEADERS },
       );
     }
@@ -174,9 +177,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const code = (error as { code?: string })?.code;
       if (code === "P2002") continue; // entryNo 경합 — 다음 번호로 재시도
       console.error("[competition] entry create failed", error);
-      return NextResponse.json({ error: "신청 처리에 실패했어요." }, { status: 500, headers: CORS_HEADERS });
+      return NextResponse.json({ error: t.submitFailed }, { status: 500, headers: CORS_HEADERS });
     }
   }
 
-  return NextResponse.json({ error: "신청이 몰리고 있어요. 잠시 후 다시 시도해주세요." }, { status: 503, headers: CORS_HEADERS });
+  return NextResponse.json({ error: t.busy }, { status: 503, headers: CORS_HEADERS });
 }

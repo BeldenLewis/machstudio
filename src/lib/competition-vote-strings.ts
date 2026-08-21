@@ -30,6 +30,13 @@ export interface CompetitionVoteStrings {
   undone: string;
   votedSuccess: string;
   networkError: string;
+  competitionClosed: string;
+  noSelection: string;
+  invalidEntries: string;
+  ipExceeded: string;
+  undoNotAllowed: string;
+  entryRequired: string;
+  cannotIdentifyVoter: string;
 }
 
 const KO: CompetitionVoteStrings = {
@@ -50,6 +57,13 @@ const KO: CompetitionVoteStrings = {
   undone: "투표를 취소했어요.",
   votedSuccess: "투표했어요.",
   networkError: "네트워크 오류가 발생했어요.",
+  competitionClosed: "종료된 대회예요.",
+  noSelection: "투표할 참가작을 선택해주세요.",
+  invalidEntries: "투표할 수 없는 참가작이 있어요.",
+  ipExceeded: "같은 네트워크에서 투표가 너무 많아요. 잠시 후 다시 시도해주세요.",
+  undoNotAllowed: "이 투표는 취소할 수 없어요.",
+  entryRequired: "참가작을 지정해주세요.",
+  cannotIdentifyVoter: "투표자를 식별할 수 없어요.",
 };
 
 const EN: CompetitionVoteStrings = {
@@ -70,6 +84,13 @@ const EN: CompetitionVoteStrings = {
   undone: "Your vote was removed.",
   votedSuccess: "Vote counted.",
   networkError: "A network error occurred.",
+  competitionClosed: "This competition has ended.",
+  noSelection: "Please select an entry to vote for.",
+  invalidEntries: "One or more entries can't be voted for.",
+  ipExceeded: "Too many votes from this network. Please try again later.",
+  undoNotAllowed: "This vote can't be undone.",
+  entryRequired: "Please specify an entry.",
+  cannotIdentifyVoter: "We couldn't identify you as a voter.",
 };
 
 const FR: CompetitionVoteStrings = {
@@ -90,6 +111,13 @@ const FR: CompetitionVoteStrings = {
   undone: "Votre vote a été retiré.",
   votedSuccess: "Vote enregistré.",
   networkError: "Une erreur réseau est survenue.",
+  competitionClosed: "Ce concours est terminé.",
+  noSelection: "Merci de sélectionner une candidature à voter.",
+  invalidEntries: "Certaines candidatures ne peuvent pas recevoir de vote.",
+  ipExceeded: "Trop de votes depuis ce réseau. Merci de réessayer plus tard.",
+  undoNotAllowed: "Ce vote ne peut pas être annulé.",
+  entryRequired: "Merci d'indiquer une candidature.",
+  cannotIdentifyVoter: "Nous n'avons pas pu vous identifier comme électeur.",
 };
 
 const JA: CompetitionVoteStrings = {
@@ -110,6 +138,13 @@ const JA: CompetitionVoteStrings = {
   undone: "投票を取り消しました。",
   votedSuccess: "投票しました。",
   networkError: "ネットワークエラーが発生しました。",
+  competitionClosed: "終了した大会です。",
+  noSelection: "投票する参加作品を選んでください。",
+  invalidEntries: "投票できない参加作品があります。",
+  ipExceeded: "同じネットワークからの投票が多すぎます。しばらくしてからもう一度お試しください。",
+  undoNotAllowed: "この投票は取り消せません。",
+  entryRequired: "参加作品を指定してください。",
+  cannotIdentifyVoter: "投票者を識別できませんでした。",
 };
 
 /**

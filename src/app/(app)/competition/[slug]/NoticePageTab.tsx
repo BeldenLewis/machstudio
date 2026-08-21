@@ -263,28 +263,18 @@ export default function NoticePageTab({ competition, rounds, patch }: Props) {
           </div>
 
           {/*
-            **시스템이 만들어 넣는 문구**의 언어. 운영자가 쓴 글은 그대로 둔다.
-            영문 대회를 열면 선발 방식·심사 기준만 설정에서 한글로 끌려와 페이지 하나에
-            두 언어가 섞였다 — 손댈 칸이 없는 자리라 더 답답한 종류였다.
+            언어는 **대회 전체 설정**(기본정보 탭)이다 — 공고·신청 폼·투표·결과·발표가 전부
+            같은 값을 쓴다. 예전엔 여기서도 따로 고를 수 있었는데, 그 값은 신청 폼 탭에서
+            바뀐 실제 언어에 덮여 아무 효과가 없는 죽은 컨트롤이었다(고를 수는 있는데 안 바뀌는
+            상태 — 실제로 혼란을 줬다). 그래서 여기는 읽기 전용으로 내리고 한 곳(기본정보)만 남긴다.
           */}
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
             <span className="text-xs font-medium">문구 언어</span>
-            {NOTICE_LANGUAGES.map(({ value, label }) => (
-              <button
-                key={value}
-                onClick={() => update({ language: value })}
-                className={`px-2.5 py-1.5 text-[11px] transition-colors ${R.control} ${
-                  np.language === value ? "bg-violet-500 text-white" : "bg-secondary text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+            <span className={`px-2.5 py-1.5 text-[11px] font-medium ${R.control} bg-secondary text-foreground`}>
+              {NOTICE_LANGUAGES.find((l) => l.value === competition.config.language)?.label ?? competition.config.language}
+            </span>
             <span className="text-[11px] text-muted-foreground">
-              신청 버튼·카운트다운 단위·비율 라벨처럼 <b>우리가 자동으로 넣는 문구</b>가 바뀌어요.
-              대회를 만들 때 넣어 둔 라운드 이름(예선·본선)도 함께 바뀝니다 — 투표 설정 탭에서
-              직접 바꾼 이름은 그대로 두고요. <b>심사 항목 이름</b>은 심사단 탭에 적으신 그대로
-              나가니, 그건 심사단 탭에서 고쳐 주세요.
+              대회 전체 설정이에요 — <b>기본정보 탭</b>에서 바꿀 수 있어요.
             </span>
           </div>
         </section>

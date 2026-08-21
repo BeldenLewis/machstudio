@@ -9,6 +9,7 @@ import {
   COMPETITION_PHASE_OVERRIDES,
   resolveCompetitionStatus,
 } from "@/lib/competition-status";
+import { NOTICE_LANGUAGES } from "@/lib/notice/config";
 import type { CompetitionDetail } from "./page";
 
 interface Props {
@@ -62,6 +63,28 @@ export default function BasicInfoTab({ competition, patch }: Props) {
             <span className="text-xs font-medium text-muted-foreground">설명</span>
             <input value={description} onChange={(e) => setDescription(e.target.value)} className={FIELD_CLS} />
           </label>
+        </div>
+      </section>
+
+      <section className={`bg-background p-5 ${R.panel} ${FINISH.s1}`}>
+        <h2 className="text-sm font-semibold">언어</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          공고 페이지·신청 폼·투표·결과·발표 — <b>대회의 모든 공개 화면이 여기 하나로</b> 정해져요.
+          화면마다 따로 고를 필요가 없어요. 항목 이름·문구는 직접 쓴 그대로 나가고,
+          버튼·안내처럼 우리가 채워 넣는 문구만 이 언어를 따라가요.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {NOTICE_LANGUAGES.map(({ value, label }) => (
+            <button
+              key={value}
+              onClick={() => void patch({ config: { ...competition.config, language: value } }, "언어를 바꿨어요")}
+              className={`px-2.5 py-1 text-[11px] transition-colors ${R.control} ${
+                competition.config.language === value ? "bg-violet-500 text-white" : "bg-secondary text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </section>
 
