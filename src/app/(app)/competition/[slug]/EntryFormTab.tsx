@@ -6,7 +6,7 @@ import {
   AlignLeft, GripVertical, ImageIcon, ListChecks, ListPlus, Mail, Phone, Plus, SquareCheck, Trash2, Users, Video,
 } from "lucide-react";
 import { toast } from "sonner";
-import { NOTICE_LANGUAGES } from "@/lib/notice/config";
+import { NOTICE_LANGUAGES, type NoticeLanguage } from "@/lib/notice/config";
 import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 import { Switch } from "@/components/ui/switch";
 import type { CompetitionFieldType, CompetitionFormField, CompetitionRepeaterSubField } from "@/lib/competition-config";
@@ -44,11 +44,25 @@ const TYPE_META: Record<CompetitionFieldType, { label: string; icon: typeof Alig
 const TYPE_ORDER: CompetitionFieldType[] = ["text", "email", "tel", "select", "multiple", "checkbox", "image", "youtube", "repeater"];
 const CHOICE_TYPES: CompetitionFieldType[] = ["select", "multiple"];
 
-/** 반복 그룹으로 막 바꿨을 때 아무 서브필드도 없으면 아무것도 못 받는 빈 항목이 된다. */
-const DEFAULT_REPEATER_SUB_FIELDS: CompetitionRepeaterSubField[] = [
-  { key: "name", label: "이름", type: "text", required: true },
-  { key: "email", label: "이메일", type: "email", required: true },
-];
+/**
+ * 반복 그룹으로 막 바꿨을 때 아무 서브필드도 없으면 아무것도 못 받는 빈 항목이 된다 —
+ * 이름·이메일 기본값을 미리 채운다. **대회 언어를 따라간다** — 영문 대회에서 이 기본값이
+ * 한글로 굳어 있으면(예전엔 그랬다) 나머지 항목은 다 영어인데 이 서브필드만 한글로 남아
+ * 미리보기에서 티가 난다.
+ */
+const REPEATER_DEFAULT_LABELS: Record<NoticeLanguage, { name: string; email: string }> = {
+  ko: { name: "이름", email: "이메일" },
+  en: { name: "Name", email: "Email" },
+  fr: { name: "Nom", email: "E-mail" },
+  ja: { name: "氏名", email: "メール" },
+};
+function defaultRepeaterSubFields(language: NoticeLanguage): CompetitionRepeaterSubField[] {
+  const t = REPEATER_DEFAULT_LABELS[language] ?? REPEATER_DEFAULT_LABELS.ko;
+  return [
+    { key: "name", label: t.name, type: "text", required: true },
+    { key: "email", label: t.email, type: "email", required: true },
+  ];
+}
 
 export default function EntryFormTab({ competition, patch, workspaceId }: Props) {
   const [form, setForm] = useState(competition.config.form);
@@ -189,7 +203,7 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                       // 반복 그룹으로 막 바꿨는데 서브필드가 하나도 없으면 아무것도 못
                       // 받는 빈 항목이 된다 — 이름·이메일 기본값을 미리 채워 둔다.
                       const subFields = type === "repeater" && (field.subFields?.length ?? 0) === 0
-                        ? DEFAULT_REPEATER_SUB_FIELDS
+                        ? defaultRepeaterSubFields(language)
                         : field.subFields;
                       updateField(field.id, { type, subFields, minItems: field.minItems ?? 1, maxItems: field.maxItems ?? 10 });
                     }}
@@ -209,6 +223,12 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                     필수
                   </label>
                   <Switch checked={field.enabled} onChange={(v) => updateField(field.id, { enabled: v })} label="항목 사용" />
+                  {field.type === "checkbox" && (
+                    <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground" title="배경·테두리로 감싸 눈에 띄게 해요 — 참가자격 확인처럼 놓치면 안 되는 체크박스에 써요">
+                      <Switch checked={field.emphasized ?? false} onChange={(v) => updateField(field.id, { emphasized: v })} label="강조 표시" />
+                      강조
+                    </label>
+                  )}
                   {!field.system && (
                     <button
                       onClick={() => update({ fields: form.fields.filter((f) => f.id !== field.id) })}
@@ -343,6 +363,36 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                       />
                       <span>명</span>
                     </div>
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                      <span>인원수 항목과 연동</span>
+                      <select
+                        value={field.countFromKey ?? ""}
+                        onChange={(e) => updateField(field.id, { countFromKey: e.target.value || undefined })}
+                        className={`${FIELD_CLS} h-8 w-auto`}
+                      >
+                        <option value="">사용 안 함 (수동으로 +/- )</option>
+                        {form.fields
+                          .filter((f) => f.id !== field.id && f.type !== "repeater")
+                          .map((f) => <option key={f.id} value={f.key}>{f.label || f.key}</option>)}
+                      </select>
+                      {field.countFromKey && (
+                        <>
+                          <span>에서</span>
+                          <input
+                            type="number" min={0} max={19}
+                            value={field.countExclude ?? 0}
+                            onChange={(e) => updateField(field.id, { countExclude: Math.max(0, Number(e.target.value) || 0) })}
+                            className={`${FIELD_CLS} h-8 w-14`}
+                          />
+                          <span>명 제외 (예: 리더 1명)</span>
+                        </>
+                      )}
+                    </div>
+                    {field.countFromKey && (
+                      <p className="text-[11px] text-muted-foreground/70">
+                        연동한 항목에 숫자를 입력하면 행 수가 자동으로 맞춰져요(최소·최대 범위 안에서만). 신청자는 그 뒤로도 +/- 로 손으로 고칠 수 있어요.
+                      </p>
+                    )}
                   </div>
                 )}
               </Reorder.Item>

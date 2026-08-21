@@ -43,6 +43,20 @@ describe("반복 항목 — 설정 정규화", () => {
     );
     expect(config.form.fields[0].subFields?.length).toBeGreaterThan(0);
   });
+
+  it("countFromKey 를 지정하면 countExclude 와 함께 유지된다(기본 0)", () => {
+    const config = normalizeCompetitionConfig(
+      { form: { fields: [{ ...repeaterField, countFromKey: "participants" }] } },
+      { includeDisabled: true },
+    );
+    expect(config.form.fields[0].countFromKey).toBe("participants");
+    expect(config.form.fields[0].countExclude).toBe(0);
+  });
+
+  it("countFromKey 가 없으면 countExclude 도 안 붙는다", () => {
+    const config = normalizeCompetitionConfig({ form: { fields: [repeaterField] } }, { includeDisabled: true });
+    expect(config.form.fields[0].countFromKey).toBeUndefined();
+  });
 });
 
 describe("반복 항목 — 공개 폼 렌더", () => {
@@ -57,6 +71,47 @@ describe("반복 항목 — 공개 폼 렌더", () => {
     expect(html).toContain('data-mc-rep-field="email"');
     expect(html).toContain('data-mc-rep-max="3"');
     expect(html).toContain("추가"); // 기본 언어(ko)의 "+ 추가" 버튼 문구
+  });
+
+  it("countFromKey/countExclude 가 행 컨테이너의 data 속성으로 실린다 — 런타임이 여기서 읽는다", () => {
+    const config = normalizeCompetitionConfig(
+      { form: { fields: [{ ...repeaterField, countFromKey: "participants", countExclude: 1 }] } },
+      { includeDisabled: true },
+    );
+    const html = renderFormFieldsHtml(config);
+    expect(html).toContain('data-mc-rep-count-from="participants"');
+    expect(html).toContain('data-mc-rep-count-exclude="1"');
+  });
+
+  it("연동을 안 쓰면 count-from 속성은 빈 값이다", () => {
+    const config = normalizeCompetitionConfig({ form: { fields: [repeaterField] } }, { includeDisabled: true });
+    const html = renderFormFieldsHtml(config);
+    expect(html).toContain('data-mc-rep-count-from=""');
+  });
+});
+
+describe("체크박스 — 강조 표시", () => {
+  const checkboxField: CompetitionFormField = {
+    id: "f-minor", key: "minority", label: "미성년자 팀원 없음", type: "checkbox",
+    placeholder: "", required: true, enabled: true, options: [], system: false,
+  };
+
+  it("emphasized 가 true 면 mc-check-emph 클래스가 붙는다", () => {
+    const config = normalizeCompetitionConfig(
+      { form: { fields: [{ ...checkboxField, emphasized: true }] } },
+      { includeDisabled: true },
+    );
+    expect(config.form.fields[0].emphasized).toBe(true);
+    const html = renderFormFieldsHtml(config);
+    expect(html).toContain('class="mc-check mc-check-emph"');
+  });
+
+  it("emphasized 를 안 켜면 기본 mc-check 클래스만 붙는다", () => {
+    const config = normalizeCompetitionConfig({ form: { fields: [checkboxField] } }, { includeDisabled: true });
+    expect(config.form.fields[0].emphasized).toBe(false);
+    const html = renderFormFieldsHtml(config);
+    expect(html).toContain('class="mc-check"');
+    expect(html).not.toContain("mc-check-emph");
   });
 });
 
