@@ -691,6 +691,25 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
     setSource((s) => s ? { ...s, successTrigger, redirectUrl: redirectUrl || null, fieldGroupSelector: fieldGroupSelector.trim() || ".form-group" } : s);
   };
 
+  /**
+   * 스니퍼 결과를 붙여넣는 순간 선택자를 **바로 서버에 저장한다.**
+   *
+   * 예전엔 "필드 적용"(화면 상태만 바꿈)과 "선택자 저장"(서버에 반영)이 완전히 분리돼
+   * 있어서, 필드는 매핑해 놓고 선택자 저장만 잊는 사고가 실제로 났다 — 그러면 실제 사이트에서
+   * 스크립트가 옛 선택자(기본 .form-group)로 아무것도 못 찾아 매핑을 다 해도 데이터가
+   * 하나도 안 들어온다. `setFieldGroupSelector` 직후 같은 값을 바로 인자로 넘겨 저장한다 —
+   * React state 갱신은 비동기라 그 자리에서 `fieldGroupSelector` 를 읽으면 갱신 전 값이 잡힌다.
+   */
+  const saveFieldGroupSelector = async (selector: string) => {
+    const res = await fetch(`/api/collect-sources/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fieldGroupSelector: selector }),
+    });
+    if (!res.ok) { toast.error("선택자 저장 실패 — 아래 '선택자 저장' 버튼으로 다시 시도해주세요"); return; }
+    setSource((s) => s ? { ...s, fieldGroupSelector: selector } : s);
+  };
+
   const addFormPagePattern = () => {
     const v = formPagePatternInput.trim();
     if (!v) return;
@@ -811,11 +830,20 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       }));
       setFields(applied);
       // 새 형식이면 감지에 실제로 쓰인 선택자도 같이 받아 온다 — 운영자가 CSS를 몰라도 된다.
-      if (!Array.isArray(parsed) && typeof parsed?.selector === "string" && parsed.selector) {
-        setFieldGroupSelector(parsed.selector);
+      // 선택자는 여기서 바로 서버에 저장한다(아래 saveFieldGroupSelector 주석 참고) —
+      // 필드 매핑은 라벨·키를 더 고칠 수 있어 "저장" 버튼을 따로 눌러야 하지만, 선택자는
+      // 고칠 이유가 없는 값이라 미룰수록 "매핑은 했는데 선택자를 깜빡했다"는 사고만 커진다.
+      const detectedSelector = !Array.isArray(parsed) && typeof parsed?.selector === "string" ? parsed.selector : "";
+      if (detectedSelector) {
+        setFieldGroupSelector(detectedSelector);
+        void saveFieldGroupSelector(detectedSelector);
       }
       setPasteJson("");
-      toast.success(`${applied.length}개 필드가 적용됐어요. 저장 버튼을 눌러 확정하세요`);
+      toast.success(
+        detectedSelector
+          ? `${applied.length}개 필드가 적용되고 선택자(${detectedSelector})도 저장됐어요 — 필드는 '필드 매핑 저장'으로 확정하세요`
+          : `${applied.length}개 필드가 적용됐어요. 저장 버튼을 눌러 확정하세요`,
+      );
       setTab("fields");
     } catch (e) {
       setPasteError(e instanceof Error ? e.message : "JSON 형식이 올바르지 않아요");
