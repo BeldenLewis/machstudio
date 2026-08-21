@@ -166,7 +166,7 @@ export default function CompetitionDetailPage({ params }: { params: Promise<{ sl
       {tab === "notice" && <NoticePageTab competition={competition} rounds={rounds} patch={patch} />}
       {tab === "form" && <EntryFormTab competition={competition} patch={patch} workspaceId={workspace?.id} />}
       {tab === "entries" && <EntriesTab competition={competition} onCountChange={setEntryCount} />}
-      {tab === "vote" && <VoteSettingsTab competition={competition} rounds={rounds} onRoundsChange={setRounds} />}
+      {tab === "vote" && <VoteSettingsTab competition={competition} rounds={rounds} onRoundsChange={setRounds} patch={patch} />}
       {tab === "judges" && <JudgesTab competition={competition} rounds={rounds} onRoundsChange={setRounds} />}
       {tab === "tally" && <TallyTab competition={competition} rounds={rounds} />}
       {tab === "awards" && <AwardsTab competition={competition} patch={patch} />}

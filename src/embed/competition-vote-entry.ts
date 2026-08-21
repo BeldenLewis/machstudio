@@ -43,8 +43,17 @@ interface EntryDto {
   media: MediaItem[];
 }
 
+interface VoteIntro {
+  enabled: boolean;
+  title: string;
+  body: string;
+  textColor: string;
+  titleFontSize: number;
+  bodyFontSize: number;
+}
+
 interface StateDto {
-  competition: { id: string; name: string; theme: CompetitionTheme; language: NoticeLanguage };
+  competition: { id: string; name: string; theme: CompetitionTheme; language: NoticeLanguage; voteIntro: VoteIntro };
   round: { kind: string; name: string; maxVotesPerVoter: number; allowVoteUndo: boolean; showLiveTally: boolean };
   open: boolean;
   message: string;
@@ -172,6 +181,20 @@ function mediaThumbHtml(entry: EntryDto): string {
   return `<div class="mcv-thumb-empty"></div>`;
 }
 
+/**
+ * 투표 화면 상단 소개 — 참가작 카드보다 먼저 보이는 대회 소개·설명 자리(레퍼런스
+ * fr.france.k-expo.org/vote 에 있던 자리를 하드코딩이 아니라 운영자가 채우는 구조로 들인다).
+ * "config 토글 ON + 실제 데이터 있음" 이중 게이트 — 켜져 있어도 내용이 비면 빈 껍데기를 안 그린다.
+ */
+function voteIntroHtml(intro: VoteIntro): string {
+  if (!intro.enabled || (!intro.title.trim() && !intro.body.trim())) return "";
+  const colorStyle = intro.textColor ? `color:${escapeHtml(intro.textColor)};` : "";
+  return `<div class="mcv-intro">
+    ${intro.title.trim() ? `<h2 class="mcv-intro-title" style="${colorStyle}font-size:${intro.titleFontSize}px">${escapeHtml(intro.title)}</h2>` : ""}
+    ${intro.body.trim() ? `<p class="mcv-intro-body" style="${colorStyle}font-size:${intro.bodyFontSize}px">${escapeHtml(intro.body)}</p>` : ""}
+  </div>`;
+}
+
 function renderVote(mount: HTMLElement, state: StateDto, payload: BootPayload, deviceId: string) {
   const selected = new Set(state.myVoteIds);
   let remaining = state.remaining;
@@ -200,6 +223,7 @@ function renderVote(mount: HTMLElement, state: StateDto, payload: BootPayload, d
 
   mount.innerHTML = `<div class="mc mcv">
     ${payload.preview ? `<div class="mc-preview-banner">${escapeHtml(t.previewBanner)}</div>` : ""}
+    ${voteIntroHtml(state.competition.voteIntro)}
     <div class="mcv-bar">
       <span class="mcv-bar-title">${escapeHtml(state.round.name)}</span>
       <span class="mcv-remain" data-mcv-remain>${escapeHtml(t.remaining(remaining, state.round.maxVotesPerVoter))}</span>

@@ -7,8 +7,10 @@ import { toast } from "sonner";
 import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 import { PreviewFrame } from "@/components/ui/PreviewFrame";
 import { Switch } from "@/components/ui/switch";
+import { ColorField } from "@/components/ui/ColorField";
 import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
 import type { CompetitionDetail } from "./page";
+import type { CompetitionConfig } from "@/lib/competition-config";
 
 export interface RoundDto {
   id: string;
@@ -61,10 +63,12 @@ export default function VoteSettingsTab({
   competition,
   rounds,
   onRoundsChange,
+  patch,
 }: {
   competition: CompetitionDetail;
   rounds: RoundDto[];
   onRoundsChange: (rounds: RoundDto[]) => void;
+  patch: (body: Record<string, unknown>, message?: string) => Promise<boolean>;
 }) {
   const [saving, setSaving] = useState<string | null>(null);
 
@@ -90,6 +94,7 @@ export default function VoteSettingsTab({
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_460px]">
       {/* min-w-0 — 그리드 항목은 기본이 min-width:auto 라 안쪽이 칸보다 넓으면 삐져나간다. */}
       <div className="min-w-0 space-y-4">
+        <VoteIntroEditor competition={competition} patch={patch} />
         {rounds.map((round) => (
           <RoundCard
             key={round.id}
@@ -104,6 +109,108 @@ export default function VoteSettingsTab({
         <VotePreviewPane competition={competition} rounds={rounds} />
       </div>
     </div>
+  );
+}
+
+type VoteIntro = CompetitionConfig["voteIntro"];
+
+/**
+ * 투표 화면 상단 소개 — 참가작 카드보다 먼저 보이는, 대회 전체가 공유하는 한 블록(예선·본선
+ * 화면 둘 다 같은 값을 쓴다). 레퍼런스 사이트(fr.france.k-expo.org/vote)에 있던 행사 소개·설명
+ * 자리를 하드코딩이 아니라 운영자가 직접 쓰는 구조로 들인다 — 톤은 대회마다 다르니까.
+ */
+function VoteIntroEditor({
+  competition,
+  patch,
+}: {
+  competition: CompetitionDetail;
+  patch: (body: Record<string, unknown>, message?: string) => Promise<boolean>;
+}) {
+  const intro = competition.config.voteIntro;
+  const [title, setTitle] = useState(intro.title);
+  const [body, setBody] = useState(intro.body);
+  const [titleFontSize, setTitleFontSize] = useState(intro.titleFontSize);
+  const [bodyFontSize, setBodyFontSize] = useState(intro.bodyFontSize);
+
+  const save = (next: Partial<VoteIntro>, message?: string) => {
+    const merged: VoteIntro = { ...intro, title, body, titleFontSize, bodyFontSize, ...next };
+    return patch({ config: { ...competition.config, voteIntro: merged } }, message);
+  };
+
+  return (
+    <section className={`bg-background p-5 ${R.panel} ${FINISH.s1}`}>
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold">투표 화면 소개</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            참가작 목록 위에 뜨는 소개 문구예요 — 예선·본선 화면에 같이 나가요.
+          </p>
+        </div>
+        <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+          노출
+          <Switch checked={intro.enabled} onChange={(v) => void save({ enabled: v }, v ? "소개를 켰어요" : "소개를 껐어요")} label="투표 소개 노출" />
+        </label>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-muted-foreground">제목</span>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={() => void save({}, "제목을 저장했어요")}
+            placeholder="예: K-POP 무대에 투표해주세요!"
+            className={FIELD_CLS}
+          />
+        </label>
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-muted-foreground">설명</span>
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            onBlur={() => void save({}, "설명을 저장했어요")}
+            placeholder="줄바꿈이 그대로 보여요 — 대회 소개, 투표 방법 등을 자유롭게 적으세요"
+            rows={4}
+            className={`${FIELD_CLS} h-auto resize-y py-2`}
+          />
+        </label>
+
+        <ColorField
+          label="글자색"
+          note="비우면 대회 테마 글자색을 그대로 써요"
+          value={intro.textColor}
+          onChange={(next) => void save({ textColor: next })}
+          allowInherit
+        />
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-muted-foreground">제목 크기 (px)</span>
+            <input
+              type="number"
+              min={14}
+              max={48}
+              value={titleFontSize}
+              onChange={(e) => setTitleFontSize(Math.min(48, Math.max(14, Number(e.target.value) || 14)))}
+              onBlur={() => void save({}, "제목 크기를 저장했어요")}
+              className={FIELD_CLS}
+            />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-muted-foreground">설명 크기 (px)</span>
+            <input
+              type="number"
+              min={11}
+              max={28}
+              value={bodyFontSize}
+              onChange={(e) => setBodyFontSize(Math.min(28, Math.max(11, Number(e.target.value) || 11)))}
+              onBlur={() => void save({}, "설명 크기를 저장했어요")}
+              className={FIELD_CLS}
+            />
+          </label>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -140,7 +247,10 @@ function VotePreviewPane({ competition, rounds }: { competition: CompetitionDeta
           ? "실제로 안 열렸어도 열린 화면으로 보여요 · 눌러도 표는 안 들어가요"
           : "지금 설정대로면 방문자에게 보이는 화면"
       }
-      reloadKey={round ? `${round.voteEnabled}-${round.maxVotesPerVoter}-${round.entryOrder}-${round.showLiveTally}-${round.allowVoteUndo}-${round.name}` : kind}
+      reloadKey={
+        (round ? `${round.voteEnabled}-${round.maxVotesPerVoter}-${round.entryOrder}-${round.showLiveTally}-${round.allowVoteUndo}-${round.name}` : kind) +
+        `-${JSON.stringify(competition.config.voteIntro)}`
+      }
       controls={
         <div className="flex flex-wrap items-center gap-1">
           {rounds.map((r) => (

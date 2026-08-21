@@ -86,7 +86,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const window = resolveVoteWindow(round);
   const ip = getClientIp(request);
-  const language = normalizeCompetitionConfig(competition.config).language;
+  const config = normalizeCompetitionConfig(competition.config);
+  const language = config.language;
 
   // 본선은 진출자만 보여준다. 예선은 노출 토글을 켠 참가작 전체.
   const entries = await prisma.competitionEntry.findMany({
@@ -132,7 +133,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   return NextResponse.json(
     {
-      competition: { id: competition.id, name: competition.name, theme: competition.theme, language },
+      competition: { id: competition.id, name: competition.name, theme: competition.theme, language, voteIntro: config.voteIntro },
       round: {
         kind: round.kind,
         // 대회를 만들 때 우리가 넣어 둔 "예선"/"본선" 기본값이면 언어를 따른다(공고와 같은 규칙).

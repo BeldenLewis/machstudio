@@ -12,6 +12,11 @@ export const VOTE_CSS = `
    빠듯해 보였다. 호스트 페이지가 폭을 제한하지 않는 아임웹 사이트에 붙었을 때 좌우 끝까지
    붙어버리는 것도 여기서 막는다. */
 .mcv { max-width: 1200px; margin: 0 auto; padding: 20px 20px 40px; box-sizing: border-box; }
+/* 운영자가 채우는 행사 소개 — 색·크기는 인라인 style 로 받는다(대회마다 값이 다른 콘텐츠라
+   --mc-* 테마 토큰이 아니라 개별 값). 색을 안 정하면 테마 글자색을 그대로 물려받는다. */
+.mcv-intro { margin: 0 0 20px; color: var(--mc-text); }
+.mcv-intro-title { margin: 0 0 8px; font-weight: 800; line-height: 1.35; word-break: keep-all; }
+.mcv-intro-body { margin: 0; line-height: 1.7; white-space: pre-wrap; opacity: .85; }
 .mcv-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between;
   gap: 12px; padding: 12px 0; margin-bottom: 14px; background: var(--mc-surface);
   border-bottom: 1px solid rgba(120,120,128,.18); }
@@ -21,14 +26,15 @@ export const VOTE_CSS = `
  * 카드 폭을 280~360px 로 **고정 범위**에 묶는다. minmax(240px, 1fr) 이었을 때는 참가작이
  * 1~2개만 있어도(오픈 초기·리허설) 남는 폭을 전부 그 카드가 흡수해 카드 하나가 900px
  * 가까이 늘어났다(참고로 준 레퍼런스 이미지의 3열 고정 카드 크기와 정반대였다). 1fr 을
- * 없애면 카드는 더 늘어나지 않고, 대신 남는 폭이 줄 안에서 뜨는데 justify-content: center
- * 로 그 여백을 카드 좌우가 아니라 줄 전체의 좌우 여백으로 돌려 가운데 정렬한다.
- * auto-fit 을 쓰는 이유는 그대로다 — 빈 트랙을 접어야 이 center 정렬이 실제 카드 기준으로 먹는다.
+ * 없애면 카드는 더 늘어나지 않고, 대신 남는 폭이 줄 안에서 뜬다.
+ * auto-fit 을 쓰는 이유는 그대로다 — 빈 트랙을 접어야 카드 크기가 실제 카드 기준으로 먹는다.
  * 상한을 300→360 으로 올린 건 카드를 더 키워 영상(16:9) 비중을 텍스트보다 우세하게 만들기 위함.
  * gap 을 20px 로 키운 것도 같은 이유 — 컨테이너를 넓히지 않으면 카드가 상한까지 자랄 때 간격이
  * 거의 안 남아 보인다(위 .mcv 주석의 역산 참고).
+ * justify-content 는 center 가 아니라 start — 참가작이 한둘일 때 가운데 덩그러니 있는 것보다,
+ * 신청 들어온 순서대로 왼쪽부터 차오르는 쪽이 "계속 채워지고 있다"는 인상을 준다.
  */
-.mcv-grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(280px, 360px)); justify-content: center; }
+.mcv-grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(280px, 360px)); justify-content: start; }
 .mcv-card { display: flex; flex-direction: column; overflow: hidden; border-radius: var(--mc-radius);
   background: var(--mc-surface); box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 6px 20px rgba(0,0,0,.06);
   transition: box-shadow .18s ease, transform .18s ease; }
