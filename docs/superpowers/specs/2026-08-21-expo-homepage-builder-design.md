@@ -1,6 +1,6 @@
 # 홈페이지 메뉴 — 전시 웹사이트 빌더 · CMS 설계 (v2)
 
-작성일: 2026-08-21 · 상태: **사용자 승인 · W0 인증 관리자 미리보기 실측 PASS · W1 구현 계획 착수 가능 · 공개 출시는 별도 사용자 승인 릴리스 검증 전까지 차단** · 증거: [W0 실측 기록](../research/2026-08-21-imweb-w0/README.md)
+작성일: 2026-08-21 · 상태: **사용자 승인 · W0 인증 관리자 미리보기 실측 PASS · W1 구현 계획 착수 가능 · 공개 출시는 별도 사용자 승인 Public Embed Launch Gate 전까지 차단** · 증거: [W0 실측 기록](../research/2026-08-21-imweb-w0/README.md)
 
 > 세 관점 설계(A: 데이터 모델, B: 편집 UX, C: 런타임·임베드)와 적대적 비판을 통합했다.
 > 갈린 곳은 전부 하나로 결정하고 근거를 남겼다. 비판의 각 지적은 §1 결정 표와 본문에서
@@ -27,7 +27,8 @@
   ⑧**커스텀 코드 섹션** — 운영자가 임의 임베드 코드(인스타그램·지도·외부 위젯)를 붙여넣는 탈출구(④와 별개 방향, "둘다" 확정).
 - 레퍼런스: genesis.com/kr/ko 실측 — **타입 × 변형(variant) 섹션 시스템**, 같은 타입 다중 인스턴스
   (card-dualshape ×2 실측).
-- 구조 원칙: **다섯 번째 임베드 파이프라인**을 만든다. 새 entry → esbuild IIFE → 생성물 커밋 →
+- 구조 원칙: **다섯 번째 제품 임베드 파이프라인**을 만든다. 최신 main에는 대회가 생성물 3벌을 가져
+  entry·생성물이 이미 5벌이므로, Expo 자체는 **여섯 번째 생성 IIFE**가 된다. 새 entry → esbuild IIFE → 생성물 커밋 →
   "주석+번들+boot" 로더라는 배포 관례는 /f/·/w/l/ 과 동형이지만, 렌더 경계는 기존 light DOM 을
   복제하지 않고 Shadow DOM 으로 바꾼다(D22).
 - 제품 범위: 특정 행사·지역·마감과 무관한 범용 전시 홈페이지 빌더다. 첫 사용 흐름은 기존 아임웹에
@@ -39,19 +40,19 @@
 
 | # | 쟁점 | 결정 | 근거 (비판 항목) |
 |---|---|---|---|
-| D1 | 저장·발행 모델 (A 섹션 행 / B 스냅샷 / C published Boolean) | **B 의 draft/published 스냅샷** + 섹션은 **페이지 JSONB 안**(C). A 의 섹션 행 모델 폐기 | 발행 후 자동저장이 60초 내 공개되는 실사고(1-1). 스냅샷은 페이지 단위 발행이라 섹션 행과 어색 — JSONB 가 정합. 동시 편집은 마지막 저장 승리로 명시(3-6, 웨비나 랜딩과 동급, 운영자 1~2인) |
+| D1 | 저장·발행 모델 (A 섹션 행 / B 스냅샷 / C published Boolean) | **B 의 draft/published 스냅샷** + 섹션은 **페이지 JSONB 안**(C). A 의 섹션 행 모델 폐기. 편집 경로만 `draftRevision` 정수 CAS | 발행 후 자동저장이 60초 내 공개되는 실사고(1-1). 스냅샷은 페이지 단위 발행이라 섹션 행과 어색 — JSONB 가 정합. seen/live 같은 비편집 쓰기는 충돌시키지 않고, 실제 동시 편집 409는 자동 병합/재시도 없이 로컬 초안을 보존한 채 멈춘다 |
 | D2 | 섹션 스니펫 게이트 | 발행(스냅샷)과 **노출 스위치를 분리**: 페이지 `liveAt`, 섹션 `embedEnabled`(JSONB 내, 스냅샷에서 읽음). §3 상태 모델 | B 모델 단독으론 "페이지는 아직인데 섹션만 먼저" 불성립, C 는 자기 시나리오와 충돌(1-2). A 의 embedEnabled 발상을 스냅샷 모델 안에서 재구성 |
 | D3 | W1 가치 명제 | **부분 이행부터**(C) — 섹션 스니펫·register-form 이 첫 사용 흐름. 페이지 임베드도 W1 에서 서빙 가능 | 기존 아임웹 정보구조·SEO·메뉴를 그대로 둔 채 작은 단위로 검증할 수 있다. 특정 행사 일정이 근거가 아니다 |
 | D4 | 이름·URL·전역 | 모델 `Expo*`, 모듈 `src/lib/expo/`, 전역 `__msExpo`, 마운트 `data-mach-expo(-section)`, 라우트 `/h/`·`/hp/`, API `/api/expo/*` | "home" 은 어드민 홈과 충돌, "exhibit" 은 길다. 스니펫 속성·전역 키는 영구 호환 부담이라 착수 전 확정(1-6) |
-| D5 | 미디어 슬롯 | URL 하나 저장(B/C) — `{ kind:"image"\|"video"\|"embed", url\|provider+id, posterUrl? }`. A 의 `src:"upload"\|"link"` 필드 폐기. **히어로에 embed 금지** 정규화(C) | `transformedImageUrl` 이 "우리 Storage URL 인가"를 이미 판정(1-7). vimeo 는 뺀다(2-6) — W1 youtube 도 W2 로 |
+| D5 | 미디어 슬롯 | URL 하나 저장(B/C) — `{ kind:"image"\|"video"\|"embed", url\|provider+id, posterUrl? }`. A 의 `src:"upload"\|"link"` 필드 폐기. **히어로에 embed 금지** 정규화(C) | W1은 process-free Storage origin/prefix helper로 소유 URL만 판정하고 JPEG/PNG/WebP 업로드 시 축소한 원본 URL을 그대로 서빙한다. `transformedImageUrl`은 번들에 env 분기를 남겨 비채택. vimeo·W1 youtube도 제외 |
 | D6 | 다국어 | 저장은 `Localized` 맵(A, `toLocalized` import), **서버가 서빙 시점에 localize 해 페이로드·런타임·편집기는 문자열만 본다** | 범용 제품은 언어 확장이 예정된 구조여야 한다. 맵을 아는 곳을 정규화 한 곳으로 좁히면 W1 단일 언어 UI 뒤에도 마이그레이션이 없다 |
 | D7 | 캐시 | SWR 86400(C). 페이로드에 `serverNow` 없음 — 접수 창 판정은 /f/ 위임 | 1-4·2-2. DB 장애 시에도 전시 홈은 계속 보이는 쪽이 옳다 |
-| D8 | 미리보기 | `/hp/{token}?page={pageId}` — **draft 렌더**, HTML 직서빙(`/cp/` 방식). 어드민 인접 미리보기는 **iframe**(SetupPreview 관례) — C 의 "mount 직접 호출" 가정 기각 | 1-8. `?published=1` 로 발행본 비교(B). 컨테이너 폭 시뮬레이션 토글 포함(5-2) |
-| D9 | seen 비콘 | 로더 GET 이 아니라 **런타임 첫 렌더 성공 시 별도 POST** `/api/expo-embed/seen` + BOT_UA 필터 | 실물 구조(`webinar-embed/[siteId]/seen` — "GET 에 쓰기 부작용 금지, CDN 캐시 무충돌")와 A 표현의 불일치(4-1) |
-| D10 | 스니펫 origin·식별자 | `getPublicAppOrigin()`(app-url.ts 실재) + **id 기반**(pageId·sid). slug 는 URL 에 쓰지 않는다 | 4-3(프리뷰 오리진 박제 결함), slug 는 운영자가 바꾸는 값. 기존 EmbedSnippetRow 의 `window.location.origin` 도 같은 수리가 필요하다는 메모를 남긴다(범위 밖) |
+| D8 | 미리보기 | `/hp/{token}?page={pageId}` — **draft 렌더**, HTML 직서빙(`/cp/` 방식). 어드민 인접 미리보기는 unsandboxed same-origin **iframe**이고 제3자 custom-code만 중첩 sandbox — C 의 "mount 직접 호출" 가정 기각 | `?published=1`, `container=standard\|wide`, code digest에 묶인 명시 실행. iframe viewport 1440/390은 유지하고 wrapper만 1410/360↔1440/390 |
+| D9 | seen 비콘 | 로더 GET 이 아니라 **런타임이 의도한 host를 확보한 뒤 별도 POST** `/api/expo-embed/seen` + BOT_UA 필터. DOMString JSON의 headerless sendBeacon/fetch keepalive로 simple request. 발행·대기 connection-only boot도 포함하고 preview·미발행은 제외 | 선부착 `lastSeenAt`과 "첫 렌더" 표현의 충돌을 제거한다. GET 쓰기 부작용·CDN 캐시·CORS preflight 침묵 실패를 함께 피한다 |
+| D10 | 스니펫 origin·식별자 | server-only `getRequiredExpoPublicOrigin()`이 `getPublicAppOrigin()`을 absolute HTTPS·canonical Production config와 대조한 뒤 **id 기반**(pageId·sid) URL만 만든다. slug 는 URL 에 쓰지 않는다 | 빈 값/상대 URL/Preview deployment host면 스니펫을 만들지 않는다. 기존 EmbedSnippetRow 의 `window.location.origin` 수리 메모는 범위 밖 |
 | D11 | 페이지 경로 | `@@unique([siteId, slug])` 사이트 전역 유일. A 의 `path` 컬럼·재계산 폐기 | 2-4. 페이지 5~10장 규모에서 부모별 동일 slug 허용 실익 없음. 부분 유니크 인덱스 신규 0개 유지 |
 | D12 | SEO | `seo Json` 컬럼 없음(2-1). 메타는 **아임웹 페이지 설정 복붙 안내**(어드민이 복붙용 텍스트 제공, W2). 스니펫에 정적 텍스트 굽기 **비채택** — 편집마다 "다시 복사"는 요구 1 이 없애려던 수고의 부활 | 3-1. 한계는 §10 원칙으로 명시했고 사용자가 승인했다(§12 Q1) |
-| D13 | 전환 절차·롤백 | **유일 권장 절차 = "임베드 전용 아임웹 새 페이지 + 아임웹 메뉴 링크가 라우터"**(C §9). B 의 체크리스트 UI 를 이 절차로 재작성. 롤백 = `liveAt` OFF 또는 메뉴 원복 — 자기신고 `switchedAt` 폐기(스위치가 실서빙을 바꾸므로 신고 축 불필요) | 5-1·3-4·3-5. 상태는 3상태 + lastSeenAt 관측 병기(B) |
+| D13 | 전환 절차·롤백 | **유일 권장 절차 = "임베드 전용 아임웹 새 페이지 + 아임웹 메뉴 링크가 라우터"**(C §9). 비공개 사전 준비는 public flag OFF에서 멈추고, 별도 출시 승인 뒤에도 먼저 OFF 상태 노출 0 감사 → flag ON → 지정 페이지만 노출한다. 롤백 = 페이지·독립 섹션 노출 OFF + off-safe 배포 + 필요 시 CDN 무효화 + 메뉴 원복 — 자기신고 `switchedAt` 폐기 | 5-1·3-4·3-5. 상태는 3상태 + lastSeenAt 관측 병기(B); 배포 플래그는 임시 kill switch가 아님 |
 | D14 | 섹션 편집 표면 | 좌측 섹션 내비게이터에서 하나를 선택하고, **중앙 편집 열에는 선택 섹션의 모든 값을 항상 노출**한다. 접힘 카드·모달 편집 비채택 | 가변 N개를 한 열에 모두 펼치지 않으면서도 "고치는 값은 숨기지 않는다"는 Direct Manipulation 원칙을 지킨다. 미리보기 클릭도 같은 선택 상태로 연결 |
 | D15 | event-info 게이트 | 정본은 `CollectSource.formConfig.eventInfo` 참조(A) — 단 **소스 isActive 는 접수 게이트지 정보 게이트가 아니다**: 소스가 비활성이어도 eventInfo 는 읽어 서빙 | 3-2. /f/ 의 "비활성이면 formConfig 미탑재"를 그대로 이식하면 안 되는 지점 |
 | D16 | 섹션 다중 번들 다운로드 | W1 은 로더 관례 유지(응답=번들+boot) + **스니펫 UI 에 "한 아임웹 페이지에 섹션 스니펫 3개 이하 권장" 명시**. 다중 Expo 번들은 W0 미실측 영역이며, W1/W2 실제 다중 스니펫 브라우저 측정에서 문제가 확인될 때 "boot 전용 응답 + 공용 번들 1회"로 분리 | expo 번들은 초기 카탈로그 기준 landing(135KB)보다 작고 CDN 압축 후 실전 비용을 모른 채 관례 첫 이탈을 감행하지 않는다. 이탈 트리거를 수치로 명시하는 쪽 선택 |
@@ -112,14 +113,16 @@ model ExpoPage {
 
   /// 편집 상태 { sections: ExpoSectionInstance[] } — 자동저장 대상. 정규화는 src/lib/expo/config.ts
   draft       Json
+  /// 편집 경로 전용 CAS. seen/live/publish/reorder가 updatedAt을 바꿔도 자동저장 충돌을 만들지 않는다.
+  draftRevision Int    @default(0)
   /// 발행 스냅샷 — 공개 로더가 읽는 유일한 원본. null = 미발행. 발행 = 서버 재정규화 후 draft 복사 (D1)
   published   Json?
   publishedAt DateTime?
-  /// 페이지 임베드 노출 스위치 — null 이면 /h/{pageId} 는 무해한 404 주석 (D2, §3)
+  /// 페이지 임베드 노출 스위치 — null 이면 발행본 내용 없이 connection-only boot (D2, §3)
   liveAt      DateTime?
   /// 이 페이지에 대응하는 아임웹 페이지 URL — 이행 현황 표시·내부 링크 해석용
   imwebUrl    String?
-  /// 런타임 첫 렌더 비콘이 갱신 (D9) — "붙어 있음" 관측 배지
+  /// 페이지 또는 섹션 런타임이 의도한 host를 확보하면 갱신 (D9) — "코드 관측" 배지
   lastSeenAt     DateTime?
   lastSeenOrigin String?
   deletedAt   DateTime?
@@ -156,8 +159,9 @@ model ExpoTemplate {          // W1 — 첫 출시부터 저장·인스턴스화
 
 ```ts
 interface ExpoSectionInstance {
-  /** 편집기가 추가 시 발급(crypto.randomUUID). 불변 — 정렬·변형 전환·발행에 살아남는다.
-   *  정규화는 sid 를 절대 재발급하지 않는다(스니펫 URL 이 참조). jsdom 테스트로 강제. */
+  /** 편집기가 추가 시 발급(crypto.randomUUID). 페이지 안에서 유일한 nonempty UUID이며 불변 —
+   *  정렬·변형 전환·발행에 살아남는다. 쓰기는 invalid/duplicate를 거부하고 total read normalizer는
+   *  첫 valid만 남긴다. 정규화는 sid를 재발급하지 않는다(스니펫 URL이 참조). */
   sid: string;
   type: string;      // 레지스트리 화이트리스트 — 모르는 타입은 정규화가 버린다
   variant: string;   // 타입별 화이트리스트 — 모르는 변형은 첫 변형으로 강등
@@ -177,9 +181,9 @@ WebinarEmbedSite 식 부착 지점 간접층(재사용 요구 없음 — A §1.2
 **템플릿 저장·인스턴스화 계약(D19)**: `design` 은 theme·페이지 구조(제목·slug·홈·부모·순서)와 section
 type/variant/design만 저장하고 콘텐츠 슬롯은 타입 기본값으로 만든다. `full`은 일반 텍스트·미디어·링크도
 저장하지만 중첩 위치까지 재귀 순회해 모든 `sourceRef`, pageId, sid, previewToken, imwebUrl, liveAt,
-published, lastSeen*을 제거한다. 각 페이지에는 원본 DB id와 무관한 template-local `key`와 `isHome`을
+published, lastSeen*, draftRevision을 제거한다. 각 페이지에는 원본 DB id와 무관한 template-local `key`와 `isHome`을
 저장하고 `parentKey`로 트리를 복원한다. 새 사이트는 항상 비공개 초안이며 모든 사이트·페이지·섹션 ID와
-previewToken을 새로 발급한다. 페이지 `liveAt=null`, 모든 section `embedEnabled=false`로 만든 뒤
+previewToken을 새로 발급하고 모든 페이지 `draftRevision=0`에서 시작한다. 페이지 `liveAt=null`, 모든 section `embedEnabled=false`로 만든 뒤
 `normalizeExpoConfig`를 통과한다. 대상 project가 template과 같은 workspace인지도 서버가 검증한다.
 
 `full` 저장 시 `link.href`를 슬롯 정의에 따라 순회한다. `page:{oldPageId}`는
@@ -204,17 +208,26 @@ transaction이 실패하면 이번 작업에서 복사한 객체만 보상 삭�
 자기신고 축이 필요 없다(D13). 판정 함수 `derivePageState(page)` 는 `expo/config.ts` 한 곳 —
 목록·트리 상태점·이행 현황이 전부 이것만 읽는다(B §5 원칙 계승).
 
+아래 표는 public-release flag가 켜진 출시 상태의 데이터 판정이다. flag OFF는 전 상태를 앞에서 덮어써
+`/h`를 상수 no-store 비활성 응답으로 만들며, 그동안 `liveAt`·`embedEnabled`를 켜는 mutation도 거부한다.
+
 | 상태 | 판정 | 로더 동작 | 배지 | 관측 병기 |
 |---|---|---|---|---|
 | 초안 | `published == null` | `/h/` 404 주석. `/hp/` draft 렌더 | 회색 "초안" (+imwebUrl 있으면 "아임웹 운영중") | — |
-| 발행됨 · 대기 | `published != null && liveAt == null` | `/h/` 는 **콘텐츠 없는 무해 스크립트**(런타임은 조용히 아무것도 안 그림 — /f/ 비활성 침묵 규칙). 스니펫 선부착 가능 | 파랑 "발행됨" | lastSeenAt("붙어 있음/아직") |
+| 발행됨 · 대기 | `published != null && liveAt == null` | `/h/` 는 **콘텐츠 없는 connection-only boot**(의도한 host만 확보하고 아무것도 안 그림). 스니펫 선부착 가능 | 파랑 "발행됨" | lastSeenAt("페이지/섹션 코드 관측/아직") |
 | 공개중 | `liveAt != null` | `/h/` 풀 서빙 (published 스냅샷) | 초록 "공개중" | lastSeenAt 5분 내 "연결됨" |
 
-- **페이지 전환 시나리오(유일 권장 절차, D13)**: ① mach 에서 제작 → /hp/ 검수 → 발행
-  ② 임베드만 담은 **아임웹 새 페이지**를 만들어 스니펫 부착(이때 lastSeenAt 이 "붙어 있음"으로)
-  ③ 전환일에 `liveAt` ON + 아임웹 메뉴 링크를 새 페이지로 교체. **롤백 = 메뉴 원복 또는 liveAt OFF 한 번.**
+`ExpoPage.lastSeenAt`은 이 페이지의 **페이지 또는 섹션 스니펫 중 하나**가 host를 확보했다는 관측이다.
+페이지 임베드만의 설치 증거로 과장하지 않는다. 둘을 구분해야 한다면 별도 scope 모델이 필요한 W2 변경이다.
+
+- **페이지 전환 시나리오(유일 권장 절차, D13)**: 비공개 단계는 ① Mach에서 제작 → `/hp/` 검수 →
+  모든 노출 게이트 OFF로 발행·canonical 스니펫 복사 후 멈춘다. 별도 공개 임베드 출시 승인 뒤에도 ② flag
+  OFF 상태에서 노출 준비 데이터 0을 먼저 감사하고 첫 ON Production을 배포 ③ 임베드만 담은 **아임웹 새 미게시 페이지**에 스니펫을
+  붙이고 지정 페이지만 `liveAt` ON해 인증 관리자 미리보기로 확인 ④ 사용자가 게시·메뉴 교체를 결정한다.
+  **롤백 = 페이지/독립 섹션 노출 OFF → off-safe 배포·CDN/구 배포 정리 → 메뉴 원복.**
   기존 아임웹 페이지에 직접 붙이는 방식은 "둘 다 보임" 사고를 낳으므로 문서·체크리스트에서 권장하지 않는다.
-- **섹션 부분 이행**: 페이지는 초안/발행·대기인 채로, 섹션 `embedEnabled` ON + 발행 → `/h/{pageId}/s/{sid}`
+- **섹션 부분 이행**: public flag가 켜진 출시 단계에서만, 페이지는 초안/발행·대기인 채로 섹션
+  `embedEnabled` ON + 발행 → `/h/{pageId}/s/{sid}`
   가 **published 스냅샷의 그 섹션만** 서빙. 기존 아임웹 페이지 코드블럭에 섹션 스니펫만 끼운다.
   게이트를 스냅샷에서 읽으므로 embedEnabled 토글도 발행을 거친다 — "발행 = 밖에 나가는 유일한 문"
   이라는 단일 규칙이 운영자 정신 모델을 지킨다(내리기도 토글 OFF + 발행 한 번).
@@ -273,10 +286,14 @@ W1 = 6타입(kv·textblock·cardgrid·toolbox·register-form·custom-code): "기
 2. **높이는 안에서 알려온다.** srcdoc 에 운영자 코드와 함께 높이 리포터를 심는다
    (ResizeObserver → `postMessage`, 부모는 `source === iframe.contentWindow` 로 대조해 높이 갱신 —
    opaque origin 이라 origin 검사가 불가능하므로 소스 대조가 정본). 위젯이 늦게 커져도 따라간다.
-3. **상한과 게이트.** code 슬롯 20KB 상한(정규화에서 자름), `hasContent` = 코드 비어 있지 않음.
+3. **상한과 게이트.** code 슬롯 20KB 상한. 쓰기 API는 초과 입력을 필드 오류로 거부하고, total
+   normalizer만 이미 저장된/legacy 비정상값을 방어적으로 자른다. `hasContent` = 코드 비어 있지 않음.
    발행 게이트를 그대로 타므로 **미리보기에서 먼저 보고 발행**이 흐름상 강제된다 — 커스텀 코드가
    제일 깨지기 쉬운 섹션이라 이 순서가 필수다. 페이로드는 jsonForScript 를 타므로 `</script>`
    조기 종료는 기존 규약이 막는다.
+4. **미리보기 실행은 명시적이다.** sandbox는 부모 DOM 접근을 막지만 타사 네트워크 요청·추적까지
+   막지는 않는다. Mach/토큰 미리보기에서는 기본 placeholder로 두고 운영자가 세션마다
+   "외부 코드 미리보기 실행"을 눌러야 srcdoc을 실행한다. 공개 런타임은 발행 게이트 통과 뒤 자동 실행한다.
 
 인라인 변형은 지금 만들지 않는다 — iframe 으로 실제 위젯이 안 되는 사례가 나오면 그때
 "가드 예외 + 스크립트 재생성" 비용을 치른다(선례: embed-runtime.test 의 KNOWN_VIOLATIONS 목록).
@@ -299,20 +316,25 @@ W1 = 6타입(kv·textblock·cardgrid·toolbox·register-form·custom-code): "기
 | 저장(content) | `{ sourceRef, heading, note }` — 폼 상태 0바이트 | `{ sourceRef }` + design 표시 토글 |
 | 편집기 UI | sourceRef → 프로젝트 내 CollectSource 드롭다운(기본 site.collectSourceId), 없으면 "사전등록 소스를 연결하세요" 인라인 경고 | 동일 + eventInfo 미설정 소스면 경고 |
 | 서버(로더) | sourceId 가 **같은 프로젝트 소속인지 검증**, 아니면 뺀다(크로스테넌트 차단). 페이로드엔 sourceId 만 | 서빙 시점에 `normalizeCollectForm(...).eventInfo` 를 `resolved.eventInfo` 로 실음. **소스 isActive 무관하게 읽는다**(D15) — isActive 는 접수 게이트지 정보 게이트가 아니다. 소스 부재·eventInfo.enabled:false 만 hasContent 실패 |
-| 런타임 | Expo 가 ShadowRoot 안 target을 `sourceId:view:instanceKey`로 등록 → **document head에 삽입한** `/f/{sourceId}` classic script tag의 `data-ms-form-target`로 key 전달 → 캐시된 본문의 `boot(payload, document.currentScript)`가 key를 즉시 캡처해 `bootInto` 호출. UI·폼 CSS·DOM만 같은 ShadowRoot에 설치(D24). 캐시 수명·접수 창 판정·레이트리밋은 계속 /f/ 소유 | resolved 값만 렌더 — 일정이 바뀌면 홈·폼·티켓이 60초 안에 같이 바뀐다. 수동 입력 폴백 없음(두 곳이 어긋난다) |
+| 런타임 | Expo 가 window-backed target registry에 `sourceId:form:mode:instanceKey`로 등록 → **document head에 삽입한** `/f/{sourceId}` classic script tag의 `data-ms-form-target`로 key 전달 → 캐시된 본문의 `boot(payload, document.currentScript)`가 key를 즉시 캡처해 `bootInto` 호출. UI·폼 CSS·DOM만 같은 ShadowRoot에 설치(D24). 캐시 수명·접수 창 판정·레이트리밋은 계속 /f/ 소유 | resolved 값만 렌더 — 일정이 바뀌면 홈·폼·티켓이 60초 안에 같이 바뀐다. 수동 입력 폴백 없음(두 곳이 어긋난다) |
 
-정확한 전달 순서는 다음과 같다. Expo는 target record
-`{ container, styleRoot, preview, disposeSignal }`를 먼저 등록하고, `data-ms-form-target={key}`를 가진
+정확한 전달 순서는 다음과 같다. Expo와 별도 `/f` IIFE가 함께 읽을 수 있도록 target은
+`window.__MACH_FORM_TARGETS_V1__`에 두며, Expo는 target record
+`{ container, styleRoot, mode, disposeSignal }`를 먼저 등록하고, `data-ms-form-target={key}`를 가진
 classic script를 **ShadowRoot가 아닌 document head에** 삽입한다. HTML 표준상 `document.currentScript`는
 document tree의 classic script에만 보장되기 때문이다. script는 UI나 style을 만들지 않는 전달자이며
 load/error 후 element를 제거한다. `/f/{sourceId}`의 캐시 가능한 본문은 target별 query string이나 payload를
 만들지 않고 마지막에 `__msForm.boot(payload, document.currentScript)`를 호출한다. `boot`는 동기 실행 중
 `currentScript.dataset.msFormTarget`을 캡처한다. key가 있으면 registry record를 해석해
 `bootInto(record, payload)`를 부르고, 없으면 기존 독립 `/f`의 document marker 탐색으로 폴백한다. target
-identity는 `sourceId:view:instanceKey`이며 `view`는 `live | preview-draft | preview-published`,
+identity는 `sourceId:form:mode:instanceKey`이며 `mode`는 `live | preview-draft | preview-published`다.
+기존 `FormBootConfig.view`는 `form | check` 의미를 그대로 유지하고 재사용하지 않는다.
 `instanceKey`는 mount마다 새로 발급하므로 같은 source를 같은 페이지에 여러 번 둬도 자리를 빼앗지 않는다.
+Shadow target의 폼 루트 생존 여부는 `document.contains(root)`가 아니라 `root.isConnected`로 판정한다.
+무관한 document mutation은 재마운트하지 않고, 실제 detach는 한 번 정리하며, 이후 Expo 재진입은 새
+instance target을 등록한다. 기존 독립 `/f`의 document marker 감시 경로는 그대로 보존한다.
 
-`preview`는 target metadata에서만 읽어 submit·분석·seen 등 외부 부작용을 모두 막는다. form CSS는
+preview 여부는 target `mode`에서만 읽어 submit·분석·seen 등 외부 부작용을 모두 막는다. form CSS는
 `record.styleRoot` 안에 한 번만 설치하고 document head에는 넣지 않는다. dispose 시 observer·listener·
 DOM·registry key를 함께 정리하며 이미 끊긴 target은 조용히 no-op한다. 폼 루트 `.msf`는 Expo의 고유
 `--msx-font`를 이어받아 등록번호까지 Pretendard + `font-variant-numeric: tabular-nums`로 렌더한다.
@@ -329,16 +351,23 @@ DOM·registry key를 함께 정리하며 이미 끊긴 target은 조용히 no-op
 ```
 GET /h/{pageId}              페이지 임베드 (liveAt 게이트)
 GET /h/{pageId}/s/{sid}      섹션 임베드 (published 스냅샷의 embedEnabled 게이트)
-GET /hp/{token}?page={id}    미리보기 HTML 직서빙 (draft, ?published=1 비교, noindex, 레이트리밋)
-POST /api/expo-embed/seen    첫 렌더 비콘 (BOT_UA 필터, D9)
+GET /hp/{token}?page={id}    미리보기 HTML 직서빙 (draft, ?published=1, container, codeDigest, noindex, 레이트리밋)
+POST /api/expo-embed/seen    host 확보 비콘 (BOT_UA 필터, D9)
 ```
 
 공통 몸통 `src/app/h/[pageId]/loader.ts` — /f/ loader.ts 를 본뜬다(실물 확인: 공통 몸통·jsonForScript·
-SCRIPT_HEADERS·OPTIONS 204 전부 실재): ① `rateLimitAsync("expo-loader:{ip}", 60/60s)` 조회 전
-② 필요한 컬럼만 select ③ 없음/삭제 → 404 주석 + 엣지 캐시(없는 id 난사 방어) ④ 본문 =
+SCRIPT_HEADERS·OPTIONS 204 전부 실재): ① public flag OFF면 조회·rate-limit 전 상수 no-store 응답
+② ON이면 rate-limit → versioned catalog probe → `EXPO_CANONICAL_PUBLIC_ORIGIN` 검증 → 필요한 컬럼만 select
+③ 없음/삭제 → 404 주석 + 엣지 캐시(없는 id 난사 방어) ④ 본문 =
 `/* mach expo */\n` + EXPO_RUNTIME_JS + boot(jsonForScript(payload)) — 주석에 id 금지
 ⑤ ETag(본문 해시) + `CDN-Cache-Control: s-maxage=60, stale-while-revalidate=86400`(D7)
 ⑥ CORS `*`. `src/proxy.ts` 공개 경로에 `/h/`·`/hp/` 추가.
+
+`/hp`는 `/cp`처럼 실제 생성 런타임을 넣은 direct HTML Route Handler다. 성공·404·429 모두 `no-store`·
+`X-Robots-Tag:noindex,nofollow`·`Referrer-Policy:no-referrer`·nosniff·SAMEORIGIN/frame-ancestors self를
+보내 bearer preview token이 외부 이미지·custom-code 요청의 Referer로 새지 않게 한다. head style/font link는
+0이고 meta viewport + inline `body margin:0`만 둔다. standard wrapper는 `calc(100% - 30px)`, wide는 100%다.
+React 미리보기 사본은 만들지 않는다.
 
 ### 페이로드
 
@@ -348,7 +377,10 @@ __msExpo.boot({
   theme: { accent, lightBg, darkBg },
   page: { title, sections: ResolvedSection[] } | null,   // 게이트 통과분만, 텍스트는 localize 완료 문자열 (D6)
   scope?: { sid },                                        // 섹션 로더만
-  preview?: true,                                         // /hp/ 만 — 향후 비콘류 부작용 차단(isPreviewUrl 규칙의 임베드 번역)
+  preview?: {                                             // /hp/ 만 — Mach write/seen 차단
+    channel, container: "standard" | "wide",
+    allowCustomCode, customCodeDigest
+  },
 })
 // serverNow 없음(D7). resolved(eventInfo 등)는 섹션 객체에 병기.
 ```
@@ -358,8 +390,9 @@ __msExpo.boot({
 `src/embed/expo-entry.ts` → `src/generated/expo-runtime.ts`(커밋) + `scripts/build-expo-runtime.mjs`
 + `runtime-hash.mjs` 에 `expoSourceHash`(명시적 파일 목록) + stale 테스트 + **innerHTML 금지 디렉터리에
 `src/lib/expo` 편입**. landing-runtime 확장 비채택 — 페이로드 모델·ETag 무효화 주기·135KB 실측(C §3,
-4-6 이 "가장 근거 단단"으로 확인). 공유는 모듈 단위: `h()` DOM 빌더, `attachReveal`,
-`transformedImageUrl`, `getYouTubeVideoId`.
+4-6 이 "가장 근거 단단"으로 확인). 공유는 process-free 모듈 단위의 `h()` DOM 빌더와 `attachReveal`만
+허용한다. `transformedImageUrl`·`getYouTubeVideoId`는 W1 Expo 번들에 넣지 않는다. 모든 생성 런타임은
+명시 hash 목록과 esbuild metafile 전체 input closure가 정확히 같아야 stale 테스트가 통과한다.
 
 부트 관례는 form/landing-entry를 확장한다. `window.__MACH_EXPO__` 레지스트리(키
 `pageId:{sid|"page"}`)가 light DOM host·재사용할 open ShadowRoot·내부 renderRoot·portal host·cleanup을
@@ -373,18 +406,22 @@ wg_animated), 마운트 폴백, 모든 실패 warn — 호스트를 절대 깨�
 slot·`part`는 제공하지 않는다. `EXPO_CSS`는 document head가 아니라 그 ShadowRoot의
 `adoptedStyleSheets`에 붙이고, 미지원 환경은 root 내부 `<style>`로 폴백한다. 내부 렌더 루트는
 `all:initial` 뒤 font/color/line-height/letter-spacing/text-transform/text-fill/text-size-adjust/
-color-scheme을 명시한다. 폼 컨트롤은 `font:inherit`. `rem`은 아임웹 document root의 font-size를
+color-scheme과 W1 기본 로케일의 `direction:ltr; unicode-bidi:isolate`를 명시한다. 폼 컨트롤은
+`font:inherit`. `rem`은 아임웹 document root의 font-size를
 참조하므로 금지하고 px·em·container query를 쓴다.
 
 모달·고정 목차는 mount 조상의 transform/overflow에 갇히지 않도록 body 직계 고유 host로 포털하되,
 그 host에도 별도 ShadowRoot와 같은 stylesheet를 붙인다. 포커스 판정은 `document.activeElement` 한 번이
 아니라 shadow chain을 따라가며, 생존 판정은 `isConnected`로 한다. 본문 host shell은 display·visibility·
 box-sizing·width/min/max-width·height·margin·padding·border·background·opacity·transform·filter·overflow·
-position/inset·z-index·pointer-events를 충돌 방지용 inline-important로 정규화하되 `width:100%`로 아임웹이
+position/inset·z-index·pointer-events·transition·animation을 충돌 방지용 inline-important로 정규화하되
+transition/animation은 `none`으로 두고 `width:100%`로 아임웹이
 제공한 바깥 컨테이너 폭은 존중한다. portal host는 같은 시각 속성을 초기화한 뒤 body viewport 기준
 fixed/inset/z-index/pointer-events 계약을 별도로 적용한다. hostile 테스트는 Shadow 내부뿐 아니라 이 두
 light-DOM host도 앞·뒤 삽입 규칙으로 공격한다. 아임웹 바깥 조상 폭은 W0에서 standard·wide를 검증했고
 독립 full은 확보하지 못했다. 바깥 조상 숨김·폭 제한은 내부 디자인 격리와 구분해 W1 인라인 안내로 다룬다.
+런타임은 zero-width/hidden/clipping 조상을 영속화하지 않고 bounded `data-msx-host-status` + 중복 없는
+console warning으로만 표시하며, 어드민은 이 한계를 정적 안내한다.
 
 #### Pretendard 단일 서체(D23)
 
@@ -394,22 +431,24 @@ light-DOM host도 앞·뒤 삽입 규칙으로 공격한다. 아임웹 바깥 �
 등록번호도 monospace 대신 tabular numerals를 쓴다. 외부 jsDelivr·Google Fonts·`local()`은 쓰지 않는다.
 
 `@font-face`를 Shadow stylesheet마다 반복하지 않는다. 런타임이 Mach origin의 절대 WOFF2 URL로
-`new FontFace(alias, url, { weight:"400 900" })`를 만들고 `document.fonts`에 한 번만 등록한다. 전역 CSS
+`new FontFace(alias, url, { weight:"400 900" })`를 만들고 bounded timeout 안에서
+`const loaded = await face.load(); document.fonts.add(loaded)`를 한 번만 실행한다. 전역 CSS
 선택자는 생기지 않으며 모든 mount가 레지스트리의 같은 load promise를 공유한다. `FontFace.load()` 완료
 뒤 root를 전환 표시해 fallback 서체가 번쩍이는 것을 막는다. 로드 실패 시 공개 콘텐츠를 영구히 숨기지는
 않고 안전 폴백으로 fail-open하되,
-이는 정상 합격 상태가 아니다. 릴리스 검증은 network 200·CORS·MIME·immutable cache와 실제 Rendered
-Fonts가 `__mach_expo_pretendard_v1`인지까지 확인한다. `custom-code` 제3자 iframe 내부만 이 계약의 예외다.
+이는 정상 합격 상태가 아니다. 비공개 `/hp` 사전 검증과 출시 승인 뒤 `/h` 검증은 각각 network 200·
+CORS·MIME·immutable cache와 실제 Rendered Fonts가 `__mach_expo_pretendard_v1`인지 확인한다.
+`custom-code` 제3자 iframe 내부만 이 계약의 예외다.
 
 ### 스니펫 (어드민 발급)
 
 ```html
 <!-- 페이지 -->
 <div data-mach-expo data-ms-page="{pageId}"></div>
-<script async src="{getPublicAppOrigin()}/h/{pageId}"></script>
+<script async src="{canonicalOrigin}/h/{pageId}"></script>
 <!-- 섹션 -->
 <div data-mach-expo-section data-ms-section="{sid}"></div>
-<script async src="{getPublicAppOrigin()}/h/{pageId}/s/{sid}"></script>
+<script async src="{canonicalOrigin}/h/{pageId}/s/{sid}"></script>
 ```
 
 두 빈 div는 콘텐츠를 light DOM에 받는 그릇이 아니라 ShadowRoot를 붙이는 **host**다. 런타임은 host
@@ -439,31 +478,35 @@ bg/paper 2벌) + 나머지는 `EXPO_CSS` 안 `color-mix` 파생. host document �
 ## 8. 미디어 (요구 5)
 
 - 슬롯 모델 D5. 업로드/링크 구분은 저장이 아니라 **입력 UI 의 두 경로** — Storage URL 여부는
-  `transformedImageUrl` 이 판정.
-- 업로드 API `POST /api/expo/[siteId]/media`: 세션 인증 → 멤버십 확인 → `validateLandingMedia`
-  **재사용**(이미지 5MB·영상 50MB·MIME 화이트리스트) → `ensureAssetBucket()` 공유 버킷, 경로
+  Expo의 process-free exact origin/prefix helper가 판정한다.
+- 업로드 API `POST /api/expo/[siteId]/media`: 세션 인증 → 멤버십 확인 → Expo 전용 JPEG/PNG/WebP
+  화이트리스트 + Vercel Function 본문 한계 아래인 **4MiB** 제한 → Sharp actual format/손상/픽셀 상한 검증 →
+  `downscaleUpload` → 결과 재검증(긴 변 ≤1600, 저장 bytes ≤1.5MiB; shared helper fail-open이 상한을 못 맞추면 거부) →
+  `ensureAssetBucket()` 공유 버킷, 경로
   `{workspaceId}/expo/{siteId}/{uuid}.{ext}`.
   **"읽기만 변환" 은 쓰지 않는다** — Supabase 이미지 변환은 유료 기능이라 이 프로젝트에서 403 이
   난다(6d73cc4 실측: 변환 URL → `FeatureNotEnabled`). 정본은 그 커밋이 세운 규약 그대로
   **업로드 시점 축소**다 — 저장된 것 자체가 작으면 변환 없이도 보이고 원본 서빙이 egress 안전.
-  expo 는 같은 업로드 경로를 재사용하므로 따로 할 일 없음(전제만 바로잡는다).
-- 프리셋: 기존 `heroBackground`·`sessionCardPhoto` 재사용, 신규 추가는 W2 카드롤러에서만.
-  링크 이미지는 변환 불가 사실을 편집기 힌트로.
+  GIF·SVG·영상은 W1 라우트에서 거부하고, 링크 이미지는 변환하지 않는다는 사실을 편집기 힌트로 보인다.
+- 읽기 프리셋은 쓰지 않는다. 저장된 축소 객체 URL을 그대로 렌더하고, 신규 표현 프리셋은 W2에서만 검토한다.
 - 영상: W1 제외. W2 에 업로드 mp4/webm(`autoplay muted loop playsinline`, reduced-motion 시
   poster+controls) + YouTube embed(nocookie, lazy, **히어로 금지**). vimeo·saveData 비채택(2-6).
-- `IMAGE_PRESETS`·validateLandingMedia 등 라이브 화면과 공유하는 지점은 방송 없는 주간의 별도 커밋으로
-  다룬다. 홈페이지 기능은 특정 행사 일정과 결합하지 않는다.
+- 기존 `IMAGE_PRESETS`·`validateLandingMedia`·`transformedImageUrl`은 건드리거나 import하지 않는다.
+  홈페이지 기능은 특정 행사 일정과 결합하지 않는다.
 
 ---
 
 ## 9. 어드민 화면 (요구 1·7 의 표면)
 
-- 사이드바 7번째 `{ href:"/homepage", label:"홈페이지" }`. 목록 `/homepage`(프로젝트 문맥, 1개면 상세
-  자동 진입 — D20). 상세 `/homepage/[siteId]?page=&view=` — **URL 자원의 소속이 프로젝트를 결정**
+- 사이드바 7번째 `{ href:"/homepage", label:"홈페이지" }`. 목록 `/homepage`는 localStorage에서 복원되는
+  workspace/project 문맥 뒤 client fetch하고, 전환 세대+AbortController로 늦은 응답을 버린다(1개면
+  `router.replace` 상세 자동 진입, `?list=1` 예외 — D20). 상세 `/homepage/[siteId]?page=&view=` — **URL 자원의 소속이 프로젝트를 결정**
   (IA 검토 결론, 딥링크 사고 방지).
 - 상세 = 3열(B §4.3): 좌 레일(테마 · 페이지/섹션 내비게이터 · 템플릿 · 이행 현황) / 중앙 편집 열 /
   우 미리보기(SetupPreview 재사용 iframe + 접기 + **컨테이너 폭 시뮬레이션 토글**). "아임웹에 붙이면
   컨테이너 폭은 달라질 수 있어요"만 고지한다. 서체·색·굵기는 달라지면 격리 실패이므로 차이라고 안내하지 않는다.
+  외부 iframe은 같은 Mach origin의 검증된 런타임이라 sandbox 없이 두고, viewport는 1440/390으로 고정한 채
+  standard wrapper 1410/360과 wide 1440/390만 전환한다. 제3자 custom-code의 중첩 iframe만 strict sandbox다.
 - 우측 `/hp` iframe의 Shadow 내부 섹션 클릭은 composed path에서 `sid`를 찾아
   `postMessage({ type:"mach-expo-select-section", pageId, sid, channel })`로 부모에 알린다. 부모는
   `event.source === iframe.contentWindow`, Mach preview origin, 현재 pageId와 iframe마다 발급한 channel을
@@ -472,22 +515,45 @@ bg/paper 2벌) + 나머지는 `EXPO_CSS` 안 `color-mix` 파생. host document �
 - 페이지 트리: EditableList(드래그·방향키·5초 실행취소), 홈 고정, 행 인라인 이름 편집 0클릭, 상태점 =
   `derivePageState`. "+ 페이지" 는 행 즉시 생성 + 포커스(모달 없음). slug 는 이름에서 파생·소스 정규화.
 - 섹션 편집기: 좌측 내비게이터 행이 핸들·타입·변형·enabled·상태 요약을 소유하고 드래그 정렬한다.
+  "+ 섹션"은 6종의 한국어 라벨·짧은 설명·허용 변형을 인라인 카탈로그로 보여주고, 선택 즉시 새 sid와
+  레지스트리 기본값으로 행을 만든 뒤 첫 필드에 포커스한다. kv는 1개·최상단, toolbox/register-form은
+  각 1개, 전체 40개 제약과 비활성 이유를 같은 표면에서 보인다.
   행 또는 우측 미리보기 섹션을 선택하면 중앙 편집 열이 그 섹션으로 바뀌며, **선택 섹션의 모든 슬롯은
   접힘·모달 없이 항상 인라인 노출**한다(D14). 슬롯 kind → 위젯 매핑 7종으로 기계 생성. 중첩 list는
-  표/행형 EditableList(업로드 타깃 행 ROW_KEY ref 규약 승계). 변형 전환은 값을 보존한다. enabled인데
+  표/행형 EditableList(업로드 타깃 행 ROW_KEY ref 규약 승계). 중앙 헤더에는 variant·enabled·독립 스니펫용
+  embedEnabled·design.bg를 항상 두며 행 값과 한 draft를 공유한다. 변형 전환은 값을 보존한다. enabled인데
   빈 섹션엔 "내용이 없어 나가지 않아요"를 해당 입력 가까이에 표시한다.
 - 사이트 생성은 `/homepage/new`에서 `빈 사이트` 또는 `템플릿`을 고르는 전용 화면이다. 템플릿 저장은
   상단의 저빈도 액션으로 두고 `디자인만`(기본) / `디자인과 콘텐츠`를 인라인 설명과 함께 선택한다.
-- 자동저장: draft 통짜 `PATCH /api/expo/pages/[id]` — `useAutosave` + 집계 표시 1곳(4-4 해소:
-  섹션 행 PATCH 배선 폐기). 발행 버튼은 draft==published 이거나 saving 중이면 비활성.
-- 섹션·초안 페이지 삭제는 편집 상태에서 제거한 뒤 **5초 실행취소**를 제공하고, 실행취소 시간이 지난
-  결과만 자동저장한다. 확인 모달은 띄우지 않는다. 확인 단계와 danger 톤은 공개 해제, 공개중 페이지 삭제,
+- 자동저장: draft 통짜 `PATCH /api/expo/pages/[id]` — `draftRevision` 정수 CAS + Expo 전용 autosave 상태기계
+  + 집계 표시 1곳(4-4 해소: 섹션 행 PATCH 배선 폐기). revision은 직렬화 value가 아닌 transport ref라
+  200 응답 자체가 재저장을 만들지 않는다. 저장 중 새 입력은 새 revision으로 한 번 더 저장하고, 409는
+  로컬 초안을 보존한 채 자동 병합/재시도 없이 멈춘다. seen/live/publish/reorder는 revision을 올리지 않는다.
+  발행 버튼은 draft==published, saving/error/conflict, 또는 5초 삭제 유예 중이면 비활성.
+- 서버가 내려준 `canEdit/canPublish/canManageSite/canManageTemplates`만 UI 표면을 결정한다. VIEWER는
+  읽기 영역으로 렌더하고 autosave·업로드·재정렬 handler를 마운트하지 않는다. draft/page/section 생성·편집·
+  업로드는 canEdit, publish/live/token은 canPublish, site/page 삭제는 canManageSite, workspace template
+  rename/delete는 canManageTemplates로 각각 나누며 서버도 같은 권한을 재검증한다.
+- 섹션·초안 페이지 삭제는 **5초 실행취소**를 제공하되 서로 다른 저장 계약을 섞지 않는다. 섹션은 draft에서
+  보류 제거하고 만료 때 페이지 autosave `PATCH` 정확히 1회, 페이지는 navigator에서 보류하고 만료 때
+  전용 soft-delete `DELETE /api/expo/pages/{pageId}` 정확히 1회를 보낸다. 둘 다 undo는 mutation 0회다.
+  페이지 삭제 유예는 현재 editor/page-order autosave가 flush 후 idle일 때만 시작하고 실패·409면 시작하지
+  않는다. 선택 페이지의 DELETE 성공 시 keyed editor를 먼저 unmount하고 홈 또는 첫 active page로
+  `router.replace`하며, 실패하면 행·선택을 복원한다. 유예 중 편집과 publish/live/reorder/page 전환은 막는다.
+  확인 모달은 띄우지 않는다. 확인 단계와 danger 톤은 공개 해제, 공개중 페이지 삭제,
   공개중 테마 변경, 영구 템플릿 삭제처럼 실제 공개 상태나 복구 가능성을 바꾸는 저빈도 액션에만 쓴다.
   공개 ON은 발행 상태·설치 체크를 같은 화면에서 인라인 검증한 뒤 1클릭으로 실행한다.
+- custom-code 실행 권한은 `pageId + normalized code digest` 현재 세션에만 묶는다. 코드/페이지 변경은 즉시
+  inert로 되돌리고, 현재 digest의 opted-in runtime-ready 메시지를 정확한 source/origin/channel에서 받은
+  뒤에만 UI가 발행을 허용한다. 이는 편집 UX 안전 게이트이며 서버 권한을 대체하지 않는다.
+- 테마는 노출 중 페이지/독립 섹션이 0개면 자동저장한다. 하나라도 있으면 로컬 staged 값만 `/hp`에 검증된
+  postMessage로 미리 적용하고, canPublish 운영자의 적용→확인 요청(`confirmPublicThemeChange:true`) 한 번만
+  서버가 노출 상태를 transaction 안에서 재검사한 뒤 저장한다. 취소는 staged 값을 폐기하고 canonical로 복구한다.
 - 이행 현황(레일 하단): 읽는 영역 — 헤드라인("3/7 공개중") → 다음 후보 → 표(페이지·상태·lastSeenAt·
   코드 버튼). 체크리스트는 D13 의 유일 권장 절차로 작성. W0 결과 `editorMode=placeholder`이므로
-  "아임웹 편집기에서는 placeholder만 보이며, 인증 관리자 미리보기 또는 Mach 미리보기에서 렌더를 확인하세요"
-  안내를 항상 붙인다. 실제 공개 화면 동작은 별도 릴리스 검증 전까지 단정하지 않는다.
+  "아임웹 편집기에서는 placeholder만 보입니다. 출시 잠금 전에는 Mach 미리보기로 확인하고, 별도 공개
+  임베드 출시 승인 뒤 인증 관리자 미리보기를 확인하세요" 안내를 항상 붙인다. 실제 공개 화면 동작은
+  사용자가 게시하기 전까지 단정하지 않는다.
 
 ---
 
@@ -528,24 +594,37 @@ Shadow DOM은 스타일 격리 경계일 뿐 서버 메타를 만들지 않으�
 - 고정 CDN Pretendard probe의 load/check가 PASS했고, Shadow signature는 `font-loaded`부터 `t+10000`까지 동일했다. 고유 Pretendard alias도 유지됐다.
 - portal은 `t+10000`에도 fixed `(0,0)`, 1×1, visible, transform/filter none이었고, `wg_animated` 위젯은 `t+2000` 전에 자연 노출됐다.
 - 임시 위젯은 설치 전 8개 → 측정 중 11개 → 제거·새로고침 후 8개로 복구됐다. marker/controller/portal/global 잔여물은 0이다.
-- 결론은 **W1 구현 계획만 해제**한다. 실제 self-host Pretendard, 실제 `/h`, 실제 공개 렌더는 별도 사용자 승인 릴리스 검증 전까지 차단한다.
+- 결론은 **W1 구현 계획만 해제**한다. 실제 self-host Pretendard와 `/hp`는 비공개 사전 검증 대상으로 두되,
+  실제 `/h`와 아임웹 통합은 별도 사용자 승인 Public Embed Launch Gate 전까지 차단한다.
 
 ### W1 — 첫 출시: 부분 이행 + 템플릿 + 완전 격리
 
 - 스키마 `ExpoSite`+`ExpoPage`+`ExpoTemplate` 순수 추가. `prisma db push`는 쓰지 않는다. checked SQL을
   만들고, 공유 프로덕션 DB 실행은 별도 승인·방송 없는 창에서 세션 URL(:5432)의 `prisma db execute`로
   한 번만 수행한다. 전후 read-only `pg_indexes` 감사로 기존 부분 유니크 인덱스 10/10 보존을 확인한다.
+  새 세 테이블은 모두 RLS를 켜고 정책은 만들지 않으며 `PUBLIC`·`anon`·`authenticated`와 쓰지 않는
+  Data API `service_role`의 테이블 권한을 회수한다. 직접 서버 DB 역할만 소유자 권한으로 접근하고
+  checker/capability probe가 이 RLS·ACL 지문까지 확인해야 준비 상태가 된다.
   배포는 **checked SQL 적용 → Expo 테이블과 인덱스 read-only 확인 → 메뉴·API 코드 배포**의 expand-first
-  순서다. 스키마 준비 확인 전에는 홈페이지 메뉴와 공개 라우트를 capability gate로 숨긴다.
+  순서다. 스키마 준비 확인 전에는 홈페이지 메뉴·어드민·토큰 미리보기를 versioned capability gate로 숨긴다.
+  capability resolver는 비동기로 catalog probe를 await하고 versioned short cache를 쓴다. `/h`와 seen은
+  별도 server-only public-release flag까지 켜져야 하며, 비공개 사전 검증에서는 계속 닫는다. 이 플래그는
+  배포 단위이므로 임시 검증용으로 켰다 끄지 않는다. 실제 공개 임베드 출시를 사용자가 별도로 승인한 뒤
+  canonical Production 배포에서 처음 켜고, Preview/과거 배포 URL은 스니펫에 넣지 않는다.
   `expo/config.ts` 정규화·`hasContent`·`derivePageState`·템플릿 sanitize/instantiate를 단위 테스트한다.
 - `src/lib/expo/`에 registry/config/model/mount/css/font/overlay를 둔다. open ShadowRoot 본문 + body 직계
   Shadow portal, self-host Pretendard, no-slot/no-part, no-rem 계약을 한 모듈에서 소유한다(D22·D23).
   CSS 빌드 테스트는 Expo source/생성물의 `rem` 토큰을 정적으로 거부한다.
-- `/f`에 target registry + `bootInto`를 추가하되 기존 독립 폼 boot를 보존한다(D24). script data attribute
-  → `document.currentScript` → `sourceId:view:instanceKey` 해석 경로와 preview side-effect 차단, 같은 source를
+- `/f`에 window-backed target registry + `bootInto`를 추가하되 기존 독립 폼 boot를 보존한다(D24). script data attribute
+  → `document.currentScript` → `sourceId:form:mode:instanceKey` 해석 경로와 preview side-effect 차단, 같은 source를
   두 번 배치하는 경우, destroy/re-entry를 테스트한다.
 - 번들 파이프라인 1벌(entry→생성물 커밋→runtime-hash→stale 테스트→innerHTML 검사 편입).
 - 라우트: `/h/{pageId}` + `/h/{pageId}/s/{sid}`(공통 loader.ts) + `/hp/{token}` + seen 비콘 + proxy 등록.
+  public flag OFF는 rate-limit/catalog/model보다 먼저 상수 no-store 응답하고, 인증 어드민 mutation은 exact
+  same-origin `Origin`·`Sec-Fetch-Site`·media type을 검증하며 CORS를 열지 않는다. `ExpoPage.draftRevision`
+  정수만 편집 CAS에 쓰고 seen/live/publish/reorder가 바꾸는 `updatedAt`은 revision으로 쓰지 않는다.
+  public flag OFF에서는 `liveAt` 또는 섹션 `embedEnabled`를 켜는 mutation을 서버가 거부하며 끄기는 항상
+  허용한다. 첫 `on` 배포 전 노출 준비 데이터가 0인지 read-only audit한다.
 - 카탈로그 6타입(kv·textblock·cardgrid·toolbox·register-form·custom-code), 이미지 업로드+링크.
 - 테마 3색 + 파생(색 유틸 승격은 별도 커밋·방송 없는 주간 — D17).
 - 어드민: 사이드바 7번째 홈페이지 메뉴와 `/homepage` 목록/빈 상태를 함께 출시. 3열 상세, 평면 페이지
@@ -571,15 +650,21 @@ Shadow DOM은 스타일 격리 경계일 뿐 서버 메타를 만들지 않으�
   postMessage 선택, 같은 source 폼 2개와 독립 `/f` 폴백을 검증한다. 실제 브라우저에서는 `/f` script가
   document tree에 있고 `currentScript`가 정확한 instance key를 읽으며 load 뒤 제거되는지도 확인한다.
 - DB 없는 `/dev/expo-harness`와 실브라우저 스위트: clean / hostile-before / hostile-after, page / section /
-  multi-section, 320·480·768·960·1440px. `*`, 제목, 본문, 링크, 버튼, 입력에 font/size/weight/color/
-  line-height/letter-spacing/text-transform/padding/border/background를 `!important`로 걸고 clean과 computed
-  style·bounding box·스크린샷이 같은지 비교한다. 기대 토큰 값도 별도로 단언한다.
+  multi-section, 320·480·768·960·1440px. 바깥 제공 폭·visibility를 같은 값으로 둔 격리 스위트는 `*`, 제목,
+  본문, 링크, 버튼, 입력, light-DOM host에 font/size/weight/color/line-height/letter-spacing/text-transform/
+  padding/border/background와 `direction:rtl`·`unicode-bidi:bidi-override`·geometry transition/animation을
+  `!important`로 걸고 clean과 computed style·bounding box·스크린샷이 같은지 비교한다. 내부 renderRoot의
+  `direction:ltr`·`unicode-bidi:isolate`도 기대값으로 단언한다. 별도 조상 제한 스위트는 부모
+  `display:none`·폭 제한·clipping을 이길 수 있다고 주장하지 않고
+  탐지·진단·가용 폭 준수·포털 escape를 검증한다. 기대 토큰 값도 별도로 단언한다.
 - 폰트: 우리 HTTPS 오리진 요청만 200, WOFF2 MIME/CORS/immutable cache, 외부 폰트 요청 0,
   한글·영문·숫자 표본으로 `document.fonts.check` 400~900, 실제 Rendered Fonts=
   `__mach_expo_pretendard_v1`, 등록번호 tabular numerals, 섹션 3개 중복 전송 0을 검증한다.
-- Chromium·WebKit·실제 iPhone Safari, 아임웹 편집기 placeholder, 인증 관리자 미리보기 데스크톱·모바일을 확인한다.
-  실제 self-host Pretendard 파일, 실제 `/h` 런타임, 실제 공개 데스크톱·모바일 렌더는 별도 사용자 승인
-  릴리스 검증에서 확인한다. 그전에는 공개 출시나 "아임웹 스타일 완전 격리" 완료를 주장하지 않는다.
+- Chromium·WebKit·실제 iPhone Safari와 Mach `/hp`를 먼저 확인한다. 실제 self-host Pretendard 파일은
+  비공개 사전 검증에서 확인할 수 있지만, 실제 `/h`와 아임웹 인증 관리자 미리보기는 임시 플래그 테스트가
+  아니라 별도 **공개 임베드 출시 승인** 뒤에만 확인한다. 아임웹 편집기에서는 placeholder를 기대하고,
+  공개 데스크톱·모바일 렌더는 사용자가 실제 게시하기 전까지 미증명으로 남긴다. 그전에는 공개 출시나
+  "아임웹 스타일 완전 격리" 완료를 주장하지 않는다.
 
 ### W2 — 페이지 전환 운영 + 표현력
 
@@ -636,6 +721,8 @@ Shadow DOM은 스타일 격리 경계일 뿐 서버 메타를 만들지 않으�
 
 1. 사용자 결정 여섯 개와 추가 승인(범용 제품·Shadow 하이브리드)이 코드·문구·테스트에서 서로 모순되지 않는다.
 2. 홈페이지 빌더가 그리는 페이지·섹션·폼·모달·목차의 실제 Rendered Font가 모두 Pretendard다.
-3. 아임웹 hostile CSS가 렌더 전·후 어느 때 들어와도 내부 computed style과 geometry가 clean 기준과 같다.
+3. 바깥 가용 geometry가 같은 조건에서 아임웹 hostile CSS가 렌더 전·후 들어와도 내부 computed style과
+   geometry가 clean 기준과 같다. 부모 `display:none`·폭 제한·clipping은 별도 탐지·진단하며 극복했다고
+   주장하지 않는다.
 4. 템플릿은 첫 출시에서 CRUD·워크스페이스 소유권·sanitize·인스턴스화까지 끝나며 모델만 존재하지 않는다.
 5. 페이지/섹션 스니펫·독립 `/f`·preview·custom-code의 기존 보안·부작용 게이트가 유지된다.
