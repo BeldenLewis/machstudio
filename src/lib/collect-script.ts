@@ -154,8 +154,14 @@ ${utmCore}
   function getFieldMeta() {
     var groups = document.querySelectorAll(GROUP_SELECTOR);
     return Array.from(groups).map(function(group, i) {
+      // 체크박스·라디오 "옵션"의 label(입력을 바로 감싸는 것)과 필드 "제목"을 구분해야 한다 —
+      // 일부 플랫폼(예: 마이스허브)은 옵션 텍스트가 label>input 구조라, 구분 없이 label 을
+      // 그냥 집으면 "관람 예정 일자" 대신 "9월 17일(목)" 같은 옵션 텍스트가 잡힌다. 입력을
+      // 감싸는 컨테이너(.input-area 등)가 아닌 형제 요소를 먼저 본다 — 그런 래퍼가 없는
+      // 사이트(아임웹 등)는 label 자신이 그 자리에서 바로 걸려 기존 동작과 같다.
       // th — 표 형태 신청서(<tr><th>라벨</th><td><input></td></tr>)는 label 태그가 없다.
-      var labelEl = group.querySelector("label, th");
+      var titleEl = group.querySelector(":scope > *:not(.input-area)");
+      var labelEl = (titleEl && titleEl.textContent.trim()) ? titleEl : group.querySelector("label, th");
       var input = group.querySelector("input, select, textarea");
       var labelText = (labelEl ? labelEl.textContent.trim() : "") ||
         (input ? (input.placeholder || input.getAttribute("name") || "") : "");

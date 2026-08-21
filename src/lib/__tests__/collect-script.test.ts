@@ -41,6 +41,11 @@ describe("buildCollectScripts — 필드 묶음 선택자", () => {
     expect(script).toContain('querySelector("label, th")');
   });
 
+  it("체크박스·라디오 옵션 label 과 필드 제목을 구분한다 — 입력 래퍼가 아닌 형제를 먼저 본다", () => {
+    const { script } = buildCollectScripts(baseInput());
+    expect(script).toContain(':scope > *:not(.input-area)');
+  });
+
   it("생성된 스크립트가 문법적으로 유효한 JS 다", () => {
     const { script, utmScript } = buildCollectScripts(baseInput());
     expect(() => new Function(utmScript)).not.toThrow();
