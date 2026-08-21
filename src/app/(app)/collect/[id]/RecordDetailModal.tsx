@@ -20,6 +20,7 @@ interface FieldMapping {
 interface CollectRecord {
   id: string;
   data: Record<string, string>;
+  registrationNo: string | null;
   utmSource: string | null;
   utmMedium: string | null;
   utmCampaign: string | null;
@@ -190,6 +191,12 @@ export default function RecordDetailModal({ sourceId, recordId, fieldMappings, o
             <>
               <div className="space-y-2">
                 <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">필드</p>
+                {record.registrationNo && (
+                  <div className="grid grid-cols-[120px_1fr] gap-3 items-start">
+                    <div className="text-xs text-muted-foreground pt-2">등록번호</div>
+                    <div className="text-sm py-2 break-words">{record.registrationNo}</div>
+                  </div>
+                )}
                 {fieldMappings.length === 0 && <p className="text-xs text-muted-foreground">필드 설정이 없어요</p>}
                 {fieldMappings.map((f) => (
                   <div key={f.id} className="grid grid-cols-[120px_1fr] gap-3 items-start">
