@@ -151,8 +151,21 @@ ${utmCore}
     return { last: last, first: first, journey: journey };
   }
 
+  // "필드 자동 감지" 스니퍼(collect/[id]/page.tsx)는 GROUP_SELECTOR 로 찾은 요소 중
+  // input/select/textarea 가 있는 것만 골라서 순서를 매긴다(섹션 제목·안내문 등도
+  // 같은 클래스를 쓰는 사이트가 있어서다 — 예: 마이스허브). 여기서 거르지 않고 그대로
+  // querySelectorAll 순서를 쓰면, 입력이 없는 요소가 하나라도 앞에 끼는 순간 스니퍼가
+  // 찍은 index 와 실제 DOM 위치가 어긋나 그 뒤 모든 필드가 엉뚱한 값을 모은다 — 스니퍼와
+  // 반드시 같은 필터를 써야 index 가 서로 맞는다.
+  function getGroups() {
+    var all = document.querySelectorAll(GROUP_SELECTOR);
+    return Array.prototype.filter.call(all, function(g) {
+      return g.querySelector("input, select, textarea");
+    });
+  }
+
   function getFieldMeta() {
-    var groups = document.querySelectorAll(GROUP_SELECTOR);
+    var groups = getGroups();
     return Array.from(groups).map(function(group, i) {
       // 체크박스·라디오 "옵션"의 label(입력을 바로 감싸는 것)과 필드 "제목"을 구분해야 한다 —
       // 일부 플랫폼(예: 마이스허브)은 옵션 텍스트가 label>input 구조라, 구분 없이 label 을
@@ -176,7 +189,7 @@ ${utmCore}
   }
 
   function collectData() {
-    var groups = document.querySelectorAll(GROUP_SELECTOR);
+    var groups = getGroups();
     var data = {};
     FIELD_MAP.forEach(function(field) {
       var group = groups[field.index];

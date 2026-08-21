@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from "vitest";
 import { buildCollectScripts } from "@/lib/collect-script";
 
 /**
@@ -50,5 +51,44 @@ describe("buildCollectScripts — 필드 묶음 선택자", () => {
     const { script, utmScript } = buildCollectScripts(baseInput());
     expect(() => new Function(utmScript)).not.toThrow();
     expect(() => new Function(script)).not.toThrow();
+  });
+});
+
+describe("buildCollectScripts — 실제 수집이 스니퍼가 찍은 index 와 맞는다", () => {
+  it("입력 없는 .field(안내문 등)가 앞에 끼어도 밀리지 않는다", async () => {
+    document.body.innerHTML = `
+      <div class="field">안내: 아래 항목을 입력해 주세요</div>
+      <div class="field"><span>이름</span><div class="input-area"><input value="홍길동" /></div></div>
+      <div class="field"><span>이메일</span><div class="input-area"><input value="a@b.com" /></div></div>
+    `;
+    // 스니퍼는 입력 없는 첫 번째 .field(안내문)를 건너뛰고 이름=index0, 이메일=index1 로 찍는다
+    // — 실제 수집도 같은 필터를 써야 이 index 가 맞는다.
+    const { script } = buildCollectScripts({
+      source: {
+        id: "src_1",
+        apiKey: "key_1",
+        successTrigger: "접수완료",
+        redirectUrl: null,
+        fieldGroupSelector: ".field",
+      },
+      fieldMappings: [
+        { index: 0, key: "name", label: "이름" },
+        { index: 1, key: "email", label: "이메일" },
+      ],
+      baseUrl: "https://machstudio.app",
+    });
+
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    new Function(script)();
+    document.body.insertAdjacentHTML("beforeend", "<div>접수완료</div>");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.data).toEqual({ name: "홍길동", email: "a@b.com" });
+
+    vi.unstubAllGlobals();
   });
 });
