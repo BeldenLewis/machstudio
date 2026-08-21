@@ -653,11 +653,16 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
       updateSubmitState();
     });
 
-    const label = h("label", { class: "msf-check" },
-      cb,
-      h("span", null, `[${required ? "required" : "optional"}] ${t(item.label) || fallbackLabel}`),
-    );
-    wrap.appendChild(label);
+    /*
+     * 법률 문구 생성기(legal-templates)가 만든 라벨은 "[Required] I have read…" 처럼
+     * 필수·선택 표시를 이미 문장 앞에 박아서 준다(국가별 sections/*.ts). 그런데 여기서
+     * "[required] "를 또 붙이면 "[required] [Required] I have read…"로 겹친다 — 아직
+     * 문구를 안 만들어 label 이 비어 있을 때(fallbackLabel)만 표시를 붙인다.
+     */
+    const generatedLabel = t(item.label);
+    const labelText = generatedLabel || `[${required ? "required" : "optional"}] ${fallbackLabel}`;
+
+    const label = h("label", { class: "msf-check" }, cb, h("span", null, labelText));
 
     const body = t(item.body);
     if (body) {
@@ -670,8 +675,12 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
         detail.style.display = open ? "" : "none";
         btn.textContent = open ? COPY.less : COPY.more;
       });
-      wrap.appendChild(btn);
+      // Details 를 라벨 아래 별도 줄이 아니라 같은 줄 오른쪽에 둔다 — 혼자 아래에
+      // 떨어져 있으면 라벨과 상관없는 항목처럼 보인다(전문 자체는 그 아래 한 줄 전체를 쓴다).
+      wrap.appendChild(h("div", { class: "msf-consent-row" }, label, btn));
       wrap.appendChild(detail);
+    } else {
+      wrap.appendChild(label);
     }
     wrap.appendChild(err);
     return wrap;

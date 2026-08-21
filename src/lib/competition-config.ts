@@ -294,7 +294,10 @@ export function normalizeCompetitionConfig(
       heroTitle: str(noticeRaw.heroTitle),
       heroSubtitle: str(noticeRaw.heroSubtitle),
       heroImageUrl: typeof noticeRaw.heroImageUrl === "string" && noticeRaw.heroImageUrl ? noticeRaw.heroImageUrl : null,
-      applyLabel: str(noticeRaw.applyLabel, "참가 신청하기"),
+      // 기본값을 여기서 한글로 못 박지 않는다 — 지금은 admin UI 에 이 값을 편집하는
+      // 칸이 없어서 항상 이 기본값이 그대로 쓰이는데, 그러면 영문 공고에도 CTA 버튼만
+      // 한글로 뜬다. 언어별 기본값은 renderNoticeHtml 이 competitionFormStrings 로 채운다.
+      applyLabel: str(noticeRaw.applyLabel),
       blocks: options.includeDisabled ? savedBlocks : savedBlocks.filter((b) => b.enabled),
     },
     form: {

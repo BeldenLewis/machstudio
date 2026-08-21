@@ -147,6 +147,43 @@ describe("테마 색", () => {
   });
 });
 
+describe("동의 항목", () => {
+  /**
+   * 법률 문구 생성기(legal-templates)가 만든 라벨은 "[Required] ..." 처럼 필수·선택
+   * 표시를 이미 문장 앞에 박아서 준다. 여기서 또 "[required] "를 붙이면
+   * "[required] [Required] ..."로 겹친다 — 실제로 겹쳐서 나온 화면을 보고 찾은 버그다.
+   */
+  it("생성된 문구가 있으면 [required]를 또 붙이지 않는다", () => {
+    mount({
+      config: normalizeCollectForm({
+        consent: { privacy: { enabled: true, label: { en: "[Required] I have read and agree to the Privacy Policy" } } },
+      }),
+    });
+    const label = host.querySelector(".msf-check span")?.textContent ?? "";
+    expect(label).toBe("[Required] I have read and agree to the Privacy Policy");
+    expect(label.toLowerCase().match(/\[required\]/g)?.length ?? 0).toBe(1);
+  });
+
+  it("문구를 아직 안 만들었으면(라벨 비어 있음) 대체 문구에 표시를 붙인다", () => {
+    mount({ config: normalizeCollectForm({ consent: { privacy: { enabled: true, label: {} } } }) });
+    const label = host.querySelector(".msf-check span")?.textContent ?? "";
+    expect(label.startsWith("[required]")).toBe(true);
+  });
+
+  /** Details 가 라벨 아래 혼자 떨어져 있으면 그 항목과 무관한 것처럼 보인다(레이아웃 버그). */
+  it("전문 보기(Details) 버튼이 라벨과 같은 줄(msf-consent-row)에 있다", () => {
+    mount({
+      config: normalizeCollectForm({
+        consent: { privacy: { enabled: true, label: { en: "Privacy" }, body: { en: "전문 내용" } } },
+      }),
+    });
+    const row = host.querySelector(".msf-consent-row");
+    expect(row).not.toBeNull();
+    expect(row?.querySelector(".msf-check")).not.toBeNull();
+    expect(row?.querySelector(".msf-more")).not.toBeNull();
+  });
+});
+
 describe("입력 정규화", () => {
   /** AGENTS.md 공통: 입력은 소스에서 정규화한다 — 안내 문구가 아니라 입력 시점에 강제. */
   it("전화 입력에서 하이픈·괄호·공백을 타이핑 즉시 지운다", () => {

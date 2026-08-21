@@ -205,11 +205,11 @@ function bindConsentPopups(form: HTMLFormElement, payload: BootPayload) {
       ov.className = "mc mc-overlay";
       ov.style.zIndex = "999960";
       ov.innerHTML = `<div class="mc-modal" style="max-width:520px">
-        <div class="mc-modal-head"><h3 class="mc-modal-title">${escapeHtml(node.textContent || "약관")}</h3></div>
+        <div class="mc-modal-head"><h3 class="mc-modal-title">${escapeHtml(node.textContent || t.terms)}</h3></div>
         <div class="mc-modal-body"><p class="mc-text">${escapeHtml(body)}</p></div>
         <div style="display:flex;gap:8px;padding:14px 18px;border-top:1px solid rgba(120,120,128,.18)">
-          <button type="button" class="mc-btn" style="flex:1;background:rgba(120,120,128,.16)!important;color:inherit!important;-webkit-text-fill-color:currentColor!important" data-mc-close>닫기</button>
-          <button type="button" class="mc-btn" style="flex:1" data-mc-agree>동의합니다</button>
+          <button type="button" class="mc-btn" style="flex:1;background:rgba(120,120,128,.16)!important;color:inherit!important;-webkit-text-fill-color:currentColor!important" data-mc-close>${escapeHtml(t.close)}</button>
+          <button type="button" class="mc-btn" style="flex:1" data-mc-agree>${escapeHtml(t.agree)}</button>
         </div></div>`;
       document.body.appendChild(ov);
       const remove = () => ov.remove();
@@ -242,9 +242,9 @@ function bindImageInputs(form: HTMLFormElement, payload: BootPayload): Map<strin
       const current = uploaded.get(key) ?? [];
 
       for (const file of files) {
-        if (current.length >= max) { alert(`이미지는 최대 ${max}장까지 올릴 수 있어요.`); break; }
+        if (current.length >= max) { alert(t.maxImagesReached(max)); break; }
         // 상한을 넘는 파일은 요청을 보내기 전에 거른다 — 서버까지 갔다가 실패하면 기다린 시간이 아깝다.
-        if (file.size > 4 * 1024 * 1024) { alert(`'${file.name}' 은 4MB를 넘어요.`); continue; }
+        if (file.size > 4 * 1024 * 1024) { alert(t.imageTooLarge(file.name)); continue; }
 
         if (payload.preview) {
           current.push(URL.createObjectURL(file));
