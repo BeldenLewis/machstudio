@@ -852,24 +852,42 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
    * 탭으로 받는다 — 서로 경쟁하지 않으니 한쪽 사이트의 잡음이 다른 쪽 감지를 흔들 수 없다.
    */
   const SNIFFER_PLATFORMS = {
-    iweb: { label: "아임웹", sel: ".form-group", labelSel: "label" },
-    mice: { label: "마이스허브 등 (표 형태)", sel: "table tr", labelSel: "th, label" },
+    iweb: {
+      label: "아임웹",
+      sel: ".form-group",
+      // 필드 제목이 그룹 안의 <label> 이다(체크박스·라디오 옵션 자체의 라벨과 안 겹친다 —
+      // 아임웹은 옵션 텍스트를 label 이 아니라 별도 span 으로 둔다).
+      getTitle: `var label = g.querySelector("label"); return label ? label.textContent.trim() : "";`,
+    },
+    mice: {
+      label: "마이스허브",
+      // 실측(edtechkorea.or.kr) 확인: 필드 하나 = div.field.rowN.fr_{모듈ID}, 그 안에
+      // input 을 감싼 div.input-area 와 **형제로** 제목 요소가 있다("field row1 fr_mod3813_in1"
+      // > "input-area f_checkbox" 형제). 체크박스·라디오 옵션 텍스트는 label 이 input 을
+      // 바로 감싸고 있어(§iweb 과 반대), input-area 안쪽을 먼저 보면 옵션 텍스트를 제목으로
+      // 오인한다 — 그래서 input-area 가 아닌 형제를 **먼저** 본다.
+      sel: ".field",
+      getTitle: `
+    var sib = g.querySelector(":scope > *:not(.input-area)");
+    if (sib && sib.textContent.trim()) return sib.textContent.trim();
+    var label = g.querySelector("label");
+    return label ? label.textContent.trim() : "";`,
+    },
   } as const;
   type SnifferPlatform = keyof typeof SNIFFER_PLATFORMS;
 
   function buildSnifferScript(platform: SnifferPlatform): string {
-    const { sel, labelSel } = SNIFFER_PLATFORMS[platform];
+    const { sel, getTitle } = SNIFFER_PLATFORMS[platform];
     return `(function() {
   var SEL = ${JSON.stringify(sel)};
-  var LABEL_SEL = ${JSON.stringify(labelSel)};
+  function getTitle(g) {${getTitle}
+  }
   var groups = Array.prototype.filter.call(document.querySelectorAll(SEL), function(g) {
     return g.querySelector("input, select, textarea");
   });
   var fields = groups.map(function(g, i) {
-    var label = g.querySelector(LABEL_SEL);
     var input = g.querySelector("input, select, textarea");
-    var labelText = (label ? label.textContent.trim() : "") ||
-      (input ? (input.placeholder || input.getAttribute("name") || "") : "");
+    var labelText = getTitle(g) || (input ? (input.placeholder || input.getAttribute("name") || "") : "");
     var type = "text";
     if (input) {
       if (input.tagName === "SELECT") type = "select";
