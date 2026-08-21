@@ -8,6 +8,8 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getClientIp, rateLimitAsync } from "@/lib/ratelimit";
+import { normalizeCollectForm, resolveCollectFormConfigOrgTokens } from "@/lib/collect-form-config";
+import { resolveOrgProfile, type WorkspaceLegalProfile } from "@/lib/legal-templates";
 import { FORM_RUNTIME_JS } from "@/generated/form-runtime";
 
 const CORS_HEADERS = {
@@ -62,11 +64,25 @@ export async function serveFormRuntime(
     });
   }
 
-  let source: { id: string; mode: string; isActive: boolean; formConfig: unknown; deletedAt: Date | null } | null = null;
+  let source:
+    | {
+        id: string;
+        mode: string;
+        isActive: boolean;
+        formConfig: unknown;
+        deletedAt: Date | null;
+        workspace: { legalProfile: unknown };
+      }
+    | null = null;
   try {
     source = await prisma.collectSource.findUnique({
       where: { id },
-      select: { id: true, mode: true, isActive: true, formConfig: true, deletedAt: true },
+      select: {
+        id: true, mode: true, isActive: true, formConfig: true, deletedAt: true,
+        // 동의 전문에 남은 조직 토큰({{ORG_ADDRESS}} 등)을 풀 때 쓴다 — 관계로 딸려 오게 해
+        // 이 로더가 이 저장소에서 가장 신경 쓰는 "쿼리 한 번" 을 유지한다.
+        workspace: { select: { legalProfile: true } },
+      },
     });
   } catch (e) {
     /**
@@ -92,6 +108,18 @@ export async function serveFormRuntime(
   }
 
   /**
+   * 동의 전문에 남은 조직 토큰({{ORG_ADDRESS}} 등)을 여기서 푼다 — 방문자에게 나가기 직전이
+   * 최신 워크스페이스 값을 반영할 마지막 지점이다. 정규화까지 여기서 미리 해 둬도
+   * 클라이언트(form-entry.ts)가 다시 normalizeCollectForm 을 거는 게 멱등이라 안전하다.
+   */
+  let resolvedFormConfig: ReturnType<typeof normalizeCollectForm> | null = null;
+  if (source.isActive) {
+    const normalized = normalizeCollectForm(source.formConfig);
+    const org = resolveOrgProfile(source.workspace.legalProfile as WorkspaceLegalProfile | null, normalized.legal.country);
+    resolvedFormConfig = resolveCollectFormConfigOrgTokens(normalized, org);
+  }
+
+  /**
    * 주석에 id 를 넣지 않는다 — id 는 URL 세그먼트라 `%2F` 로 "별표+슬래시" 를 만들어
    * 주석을 닫고 우리 오리진에서 서빙되는 스크립트 본문에 임의 JS 를 넣을 수 있다
    * (랜딩 로더에서 실제로 있었던 취약점, 파트너 CSP allowlist 우회).
@@ -109,7 +137,7 @@ export async function serveFormRuntime(
        * 그대로 실어 보내면 아직 공개 전인 폼의 문항 라벨·선택지·안내 문구·행사 개요가
        * 인증 없이 통째로 읽힌다. 눈에 안 띄는 노출이 제일 늦게 발견된다.
        */
-      formConfig: source.isActive ? source.formConfig : null,
+      formConfig: resolvedFormConfig,
       // 접수 창 판정의 기준 시각. 방문자 기기 시계를 믿지 않는다.
       serverNow: new Date().toISOString(),
       active: source.isActive,

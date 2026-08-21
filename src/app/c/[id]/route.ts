@@ -13,9 +13,10 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { normalizeCompetitionConfig } from "@/lib/competition-config";
+import { normalizeCompetitionConfig, resolveCompetitionConfigOrgTokens } from "@/lib/competition-config";
 import { normalizeCriteria } from "@/lib/competition-scoring";
 import { resolveCompetitionStatus } from "@/lib/competition-status";
+import { resolveOrgProfile, type WorkspaceLegalProfile } from "@/lib/legal-templates";
 import { COMPETITION_RUNTIME_JS } from "@/generated/competition-runtime";
 
 const CORS_HEADERS = {
@@ -47,7 +48,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params;
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
 
-  const competition = await prisma.competition.findUnique({ where: { id } });
+  const competition = await prisma.competition.findUnique({
+    where: { id },
+    // workspace 는 관계로 딸려 오게 해 쿼리를 늘리지 않는다 — 동의 전문에 남은 조직 토큰
+    // ({{ORG_ADDRESS}} 등, §legal-templates/tokens)을 풀 때 쓴다.
+    include: { workspace: { select: { legalProfile: true } } },
+  });
 
   // 없는 id 에 런타임 번들을 서빙하지 않는다 — 매번 다른 id 로 엣지 캐시를 우회해 DB·대역폭을 때릴 수 있다.
   if (!competition) {
@@ -59,7 +65,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const status = resolveCompetitionStatus(competition);
   // 공개 페이로드에는 공개용 config 만 싣는다(꺼 둔 블록·항목 제외). 참가자 개인정보는 애초에 없다.
-  const config = normalizeCompetitionConfig(competition.config);
+  const normalizedConfig = normalizeCompetitionConfig(competition.config);
+  const org = resolveOrgProfile(competition.workspace.legalProfile as WorkspaceLegalProfile | null, normalizedConfig.legal.country);
+  const config = resolveCompetitionConfigOrgTokens(normalizedConfig, org);
 
   /**
    * 공고의 선발 방식·심사 기준은 **투표 설정과 심사단 탭의 값을 그대로 그린다**(auto 소스).

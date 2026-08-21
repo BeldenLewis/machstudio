@@ -10,7 +10,8 @@
  */
 import { isNoticeLanguage, normalizeNoticePageConfig, type NoticeLanguage, type NoticePageConfig } from "@/lib/notice/config";
 import type { WebinarRegistrationField } from "./webinar-config";
-import { isLegalCountry, type Country, type ThirdParty } from "@/lib/legal-templates/types";
+import { isLegalCountry, type Country, type OrgProfile, type ThirdParty } from "@/lib/legal-templates/types";
+import { resolveOrgTokens } from "@/lib/legal-templates/tokens";
 
 /** 대회 신청 폼에만 있는 추가 타입 — 사진 업로드와 YouTube 링크. */
 export type CompetitionExtraFieldType = "image" | "youtube";
@@ -279,6 +280,24 @@ export function normalizeCompetitionConfig(
         .filter((t) => t.name !== ""),
       dataRetentionNote: str(legalRaw.dataRetentionNote),
       effectiveDate: str(legalRaw.effectiveDate),
+    },
+  };
+}
+
+/**
+ * 동의 전문에 남아 있는 조직 토큰({{ORG_ADDRESS}} 등, §legal-templates/tokens)을 지금 워크스페이스
+ * 값으로 채운다. CollectSource 의 resolveCollectFormConfigOrgTokens 와 같은 이유로, 공개 화면에
+ * config 를 내보내기 직전(임베드 로더)에 불러야 방문자가 항상 최신 회사 정보를 본다.
+ */
+export function resolveCompetitionConfigOrgTokens(config: CompetitionConfig, org: OrgProfile): CompetitionConfig {
+  const locale = config.legal.country === "kr" ? "ko" : "en";
+  return {
+    ...config,
+    form: {
+      ...config.form,
+      privacyBody: resolveOrgTokens(config.form.privacyBody, org, locale),
+      marketingBody: resolveOrgTokens(config.form.marketingBody, org, locale),
+      thirdPartyBody: resolveOrgTokens(config.form.thirdPartyBody, org, locale),
     },
   };
 }

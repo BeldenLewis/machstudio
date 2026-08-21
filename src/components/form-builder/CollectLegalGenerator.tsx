@@ -28,6 +28,7 @@ import {
   generateConsentDocuments,
   inferDataCategories,
   resolveOrgProfile,
+  resolveOrgTokens,
   type OrgProfile,
 } from "@/lib/legal-templates";
 
@@ -74,6 +75,16 @@ export function CollectLegalGenerator({
         marketingOffered: config.consent.marketing.enabled,
       }),
     [legal, org, config.eventInfo, config.consent.marketing.enabled, collectedCategories],
+  );
+
+  /**
+   * 조직명·주소·이메일은 본문에 토큰({{ORG_ADDRESS}} 등)으로 저장된다(§legal-templates/tokens) —
+   * 워크스페이스 값이 나중에 바뀌어도 이 문서를 다시 생성할 필요가 없게 하기 위해서다. 다만
+   * 미리보기는 사람이 읽는 화면이라 여기서만 지금 값으로 풀어서 보여 준다.
+   */
+  const resolvedPreviewBody = useMemo(
+    () => resolveOrgTokens(preview.privacy.body, org, legal.country === "kr" ? "ko" : "en"),
+    [preview.privacy.body, org, legal.country],
   );
 
   const hasExistingText =
@@ -177,7 +188,7 @@ export function CollectLegalGenerator({
       <details className="rounded-lg bg-secondary/40 p-2">
         <summary className="cursor-pointer text-[11px] font-medium text-muted-foreground">미리보기</summary>
         <div className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md bg-background p-2 text-[11px] leading-relaxed shadow-sm">
-          {preview.privacy.body}
+          {resolvedPreviewBody}
         </div>
       </details>
 
@@ -191,6 +202,8 @@ export function CollectLegalGenerator({
       </button>
       <p className="text-[11px] leading-snug text-muted-foreground/70">
         법률 자문을 대체하지 않아요 — 생성된 문구는 실제 배포 전에 법무 검토를 받으세요.
+        회사명·주소·담당 이메일은 워크스페이스 설정 값을 실시간으로 따라가요 — 나중에 그 값만 바뀌어도
+        여기서 다시 생성할 필요 없이 자동으로 반영돼요.
       </p>
     </section>
   );

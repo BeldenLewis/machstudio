@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { generateConsentDocuments } from "@/lib/legal-templates/generate";
+import { ORG_TOKEN } from "@/lib/legal-templates/tokens";
 import type { Country, GenerateInput, Purpose } from "@/lib/legal-templates/types";
 import { emptyEventLegalBlanks, emptyOrgProfile } from "@/lib/legal-templates/types";
 
@@ -120,8 +121,25 @@ describe("generateConsentDocuments — 국가 × 목적 전수", () => {
       collectedCategories: [],
       marketingOffered: false,
     });
-    expect(result.privacy.body).toContain("[Business Legal Name]");
+    // 조직명·주소·이메일은 리터럴이 아니라 토큰으로 남는다 — resolveOrgTokens.test.ts 가 그 치환을 검증한다.
+    expect(result.privacy.body).toContain(ORG_TOKEN.name);
     expect(result.privacy.body).toContain("[Event Name]");
+  });
+
+  it("조직 연락처는 리터럴이 아니라 항상 토큰으로 남는다 — 워크스페이스 값이 바뀌면 재생성 없이 갱신되게", () => {
+    const result = generateConsentDocuments(baseInput());
+    expect(result.privacy.body).toContain(ORG_TOKEN.name);
+    expect(result.privacy.body).toContain(ORG_TOKEN.address);
+    expect(result.privacy.body).not.toContain("Exporum Inc.");
+    expect(result.privacy.body).not.toContain("123 Main St");
+  });
+
+  it("행사별 문의처 override 는 토큰이 아니라 그 행사에 한정된 리터럴로 남는다", () => {
+    const result = generateConsentDocuments(
+      baseInput({ event: { ...emptyEventLegalBlanks(), eventName: "X", contactEmail: "onsite@event.example" } }),
+    );
+    expect(result.privacy.body).toContain("onsite@event.example");
+    expect(result.privacy.body).not.toContain(ORG_TOKEN.email);
   });
 
   it("알 수 없는 국가 코드는 US 로 폴백한다 — 화면이 비면 안 된다", () => {

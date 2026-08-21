@@ -1,4 +1,5 @@
-import type { DataCategory, EventLegalBlanks, OrgProfile } from "../types";
+import type { DataCategory, EventLegalBlanks } from "../types";
+import { ORG_TOKEN } from "../tokens";
 
 /** DataCategory 를 문서 산문에 넣을 구절로. 나라(=언어)마다 다른 사전을 쓴다. */
 const CATEGORY_EN: Record<DataCategory, string> = {
@@ -56,22 +57,24 @@ export function blankKo(value: string, placeholder: string): string {
   return trimmed || placeholder;
 }
 
-export function orgLineEn(org: OrgProfile): string {
-  const name = blankEn(org.legalName, "[Business Legal Name]");
-  const address = blankEn(org.address, "[Business Mailing Address]");
-  return `${name}, ${address}`;
+/**
+ * 조직명·주소·이메일은 리터럴 값이 아니라 토큰을 그대로 문서에 심는다 — 워크스페이스 설정에서
+ * 값이 바뀌면 이미 생성된 문서도 다시 만들 필요 없이 노출 시점에 최신 값으로 풀린다
+ * (`resolveOrgTokens`, `../tokens.ts`). 행사별 문의처 override(`event.contactEmail`)만은 그 행사에
+ * 한정된 값이라 리터럴로 그대로 굳힌다.
+ */
+export function orgLineEn(): string {
+  return `${ORG_TOKEN.name}, ${ORG_TOKEN.address}`;
 }
 
-export function orgLineKo(org: OrgProfile): string {
-  const name = blankKo(org.legalName, "[회사명 미입력]");
-  const address = blankKo(org.address, "[사업장 주소 미입력]");
-  return `${name} (${address})`;
+export function orgLineKo(): string {
+  return `${ORG_TOKEN.name} (${ORG_TOKEN.address})`;
 }
 
-export function contactEmailEn(org: OrgProfile, event: EventLegalBlanks): string {
-  return blankEn(event.contactEmail || org.privacyContactEmail, "[privacy contact email]");
+export function contactEmailEn(event: EventLegalBlanks): string {
+  return event.contactEmail.trim() || ORG_TOKEN.email;
 }
 
-export function contactEmailKo(org: OrgProfile, event: EventLegalBlanks): string {
-  return blankKo(event.contactEmail || org.privacyContactEmail, "[담당 이메일 미입력]");
+export function contactEmailKo(event: EventLegalBlanks): string {
+  return event.contactEmail.trim() || ORG_TOKEN.email;
 }

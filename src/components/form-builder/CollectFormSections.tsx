@@ -278,6 +278,12 @@ export function CollectFormSections({
                 rows={2}
                 className="w-full resize-y rounded-lg bg-background px-2 py-1.5 text-[12px] shadow-sm outline-none"
               />
+              {/* {{ORG_ADDRESS}} 같은 중괄호 토큰은 문법이 아니라 자리표시자다 — 워크스페이스
+                  설정의 회사 정보가 바뀔 때마다 노출 시점에 최신 값으로 풀린다(resolveOrgTokens). */}
+              <p className="px-1 text-[10px] leading-snug text-muted-foreground/60">
+                {"{{ORG_NAME}}"}·{"{{ORG_ADDRESS}}"}·{"{{ORG_EMAIL}}"} 같은 중괄호 자리표시자는 그대로 둬도 돼요 —
+                워크스페이스 설정 › 약관 탭의 회사 정보가 바뀌면 자동으로 최신 값으로 보여요.
+              </p>
               <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <Switch
                   checked={item.defaultChecked}
