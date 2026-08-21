@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   AlignLeft, ImageIcon, ListChecks, ListPlus, Mail, Phone, Plus, SquareCheck, Trash2, Video,
@@ -11,6 +11,8 @@ import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 import { Switch } from "@/components/ui/switch";
 import type { CompetitionFieldType, CompetitionFormField } from "@/lib/competition-config";
 import { CompetitionLegalGenerator } from "./CompetitionLegalGenerator";
+import { ConsentBodyField, useWorkspaceLegalProfile } from "@/components/legal/legal-generator-shared";
+import { resolveOrgProfile } from "@/lib/legal-templates";
 import FormPreview from "./FormPreview";
 import type { CompetitionDetail } from "./page";
 
@@ -52,6 +54,11 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
   const language = competition.config.language;
   const [legal, setLegal] = useState(competition.config.legal);
   const [saving, setSaving] = useState(false);
+
+  // 동의 전문 편집 칸이 {{ORG_ADDRESS}} 같은 조직 토큰을 실제 값으로 풀어 보여주는 데 쓴다.
+  const { profile: orgProfile } = useWorkspaceLegalProfile(workspaceId);
+  const org = useMemo(() => resolveOrgProfile(orgProfile, legal.country), [orgProfile, legal.country]);
+  const legalLocale = legal.country === "kr" ? "ko" : "en";
 
   const update = (next: Partial<typeof form>) => setForm((prev) => ({ ...prev, ...next }));
   const updateField = (id: string, next: Partial<CompetitionFormField>) =>
@@ -302,19 +309,16 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                   onChange={(e) => update({ [textKey]: e.target.value } as Partial<typeof form>)}
                   className={FIELD_CLS}
                 />
-                <textarea
+                <ConsentBodyField
                   value={form[bodyKey]}
-                  onChange={(e) => update({ [bodyKey]: e.target.value } as Partial<typeof form>)}
-                  rows={3}
+                  org={org}
+                  locale={legalLocale}
+                  onSave={(next) => update({ [bodyKey]: next } as Partial<typeof form>)}
                   placeholder="약관 전문 (입력하면 문구를 눌러 팝업으로 볼 수 있어요)"
-                  className={`${FIELD_CLS} h-auto py-2`}
+                  ariaLabel={`${kind} 전문`}
+                  rows={3}
+                  className={`${FIELD_CLS} h-auto resize-y py-2`}
                 />
-                {/* {{ORG_ADDRESS}} 같은 중괄호 토큰은 문법이 아니라 자리표시자다 — 워크스페이스
-                    설정의 회사 정보가 바뀔 때마다 노출 시점에 최신 값으로 풀린다(resolveOrgTokens). */}
-                <p className="text-[10px] leading-snug text-muted-foreground/60">
-                  {"{{ORG_NAME}}"}·{"{{ORG_ADDRESS}}"}·{"{{ORG_EMAIL}}"} 같은 중괄호 자리표시자는 그대로 둬도 돼요 —
-                  워크스페이스 설정 › 약관 탭의 회사 정보가 바뀌면 자동으로 최신 값으로 보여요.
-                </p>
               </div>
             );
           })}

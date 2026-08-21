@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ORG_TOKEN, resolveOrgTokens } from "@/lib/legal-templates/tokens";
+import { ORG_TOKEN, encodeOrgTokens, resolveOrgTokens } from "@/lib/legal-templates/tokens";
 import { emptyOrgProfile } from "@/lib/legal-templates/types";
 
 /**
@@ -42,5 +42,36 @@ describe("resolveOrgTokens", () => {
     const after = resolveOrgTokens(text, { ...emptyOrgProfile(), privacyContactEmail: "new@exporum.com" }, "ko");
     expect(before).not.toBe(after);
     expect(after).toBe("문의: new@exporum.com");
+  });
+});
+
+/**
+ * `encodeOrgTokens` 는 `resolveOrgTokens` 의 역방향 — 편집 칸이 항상 실제 값만 보여주고
+ * ({{ORG_ADDRESS}} 같은 중괄호 문법 없이), 저장할 때만 다시 토큰으로 접어 넣는다.
+ * "이런거 없게 입력할 수 있게 해줘" 피드백이 이 왕복(resolve → 편집 → encode)의 근거다.
+ */
+describe("encodeOrgTokens", () => {
+  const org = { ...emptyOrgProfile(), legalName: "Exporum Inc.", address: "123 Main St, LA", privacyContactEmail: "privacy@exporum.com" };
+
+  it("resolveOrgTokens 로 풀었던 값을 그대로 되돌리면 원문과 같다 — 왕복이 무손실이다", () => {
+    const original = `${ORG_TOKEN.name}, ${ORG_TOKEN.address} 문의: ${ORG_TOKEN.email}`;
+    const resolved = resolveOrgTokens(original, org, "en");
+    expect(encodeOrgTokens(resolved, org)).toBe(original);
+  });
+
+  it("조직 값과 무관한 나머지 문장은 그대로 둔다", () => {
+    const resolved = `이 문서는 ${org.legalName} 가 작성했습니다. 그 외 내용은 자유 서술입니다.`;
+    expect(encodeOrgTokens(resolved, org)).toBe(`이 문서는 ${ORG_TOKEN.name} 가 작성했습니다. 그 외 내용은 자유 서술입니다.`);
+  });
+
+  it("아직 비어 있는 필드는 되돌릴 원본이 없어 손대지 않는다", () => {
+    const text = "[Business Legal Name] 가 작성했습니다.";
+    expect(encodeOrgTokens(text, emptyOrgProfile())).toBe(text);
+  });
+
+  it("개인정보보호책임자 이메일이 일반 담당 이메일과 다르면 각자의 토큰으로 구분해서 되돌린다", () => {
+    const withDistinctDpo = { ...org, dpoContactEmail: "dpo@exporum.com" };
+    const text = `일반 문의: ${org.privacyContactEmail}, 보호책임자: dpo@exporum.com`;
+    expect(encodeOrgTokens(text, withDistinctDpo)).toBe(`일반 문의: ${ORG_TOKEN.email}, 보호책임자: ${ORG_TOKEN.dpoEmail}`);
   });
 });
