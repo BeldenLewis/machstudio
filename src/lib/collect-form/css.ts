@@ -30,7 +30,11 @@ export const COLLECT_FORM_CSS = `
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
   font-size:15px; line-height:1.5; color:var(--msf-fg);
   text-align:left; letter-spacing:normal; word-break:break-word;
-  max-width:520px; margin:0 auto;
+  /* 520px 은 호스트가 좁은 칸(사이드바 등)에 넣을 때 기준이었는데, 폼을 페이지 본문
+     한가운데 통으로 박는 사이트(대개 데스크톱)에서는 그 폭이 그대로 화면보다 훨씬 좁아
+     "혼자만 작은 모바일 위젯"으로 보인다. 실제 좁은 호스트에서는 부모 폭이 이미 520px
+     보다 작으므로 이 값을 키워도 그런 배치에는 영향이 없다. */
+  max-width:640px; margin:0 auto;
 }
 .msf *,.msf *::before,.msf *::after{box-sizing:border-box}
 /* 리셋은 :where() 로 특이도를 0으로 낮춰서 건다.

@@ -10,6 +10,7 @@
  */
 import { h, clearNode } from "@/lib/dom/h";
 import { COLLECT_FORM_CSS } from "./css";
+import { onAccentColor } from "@/lib/competition-render";
 import type { CollectFormConfig } from "@/lib/collect-form-config";
 
 const STYLE_ID = "msf-css";
@@ -89,7 +90,19 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
   const usePhone = config.lookup.fields.includes("phone");
   const needBoth = config.lookup.logic === "and";
 
-  const root = h("div", { class: "msf" });
+  // 등록 폼(mount.ts)과 같은 규칙 — 테마 색을 인라인 custom property 로 심는다. 여기서
+  // 빠지면 등록 폼은 브랜드 키컬러가 입혀지는데 바로 옆 "Find my QR" 화면만 기본색으로
+  // 남아 두 화면이 다른 서비스처럼 보인다.
+  const theme = config.theme;
+  const root = h("div", {
+    class: "msf",
+    style: {
+      "--msf-accent": theme.accentColor || null,
+      "--msf-accent-fg": theme.accentColor ? onAccentColor(theme.accentColor) : null,
+      "--msf-fg": theme.textColor || null,
+      "--msf-bg": theme.surfaceColor || null,
+    },
+  });
   const stack = h("div", { class: "msf-lookup" });
   root.appendChild(stack);
 
