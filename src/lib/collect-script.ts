@@ -332,6 +332,24 @@ ${utmCore}
     });
     observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true });
 
+    // 일부 사이트는 성공 메시지를 페이지 텍스트가 아니라 네이티브 alert() 팝업으로 띄운다
+    // (마이스허브 등) — alert() 은 DOM 밖에 뜨는 별도 레이어라 위 MutationObserver 로는
+    // 절대 못 잡는다. alert 자체를 가로채서, 뜬 메시지가 성공 트리거 문구를 포함할 때만
+    // 전송한다 — "폼 제출을 곧바로 전송으로 본다"가 아니라, 검증 실패 알림(예: "이메일을
+    // 입력해주세요")도 흔히 같은 alert() 을 쓰기 때문에 문구 매칭은 그대로 유지해야 오탐이
+    // 안 생긴다.
+    var originalAlert = window.alert;
+    if (typeof originalAlert === "function") {
+      window.alert = function(message) {
+        try {
+          if (!triggered && SUCCESS_TRIGGER && String(message == null ? "" : message).indexOf(SUCCESS_TRIGGER) !== -1) {
+            fire();
+          }
+        } catch (e) {}
+        return originalAlert.apply(window, arguments);
+      };
+    }
+
     // 페이지 이탈 fallback — 제출 데이터는 캡처됐는데 아직 전송 안 됐고,
     // 캡처된지 60초 이내면 (= 방금 제출하고 thank-you로 넘어가는 중) sendBeacon으로 전송.
     function flushOnLeave() {

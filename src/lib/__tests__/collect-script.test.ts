@@ -92,3 +92,41 @@ describe("buildCollectScripts — 실제 수집이 스니퍼가 찍은 index 와
     vi.unstubAllGlobals();
   });
 });
+
+describe("buildCollectScripts — 성공 메시지가 alert() 팝업으로 뜨는 사이트", () => {
+  it("alert 문구가 성공 트리거와 일치하면 그때 전송한다", async () => {
+    document.body.innerHTML = `
+      <div class="field"><span>이름</span><div class="input-area"><input value="홍길동" /></div></div>
+    `;
+    const { script } = buildCollectScripts({
+      source: {
+        id: "src_1",
+        apiKey: "key_1",
+        successTrigger: "사전등록이 완료되었습니다",
+        redirectUrl: null,
+        fieldGroupSelector: ".field",
+      },
+      fieldMappings: [{ index: 0, key: "name", label: "이름" }],
+      baseUrl: "https://machstudio.app",
+    });
+
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    const alertMock = vi.fn();
+    vi.stubGlobal("alert", alertMock);
+
+    new Function(script)();
+
+    // 검증 실패 알림처럼 트리거 문구와 무관한 alert 은 무시한다 — 오탐 방지.
+    window.alert("이메일을 입력해주세요");
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    window.alert("사전등록이 완료되었습니다");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.data).toEqual({ name: "홍길동" });
+    expect(alertMock).toHaveBeenCalledTimes(2);
+
+    vi.unstubAllGlobals();
+  });
+});
