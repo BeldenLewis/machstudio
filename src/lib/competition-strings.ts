@@ -32,6 +32,14 @@ export interface CompetitionFormStrings {
   previewSubmitted: string;
   /** 접수 완료 문구에 붙는 참가번호 라벨 */
   entryNoLabel: string;
+  notAcceptingNow: string;
+  /** 필수 항목 미입력. {label} 을 항목 이름으로 채워 쓴다. */
+  fieldRequired: (label: string) => string;
+  /** 전화 형식 오류. {label} 을 항목 이름으로 채워 쓴다. */
+  phoneInvalid: (label: string) => string;
+  youtubeInvalid: string;
+  busy: string;
+  duplicateEntry: string;
 }
 
 const KO: CompetitionFormStrings = {
@@ -54,6 +62,12 @@ const KO: CompetitionFormStrings = {
   previewBanner: "미리보기입니다. 신청해도 저장되지 않아요.",
   previewSubmitted: "미리보기라 저장되지 않았어요. 실제 배포 후에는 정상 접수됩니다.",
   entryNoLabel: "참가번호",
+  notAcceptingNow: "지금은 접수 기간이 아니에요.",
+  fieldRequired: (label) => `${label} 항목을 입력해주세요.`,
+  phoneInvalid: (label) => `${label} 항목의 번호를 확인해주세요.`,
+  youtubeInvalid: "YouTube 링크를 확인해주세요.",
+  busy: "신청이 몰리고 있어요. 잠시 후 다시 시도해주세요.",
+  duplicateEntry: "이미 신청하셨어요.",
 };
 
 const EN: CompetitionFormStrings = {
@@ -76,6 +90,12 @@ const EN: CompetitionFormStrings = {
   previewBanner: "This is a preview. Applications are not saved.",
   previewSubmitted: "Not saved — this is a preview. Real submissions work once published.",
   entryNoLabel: "Entry no.",
+  notAcceptingNow: "Applications aren't open right now.",
+  fieldRequired: (label) => `Please fill in ${label}.`,
+  phoneInvalid: (label) => `Please check the number for ${label}.`,
+  youtubeInvalid: "Please check the YouTube link.",
+  busy: "Applications are coming in fast. Please try again in a moment.",
+  duplicateEntry: "You've already applied.",
 };
 
 
@@ -100,6 +120,12 @@ const FR: CompetitionFormStrings = {
   previewBanner: "Ceci est un aperçu. Les candidatures ne sont pas enregistrées.",
   previewSubmitted: "Non enregistré — ceci est un aperçu. Les envois fonctionneront après publication.",
   entryNoLabel: "N° de dossier",
+  notAcceptingNow: "Les inscriptions ne sont pas ouvertes en ce moment.",
+  fieldRequired: (label) => `Merci de renseigner « ${label} ».`,
+  phoneInvalid: (label) => `Merci de vérifier le numéro pour « ${label} ».`,
+  youtubeInvalid: "Merci de vérifier le lien YouTube.",
+  busy: "Les candidatures affluent. Merci de réessayer dans un instant.",
+  duplicateEntry: "Vous avez déjà candidaté.",
 };
 
 const JA: CompetitionFormStrings = {
@@ -123,6 +149,12 @@ const JA: CompetitionFormStrings = {
   previewBanner: "プレビューです。応募しても保存されません。",
   previewSubmitted: "プレビューのため保存されていません。公開後は正常に受け付けられます。",
   entryNoLabel: "エントリー番号",
+  notAcceptingNow: "現在は受付期間ではありません。",
+  fieldRequired: (label) => `${label}を入力してください。`,
+  phoneInvalid: (label) => `${label}の番号をご確認ください。`,
+  youtubeInvalid: "YouTubeのリンクをご確認ください。",
+  busy: "応募が集中しています。しばらくしてからもう一度お試しください。",
+  duplicateEntry: "すでに応募済みです。",
 };
 
 /**

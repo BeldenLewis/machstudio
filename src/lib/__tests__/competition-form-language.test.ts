@@ -79,6 +79,10 @@ describe("지원 언어 전수 점검", () => {
         if (typeof value === "function") continue;
         expect(value, `form.${key}`).toBeTruthy();
       }
+      // 신청 처리 API(entries/route.ts)가 실제로 쓰는 함수형 문구.
+      expect(form.imageHint(3), "form.imageHint").toBeTruthy();
+      expect(form.fieldRequired("Email"), "form.fieldRequired").toContain("Email");
+      expect(form.phoneInvalid("Phone"), "form.phoneInvalid").toContain("Phone");
       for (const [key, value] of Object.entries(notice)) {
         if (typeof value === "object") continue;
         expect(value, `notice.${key}`).toBeTruthy();

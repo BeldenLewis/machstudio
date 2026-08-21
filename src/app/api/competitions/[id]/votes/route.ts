@@ -12,6 +12,7 @@ import { normalizeCompetitionConfig, normalizeMedia } from "@/lib/competition-co
 import { resolveCompetitionStatus } from "@/lib/competition-status";
 import { roundDisplayName } from "@/lib/notice/build-model";
 import { noticeStrings } from "@/lib/notice/strings";
+import { competitionVoteStrings } from "@/lib/competition-vote-strings";
 import {
   deriveVoterKey,
   orderEntries,
@@ -184,15 +185,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const ctx = await loadContext(id, String(body.round ?? "prelim"));
   if ("error" in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status, headers: CORS_HEADERS });
   const { competition, round } = ctx;
+  const language = normalizeCompetitionConfig(competition.config).language;
+  const t = competitionVoteStrings(language);
 
   // 대회 단계와 투표 창을 서버가 본다.
   const phase = resolveCompetitionStatus(competition).phase;
   if (phase === "closed") {
-    return NextResponse.json({ error: "종료된 대회예요." }, { status: 403, headers: CORS_HEADERS });
+    return NextResponse.json({ error: t.competitionClosed }, { status: 403, headers: CORS_HEADERS });
   }
   const window = resolveVoteWindow(round);
   if (!window.open) {
-    const language = normalizeCompetitionConfig(competition.config).language;
     return NextResponse.json({ error: voteWindowMessage(window.reason, language) }, { status: 403, headers: CORS_HEADERS });
   }
 
@@ -200,7 +202,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     ? body.entryIds.filter((v): v is string => typeof v === "string" && !!v)
     : [];
   if (entryIds.length === 0) {
-    return NextResponse.json({ error: "투표할 참가작을 선택해주세요." }, { status: 400, headers: CORS_HEADERS });
+    return NextResponse.json({ error: t.noSelection }, { status: 400, headers: CORS_HEADERS });
   }
 
   const { voterKey, ipHash, error } = deriveVoterKey({
@@ -211,7 +213,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     registrationNo: typeof body.registrationNo === "string" ? body.registrationNo : null,
   });
   if (!voterKey) {
-    return NextResponse.json({ error: error ?? "투표자를 식별할 수 없어요." }, { status: 400, headers: CORS_HEADERS });
+    return NextResponse.json({ error: error ?? t.cannotIdentifyVoter }, { status: 400, headers: CORS_HEADERS });
   }
 
   // 노출된 참가작만 받는다 — id 를 직접 만들어 보내는 경로를 막는다.
@@ -226,7 +228,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     select: { id: true },
   });
   if (validEntries.length !== entryIds.length) {
-    return NextResponse.json({ error: "투표할 수 없는 참가작이 있어요." }, { status: 400, headers: CORS_HEADERS });
+    return NextResponse.json({ error: t.invalidEntries }, { status: 400, headers: CORS_HEADERS });
   }
 
   const userAgent = request.headers.get("user-agent")?.slice(0, 300) ?? null;
@@ -278,15 +280,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   if ("limitExceeded" in result) {
     return NextResponse.json(
-      { error: `이 투표는 ${round.maxVotesPerVoter}표까지 할 수 있어요.`, remaining: result.remaining },
+      { error: t.limitReached(round.maxVotesPerVoter), remaining: result.remaining },
       { status: 409, headers: CORS_HEADERS },
     );
   }
   if ("ipExceeded" in result) {
-    return NextResponse.json(
-      { error: "같은 네트워크에서 투표가 너무 많아요. 잠시 후 다시 시도해주세요." },
-      { status: 429, headers: CORS_HEADERS },
-    );
+    return NextResponse.json({ error: t.ipExceeded }, { status: 429, headers: CORS_HEADERS });
   }
 
   const { inserted, duplicated, total } = result;
@@ -297,7 +296,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       inserted,
       duplicated,
       remaining: Math.max(0, round.maxVotesPerVoter - total),
-      message: inserted > 0 ? "투표했어요." : "이미 투표한 참가작이에요.",
+      message: inserted > 0 ? t.votedSuccess : t.alreadyVoted,
     },
     { status: inserted > 0 ? 201 : 200, headers: CORS_HEADERS },
   );
@@ -323,13 +322,14 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const ctx = await loadContext(id, String(body.round ?? "prelim"));
   if ("error" in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status, headers: CORS_HEADERS });
   const { competition, round } = ctx;
+  const language = normalizeCompetitionConfig(competition.config).language;
+  const t = competitionVoteStrings(language);
 
   if (!round.allowVoteUndo) {
-    return NextResponse.json({ error: "이 투표는 취소할 수 없어요." }, { status: 403, headers: CORS_HEADERS });
+    return NextResponse.json({ error: t.undoNotAllowed }, { status: 403, headers: CORS_HEADERS });
   }
   const window = resolveVoteWindow(round);
   if (!window.open) {
-    const language = normalizeCompetitionConfig(competition.config).language;
     return NextResponse.json({ error: voteWindowMessage(window.reason, language) }, { status: 403, headers: CORS_HEADERS });
   }
 
@@ -340,10 +340,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     deviceId: typeof body.deviceId === "string" ? body.deviceId : null,
     registrationNo: typeof body.registrationNo === "string" ? body.registrationNo : null,
   });
-  if (!voterKey) return NextResponse.json({ error: "투표자를 식별할 수 없어요." }, { status: 400, headers: CORS_HEADERS });
+  if (!voterKey) return NextResponse.json({ error: t.cannotIdentifyVoter }, { status: 400, headers: CORS_HEADERS });
 
   const entryId = typeof body.entryId === "string" ? body.entryId : "";
-  if (!entryId) return NextResponse.json({ error: "참가작을 지정해주세요." }, { status: 400, headers: CORS_HEADERS });
+  if (!entryId) return NextResponse.json({ error: t.entryRequired }, { status: 400, headers: CORS_HEADERS });
 
   await prisma.competitionVote.deleteMany({ where: { roundId: round.id, entryId, voterKey } });
   const total = await prisma.competitionVote.count({ where: { roundId: round.id, voterKey } });

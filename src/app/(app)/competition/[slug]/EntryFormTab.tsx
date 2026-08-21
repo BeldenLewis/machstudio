@@ -44,11 +44,12 @@ const CHOICE_TYPES: CompetitionFieldType[] = ["select", "multiple"];
 export default function EntryFormTab({ competition, patch, workspaceId }: Props) {
   const [form, setForm] = useState(competition.config.form);
   /**
-   * 문구 언어는 **대회 전체 설정**이다(공고와 같은 값). 폼에서도 고를 수 있게 둔 이유는,
-   * 영문 폼을 만들다가 안내가 한글로 남는 걸 발견하는 자리가 여기이기 때문이다 —
-   * 발견한 자리에서 바로 고칠 수 있어야 한다.
+   * 문구 언어는 **대회 전체 설정**(기본정보 탭)이다 — 여기서 따로 고르지 않는다.
+   * 예전엔 여기서도 고를 수 있었는데, 그 값을 공고 탭이 아니라 **여기 저장이 최종적으로
+   * 반영**하는 구조였다(신청 폼 탭 save 가 top-level config.language 를 쓴다) — 그래서
+   * 공고 탭의 언어 버튼은 눌러도 반영되지 않는 죽은 컨트롤이었다. 기본정보로 하나로 모은다.
    */
-  const [language, setLanguage] = useState(competition.config.language);
+  const language = competition.config.language;
   const [legal, setLegal] = useState(competition.config.legal);
   const [saving, setSaving] = useState(false);
 
@@ -87,7 +88,7 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
     }
     setSaving(true);
     try {
-      await patch({ config: { ...competition.config, form, language, legal } }, "신청 폼을 저장했어요");
+      await patch({ config: { ...competition.config, form, legal } }, "신청 폼을 저장했어요");
     } finally {
       setSaving(false);
     }
@@ -100,26 +101,16 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
         <h2 className="text-sm font-semibold">폼 안내</h2>
 
         {/*
-          **시스템이 넣는 문구의 언어.** 항목 이름은 직접 쓰지만 그 밑에 붙는 안내
-          ("장당 4MB 이하", "비공개 영상은 재생되지 않아요")는 우리가 넣는 것이라
-          운영자가 손댈 수 없었다 — 영문 폼에 그 두 줄만 한글로 남았다.
-          공고와 **같은 값**이다. 한 대회가 화면마다 다른 언어일 이유가 없다.
+          **시스템이 넣는 문구의 언어.** 대회 전체 설정(기본정보 탭)이라 여기서는 읽기만 한다 —
+          이유는 위 language 선언부 주석 참고.
         */}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium">문구 언어</span>
-          {NOTICE_LANGUAGES.map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => setLanguage(value)}
-              className={`px-2.5 py-1 text-[11px] transition-colors ${R.control} ${
-                language === value ? "bg-violet-500 text-white" : "bg-secondary text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+          <span className={`px-2.5 py-1 text-[11px] font-medium ${R.control} bg-secondary text-foreground`}>
+            {NOTICE_LANGUAGES.find((l) => l.value === language)?.label ?? language}
+          </span>
           <span className="text-[11px] text-muted-foreground">
-            파일 크기·영상 공개 설정 안내, 버튼·오류 문구가 바뀌어요 · <b>공고 페이지와 같은 설정</b>입니다
+            파일 크기·영상 공개 설정 안내, 버튼·오류 문구가 바뀌어요 · <b>기본정보 탭</b>에서 바꿀 수 있어요
           </span>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">

@@ -28,8 +28,9 @@ export const VOTE_CSS = `
 .mcv-card.is-voted { box-shadow: 0 0 0 2px var(--mc-accent), 0 6px 20px rgba(0,0,0,.10); }
 /* 16:9 — 참가작 영상은 대부분 무대를 가로로 찍은 유튜브 영상이다. 세로 여백이 남는 16:10 은
    그 위에 검은 레터박스가 생긴다(object-fit:cover 라 실제로는 위아래가 잘려 나간다). */
-.mcv-media { position: relative; aspect-ratio: 16 / 9; background: rgba(120,120,128,.12); }
-.mcv-thumb-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mcv-media { position: relative; aspect-ratio: 16 / 9; background: rgba(120,120,128,.12); overflow: hidden; }
+.mcv-thumb-img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .4s ease; }
+.mcv-card:hover .mcv-thumb-img { transform: scale(1.04); }
 .mcv-thumb-empty { width: 100%; height: 100%; }
 .mcv-video { position: relative; display: block; width: 100%; height: 100%; padding: 0; border: 0; background: none; cursor: pointer; }
 .mcv-play { position: absolute; inset: 0; margin: auto; width: 46px; height: 46px; border-radius: 999px;
@@ -55,6 +56,6 @@ export const VOTE_CSS = `
 .is-voted .mcv-btn { background: var(--mc-accent); color: var(--mc-on-accent); }
 @media (max-width: 520px) { .mcv-grid { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) {
-  .mcv-card, .mcv-card:hover { transition: none; transform: none; }
+  .mcv-card, .mcv-card:hover, .mcv-thumb-img, .mcv-card:hover .mcv-thumb-img { transition: none; transform: none; }
 }
 `.trim();
