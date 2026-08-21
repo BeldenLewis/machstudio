@@ -42,10 +42,16 @@ export const COLLECT_FORM_CSS = `
 .msf-stack{display:flex;flex-direction:column;gap:14px;line-height:1.5 !important}
 
 /* ── 행사 개요 ─────────────────────────────── */
-.msf-info{background:var(--msf-soft);border-radius:var(--msf-radius);padding:12px 14px;font-size:13px}
-.msf-info-date{font-weight:700}
-.msf-info-row{color:var(--msf-muted);margin-top:2px}
-.msf-info-row b{font-weight:600;color:var(--msf-fg)}
+/* 라벨(기간·장소·운영시간) + 값 두 칸짜리 표 — 아임웹에 따로 만들던 개요 표를 이 안에서
+   그대로 대신한다. 라벨 칸은 키컬러로 눈에 띄게, 값 칸은 본문색으로 차분하게 — 참가작
+   카드의 no·accent 배지와 같은 위계다. */
+.msf-info{border:1px solid var(--msf-line);border-radius:var(--msf-radius);overflow:hidden}
+.msf-info-row{display:grid;grid-template-columns:100px 1fr;gap:4px 14px;padding:11px 14px;font-size:13px;border-top:1px solid var(--msf-line)}
+.msf-info-row:first-child{border-top:0}
+.msf-info-label{font-weight:700;color:var(--msf-accent)}
+.msf-info-value{color:var(--msf-fg)}
+.msf-info-value div+div{margin-top:2px}
+@media (max-width:400px){.msf-info-row{grid-template-columns:1fr}}
 
 /* ── 항목 ──────────────────────────────────── */
 .msf-field{display:flex;flex-direction:column;gap:6px}

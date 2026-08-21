@@ -81,6 +81,22 @@ describe("normalizeCollectForm — 어떤 쓰레기가 와도 던지지 않는�
     expect(cfg({ fields: [{ key: "email" }], branch: { enabled: true, fieldKey: "type", groups } }).branch.enabled).toBe(false);
   });
 
+  it("테마 색은 비어 있으면 기본값(빈 문자열 = CSS 기본색)으로 떨어진다", () => {
+    expect(cfg({}).theme).toEqual({ accentColor: "", textColor: "", surfaceColor: "" });
+  });
+
+  it("테마 색은 6자리 HEX 형식일 때만 저장한다 — 아니면 CSS 기본값으로 떨어진다", () => {
+    expect(cfg({ theme: { accentColor: "#FF8500" } }).theme.accentColor).toBe("#FF8500");
+    expect(cfg({ theme: { accentColor: "orange" } }).theme.accentColor).toBe("");
+    expect(cfg({ theme: { accentColor: "#fff" } }).theme.accentColor).toBe("");
+  });
+
+  it("운영시간은 날짜가 없는 행을 걸러낸다", () => {
+    const c = cfg({ eventInfo: { openingHours: [{ date: "2026-10-22", open: "10:00", close: "17:00" }, { date: "", open: "09:00" }] } });
+    expect(c.eventInfo.openingHours).toHaveLength(1);
+    expect(c.eventInfo.openingHours[0]).toEqual({ date: "2026-10-22", open: "10:00", close: "17:00", lastEntrance: "" });
+  });
+
   it("동의 사전 체크는 명시적 true 일 때만 — 기본은 항상 미체크", () => {
     expect(cfg({}).consent.privacy.defaultChecked).toBe(false);
     expect(cfg({ consent: { privacy: { defaultChecked: "yes" } } }).consent.privacy.defaultChecked).toBe(false);

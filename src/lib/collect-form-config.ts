@@ -204,6 +204,18 @@ export interface CollectEventLegal {
   effectiveDate: string;
 }
 
+/**
+ * 폼 색상 — 파트너 사이트(아임웹 등)의 브랜드 톤에 맞추는 용도. 비워 두면 CSS 기본값을
+ * 그대로 쓴다(collect-form/css.ts 의 --msf-accent 등). 대회 시스템의 CompetitionTheme 와
+ * 같은 개념이지만 CollectSource 는 항목이 여기 셋뿐이라 로고·모서리 반경은 아직 안 둔다 —
+ * 필요해지면 그때 늘린다.
+ */
+export interface CollectTheme {
+  accentColor: string;
+  textColor: string;
+  surfaceColor: string;
+}
+
 export interface CollectFormConfig {
   fields: CollectField[];
   branch: CollectBranch;
@@ -214,6 +226,7 @@ export interface CollectFormConfig {
   completion: CollectCompletion;
   lookup: CollectLookup;
   legal: CollectEventLegal;
+  theme: CollectTheme;
   /** 제출 버튼 문구. 비면 렌더러 기본 문구. */
   submitLabel: Localized;
   defaultLocale: string;
@@ -256,6 +269,7 @@ export const EMPTY_FORM_CONFIG: CollectFormConfig = {
      (eventInfo.enabled, consent.marketing.enabled, branch.enabled). or/showQr 은 켠 뒤의 기본값. */
   lookup: { enabled: false, fields: ["email", "phone"], logic: "or", showQr: true },
   legal: { country: "us", eventName: "", onSitePhotography: false, thirdParties: [], dataRetentionNote: "", effectiveDate: "" },
+  theme: { accentColor: "", textColor: "", surfaceColor: "" },
   submitLabel: {},
   defaultLocale: DEFAULT_LOCALE,
   statusOverride: null,
@@ -435,6 +449,8 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
   const lookupRaw = obj(c.lookup);
   const legalRaw = obj(c.legal);
   const thirdPartiesRaw = Array.isArray(legalRaw.thirdParties) ? legalRaw.thirdParties : [];
+  const themeRaw = obj(c.theme);
+  const hexOrEmpty = (value: unknown) => (/^#[0-9a-fA-F]{6}$/.test(str(value)) ? str(value) : "");
 
   // 기본값은 **복사해서** 준다. 모듈 상수 배열을 그대로 돌려주면 호출부가 push/splice 하는
   // 순간(조회 항목 토글이 딱 그 모양이다) 상수 자체가 오염돼, 웜 람다에서 뒤이어 정규화되는
@@ -525,6 +541,11 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
         .filter((t) => t.name !== ""),
       dataRetentionNote: str(legalRaw.dataRetentionNote),
       effectiveDate: str(legalRaw.effectiveDate),
+    },
+    theme: {
+      accentColor: hexOrEmpty(themeRaw.accentColor),
+      textColor: hexOrEmpty(themeRaw.textColor),
+      surfaceColor: hexOrEmpty(themeRaw.surfaceColor),
     },
     submitLabel: toLocalized(c.submitLabel, locale),
     defaultLocale: locale,
