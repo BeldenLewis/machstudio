@@ -228,6 +228,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   // console sniffer paste
   const [pasteJson, setPasteJson] = useState("");
   const [pasteError, setPasteError] = useState("");
+  const [snifferPlatform, setSnifferPlatform] = useState<"iweb" | "mice">("iweb");
 
   const fetchSource = useCallback(async () => {
     setIsLoading(true);
@@ -843,28 +844,29 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   };
 
   /**
-   * 콘솔 스니퍼 — 아임웹(.form-group)뿐 아니라 표 형태(tr) · 정의 목록(dl) 신청서도
-   * 시도해 본다. 필드가 제일 많이 잡히는 방식을 골라 그 선택자를 결과에 같이 담아서,
-   * "감지 안 됨" 자리에서 운영자가 CSS 를 몰라도 붙여넣기만 하면 되게 한다.
+   * 콘솔 스니퍼는 **플랫폼별로 완전히 분리한다.** 예전에 ".form-group"·"table tr"·"dl > div"
+   * 를 한 번에 다 시도해서 "매칭 개수가 제일 많은 쪽"을 고르게 했더니, 아임웹 페이지에 폼과
+   * 무관한 다른 표(예: 뉴스레터 구독란)가 있으면 그 표의 행 수가 실제 .form-group 개수를
+   * 이겨서 **아임웹조차 오감지**했다 — "아임웹도 안 되고 마이스허브도 안 된다"던 피드백의
+   * 원인이다. 운영자가 지금 보고 있는 사이트가 뭔지 이미 알고 있으니, 그 앎을 그대로
+   * 탭으로 받는다 — 서로 경쟁하지 않으니 한쪽 사이트의 잡음이 다른 쪽 감지를 흔들 수 없다.
    */
-  const snifferScript = `(function() {
-  function tryPattern(sel, labelSel) {
-    var groups = Array.prototype.filter.call(document.querySelectorAll(sel), function(g) {
-      return g.querySelector("input, select, textarea");
-    });
-    return { sel: sel, labelSel: labelSel, groups: groups };
-  }
-  var candidates = [
-    tryPattern(".form-group", "label"),
-    tryPattern("table tr", "th, label"),
-    tryPattern("dl > div", "dt, label"),
-  ];
-  var best = candidates[0];
-  for (var i = 1; i < candidates.length; i++) {
-    if (candidates[i].groups.length > best.groups.length) best = candidates[i];
-  }
-  var fields = best.groups.map(function(g, i) {
-    var label = g.querySelector(best.labelSel);
+  const SNIFFER_PLATFORMS = {
+    iweb: { label: "아임웹", sel: ".form-group", labelSel: "label" },
+    mice: { label: "마이스허브 등 (표 형태)", sel: "table tr", labelSel: "th, label" },
+  } as const;
+  type SnifferPlatform = keyof typeof SNIFFER_PLATFORMS;
+
+  function buildSnifferScript(platform: SnifferPlatform): string {
+    const { sel, labelSel } = SNIFFER_PLATFORMS[platform];
+    return `(function() {
+  var SEL = ${JSON.stringify(sel)};
+  var LABEL_SEL = ${JSON.stringify(labelSel)};
+  var groups = Array.prototype.filter.call(document.querySelectorAll(SEL), function(g) {
+    return g.querySelector("input, select, textarea");
+  });
+  var fields = groups.map(function(g, i) {
+    var label = g.querySelector(LABEL_SEL);
     var input = g.querySelector("input, select, textarea");
     var labelText = (label ? label.textContent.trim() : "") ||
       (input ? (input.placeholder || input.getAttribute("name") || "") : "");
@@ -876,12 +878,17 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
     }
     return { index: i, key: "field_" + i, label: labelText, type: type };
   });
-  var result = { selector: best.sel, fields: fields };
+  var result = { selector: SEL, fields: fields };
   try { copy(JSON.stringify(result, null, 2)); } catch(e) {}
-  console.log("감지 방식: " + best.sel + " (" + fields.length + "개 필드) — 0개면 이 사이트는 자동 감지가 안 돼요, 직접 선택자를 입력해주세요.");
+  console.log((fields.length === 0
+    ? "0개 감지됨 — 이 방식은 이 사이트에 안 맞아요. 신청서 필드를 우클릭 → 검사로 감싸는 태그를 확인해서 '직접 입력'에 넣어주세요."
+    : fields.length + "개 필드 감지됨") + " (선택자: " + SEL + ")");
   console.log(JSON.stringify(result, null, 2));
   return result;
 })();`;
+  }
+
+  const snifferScript = buildSnifferScript(snifferPlatform);
 
   if (isLoading) {
     return (
@@ -1435,7 +1442,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                       </div>
                     ))}
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-2">실제 폼 제출 시 스크립트가 감지한 필드예요. "한 번에 적용" 후 라벨과 키를 수정하세요.</p>
+                  <p className="text-[11px] text-muted-foreground mt-2">실제 폼 제출 시 스크립트가 감지한 필드예요. &ldquo;한 번에 적용&rdquo; 후 라벨과 키를 수정하세요.</p>
                 </div>
               )}
 
@@ -1444,7 +1451,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <h3 className="text-sm font-medium">필드 매핑</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">인덱스는 아래 "필드 묶음 선택자"로 찾은 순서(0부터)예요</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">인덱스는 아래 &ldquo;필드 묶음 선택자&rdquo;로 찾은 순서(0부터)예요</p>
                   </div>
                 </div>
 
@@ -1718,9 +1725,29 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                   <Sparkles className="w-4 h-4 text-amber-500" />
                   <span className="text-sm font-medium">필드 자동 감지 (설치 전 사용)</span>
                 </div>
+
+                {/* 플랫폼마다 스니퍼를 완전히 따로 둔다 — 한 스크립트가 여러 방식을 동시에 시도해
+                    "매칭 개수가 제일 많은 쪽"을 고르면, 폼과 무관한 다른 표가 페이지 어딘가에
+                    있을 때 그쪽이 이겨서 오감지한다(아임웹에서 실제로 그랬다). 지금 보고 있는
+                    사이트가 뭔지는 운영자가 이미 아니까, 그 앎을 탭으로 그대로 받는다. */}
+                <div className="flex items-center gap-1.5 mb-3">
+                  {(Object.keys(SNIFFER_PLATFORMS) as Array<keyof typeof SNIFFER_PLATFORMS>).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setSnifferPlatform(p)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                        snifferPlatform === p ? "bg-amber-500 text-white" : "bg-secondary text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {SNIFFER_PLATFORMS[p].label}
+                    </button>
+                  ))}
+                </div>
+
                 <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside mb-3">
-                  <li>등록 폼 페이지를 열고 브라우저 콘솔(F12)을 엽니다 — 아임웹이 아닌, 직접 만든 신청서도 됩니다</li>
-                  <li>아래 스크립트를 복사해서 콘솔에 붙여넣고 Enter</li>
+                  <li>등록 폼 페이지를 열고 브라우저 콘솔(F12)을 엽니다</li>
+                  <li>위에서 이 사이트를 만든 플랫폼을 고르고, 아래 스크립트를 콘솔에 붙여넣고 Enter</li>
                   <li>출력된 JSON을 아래에 붙여넣기 → 필드와 감지 방식이 자동 입력</li>
                 </ol>
                 <div className="relative mb-3">
