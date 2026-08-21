@@ -12,11 +12,18 @@ export const ORG_TOKEN = {
   address: "{{ORG_ADDRESS}}",
   email: "{{ORG_EMAIL}}",
   dpoEmail: "{{ORG_DPO_EMAIL}}",
+  hostingRegion: "{{ORG_HOSTING_REGION}}",
 } as const;
 
 const PLACEHOLDER = {
-  en: { name: "[Business Legal Name]", address: "[Business Mailing Address]", email: "[privacy contact email]" },
-  ko: { name: "[회사명 미입력]", address: "[사업장 주소 미입력]", email: "[담당 이메일 미입력]" },
+  en: {
+    name: "[Business Legal Name]", address: "[Business Mailing Address]", email: "[privacy contact email]",
+    hostingRegion: "[server hosting region — set in Workspace Settings]",
+  },
+  ko: {
+    name: "[회사명 미입력]", address: "[사업장 주소 미입력]", email: "[담당 이메일 미입력]",
+    hostingRegion: "[서버 소재지 미입력 — 워크스페이스 설정에서 입력]",
+  },
 } as const;
 
 /**
@@ -29,9 +36,11 @@ export function resolveOrgTokens(text: string, org: OrgProfile, locale: "en" | "
   const address = org.address.trim() || p.address;
   const email = org.privacyContactEmail.trim() || p.email;
   const dpoEmail = org.dpoContactEmail?.trim() || org.privacyContactEmail.trim() || p.email;
+  const hostingRegion = org.hostingRegion.trim() || p.hostingRegion;
   return text
     .split(ORG_TOKEN.name).join(name)
     .split(ORG_TOKEN.address).join(address)
     .split(ORG_TOKEN.dpoEmail).join(dpoEmail)
-    .split(ORG_TOKEN.email).join(email);
+    .split(ORG_TOKEN.email).join(email)
+    .split(ORG_TOKEN.hostingRegion).join(hostingRegion);
 }

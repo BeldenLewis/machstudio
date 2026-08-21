@@ -60,10 +60,17 @@ export interface OrgProfile {
   privacyContactEmail: string;
   /** 개인정보보호책임자 등 — 없으면 privacyContactEmail 로 갈음한다. */
   dpoContactEmail?: string;
+  /**
+   * 국외이전 고지에 쓰는 실제 서버(인프라) 소재지. 예전엔 이 값이 없어 생성문에 "실제 소재지를
+   * 개발팀에 확인한 뒤 채워 넣으세요" 라는 운영 메모가 그대로 남아 있었다 — 생성 버튼을 눌러도
+   * 결국 사람이 문서를 열어 손으로 고쳐야 하는 유일한 빈칸이었다. 다른 값과 마찬가지로 한 번만
+   * 입력해 두면 모든 문서가 재사용한다.
+   */
+  hostingRegion: string;
 }
 
 export function emptyOrgProfile(): OrgProfile {
-  return { legalName: "", address: "", privacyContactEmail: "", dpoContactEmail: "" };
+  return { legalName: "", address: "", privacyContactEmail: "", dpoContactEmail: "", hostingRegion: "" };
 }
 
 /** 워크스페이스에 저장되는 조직 정보. 나라별로 다른 법인·주소를 쓸 수 있어 override 를 둔다. */

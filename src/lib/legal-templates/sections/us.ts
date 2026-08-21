@@ -139,10 +139,9 @@ const PRIVACY_SECTIONS: Section[] = [
     render: () =>
       `## International Data Transfer\n\n` +
       `${orgLineEn()} is affiliated with an organization based in the Republic of Korea, and the systems ` +
-      `we use to process registrations may store or process your information on servers located outside the ` +
-      `United States, including in the Republic of Korea. We take reasonable measures to protect your ` +
-      `information consistent with this Privacy Policy regardless of where it is processed. ` +
-      `*[Operations note: confirm the actual hosting region with the engineering team before publishing.]*`,
+      `we use to process registrations may store or process your information on servers located in ` +
+      `${ORG_TOKEN.hostingRegion}. We take reasonable measures to protect your information consistent with ` +
+      `this Privacy Policy regardless of where it is processed.`,
   },
   {
     id: "photography-registration",

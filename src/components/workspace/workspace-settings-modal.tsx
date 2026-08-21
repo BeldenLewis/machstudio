@@ -254,7 +254,7 @@ export function WorkspaceSettingsModal({ open, onClose }: Props) {
    * 아니라 조직 자산이다(약관 템플릿과 같은 이유). 나라별로 법인이 다를 수 있어 US/KR
    * override 를 따로 둔다.
    */
-  const emptyOrg = { legalName: "", address: "", privacyContactEmail: "", dpoContactEmail: "" };
+  const emptyOrg = { legalName: "", address: "", privacyContactEmail: "", dpoContactEmail: "", hostingRegion: "" };
   const [legalDefault, setLegalDefault] = useState(emptyOrg);
   const [legalByCountry, setLegalByCountry] = useState<Record<string, typeof emptyOrg>>({});
   const [showCountryOverride, setShowCountryOverride] = useState(false);
@@ -779,6 +779,19 @@ export function WorkspaceSettingsModal({ open, onClose }: Props) {
                             placeholder="비우면 위 담당 이메일로 대신해요"
                             className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm transition-colors focus:border-violet-400 focus:outline-none"
                           />
+                        </label>
+                        <label className="space-y-1.5 sm:col-span-2">
+                          <span className="text-[11px] font-medium text-muted-foreground">서버(인프라) 소재지</span>
+                          <input
+                            value={legalDefault.hostingRegion}
+                            onChange={(e) => setLegalDefault((v) => ({ ...v, hostingRegion: e.target.value }))}
+                            placeholder="예: 대한민국, 미국"
+                            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm transition-colors focus:border-violet-400 focus:outline-none"
+                          />
+                          <span className="block text-[11px] leading-relaxed text-muted-foreground">
+                            개인정보처리방침의 국외이전 고지에 쓰여요 — 실제로 등록 시스템을 운영하는 서버의 물리적 소재지(Vercel·Supabase 등)를
+                            한 번만 입력해 두면 모든 문서가 재사용해요. 정확한 리전은 개발팀에 확인하세요.
+                          </span>
                         </label>
                       </div>
 
