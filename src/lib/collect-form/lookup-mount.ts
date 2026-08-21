@@ -11,6 +11,7 @@
 import { h, clearNode } from "@/lib/dom/h";
 import { COLLECT_FORM_CSS } from "./css";
 import { onAccentColor } from "@/lib/competition-render";
+import { COUNTRY_DIALS, flagEmoji, isKnownCountry } from "@/lib/collect-country";
 import type { CollectFormConfig } from "@/lib/collect-form-config";
 
 const STYLE_ID = "msf-css";
@@ -126,6 +127,24 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
     if (phoneInput.value !== digits) phoneInput.value = digits;
   });
 
+  /**
+   * 국가 선택 — 등록 폼(mount.ts)과 **같은 컨트롤**이다.
+   *
+   * 등록자가 기본 국가가 아닌 나라를 골라 등록했다면(§6.3) 저장된 번호는 그 나라 기준
+   * E.164 다. 조회 칸이 국가를 못 고르면 서버는 항상 `defaultCountry` 로 해석하는데,
+   * 그러면 자기 번호를 정확히 쳐도 못 찾는다 — 입력 화면과 확인 화면의 형식이 갈리는 것.
+   */
+  const phoneCountrySel = h("select", {
+    class: "msf-tel-cc", "data-msf-cc": "phone", "aria-label": `${COPY.phone} — country`,
+  }) as HTMLSelectElement;
+  for (const c of COUNTRY_DIALS) {
+    phoneCountrySel.appendChild(h("option", { value: c.code }, `${flagEmoji(c.code)} +${c.dial} ${c.name}`));
+  }
+  if (isKnownCountry(config.validation.defaultCountry)) {
+    phoneCountrySel.value = config.validation.defaultCountry.toUpperCase();
+  }
+  const phoneWrap = h("div", { class: "msf-tel" }, phoneCountrySel, phoneInput);
+
   const banner = h("div", { class: "msf-banner", role: "alert" });
   banner.style.display = "none";
   /**
@@ -144,10 +163,10 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
     banner.style.display = "none";
   }
 
-  function field(label: string, input: HTMLInputElement): HTMLElement {
+  function field(label: string, forId: string, content: HTMLElement): HTMLElement {
     return h("div", { class: "msf-field" },
-      h("label", { class: "msf-label", for: input.id }, label),
-      input,
+      h("label", { class: "msf-label", for: forId }, label),
+      content,
     );
   }
 
@@ -336,7 +355,7 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "omit",
-        body: JSON.stringify({ email, phone }),
+        body: JSON.stringify({ email, phone, phoneCountry: usePhone ? phoneCountrySel.value : "" }),
       });
       if (res.status === 429) { showBanner(COPY.tooMany); return; }
       const data = (await res.json().catch(() => null)) as
@@ -382,8 +401,8 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
 
     stack.appendChild(h("div", { class: "msf-state-title" }, COPY.title));
     stack.appendChild(h("div", { class: "msf-hint" }, needBoth ? COPY.needBoth : COPY.desc));
-    if (useEmail) stack.appendChild(field(COPY.email, emailInput));
-    if (usePhone) stack.appendChild(field(COPY.phone, phoneInput));
+    if (useEmail) stack.appendChild(field(COPY.email, emailInput.id, emailInput));
+    if (usePhone) stack.appendChild(field(COPY.phone, phoneInput.id, phoneWrap));
     stack.appendChild(submitBtn);
     stack.appendChild(banner);
     stack.appendChild(resultHost);

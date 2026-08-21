@@ -68,6 +68,20 @@ describe("조회 조건", () => {
     expect(buildLookupCriteria(orConfig, { email: "a@b.com" })).toMatchObject({ logic: "or" });
     expect(buildLookupCriteria(orConfig, { phone: "2025550147" })).toMatchObject({ logic: "or" });
   });
+
+  /**
+   * 등록 폼은 항목마다 국가를 고를 수 있다(§6.3) — 기본 국가가 US 인 폼이라도 등록자가
+   * KR 을 골랐다면 저장은 +82 기준이다. 조회도 같은 국가를 보내야 같은 값이 나온다.
+   */
+  it("조회에 딸려 온 국가를 우선한다 — 기본 국가로만 해석하지 않는다", () => {
+    const c = buildLookupCriteria(orConfig, { phone: "1012345678", phoneCountry: "KR" });
+    expect(c?.phoneE164).toBe("+821012345678");
+  });
+
+  it("모르는 국가 코드가 오면 폼의 기본 국가로 되돌아간다", () => {
+    const c = buildLookupCriteria(orConfig, { phone: "2025550147", phoneCountry: "UK" });
+    expect(c?.phoneE164).toBe("+12025550147");
+  });
 });
 
 describe("내보내는 정보", () => {
