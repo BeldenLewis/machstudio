@@ -52,10 +52,14 @@ interface VoteIntro {
   bodyFontSize: number;
 }
 
+type VoteReason = "ok" | "disabled" | "before" | "closed";
+
 interface StateDto {
   competition: { id: string; name: string; theme: CompetitionTheme; language: NoticeLanguage; voteIntro: VoteIntro };
   round: { kind: string; name: string; maxVotesPerVoter: number; allowVoteUndo: boolean; showLiveTally: boolean };
   open: boolean;
+  /** 열림/예정/마감을 구분하는 짧은 사유 — 상단 상태 배지·투표 버튼 비활성화가 이걸 본다. */
+  reason: VoteReason;
   message: string;
   entries: EntryDto[];
   myVoteIds: string[];
@@ -195,6 +199,16 @@ function voteIntroHtml(intro: VoteIntro): string {
   </div>`;
 }
 
+/**
+ * 상단 상태 배지 — "지금 투표 기간인지 아닌지" 를 문장 대신 색+짧은 라벨로 한눈에 보여준다
+ * (레퍼런스 fr.france.k-expo.org/vote 의 "Vote fermé" 빨간 배지와 같은 자리).
+ */
+function statusPillHtml(reason: VoteReason): string {
+  const cls = reason === "ok" ? "is-open" : reason === "before" ? "is-before" : "is-closed";
+  const label = reason === "ok" ? t.statusOpen : reason === "before" ? t.statusBefore : t.statusClosed;
+  return `<span class="mcv-status ${cls}">${escapeHtml(label)}</span>`;
+}
+
 function renderVote(mount: HTMLElement, state: StateDto, payload: BootPayload, deviceId: string) {
   const selected = new Set(state.myVoteIds);
   let remaining = state.remaining;
@@ -206,6 +220,8 @@ function renderVote(mount: HTMLElement, state: StateDto, payload: BootPayload, d
         state.round.showLiveTally && state.tally
           ? `<span class="mcv-count">${escapeHtml(t.voteCount(state.tally[entry.id] ?? 0))}</span>`
           : "";
+      // 배지로 "마감"을 알려 놓고 버튼은 여전히 눌러 보게 두면, 눌러야 비로소 마감을 아는 게 된다.
+      const closedNow = state.reason !== "ok";
       return `<article class="mcv-card${voted ? " is-voted" : ""}" data-mcv-entry="${escapeHtml(entry.id)}">
         <div class="mcv-media">${mediaThumbHtml(entry)}</div>
         <div class="mcv-body">
@@ -213,8 +229,8 @@ function renderVote(mount: HTMLElement, state: StateDto, payload: BootPayload, d
           <h3 class="mcv-title">${escapeHtml(entry.title)}</h3>
           ${entry.teamName ? `<p class="mcv-team">${escapeHtml(entry.teamName)}</p>` : ""}
           ${entry.summary ? `<p class="mcv-summary">${escapeHtml(entry.summary)}</p>` : ""}
-          <button type="button" class="mcv-btn" data-mcv-vote="${escapeHtml(entry.id)}">
-            ${voted ? escapeHtml(t.voteBtnVoted) : escapeHtml(t.voteBtnDefault)}
+          <button type="button" class="mcv-btn" data-mcv-vote="${escapeHtml(entry.id)}"${closedNow ? " disabled" : ""}>
+            ${voted ? escapeHtml(t.voteBtnVoted) : closedNow ? escapeHtml(t.statusClosed) : escapeHtml(t.voteBtnDefault)}
           </button>
         </div>
       </article>`;
@@ -225,8 +241,11 @@ function renderVote(mount: HTMLElement, state: StateDto, payload: BootPayload, d
     ${payload.preview ? `<div class="mc-preview-banner">${escapeHtml(t.previewBanner)}</div>` : ""}
     ${voteIntroHtml(state.competition.voteIntro)}
     <div class="mcv-bar">
-      <span class="mcv-bar-title">${escapeHtml(state.round.name)}</span>
-      <span class="mcv-remain" data-mcv-remain>${escapeHtml(t.remaining(remaining, state.round.maxVotesPerVoter))}</span>
+      <span class="mcv-bar-left">
+        <span class="mcv-bar-title">${escapeHtml(state.round.name)}</span>
+        ${statusPillHtml(state.reason)}
+      </span>
+      ${state.open ? `<span class="mcv-remain" data-mcv-remain>${escapeHtml(t.remaining(remaining, state.round.maxVotesPerVoter))}</span>` : ""}
     </div>
     ${state.open ? "" : `<p class="mc-note">${escapeHtml(state.message)}</p>`}
     ${state.entries.length === 0 ? `<p class="mc-note">${escapeHtml(t.emptyEntries)}</p>` : `<div class="mcv-grid">${cards}</div>`}

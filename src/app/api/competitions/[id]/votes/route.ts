@@ -145,6 +145,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         showLiveTally: round.showLiveTally,
       },
       open: forceOpen || window.open,
+      // "닫힘" 한 문장(message)과 별개로 상단 상태 배지가 참조하는 짧은 사유 — 열림/예정/마감을 구분해야
+      // 배지 색과 문구가 갈린다. 강제로 연 미리보기는 실제로 열린 것과 같은 "ok"로 본다.
+      reason: forceOpen ? "ok" : window.reason,
       message: forceOpen ? "" : voteWindowMessage(window.reason, language),
       /*
         샘플은 **열린 화면(state=open)에서만** 채운다. "지금 상태" 미리보기는 방문자가

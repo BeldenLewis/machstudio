@@ -20,8 +20,16 @@ export const VOTE_CSS = `
 .mcv-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between;
   gap: 12px; padding: 12px 0; margin-bottom: 14px; background: var(--mc-surface);
   border-bottom: 1px solid rgba(120,120,128,.18); }
+.mcv-bar-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .mcv-bar-title { font-size: 16px; font-weight: 800; }
-.mcv-remain { font-size: 13px; font-weight: 700; color: var(--mc-accent); }
+.mcv-remain { font-size: 13px; font-weight: 700; color: var(--mc-accent); white-space: nowrap; }
+/* "지금 투표 기간인지" 를 문장이 아니라 색+짧은 라벨로 바로 읽게 — 상태색은 대회 테마 accent 와
+   별개다(대회마다 accent 가 달라도 열림·마감 색은 항상 같은 의미여야 한다). */
+.mcv-status { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 800; white-space: nowrap; }
+.mcv-status.is-open { background: rgba(16,185,129,.14); color: #059669; }
+.mcv-status.is-before { background: rgba(245,158,11,.16); color: #b45309; }
+.mcv-status.is-closed { background: rgba(239,68,68,.14); color: #dc2626; }
 /*
  * 카드 폭을 280~360px 로 **고정 범위**에 묶는다. minmax(240px, 1fr) 이었을 때는 참가작이
  * 1~2개만 있어도(오픈 초기·리허설) 남는 폭을 전부 그 카드가 흡수해 카드 하나가 900px
