@@ -10,6 +10,7 @@ import { useMemo } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { EditableList, ROW_KEY, withRowKeys } from "@/components/ui/editable-list";
+import { ColorField, BRAND_PRESETS } from "@/components/ui/ColorField";
 import { FIELD_CLS, FINISH, R, UrlField } from "@/components/ui/primitives";
 import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
 import { isSupportedCountry } from "@/lib/collect-phone";
@@ -91,6 +92,35 @@ export function CollectFormSections({
 
   return (
     <div className="space-y-3">
+      {/* ── 테마 ──────────────────────────────────────────────────── */}
+      <Block title="테마" desc="파트너 사이트(아임웹 등)의 브랜드 색에 맞춰요. 비워 두면 기본 색을 써요.">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <ColorField
+            label="키컬러"
+            note="버튼·포커스·강조 텍스트"
+            value={config.theme.accentColor}
+            onChange={(next) => patch({ theme: { ...config.theme, accentColor: next } })}
+            presets={BRAND_PRESETS}
+            allowInherit
+            inheritLabel="기본색(네이비)"
+          />
+          <ColorField
+            label="글자색"
+            value={config.theme.textColor}
+            onChange={(next) => patch({ theme: { ...config.theme, textColor: next } })}
+            allowInherit
+            inheritLabel="기본색"
+          />
+          <ColorField
+            label="배경색"
+            value={config.theme.surfaceColor}
+            onChange={(next) => patch({ theme: { ...config.theme, surfaceColor: next } })}
+            allowInherit
+            inheritLabel="기본(흰색)"
+          />
+        </div>
+      </Block>
+
       {/* ── 행사 개요 ─────────────────────────────────────────────── */}
       <Block
         title="행사 개요"
@@ -113,6 +143,95 @@ export function CollectFormSections({
             className={FIELD_CLS}
           />
         </Row>
+
+        <div>
+          <span className="mb-1 block text-[11px] font-medium text-muted-foreground">운영시간</span>
+          <p className="mb-1.5 text-[11px] leading-snug text-muted-foreground/70">
+            폼 상단 개요 표에 날짜별로 한 줄씩 나가요. 아임웹 등 외부에 따로 안 만들어도 돼요.
+          </p>
+          <EditableList<CollectFormConfig["eventInfo"]["openingHours"][number] & { [ROW_KEY]?: string }>
+            listId="event-hours"
+            itemNoun="날짜"
+            items={withRowKeys(ev.openingHours)}
+            onChange={(next) => setEvent({ openingHours: next })}
+            rowKey={(h) => h[ROW_KEY] ?? ""}
+            addLabel="날짜 추가"
+            makeItem={() => ({ date: "", open: "", close: "", lastEntrance: "" })}
+            emptyState={<p className="rounded-xl bg-secondary/40 p-3 text-center text-[11px] text-muted-foreground">없음</p>}
+            renderRow={({ item, removeButton, patch: patchRow }) => (
+              <div className={`${R.surface} flex flex-wrap items-center gap-1.5 bg-secondary p-2 ${FINISH.s2}`}>
+                <input
+                  type="date"
+                  value={item.date}
+                  onChange={(e) => patchRow({ date: e.target.value })}
+                  aria-label="날짜"
+                  className="min-w-0 shrink-0 bg-transparent text-[12px] outline-none"
+                />
+                <input
+                  type="time"
+                  value={item.open}
+                  onChange={(e) => patchRow({ open: e.target.value })}
+                  aria-label="시작 시각"
+                  className="min-w-0 shrink-0 bg-transparent text-[12px] outline-none"
+                />
+                <span className="text-[11px] text-muted-foreground">~</span>
+                <input
+                  type="time"
+                  value={item.close}
+                  onChange={(e) => patchRow({ close: e.target.value })}
+                  aria-label="종료 시각"
+                  className="min-w-0 shrink-0 bg-transparent text-[12px] outline-none"
+                />
+                <input
+                  type="time"
+                  value={item.lastEntrance}
+                  onChange={(e) => patchRow({ lastEntrance: e.target.value })}
+                  aria-label="마지막 입장 시각 (선택)"
+                  title="마지막 입장 시각 (선택)"
+                  className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/50"
+                />
+                {removeButton()}
+              </div>
+            )}
+          />
+        </div>
+
+        <div>
+          <span className="mb-1 block text-[11px] font-medium text-muted-foreground">개요 추가 행 (선택)</span>
+          <p className="mb-1.5 text-[11px] leading-snug text-muted-foreground/70">
+            &ldquo;기간·장소·운영시간&rdquo; 아래에 원하는 항목을 더 넣을 수 있어요 (예: 주최, 문의).
+          </p>
+          <EditableList<CollectFormConfig["eventInfo"]["extraRows"][number] & { [ROW_KEY]?: string }>
+            listId="event-extra-rows"
+            itemNoun="항목"
+            items={withRowKeys(ev.extraRows)}
+            onChange={(next) => setEvent({ extraRows: next })}
+            rowKey={(r) => r[ROW_KEY] ?? ""}
+            addLabel="행 추가"
+            makeItem={() => ({ label: {}, value: {} })}
+            emptyState={<p className="rounded-xl bg-secondary/40 p-3 text-center text-[11px] text-muted-foreground">없음</p>}
+            renderRow={({ item, removeButton, patch: patchRow }) => (
+              <div className={`${R.surface} flex items-center gap-1.5 bg-secondary p-2 ${FINISH.s2}`}>
+                <input
+                  value={localize(item.label, DEFAULT_LOCALE)}
+                  onChange={(e) => patchRow({ label: toLocalized(e.target.value) })}
+                  placeholder="항목명 (예: 주최)"
+                  aria-label="항목명"
+                  className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/50"
+                />
+                <input
+                  value={localize(item.value, DEFAULT_LOCALE)}
+                  onChange={(e) => patchRow({ value: toLocalized(e.target.value) })}
+                  placeholder="내용"
+                  aria-label="내용"
+                  className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/50"
+                />
+                {removeButton()}
+              </div>
+            )}
+          />
+        </div>
+
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {/* 입력은 KST 벽시각, 저장은 오프셋이 붙은 ISO — 서버(UTC)와 브라우저가 같은 순간을
               가리켜야 접수 창 판정이 한쪽에서만 열리는 일이 없다. 웨비나 일정과 같은 헬퍼를 쓴다. */}

@@ -100,6 +100,53 @@ describe("등록 폼 렌더", () => {
   });
 });
 
+/**
+ * 기간·장소·운영시간 개요 표 — 아임웹에 따로 만들던 걸 이 안에서 대신한다는 요청으로 추가.
+ * "config 토글 ON + 실제 데이터 있음" 이중 게이트를 여기서도 확인한다.
+ */
+describe("행사 개요 표", () => {
+  const withEventInfo = normalizeCollectForm({
+    eventInfo: {
+      enabled: true,
+      eventDates: ["2026-10-22", "2026-10-24"],
+      venue: { en: "Magic Box, LA" },
+      openingHours: [{ date: "2026-10-22", open: "10:00", close: "17:00", lastEntrance: "16:30" }],
+      extraRows: [{ label: { en: "Organizer" }, value: { en: "Exporum Inc." } }],
+    },
+  });
+
+  it("날짜·장소·운영시간·추가 행이 각자의 라벨과 함께 나온다", () => {
+    mount({ config: withEventInfo });
+    expect(text()).toContain("Period");
+    expect(text()).toContain("2026-10-22 – 2026-10-24");
+    expect(text()).toContain("Venue");
+    expect(text()).toContain("Magic Box, LA");
+    expect(text()).toContain("Opening Hours");
+    expect(text()).toContain("10:00 ~ 17:00");
+    expect(text()).toContain("Last Entrance 16:30");
+    expect(text()).toContain("Organizer");
+    expect(text()).toContain("Exporum Inc.");
+  });
+
+  it("행사 개요를 켰어도 값이 하나도 없으면 빈 표를 그리지 않는다", () => {
+    mount({ config: normalizeCollectForm({ eventInfo: { enabled: true } }) });
+    expect(host.querySelector(".msf-info")).toBeNull();
+  });
+});
+
+describe("테마 색", () => {
+  it("키컬러를 정하면 --msf-accent 가 그 값으로, 안 정하면 기본값이 그대로 쓰인다", () => {
+    mount({ config: normalizeCollectForm({ theme: { accentColor: "#FF8500" } }) });
+    const root = host.querySelector(".msf") as HTMLElement;
+    expect(root.style.getPropertyValue("--msf-accent")).toBe("#FF8500");
+
+    handle?.destroy();
+    mount({ config: CONFIG });
+    const root2 = host.querySelector(".msf") as HTMLElement;
+    expect(root2.style.getPropertyValue("--msf-accent")).toBe("");
+  });
+});
+
 describe("입력 정규화", () => {
   /** AGENTS.md 공통: 입력은 소스에서 정규화한다 — 안내 문구가 아니라 입력 시점에 강제. */
   it("전화 입력에서 하이픈·괄호·공백을 타이핑 즉시 지운다", () => {

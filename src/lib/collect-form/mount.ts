@@ -11,6 +11,7 @@
  * DOM 은 `h()` 로만 만든다(innerHTML 금지 — src/lib/__tests__/embed-runtime.test.ts 가 강제).
  */
 import { h, clearNode } from "@/lib/dom/h";
+import { onAccentColor } from "@/lib/competition-render";
 import { COLLECT_FORM_CSS } from "./css";
 import {
   DEFAULT_LOCALE,
@@ -68,6 +69,9 @@ const COPY = {
   previewDone: "Sample number — nothing was saved.",
   more: "Details",
   less: "Hide",
+  period: "Period",
+  venue: "Venue",
+  openingHours: "Opening Hours",
 } as const;
 
 const ISSUE_COPY: Record<SubmissionIssue["code"], string> = {
@@ -246,7 +250,21 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     issues = issues.filter((i) => i.key !== key);
   };
 
-  const root = h("div", { class: "msf" });
+  /*
+   * 파트너 사이트 브랜드 톤에 맞추는 색 — 비워 두면 css.ts 기본값을 그대로 쓴다. 인라인
+   * custom property 는 문서 공용 <style>(ensureStyles) 의 클래스 규칙을 항상 이긴다,
+   * 그래서 같은 페이지에 다른 색의 폼이 두 개 붙어도 서로 안 섞인다.
+   */
+  const theme = config.theme;
+  const root = h("div", {
+    class: "msf",
+    style: {
+      "--msf-accent": theme.accentColor || null,
+      "--msf-accent-fg": theme.accentColor ? onAccentColor(theme.accentColor) : null,
+      "--msf-fg": theme.textColor || null,
+      "--msf-bg": theme.surfaceColor || null,
+    },
+  });
   const stack = h("div", { class: "msf-stack" });
   root.appendChild(stack);
 
@@ -990,18 +1008,34 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     }
 
     if (config.eventInfo.enabled) {
+      /*
+       * "기간·장소·운영시간" 개요 표 — 아임웹에 따로 만들던 걸 여기서 대신한다(설계 요청:
+       * "우리 자체 빌더에서 저것도 만들 수 있으면"). 값이 있는 행만 그린다 — 빈 껍데기를
+       * 방문자에게 보이지 않는다.
+       */
+      const infoRow = (label: string, ...value: Array<Node | string | false>) =>
+        h("div", { class: "msf-info-row" }, h("div", { class: "msf-info-label" }, label), h("div", { class: "msf-info-value" }, ...value));
+
       const dates = config.eventInfo.eventDates;
       const venue = t(config.eventInfo.venue);
-      if (dates.length > 0 || venue) {
+      const hours = config.eventInfo.openingHours;
+      const extraRows = config.eventInfo.extraRows
+        .map((r) => ({ label: t(r.label), value: t(r.value) }))
+        .filter((r) => r.label && r.value);
+
+      if (dates.length > 0 || venue || hours.length > 0 || extraRows.length > 0) {
         const info = h("div", { class: "msf-info" });
-        if (dates.length > 0) info.appendChild(h("div", { class: "msf-info-date" }, dates.join(" · ")));
-        if (venue) info.appendChild(h("div", { class: "msf-info-row" }, venue));
-        for (const r of config.eventInfo.extraRows) {
-          const label = t(r.label);
-          const value = t(r.value);
-          if (!label && !value) continue;
-          info.appendChild(h("div", { class: "msf-info-row" }, h("b", null, label), value ? " " + value : ""));
+        if (dates.length > 0) info.appendChild(infoRow(COPY.period, dates.join(" – ")));
+        if (venue) info.appendChild(infoRow(COPY.venue, venue));
+        if (hours.length > 0) {
+          const lines = hours.map((row) => {
+            const range = [row.open, row.close].filter(Boolean).join(" ~ ");
+            const entrance = row.lastEntrance ? ` (Last Entrance ${row.lastEntrance})` : "";
+            return h("div", null, [row.date, range].filter(Boolean).join(" : ") + entrance);
+          });
+          info.appendChild(infoRow(COPY.openingHours, ...lines));
         }
+        for (const r of extraRows) info.appendChild(infoRow(r.label, r.value));
         stack.appendChild(info);
       }
     }
