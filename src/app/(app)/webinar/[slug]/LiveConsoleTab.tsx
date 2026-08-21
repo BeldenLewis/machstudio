@@ -456,7 +456,7 @@ function InquiryPanel({ webinarId, tick = 0, onNavigate }: { webinarId: string; 
   if (total === 0) {
     return (
       <p className="rounded-xl border border-dashed border-border p-3 text-xs leading-relaxed text-muted-foreground">
-        아직 들어온 문의·폼 응답이 없어요. 만들기 → 라이브 페이지의 CTA 버튼에 폼을 연결하면, 시청자가 남긴 문의가 여기로 실시간으로 모여요.
+        아직 들어온 문의·폼 응답이 없어요. 만들기 → 시청 화면 → 라이브의 CTA 버튼에 폼을 연결하면, 시청자가 남긴 문의가 여기로 실시간으로 모여요.
       </p>
     );
   }
@@ -1038,7 +1038,7 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false, onEnabledChange }:
     <div className={fillHeight ? "flex h-full min-h-0 flex-col" : "space-y-4"}>
       {!fillHeight && (
         <p className="text-[11px] leading-relaxed text-muted-foreground">
-          시청자 채팅은 <b className="font-semibold text-foreground">만들기 → 라이브 페이지 → 참여 구성 → 채팅 탭 사용</b>을 켜야 시청 화면에 보여요. 여기선 운영자 발언과 메시지 삭제(모더레이션)를 할 수 있어요.
+          시청자 채팅은 <b className="font-semibold text-foreground">만들기 → 시청 화면 → 라이브 → 참여 구성에서 채팅</b>을 켜야 시청 화면에 보여요. 여기선 운영자 발언과 메시지 삭제(모더레이션)를 할 수 있어요.
         </p>
       )}
 
@@ -1130,7 +1130,7 @@ function ChatPanel({ webinarId, tick = 0, fillHeight = false, onEnabledChange }:
         {!loading && !settings.chatEnabled && (
           <p className="rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-2.5 py-2 text-[11px] leading-relaxed text-amber-600 dark:text-amber-400">
             시청자 채팅이 꺼져 있어요 — 지금 보낸 메시지는 시청자에게 보이지 않아요.
-            {fillHeight ? " 위쪽 켜기 스위치로 켤 수 있어요." : " 만들기 → 라이브 페이지 → 참여 구성 → 채팅 탭 사용을 켜야 보여요."}
+            {fillHeight ? " 위쪽 켜기 스위치로 켤 수 있어요." : " 만들기 → 시청 화면 → 라이브 → 참여 구성에서 채팅을 켜야 보여요."}
           </p>
         )}
         <div className="flex gap-2">
