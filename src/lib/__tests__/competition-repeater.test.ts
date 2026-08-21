@@ -58,6 +58,41 @@ describe("반복 항목 — 공개 폼 렌더", () => {
     expect(html).toContain('data-mc-rep-max="3"');
     expect(html).toContain("추가"); // 기본 언어(ko)의 "+ 추가" 버튼 문구
   });
+
+  /**
+   * 인원수 연동 — "리더 포함 n명" 텍스트 항목을 고르면 신청자가 직접 +/- 누르지 않아도
+   * 행 수가 자동으로 맞춰진다(embed/competition-entry.ts 가 실제 계산을 한다). 렌더 쪽이
+   * 할 일은 두 가지: 연동 키·제외 인원을 data 속성으로 내보내고, 어긋날 여지가 있는
+   * 수동 버튼을 숨기는 것.
+   */
+  const countField: CompetitionFormField = {
+    id: "f-count", key: "participants", label: "인원수", type: "text",
+    placeholder: "", required: true, enabled: true, options: [], system: false,
+  };
+
+  it("연동한 항목이 실제로 있으면 count 속성을 내보내고 수동 버튼을 숨긴다", () => {
+    const linked: CompetitionFormField = { ...repeaterField, countFieldKey: "participants", countOffset: 1 };
+    const config = normalizeCompetitionConfig(
+      { form: { fields: [countField, linked] } },
+      { includeDisabled: true },
+    );
+    const html = renderFormFieldsHtml(config);
+    expect(html).toContain('data-mc-rep-count-key="participants"');
+    expect(html).toContain('data-mc-rep-count-offset="1"');
+    expect(html).toContain('data-mc-rep-add-for="members" style="display:none"');
+    expect(html).toContain('data-mc-rep-remove aria-label="삭제" style="display:none"');
+  });
+
+  it("연동 대상 항목이 없거나 꺼져 있으면 수동 모드로 되돌아간다 — 안 그러면 행을 늘릴 방법이 없어진다", () => {
+    const dangling: CompetitionFormField = { ...repeaterField, countFieldKey: "does_not_exist", countOffset: 1 };
+    const config = normalizeCompetitionConfig(
+      { form: { fields: [dangling] } },
+      { includeDisabled: true },
+    );
+    const html = renderFormFieldsHtml(config);
+    expect(html).toContain('data-mc-rep-count-key=""');
+    expect(html).not.toContain("display:none");
+  });
 });
 
 describe("반복 항목 — 제출 검증(normalizeRepeaterSubmission)", () => {

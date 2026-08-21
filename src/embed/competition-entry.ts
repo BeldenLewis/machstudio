@@ -300,6 +300,8 @@ function bindRepeaterInputs(form: HTMLFormElement) {
     const min = Number(rowsHost.getAttribute("data-mc-rep-min") || 0);
     const max = Number(rowsHost.getAttribute("data-mc-rep-max") || 10);
     const label = rowsHost.getAttribute("data-mc-rep-label") ?? "";
+    const countKey = rowsHost.getAttribute("data-mc-rep-count-key") ?? "";
+    const countOffset = Number(rowsHost.getAttribute("data-mc-rep-count-offset") || 0);
     const addBtn = form.querySelector<HTMLButtonElement>(`[data-mc-rep-add-for="${CSS.escape(key)}"]`);
     // 행 template 은 renderFormFieldsHtml 이 rowsHost 바로 다음 형제로 굽는다 — 필드가
     // 여러 개일 때 form.querySelector 로 아무 template 이나 집으면 섞인다.
@@ -318,6 +320,42 @@ function bindRepeaterInputs(form: HTMLFormElement) {
       });
       if (addBtn) addBtn.disabled = rows.length >= max;
     };
+
+    /**
+     * 인원수 연동 — "리더 포함 n명" 같은 항목에 신청자가 적은 숫자에서 countOffset(보통
+     * 리더 1명)을 뺀 만큼만 행을 보여준다. renderFormFieldsHtml 이 이미 수동 +/- 버튼을
+     * 숨겨 뒀으니, 여기서도 그 버튼에 이벤트를 안 붙인다 — 두 경로가 동시에 행 수를
+     * 바꾸면 신청자가 적은 인원수와 실제 행 수가 어긋난다.
+     */
+    const countInput = countKey
+      ? form.querySelector<HTMLInputElement>(`[data-mc-key="${CSS.escape(countKey)}"]`)
+      : null;
+    if (countInput) {
+      const setRowCount = (target: number) => {
+        const clamped = Math.max(min, Math.min(max, target));
+        let rows = rowsHost.querySelectorAll("[data-mc-rep-row]").length;
+        if (!ownTemplate) return;
+        while (rows < clamped) {
+          rowsHost.appendChild(ownTemplate.content.cloneNode(true));
+          rows++;
+        }
+        while (rows > clamped) {
+          const all = rowsHost.querySelectorAll<HTMLElement>("[data-mc-rep-row]");
+          all[all.length - 1]?.remove();
+          rows--;
+        }
+        renumber();
+      };
+      const sync = () => {
+        const n = Number(countInput.value);
+        // 아직 안 적었거나 숫자가 아니면 최소 행 수로 되돌린다 — 0행으로 비우면 "몇 명분을
+        // 채워야 하는지" 단서가 사라진다.
+        setRowCount(Number.isFinite(n) && countInput.value.trim() !== "" ? n - countOffset : min);
+      };
+      countInput.addEventListener("input", sync);
+      sync();
+      return;
+    }
 
     rowsHost.addEventListener("click", (e) => {
       const btn = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-mc-rep-remove]");

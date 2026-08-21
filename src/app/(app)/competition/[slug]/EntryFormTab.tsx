@@ -3,13 +3,18 @@
 import { useMemo, useState } from "react";
 import { motion, Reorder } from "framer-motion";
 import {
-  AlignLeft, GripVertical, ImageIcon, ListChecks, ListPlus, Mail, Phone, Plus, SquareCheck, Trash2, Users, Video,
+  AlertTriangle, AlignLeft, GripVertical, ImageIcon, ListChecks, ListPlus, Mail, Phone, Plus, SquareCheck, Trash2, Users, Video,
 } from "lucide-react";
 import { toast } from "sonner";
 import { NOTICE_LANGUAGES } from "@/lib/notice/config";
 import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 import { Switch } from "@/components/ui/switch";
-import type { CompetitionFieldType, CompetitionFormField, CompetitionRepeaterSubField } from "@/lib/competition-config";
+import {
+  DEFAULT_REPEATER_SUB_FIELDS_BY_LANG,
+  type CompetitionFieldType,
+  type CompetitionFormField,
+  type CompetitionRepeaterSubField,
+} from "@/lib/competition-config";
 import { CompetitionLegalGenerator } from "./CompetitionLegalGenerator";
 import { ConsentBodyField, useWorkspaceLegalProfile } from "@/components/legal/legal-generator-shared";
 import { resolveOrgProfile } from "@/lib/legal-templates";
@@ -44,11 +49,19 @@ const TYPE_META: Record<CompetitionFieldType, { label: string; icon: typeof Alig
 const TYPE_ORDER: CompetitionFieldType[] = ["text", "email", "tel", "select", "multiple", "checkbox", "image", "youtube", "repeater"];
 const CHOICE_TYPES: CompetitionFieldType[] = ["select", "multiple"];
 
-/** 반복 그룹으로 막 바꿨을 때 아무 서브필드도 없으면 아무것도 못 받는 빈 항목이 된다. */
-const DEFAULT_REPEATER_SUB_FIELDS: CompetitionRepeaterSubField[] = [
-  { key: "name", label: "이름", type: "text", required: true },
-  { key: "email", label: "이메일", type: "email", required: true },
-];
+/**
+ * 한글이 섞여 있는가 — 영문(또는 다른 언어) 대회에 항목 이름을 "이름"·"이메일"처럼
+ * 한국어 기본값 그대로 남겨 둔 경우를 잡는다.
+ *
+ * **왜 필요한가.** 반복 항목의 서브필드 라벨은 항목 목록 안에 작게 접혀 있는 자리라
+ * (§공통 "얼마나 자주 쓰이고… 저빈도 긴 세부는 가까운 확장으로"의 반대 실패) 운영자가
+ * 최상단 항목 이름만 영어로 바꾸고 그 안쪽은 지나치기 쉽다 — 실제로 그렇게 나간 영문
+ * 대회 신청 폼 한가운데 "이름 *"·"이메일 *"이 그대로 뜬 적이 있다. 놓치기 쉬운 자리일수록
+ * 눈에 띄는 경고를 바로 옆에 둔다(§공통 "검증 피드백은 해당 필드 바로 아래 인라인으로").
+ */
+function hasHangul(s: string): boolean {
+  return /[가-힣ㄱ-ㆎ]/.test(s);
+}
 
 export default function EntryFormTab({ competition, patch, workspaceId }: Props) {
   const [form, setForm] = useState(competition.config.form);
@@ -66,6 +79,14 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
   const { profile: orgProfile } = useWorkspaceLegalProfile(workspaceId);
   const org = useMemo(() => resolveOrgProfile(orgProfile, legal.country), [orgProfile, legal.country]);
   const legalLocale = legal.country === "kr" ? "ko" : "en";
+
+  // 한글이 남은 항목 — 최상단 라벨이든, 반복 항목 안쪽 서브필드 라벨이든 하나라도 걸리면 잡는다.
+  const hangulIssueFields = useMemo(() => {
+    if (language === "ko") return [];
+    return form.fields.filter(
+      (f) => hasHangul(f.label) || (f.subFields ?? []).some((s) => hasHangul(s.label)),
+    );
+  }, [form.fields, language]);
 
   const update = (next: Partial<typeof form>) => setForm((prev) => ({ ...prev, ...next }));
   const updateField = (id: string, next: Partial<CompetitionFormField>) =>
@@ -153,6 +174,21 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
           <span className="text-[11px] text-muted-foreground">{form.fields.length}개</span>
         </div>
 
+        {/*
+          한글 남은 항목을 **목록 맨 위에서 한 번에** 알린다. 항목 하나하나 옆 배지만으로는
+          항목이 많을 때(반복 항목 서브필드까지 합치면 금방 10개가 넘는다) 스크롤해서 지나친
+          걸 끝내 못 볼 수 있다 — 여기서부터 보면 몇 개가 남았는지, 어떤 항목인지 스크롤 없이 안다.
+        */}
+        {hangulIssueFields.length > 0 && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-500/10 p-2.5 text-[11px] leading-relaxed text-amber-700">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              한글이 남은 항목이 {hangulIssueFields.length}개 있어요 — {hangulIssueFields.map((f) => f.label || f.key).join(", ")}.
+              신청자는 이 폼을 {NOTICE_LANGUAGES.find((l) => l.value === language)?.label ?? language}로 봐요.
+            </span>
+          </div>
+        )}
+
         <Reorder.Group axis="y" values={form.fields} onReorder={(fields) => update({ fields })} className="mt-4 space-y-2">
           {form.fields.map((field, index) => {
             const Icon = TYPE_META[field.type]?.icon ?? AlignLeft;
@@ -174,6 +210,14 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                     placeholder="항목 이름"
                     className={`${FIELD_CLS} h-8 w-40`}
                   />
+                  {language !== "ko" && hasHangul(field.label) && (
+                    <span
+                      className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-1 text-[11px] font-medium text-amber-600"
+                      title="신청자는 영문 등 다른 언어로 이 폼을 봐요 — 한글이 그대로 나가요"
+                    >
+                      <AlertTriangle className="h-3 w-3" /> 한글 남음
+                    </span>
+                  )}
                   <input
                     value={field.key}
                     onChange={(e) => updateField(field.id, { key: e.target.value })}
@@ -189,7 +233,7 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                       // 반복 그룹으로 막 바꿨는데 서브필드가 하나도 없으면 아무것도 못
                       // 받는 빈 항목이 된다 — 이름·이메일 기본값을 미리 채워 둔다.
                       const subFields = type === "repeater" && (field.subFields?.length ?? 0) === 0
-                        ? DEFAULT_REPEATER_SUB_FIELDS
+                        ? DEFAULT_REPEATER_SUB_FIELDS_BY_LANG[language]
                         : field.subFields;
                       updateField(field.id, { type, subFields, minItems: field.minItems ?? 1, maxItems: field.maxItems ?? 10 });
                     }}
@@ -283,13 +327,21 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                         updateField(field.id, { subFields });
                       };
                       return (
-                        <div key={i} className="flex items-center gap-1.5">
+                        <div key={i} className="flex flex-wrap items-center gap-1.5">
                           <input
                             value={sub.label}
                             onChange={(e) => updateSub({ label: e.target.value })}
                             placeholder="서브필드 이름 (예: 이름)"
                             className={`${FIELD_CLS} h-8 flex-1`}
                           />
+                          {language !== "ko" && hasHangul(sub.label) && (
+                            <span
+                              className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-1 text-[11px] font-medium text-amber-600"
+                              title="신청자는 영문 등 다른 언어로 이 폼을 봐요 — 한글이 그대로 나가요"
+                            >
+                              <AlertTriangle className="h-3 w-3" /> 한글 남음
+                            </span>
+                          )}
                           <input
                             value={sub.key}
                             onChange={(e) => updateSub({ key: e.target.value })}
@@ -343,6 +395,44 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                       />
                       <span>명</span>
                     </div>
+
+                    {/*
+                      인원수 항목과 연동 — "리더 포함 n명" 같은 텍스트 항목을 고르면, 신청자가
+                      거기 적은 숫자에서 제외 인원(리더 등)을 뺀 만큼 행이 자동으로 맞춰진다.
+                      고르지 않으면 지금처럼 "+ 추가" 버튼으로 직접 늘린다.
+                    */}
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                      <span>인원수 항목과 연동</span>
+                      <select
+                        value={field.countFieldKey ?? ""}
+                        onChange={(e) => updateField(field.id, { countFieldKey: e.target.value })}
+                        className={`${FIELD_CLS} h-8 w-44`}
+                      >
+                        <option value="">연동 안 함 (수동으로 추가)</option>
+                        {form.fields
+                          .filter((f) => f.type === "text" && f.id !== field.id)
+                          .map((f) => (
+                            <option key={f.id} value={f.key}>{f.label || f.key}</option>
+                          ))}
+                      </select>
+                      {field.countFieldKey && (
+                        <>
+                          <span>− 제외 인원</span>
+                          <input
+                            type="number" min={0} max={field.maxItems ?? 10}
+                            value={field.countOffset ?? 1}
+                            onChange={(e) => updateField(field.id, { countOffset: Math.max(0, Number(e.target.value) || 0) })}
+                            className={`${FIELD_CLS} h-8 w-16`}
+                          />
+                          <span>명 (리더처럼 다른 항목에서 이미 받은 인원)</span>
+                        </>
+                      )}
+                    </div>
+                    {field.countFieldKey && (
+                      <p className="text-[11px] text-muted-foreground">
+                        신청자가 위 항목에 인원수를 적으면 행이 자동으로 늘고 줄어요 — 추가/삭제 버튼은 숨겨져요.
+                      </p>
+                    )}
                   </div>
                 )}
               </Reorder.Item>

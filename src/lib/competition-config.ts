@@ -35,6 +35,15 @@ export interface CompetitionFormField extends Omit<WebinarRegistrationField, "ty
   minItems?: number;
   /** repeater 전용 — 최대 행 수. */
   maxItems?: number;
+  /**
+   * repeater 전용 — 행 수를 대신 정해 주는 다른 항목의 key(예: "인원수" 텍스트 항목).
+   * 비어 있으면 지금처럼 신청자가 "+ 추가" 버튼으로 직접 늘린다. 채워져 있으면 그 항목
+   * 값에서 countOffset 을 뺀 만큼 행이 자동으로 맞춰지고, 수동 추가/삭제 버튼은 숨긴다 —
+   * 두 숫자가 어긋난 채로 제출되는 것을 막는다(리더는 이미 이름·이메일 항목에서 받는다).
+   */
+  countFieldKey?: string;
+  /** repeater 전용 — countFieldKey 값에서 뺄 인원 수. 기본 1(리더 1명). */
+  countOffset?: number;
 }
 
 /** 공고 페이지 블록. 대회 소개·참가 자격·신청 절차·일정·FAQ 를 구조로 표현한다. */
@@ -184,13 +193,33 @@ function normalizeSubField(raw: unknown, index: number): CompetitionRepeaterSubF
   return { key, label: str(f.label) || key, type, required: bool(f.required, true) };
 }
 
-/** 새로 반복 타입으로 바꿨는데 서브필드가 하나도 없으면 아무것도 못 받는 빈 항목이 된다. */
-const DEFAULT_REPEATER_SUB_FIELDS: CompetitionRepeaterSubField[] = [
-  { key: "name", label: "이름", type: "text", required: true },
-  { key: "email", label: "이메일", type: "email", required: true },
-];
+/**
+ * 새로 반복 타입으로 바꿨는데 서브필드가 하나도 없으면 아무것도 못 받는 빈 항목이 된다 —
+ * 그래서 이름·이메일 기본값을 채운다. **언어별로 따로 둔다.** 예전엔 한국어 한 벌뿐이라
+ * 영문 대회(§language)에서 이 항목만 "이름"·"이메일"로 남았다 — 대회 전체가 영어인데
+ * 신청자 화면 한가운데 한글이 뜨는, 놓치기 쉬운 자리였다(운영자가 서브필드 라벨까지
+ * 손대야 한다는 걸 모르면 그대로 나간다).
+ */
+export const DEFAULT_REPEATER_SUB_FIELDS_BY_LANG: Record<NoticeLanguage, CompetitionRepeaterSubField[]> = {
+  ko: [
+    { key: "name", label: "이름", type: "text", required: true },
+    { key: "email", label: "이메일", type: "email", required: true },
+  ],
+  en: [
+    { key: "name", label: "Name", type: "text", required: true },
+    { key: "email", label: "Email", type: "email", required: true },
+  ],
+  fr: [
+    { key: "name", label: "Nom", type: "text", required: true },
+    { key: "email", label: "E-mail", type: "email", required: true },
+  ],
+  ja: [
+    { key: "name", label: "名前", type: "text", required: true },
+    { key: "email", label: "メール", type: "email", required: true },
+  ],
+};
 
-function normalizeField(raw: unknown, index: number): CompetitionFormField | null {
+function normalizeField(raw: unknown, index: number, language: NoticeLanguage): CompetitionFormField | null {
   if (!raw || typeof raw !== "object") return null;
   const f = raw as Record<string, unknown>;
   const key = str(f.key).trim();
@@ -214,9 +243,11 @@ function normalizeField(raw: unknown, index: number): CompetitionFormField | nul
     ...(typeof f.maxFiles === "number" && f.maxFiles >= 1 ? { maxFiles: Math.floor(f.maxFiles) } : {}),
     ...(type === "repeater"
       ? {
-          subFields: subFields.length > 0 ? subFields : DEFAULT_REPEATER_SUB_FIELDS,
+          subFields: subFields.length > 0 ? subFields : DEFAULT_REPEATER_SUB_FIELDS_BY_LANG[language],
           minItems: typeof f.minItems === "number" && f.minItems >= 0 ? Math.floor(f.minItems) : 1,
           maxItems: typeof f.maxItems === "number" && f.maxItems >= 1 ? Math.floor(f.maxItems) : 10,
+          countFieldKey: str(f.countFieldKey).trim(),
+          countOffset: typeof f.countOffset === "number" && f.countOffset >= 0 ? Math.floor(f.countOffset) : 1,
         }
       : {}),
   };
@@ -279,11 +310,13 @@ export function normalizeCompetitionConfig(
     ? noticeRaw.blocks.map(normalizeBlock).filter((b): b is CompetitionNoticeBlock => b !== null)
     : DEFAULT_NOTICE_BLOCKS;
 
-  const savedFields = Array.isArray(formRaw.fields)
-    ? formRaw.fields.map(normalizeField).filter((f): f is CompetitionFormField => f !== null)
-    : DEFAULT_COMPETITION_FIELDS;
-
+  // 신청 폼 언어별 기본값(반복 항목 서브필드 등)이 필요해서, 필드보다 먼저 정한다.
   const notice = normalizeNoticePageConfig(source, { keepEmptyRows: options.includeDisabled });
+  const language: NoticeLanguage = isNoticeLanguage(source.language) ? source.language : notice.language;
+
+  const savedFields = Array.isArray(formRaw.fields)
+    ? formRaw.fields.map((f, i) => normalizeField(f, i, language)).filter((f): f is CompetitionFormField => f !== null)
+    : DEFAULT_COMPETITION_FIELDS;
 
   const legalRaw = (source.legal && typeof source.legal === "object" ? source.legal : {}) as Record<string, unknown>;
   const thirdPartiesRaw = Array.isArray(legalRaw.thirdParties) ? legalRaw.thirdParties : [];
@@ -329,7 +362,7 @@ export function normalizeCompetitionConfig(
     // 공고 상세페이지는 자기 정규화 함수가 소유한다 — 여기서 다시 풀어 쓰면 두 벌이 된다.
     noticePage: notice,
     // 위로 올린 값. 예전에 공고에만 정해 둔 대회는 그 값을 그대로 이어받는다.
-    language: isNoticeLanguage(source.language) ? source.language : notice.language,
+    language,
     legal: {
       country: isLegalCountry(legalRaw.country) ? legalRaw.country : "us",
       eventName: str(legalRaw.eventName),

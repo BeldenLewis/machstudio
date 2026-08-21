@@ -121,8 +121,11 @@ export function buildCompetitionCss(theme: CompetitionTheme): string {
 .mc-tel-cc:focus { border-color: var(--mc-accent); }
 .mc-tel .mc-input { flex: 1 1 auto; min-width: 0; }
 .mc-hint { margin-top: 5px; font-size: 11.5px; opacity: .62; }
+/* gap 은 보험으로만 둔다 — 실제 간격은 margin-right 다. 임베드 호스트(아임웹 등) 페이지가
+   자기 전역 CSS 로 label 의 display 를 되돌리는 경우가 있는데, 그러면 flex gap 은 통째로
+   무효가 되지만 margin 은 display 와 무관하게 항상 적용된다(체크박스가 글자에 붙어 보이던 문제). */
 .mc-check { display:flex; align-items:flex-start; gap:8px; font-size:13px; line-height:1.5; margin-bottom:8px; cursor:pointer; }
-.mc-check input { margin-top: 2px; flex: none; }
+.mc-check input { margin-top: 2px; margin-right: 8px; flex: none; }
 .mc-consent-link { text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 /* 파일 선택 버튼 — 네이티브 input 은 시각적으로만 숨긴다(display:none 이면 탭 순서에서도
    빠져 키보드로 못 연다). 사전등록 폼의 .msf-chip 과 같은 숨김 기법. */
@@ -294,6 +297,15 @@ export function renderFormFieldsHtml(config: CompetitionConfig): string {
         const subFields = field.subFields ?? [];
         const min = field.minItems ?? 1;
         const max = field.maxItems ?? 10;
+        /**
+         * 인원수 연동 — countFieldKey 가 가리키는 항목이 실제로 있고 켜져 있을 때만 잠근다.
+         * 지워졌거나 꺼진 항목을 계속 가리키면 수동 버튼만 숨은 채 행을 늘릴 방법이 없어진다
+         * (§공통 "이 원칙에서 벗어나는 선택엔 이유를 남긴다" — 여기선 반대로 방어 코드의 이유).
+         */
+        const countLinked = !!field.countFieldKey
+          && config.form.fields.some((f) => f.key === field.countFieldKey && f.type === "text" && f.enabled);
+        const countKey = countLinked ? field.countFieldKey! : "";
+        const countOffset = field.countOffset ?? 1;
         const rowFieldsHtml = subFields
           .map((sf) => {
             const req = sf.required ? '<span class="mc-req">*</span>' : "";
@@ -304,17 +316,23 @@ export function renderFormFieldsHtml(config: CompetitionConfig): string {
         // 초기 화면에도 최소 행 수만큼 미리 그린다 — 빈 화면에서 "+ 추가"를 누르는 것보다
         // 몇 명분을 채워야 하는지 바로 보이는 편이 낫다(최소 0이어도 1행은 보여준다).
         const initialCount = Math.max(min, 1);
+        // 인원수에 연동되면 행 수는 스크립트가 정한다 — 수동 삭제 버튼을 남겨 두면 신청자가
+        // 지운 행 수와 "인원수" 항목의 숫자가 어긋난 채로 제출될 수 있다.
+        const removeBtnHtml = countLinked
+          ? `<button type="button" class="mc-rep-remove" data-mc-rep-remove aria-label="${escapeHtml(t.removeRow)}" style="display:none">&times;</button>`
+          : `<button type="button" class="mc-rep-remove" data-mc-rep-remove aria-label="${escapeHtml(t.removeRow)}">&times;</button>`;
         const rowHtml = `<div class="mc-rep-row" data-mc-rep-row>
             <div class="mc-rep-row-head"><span class="mc-rep-row-title" data-mc-rep-title></span>
-              <button type="button" class="mc-rep-remove" data-mc-rep-remove aria-label="${escapeHtml(t.removeRow)}">&times;</button></div>
+              ${removeBtnHtml}</div>
             ${rowFieldsHtml}
           </div>`;
         const rows = Array.from({ length: initialCount }, () => rowHtml).join("");
         return `<div class="mc-field">${label}
           <div class="mc-rep-rows" data-mc-rep-rows data-mc-key="${escapeHtml(field.key)}"
-            data-mc-rep-min="${min}" data-mc-rep-max="${max}" data-mc-rep-label="${escapeHtml(field.label)}">${rows}</div>
+            data-mc-rep-min="${min}" data-mc-rep-max="${max}" data-mc-rep-label="${escapeHtml(field.label)}"
+            data-mc-rep-count-key="${escapeHtml(countKey)}" data-mc-rep-count-offset="${countOffset}">${rows}</div>
           <template data-mc-rep-template>${rowHtml}</template>
-          <button type="button" class="mc-rep-add" data-mc-rep-add data-mc-rep-add-for="${escapeHtml(field.key)}">+ ${escapeHtml(t.addRow)}</button>
+          <button type="button" class="mc-rep-add" data-mc-rep-add data-mc-rep-add-for="${escapeHtml(field.key)}"${countLinked ? ' style="display:none"' : ""}>+ ${escapeHtml(t.addRow)}</button>
         </div>`;
       }
       if (field.type === "youtube") {
