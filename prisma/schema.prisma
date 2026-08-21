@@ -264,6 +264,10 @@ model CollectSource {
   allowedOrigins   String[]  @default([])
   formPagePatterns String[]  @default([])
   dedupKeyFields   String[]  @default([])
+  /// 연동형(capture)이 필드 하나를 감지할 때 묶음으로 보는 CSS 선택자. 기본값은 아임웹 폼
+  /// 빌더가 항상 넣는 ".form-group" — 그 밖의 사이트(직접 만든 신청서 등)는 이 값을
+  /// 그 사이트에 맞는 선택자(예: 표 형태면 "table tr")로 바꿔야 필드가 잡힌다.
+  fieldGroupSelector String  @default(".form-group")
   /// 수집 방식 — "capture"(외부 폼에 스크립트를 붙여 가로챔, 기존) | "builder"(여기서 폼을 만들어 렌더).
   /// formConfig 가 비었는지로 유추하지 않는다 — 빌더형인데 아직 문항을 안 채운 상태와 구분이 안 된다.
   /// 기본값이 capture 라 기존 소스는 전부 그대로 동작한다(백필 불필요).

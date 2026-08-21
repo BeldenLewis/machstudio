@@ -76,6 +76,7 @@ interface CollectSource {
   allowedOrigins: string[];
   formPagePatterns: string[];
   dedupKeyFields: string[];
+  fieldGroupSelector: string;
   fieldMappings: FieldMapping[];
   discoveredFields: DiscoveredField[] | null;
   _count: { records: number };
@@ -218,6 +219,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   const [isSavingFields, setIsSavingFields] = useState(false);
   const [successTrigger, setSuccessTrigger] = useState("");
   const [redirectUrl, setRedirectUrl] = useState("");
+  const [fieldGroupSelector, setFieldGroupSelector] = useState(".form-group");
 
   const [script, setScript] = useState<string | null>(null);
   const [utmScript, setUtmScript] = useState<string | null>(null);
@@ -237,6 +239,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       setFields(data.source.fieldMappings ?? []);
       setSuccessTrigger(data.source.successTrigger);
       setRedirectUrl(data.source.redirectUrl ?? "");
+      setFieldGroupSelector(data.source.fieldGroupSelector || ".form-group");
       setSettingsWebhookUrl(data.source.webhookUrl ?? "");
       setSettingsNotifyOnSubmit(!!data.source.notifyOnSubmit);
       setSettingsAllowedOrigins((data.source.allowedOrigins ?? []).join("\n"));
@@ -680,11 +683,11 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
     const res = await fetch(`/api/collect-sources/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ successTrigger, redirectUrl: redirectUrl || null }),
+      body: JSON.stringify({ successTrigger, redirectUrl: redirectUrl || null, fieldGroupSelector: fieldGroupSelector.trim() || ".form-group" }),
     });
     if (!res.ok) { toast.error("저장 실패"); return; }
     toast.success("설정이 저장됐어요");
-    setSource((s) => s ? { ...s, successTrigger, redirectUrl: redirectUrl || null } : s);
+    setSource((s) => s ? { ...s, successTrigger, redirectUrl: redirectUrl || null, fieldGroupSelector: fieldGroupSelector.trim() || ".form-group" } : s);
   };
 
   const addFormPagePattern = () => {
@@ -788,13 +791,15 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
     setTab("fields");
   };
 
-  // 콘솔 스니퍼 JSON 붙여넣기로 필드 적용
+  // 콘솔 스니퍼 JSON 붙여넣기로 필드 적용 — { selector, fields } 새 형식과, 옛 스니퍼가
+  // 찍던 배열 하나짜리 형식을 둘 다 받는다(캐시된 옛 스니퍼로 붙여넣는 사람이 있을 수 있다).
   const applyPastedJson = () => {
     setPasteError("");
     try {
       const parsed = JSON.parse(pasteJson);
-      if (!Array.isArray(parsed)) throw new Error("배열 형식이 아니에요");
-      const applied: FieldMapping[] = parsed.map((f: { index?: number; key?: string; label?: string; type?: string }, i: number) => ({
+      const list: unknown = Array.isArray(parsed) ? parsed : parsed?.fields;
+      if (!Array.isArray(list)) throw new Error("형식이 올바르지 않아요");
+      const applied: FieldMapping[] = list.map((f: { index?: number; key?: string; label?: string; type?: string }, i: number) => ({
         id: `pasted-${i}`,
         index: typeof f.index === "number" ? f.index : i,
         key: f.key || toKey(f.label ?? "", i),
@@ -804,6 +809,10 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
         sortOrder: i,
       }));
       setFields(applied);
+      // 새 형식이면 감지에 실제로 쓰인 선택자도 같이 받아 온다 — 운영자가 CSS를 몰라도 된다.
+      if (!Array.isArray(parsed) && typeof parsed?.selector === "string" && parsed.selector) {
+        setFieldGroupSelector(parsed.selector);
+      }
       setPasteJson("");
       toast.success(`${applied.length}개 필드가 적용됐어요. 저장 버튼을 눌러 확정하세요`);
       setTab("fields");
@@ -833,11 +842,29 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
     setFields((f) => f.map((fld, i) => i === idx ? { ...fld, ...patch } : fld));
   };
 
-  // 콘솔 스니퍼 스크립트
+  /**
+   * 콘솔 스니퍼 — 아임웹(.form-group)뿐 아니라 표 형태(tr) · 정의 목록(dl) 신청서도
+   * 시도해 본다. 필드가 제일 많이 잡히는 방식을 골라 그 선택자를 결과에 같이 담아서,
+   * "감지 안 됨" 자리에서 운영자가 CSS 를 몰라도 붙여넣기만 하면 되게 한다.
+   */
   const snifferScript = `(function() {
-  var groups = document.querySelectorAll(".form-group");
-  var fields = Array.from(groups).map(function(g, i) {
-    var label = g.querySelector("label");
+  function tryPattern(sel, labelSel) {
+    var groups = Array.prototype.filter.call(document.querySelectorAll(sel), function(g) {
+      return g.querySelector("input, select, textarea");
+    });
+    return { sel: sel, labelSel: labelSel, groups: groups };
+  }
+  var candidates = [
+    tryPattern(".form-group", "label"),
+    tryPattern("table tr", "th, label"),
+    tryPattern("dl > div", "dt, label"),
+  ];
+  var best = candidates[0];
+  for (var i = 1; i < candidates.length; i++) {
+    if (candidates[i].groups.length > best.groups.length) best = candidates[i];
+  }
+  var fields = best.groups.map(function(g, i) {
+    var label = g.querySelector(best.labelSel);
     var input = g.querySelector("input, select, textarea");
     var labelText = (label ? label.textContent.trim() : "") ||
       (input ? (input.placeholder || input.getAttribute("name") || "") : "");
@@ -845,12 +872,15 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
     if (input) {
       if (input.tagName === "SELECT") type = "select";
       else if (input.type === "checkbox") type = "checkbox";
+      else if (input.type === "radio") type = "radio";
     }
     return { index: i, key: "field_" + i, label: labelText, type: type };
   });
-  try { copy(JSON.stringify(fields, null, 2)); } catch(e) {}
-  console.log(JSON.stringify(fields, null, 2));
-  return fields;
+  var result = { selector: best.sel, fields: fields };
+  try { copy(JSON.stringify(result, null, 2)); } catch(e) {}
+  console.log("감지 방식: " + best.sel + " (" + fields.length + "개 필드) — 0개면 이 사이트는 자동 감지가 안 돼요, 직접 선택자를 입력해주세요.");
+  console.log(JSON.stringify(result, null, 2));
+  return result;
 })();`;
 
   if (isLoading) {
@@ -1414,7 +1444,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <h3 className="text-sm font-medium">필드 매핑</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">인덱스는 아임웹 form-group 순서(0부터)예요</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">인덱스는 아래 "필드 묶음 선택자"로 찾은 순서(0부터)예요</p>
                   </div>
                 </div>
 
@@ -1689,9 +1719,9 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                   <span className="text-sm font-medium">필드 자동 감지 (설치 전 사용)</span>
                 </div>
                 <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside mb-3">
-                  <li>아임웹 등록 폼 페이지를 열고 브라우저 콘솔(F12)을 엽니다</li>
+                  <li>등록 폼 페이지를 열고 브라우저 콘솔(F12)을 엽니다 — 아임웹이 아닌, 직접 만든 신청서도 됩니다</li>
                   <li>아래 스크립트를 복사해서 콘솔에 붙여넣고 Enter</li>
-                  <li>출력된 JSON을 아래에 붙여넣기 → 필드 자동 입력</li>
+                  <li>출력된 JSON을 아래에 붙여넣기 → 필드와 감지 방식이 자동 입력</li>
                 </ol>
                 <div className="relative mb-3">
                   <div className="absolute top-2 right-2">
@@ -1720,6 +1750,29 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition-colors disabled:opacity-40"
                   >
                     <Check className="w-3.5 h-3.5" />필드 적용
+                  </button>
+                </div>
+
+                {/* 감지 선택자 — 스니퍼가 자동으로 채워 주지만, 0개가 나온 사이트는 직접 확인해서 넣는다. */}
+                <div className="mt-4 pt-4 border-t border-border space-y-1.5">
+                  <span className="text-xs font-medium">필드 묶음 선택자</span>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    실제로 폼에 설치되는 스크립트가 필드 하나를 찾을 때 쓰는 CSS 선택자예요. 위 스니퍼가 감지에
+                    성공하면 자동으로 채워져요. 0개가 나왔다면 신청서 필드 하나를 우클릭 → 검사로 감싸는 태그를
+                    확인해서 직접 입력하세요(예: 표 형태면 <code className="font-mono">table tr</code>).
+                  </p>
+                  <input
+                    type="text"
+                    value={fieldGroupSelector}
+                    onChange={(e) => setFieldGroupSelector(e.target.value)}
+                    placeholder=".form-group"
+                    className="w-full px-3 py-2 rounded-xl border border-border bg-background text-xs font-mono focus:outline-none focus:border-violet-400"
+                  />
+                  <button
+                    onClick={() => void handleSaveSettings()}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-500 text-white text-xs font-medium hover:bg-violet-600 transition-colors"
+                  >
+                    <Check className="w-3.5 h-3.5" />선택자 저장
                   </button>
                 </div>
               </div>

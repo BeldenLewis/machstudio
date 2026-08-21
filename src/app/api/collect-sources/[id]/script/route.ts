@@ -29,6 +29,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       successTrigger: source.successTrigger,
       redirectUrl: source.redirectUrl,
       formPagePatterns: source.formPagePatterns,
+      fieldGroupSelector: source.fieldGroupSelector,
     },
     fieldMappings: source.fieldMappings.map((f) => ({
       index: f.index,

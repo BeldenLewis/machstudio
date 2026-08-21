@@ -23,6 +23,12 @@ export type CollectScriptSource = {
   // 폼 감지가 활성화되는 페이지 경로 패턴 (glob, `*`는 어떤 문자열에도 매칭).
   // 빈 배열이면 모든 페이지에서 활성화 (기존 동작 유지).
   formPagePatterns?: string[];
+  /**
+   * 필드 하나를 묶어서 보는 CSS 선택자. 기본 ".form-group" 은 아임웹 폼 빌더 전용 관례라
+   * 직접 만든 신청서(표 형태 등)에는 안 먹는다 — 그런 사이트는 운영자가 "필드 자동 감지"
+   * 스니퍼로 찾은 선택자를 여기 넣는다(collect-sources/[id]/page.tsx).
+   */
+  fieldGroupSelector?: string;
 };
 
 export type BuildCollectScriptsInput = {
@@ -93,6 +99,9 @@ ${utmCore}
   var REDIRECT_URL = ${JSON.stringify(redirectUrl)};
   // 폼 감지가 활성화될 페이지 경로 패턴 (glob). 빈 배열 = 모든 페이지.
   var FORM_PAGE_PATTERNS = ${JSON.stringify(source.formPagePatterns ?? [])};
+  // 필드 하나를 묶어서 보는 선택자 — 기본은 아임웹 관례(.form-group), 그 외 사이트는
+  // 운영자가 "필드 자동 감지" 스니퍼로 찾은 값으로 바꿔 둔다.
+  var GROUP_SELECTOR = ${JSON.stringify(source.fieldGroupSelector || ".form-group")};
 
   var FIELD_MAP = [
 ${fieldMap}
@@ -143,9 +152,10 @@ ${utmCore}
   }
 
   function getFieldMeta() {
-    var groups = document.querySelectorAll(".form-group");
+    var groups = document.querySelectorAll(GROUP_SELECTOR);
     return Array.from(groups).map(function(group, i) {
-      var labelEl = group.querySelector("label");
+      // th — 표 형태 신청서(<tr><th>라벨</th><td><input></td></tr>)는 label 태그가 없다.
+      var labelEl = group.querySelector("label, th");
       var input = group.querySelector("input, select, textarea");
       var labelText = (labelEl ? labelEl.textContent.trim() : "") ||
         (input ? (input.placeholder || input.getAttribute("name") || "") : "");
@@ -160,7 +170,7 @@ ${utmCore}
   }
 
   function collectData() {
-    var groups = document.querySelectorAll(".form-group");
+    var groups = document.querySelectorAll(GROUP_SELECTOR);
     var data = {};
     FIELD_MAP.forEach(function(field) {
       var group = groups[field.index];
