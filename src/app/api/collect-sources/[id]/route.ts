@@ -85,8 +85,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const body = await request.json();
   const {
     name, description, siteUrl, successTrigger, redirectUrl, isActive,
-    webhookUrl, notifyOnSubmit, allowedOrigins, formPagePatterns, dedupKeyFields,
+    webhookUrl, notifyOnSubmit, allowedOrigins, formPagePatterns, dedupKeyFields, fieldGroupSelector,
   } = body;
+
+  // 필드 감지 선택자 — 비거나 형식이 아니면 기본값(아임웹 관례)으로 되돌린다. 조용히 빈 채로
+  // 저장하면 연동형 스크립트가 아무 필드도 못 찾는 채로 조용히 배포된다.
+  const normalizedFieldGroupSelector: string | undefined =
+    fieldGroupSelector !== undefined
+      ? (typeof fieldGroupSelector === "string" && fieldGroupSelector.trim() ? fieldGroupSelector.trim().slice(0, 200) : ".form-group")
+      : undefined;
 
   let normalizedAllowed: string[] | undefined;
   if (Array.isArray(allowedOrigins)) {
@@ -174,6 +181,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(normalizedAllowed !== undefined && { allowedOrigins: normalizedAllowed }),
       ...(normalizedFormPagePatterns !== undefined && { formPagePatterns: normalizedFormPagePatterns }),
       ...(normalizedDedupKeyFields !== undefined && { dedupKeyFields: normalizedDedupKeyFields }),
+      ...(normalizedFieldGroupSelector !== undefined && { fieldGroupSelector: normalizedFieldGroupSelector }),
       /**
        * 폼 정의는 **정규화해서 저장한다.**
        *
