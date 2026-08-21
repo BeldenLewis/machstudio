@@ -61,7 +61,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       data.activeWebinarId = null;
     } else if (typeof body.activeWebinarId === "string") {
       const webinar = await prisma.webinar.findFirst({
-        where: { id: body.activeWebinarId, workspaceId: site.workspaceId },
+        where: { id: body.activeWebinarId, workspaceId: site.workspaceId, projectId: site.projectId },
         select: { id: true },
       });
       if (!webinar) return NextResponse.json({ error: "노출할 웨비나를 찾을 수 없어요" }, { status: 400 });

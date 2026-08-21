@@ -147,8 +147,9 @@ function buildLandingEmbedSnippet(origin: string, slug: string, name: string, bg
 <script async src="${origin}/w/l/${slug}"></script>`;
 }
 
-export default function DeployTab({ webinarId, slug, webinarName, components, onSilentUpdate }: {
+export default function DeployTab({ webinarId, projectId, slug, webinarName, components, onSilentUpdate }: {
   webinarId: string;
+  projectId: string;
   slug: string;
   webinarName: string;
   components: Record<string, unknown> | null;
@@ -196,7 +197,7 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
     if (res.ok) onSilentUpdate();
     return res.ok;
   });
-  const { workspace, currentProject } = useWorkspace();
+  const { workspace } = useWorkspace();
   const [sites, setSites] = useState<EmbedSite[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -237,10 +238,10 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
   }, [webinarId]);
 
   const fetchSites = useCallback(async () => {
-    if (!workspace || !currentProject) return;
+    if (!workspace || !projectId) return;
     if (!hasLoadedRef.current) setIsLoading(true);
     try {
-      const res = await fetch(`/api/webinar-embed-sites?workspaceId=${workspace.id}&projectId=${currentProject.id}`);
+      const res = await fetch(`/api/webinar-embed-sites?workspaceId=${workspace.id}&projectId=${projectId}`);
       const data = await res.json().catch(() => null);
       if (res.ok && data?.sites) {
         setSites(data.sites);
@@ -249,7 +250,7 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
     } finally {
       setIsLoading(false);
     }
-  }, [workspace, currentProject]);
+  }, [workspace, projectId]);
 
   useEffect(() => { void fetchSites(); }, [fetchSites]);
 
@@ -263,7 +264,7 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
   }, [fetchSites]);
 
   const createSite = async () => {
-    if (!workspace || !currentProject || !newName.trim() || creating) return;
+    if (!workspace || !projectId || !newName.trim() || creating) return;
     setCreating(true);
     try {
       const res = await fetch("/api/webinar-embed-sites", {
@@ -271,7 +272,7 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workspaceId: workspace.id,
-          projectId: currentProject.id,
+          projectId,
           name: newName.trim(),
           siteUrl: newSiteUrl.trim(),
           activeWebinarId: webinarId,

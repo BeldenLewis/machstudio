@@ -496,6 +496,7 @@ function WebinarDetail({ id }: { id: string }) {
             )}
             {activeTab === "deploy" && <DeployTab
                 webinarId={id}
+                projectId={webinar.project?.id ?? ""}
                 slug={webinar.slug}
                 webinarName={webinar.name}
                 components={webinar.components ?? null}
