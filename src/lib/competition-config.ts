@@ -103,6 +103,21 @@ export interface CompetitionConfig {
     dataRetentionNote: string;
     effectiveDate: string;
   };
+  /**
+   * 투표 화면 상단 소개 문구. 참가작 카드보다 먼저 보이는, 대회 전체가 공유하는 한 블록이다
+   * (라운드마다 다시 쓰지 않는다 — 예선·본선 화면 둘 다 여기 값을 그대로 쓴다). 레퍼런스
+   * 사이트(fr.france.k-expo.org/vote)에 있던 행사 소개·설명 자리를 하드코딩이 아니라
+   * 운영자가 채우는 구조로 들인다.
+   */
+  voteIntro: {
+    enabled: boolean;
+    title: string;
+    body: string;
+    /** 빈 문자열이면 테마 기본 글자색을 그대로 쓴다. */
+    textColor: string;
+    titleFontSize: number;
+    bodyFontSize: number;
+  };
 }
 
 export const COMPETITION_MEDIA = {
@@ -138,6 +153,11 @@ function bool(value: unknown, fallback = false): boolean {
 }
 function strArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+/** 운영자가 입력한 글자 크기(px). 범위를 벗어나면 레이아웃이 깨지므로 저장 시점에 가둔다. */
+function clampFontSize(value: unknown, fallback: number, min: number, max: number): number {
+  const n = typeof value === "number" ? value : fallback;
+  return Math.min(max, Math.max(min, Math.round(n)));
 }
 
 function normalizeField(raw: unknown, index: number): CompetitionFormField | null {
@@ -227,6 +247,7 @@ export function normalizeCompetitionConfig(
 
   const legalRaw = (source.legal && typeof source.legal === "object" ? source.legal : {}) as Record<string, unknown>;
   const thirdPartiesRaw = Array.isArray(legalRaw.thirdParties) ? legalRaw.thirdParties : [];
+  const voteIntroRaw = (source.voteIntro && typeof source.voteIntro === "object" ? source.voteIntro : {}) as Record<string, unknown>;
 
   return {
     notice: {
@@ -280,6 +301,14 @@ export function normalizeCompetitionConfig(
         .filter((t) => t.name !== ""),
       dataRetentionNote: str(legalRaw.dataRetentionNote),
       effectiveDate: str(legalRaw.effectiveDate),
+    },
+    voteIntro: {
+      enabled: bool(voteIntroRaw.enabled),
+      title: str(voteIntroRaw.title),
+      body: str(voteIntroRaw.body),
+      textColor: /^#[0-9a-fA-F]{6}$/.test(str(voteIntroRaw.textColor)) ? str(voteIntroRaw.textColor) : "",
+      titleFontSize: clampFontSize(voteIntroRaw.titleFontSize, 22, 14, 48),
+      bodyFontSize: clampFontSize(voteIntroRaw.bodyFontSize, 15, 11, 28),
     },
   };
 }
