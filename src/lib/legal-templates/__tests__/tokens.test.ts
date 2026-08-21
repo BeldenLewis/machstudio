@@ -8,9 +8,16 @@ import { emptyOrgProfile } from "@/lib/legal-templates/types";
  */
 describe("resolveOrgTokens", () => {
   it("채워진 조직 정보로 토큰을 치환한다", () => {
-    const org = { legalName: "Exporum Inc.", address: "123 Main St, LA", privacyContactEmail: "privacy@exporum.com" };
+    const org = { ...emptyOrgProfile(), legalName: "Exporum Inc.", address: "123 Main St, LA", privacyContactEmail: "privacy@exporum.com" };
     const text = `${ORG_TOKEN.name}, ${ORG_TOKEN.address} / ${ORG_TOKEN.email}`;
     expect(resolveOrgTokens(text, org, "en")).toBe("Exporum Inc., 123 Main St, LA / privacy@exporum.com");
+  });
+
+  it("서버 소재지가 비어 있으면 자리표시자, 채워지면 그대로 치환된다", () => {
+    expect(resolveOrgTokens(ORG_TOKEN.hostingRegion, emptyOrgProfile(), "en")).toBe("[server hosting region — set in Workspace Settings]");
+    expect(resolveOrgTokens(ORG_TOKEN.hostingRegion, emptyOrgProfile(), "ko")).toBe("[서버 소재지 미입력 — 워크스페이스 설정에서 입력]");
+    const org = { ...emptyOrgProfile(), hostingRegion: "대한민국" };
+    expect(resolveOrgTokens(ORG_TOKEN.hostingRegion, org, "ko")).toBe("대한민국");
   });
 
   it("비어 있으면 조용히 지우지 않고 언어별 자리표시자를 남긴다", () => {

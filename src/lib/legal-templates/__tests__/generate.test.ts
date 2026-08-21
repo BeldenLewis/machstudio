@@ -11,7 +11,7 @@ function baseInput(overrides: Partial<GenerateInput> = {}): GenerateInput {
   return {
     country: "us",
     purpose: "pre-registration",
-    org: { legalName: "Exporum Inc.", address: "123 Main St, Los Angeles, CA", privacyContactEmail: "privacy@exporum.com" },
+    org: { ...emptyOrgProfile(), legalName: "Exporum Inc.", address: "123 Main St, Los Angeles, CA", privacyContactEmail: "privacy@exporum.com" },
     event: {
       ...emptyEventLegalBlanks(),
       eventName: "Korea Expo LA",
@@ -133,6 +133,15 @@ describe("generateConsentDocuments — 국가 × 목적 전수", () => {
     expect(result.privacy.body).not.toContain("Exporum Inc.");
     expect(result.privacy.body).not.toContain("123 Main St");
   });
+
+  it.each(COUNTRIES)(
+    "%s — 국외이전 고지는 서버 소재지 토큰을 쓴다, 운영자가 직접 손봐야 하는 운영 메모를 남기지 않는다",
+    (country) => {
+      const result = generateConsentDocuments(baseInput({ country }));
+      expect(result.privacy.body).toContain(ORG_TOKEN.hostingRegion);
+      expect(result.privacy.body).not.toMatch(/Operations note|운영 참고/);
+    },
+  );
 
   it("행사별 문의처 override 는 토큰이 아니라 그 행사에 한정된 리터럴로 남는다", () => {
     const result = generateConsentDocuments(
