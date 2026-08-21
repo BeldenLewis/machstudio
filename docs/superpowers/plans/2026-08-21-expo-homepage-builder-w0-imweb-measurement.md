@@ -2,26 +2,27 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (- [ ]) syntax for tracking.
 
-**Goal:** Measure the real Imweb editor and private published page without production feature code, then lock the W1 width, editor-preview, script, Shadow DOM, and rollout gates with reproducible evidence.
+**Goal:** Measure the real Imweb editor and authenticated admin preview without production feature code or publication, then lock the W1 width, editor-preview, script, Shadow DOM, and rollout gates with reproducible evidence.
 
-**Architecture:** W0 is an independent subproject because its observations determine later implementation details. A disposable probe uses three layout-marker code widgets plus one controller widget on a duplicated, private, menu-unlinked Imweb page; it performs pinned CDN GETs and a DB-free Mach OPTIONS request, records sanitized JSON and cropped screenshots, then is removed. W1 data, runtime, and admin plans are written only after this measurement contract is committed.
+**Architecture:** W0 is an independent subproject because its observations determine later implementation details. A disposable probe uses three layout-marker code widgets plus one controller widget on the user's designated, menu-hidden Imweb working page; it performs pinned CDN GETs and a DB-free Mach OPTIONS request in the editor and authenticated admin preview, records sanitized JSON and cropped screenshots, then is removed without publication. W1 implementation planning may start after the preview contract is committed, while public launch remains blocked on a later user-approved release verification.
 
 **Tech Stack:** Imweb code widgets, classic JavaScript, open Shadow DOM, CSSOM, FontFace capability detection, Chrome with the user's existing authenticated session, Markdown/JSON evidence, Git
 
 ## Global Constraints
 
 - This is a generic homepage-builder measurement. Do not use LA, an event deadline, or event-specific sample data.
-- Use only the user's existing authenticated browser session and a duplicated/private Imweb test page that is not linked from an operating menu.
+- Use only the user's existing authenticated browser session and the user-designated Imweb working page that is hidden from the operating menu.
+- The user explicitly prohibited publication on 2026-08-21. Never click Publish, change page access permissions, or expose the page to visitors during W0.
 - Do not touch an operating page, global header code, site theme, domain settings, production menu, form, registration source, webinar, or competition.
 - W0 starts no local dev server and performs no build, Prisma command, database query, database write, storage write, analytics call, beacon, form submission, cookie write, or business API request.
 - Do not add a production probe endpoint. The probe may issue GET only to pinned jsDelivr assets and OPTIONS only to https://machstudio.vercel.app/f/__mach_expo_w0__.
 - The Mach OPTIONS request is DB-free by repository contract: src/app/f/[id]/route.ts delegates OPTIONS directly to loaderOptions, and loaderOptions returns 204 before serveFormRuntime.
 - Do not use /f/{id}, /w/{id}, /w/l/{slug}, /s/{id}, or another product loader as a probe; their GET paths touch product state or data.
 - Never commit an Imweb admin URL, preview token, cookie, account name, HAR, full-window screenshot, or page content outside the probe crop.
-- The test page stays private and menu-unlinked. Remove the probe widgets after evidence capture, but do not delete the test page automatically.
-- Published-mode external classic-script failure, missing required Shadow/FontFace APIs, CSP exclusion of the canonical Mach origin, or inability to prove cleanup blocks W1.
+- The working page stays unpublished and menu-hidden. Remove the probe widgets after evidence capture, but do not delete or rename the page.
+- Admin-preview external classic-script failure, missing required Shadow/FontFace APIs, CSP exclusion of the canonical Mach origin, or inability to prove cleanup blocks W1 implementation planning.
 - Editor-mode script failure alone does not block W1; it selects the explicit editor-placeholder contract.
-- W1 may expose kv.full only when both published desktop and mobile meet the exact geometry threshold in Task 1.
+- W1 may implement kv.full only when both admin-preview desktop and mobile meet the exact geometry threshold in Task 1. Public release of kv.full still requires the later release verification.
 
 ---
 
@@ -30,18 +31,18 @@
 - Create: docs/superpowers/research/2026-08-21-imweb-w0/README.md — sanitized safety record, result matrix, verdict, and cleanup proof.
 - Create: docs/superpowers/research/2026-08-21-imweb-w0/editor-desktop.json — exact 1440×1000 editor export.
 - Create: docs/superpowers/research/2026-08-21-imweb-w0/editor-mobile.json — exact 390×844 editor export.
-- Create: docs/superpowers/research/2026-08-21-imweb-w0/published-desktop.json — exact 1440×1000 private-published export.
-- Create: docs/superpowers/research/2026-08-21-imweb-w0/published-mobile.json — exact 390×844 private-published export.
+- Create: docs/superpowers/research/2026-08-21-imweb-w0/preview-desktop.json — exact 1440×1000 authenticated admin-preview export.
+- Create: docs/superpowers/research/2026-08-21-imweb-w0/preview-mobile.json — exact 390×844 authenticated admin-preview export.
 - Create: docs/superpowers/research/2026-08-21-imweb-w0/editor-desktop.png — probe-only crop.
 - Create: docs/superpowers/research/2026-08-21-imweb-w0/editor-mobile.png — probe-only crop.
-- Create: docs/superpowers/research/2026-08-21-imweb-w0/published-desktop.png — probe-only crop.
-- Create: docs/superpowers/research/2026-08-21-imweb-w0/published-mobile.png — probe-only crop.
+- Create: docs/superpowers/research/2026-08-21-imweb-w0/preview-desktop.png — probe-only crop.
+- Create: docs/superpowers/research/2026-08-21-imweb-w0/preview-mobile.png — probe-only crop.
 - Modify: docs/superpowers/specs/2026-08-21-expo-homepage-builder-design.md — replace W0-dependent choices with measured decisions.
 - Do not modify: src/**, prisma/**, public/**, scripts/**, package.json, package-lock.json, or environment files.
 
 ## Measurement Record Contract
 
-Every JSON file uses this stable union. It intentionally omits location.href and all account/site identifiers. The no-execution branch is required when the editor or published page preserves HTML but does not run the controller; never invent a successful export.
+Every JSON file uses this stable union. It intentionally omits location.href and all account/site identifiers. The no-execution branch is required when the editor or authenticated admin preview preserves HTML but does not run the controller; never invent a successful export.
 
 ~~~ts
 type ExpoW0Record = ExpoW0Export | ExpoW0NoExecution;
@@ -51,8 +52,8 @@ interface ExpoW0Export {
   runLabel:
     | "editor-desktop-1440x1000"
     | "editor-mobile-390x844"
-    | "published-desktop-1440x1000"
-    | "published-mobile-390x844";
+    | "preview-desktop-1440x1000"
+    | "preview-mobile-390x844";
   version: "2026-08-21.1";
   startedAt: string;
   capabilities: {
@@ -129,8 +130,8 @@ interface ExpoW0NoExecution {
   runLabel:
     | "editor-desktop-1440x1000"
     | "editor-mobile-390x844"
-    | "published-desktop-1440x1000"
-    | "published-mobile-390x844";
+    | "preview-desktop-1440x1000"
+    | "preview-mobile-390x844";
   version: "2026-08-21.1";
   observedAt: string;
   dom: {
@@ -186,18 +187,18 @@ interface StyleSignature {
 
 ---
 
-### Task 1: Measure the private Imweb page and preserve sanitized evidence
+### Task 1: Measure the unpublished Imweb working page and preserve sanitized evidence
 
 **Files:**
 - Create: docs/superpowers/research/2026-08-21-imweb-w0/README.md
 - Create: docs/superpowers/research/2026-08-21-imweb-w0/editor-desktop.json
 - Create: docs/superpowers/research/2026-08-21-imweb-w0/editor-mobile.json
-- Create: docs/superpowers/research/2026-08-21-imweb-w0/published-desktop.json
-- Create: docs/superpowers/research/2026-08-21-imweb-w0/published-mobile.json
+- Create: docs/superpowers/research/2026-08-21-imweb-w0/preview-desktop.json
+- Create: docs/superpowers/research/2026-08-21-imweb-w0/preview-mobile.json
 - Create: docs/superpowers/research/2026-08-21-imweb-w0/editor-desktop.png
 - Create: docs/superpowers/research/2026-08-21-imweb-w0/editor-mobile.png
-- Create: docs/superpowers/research/2026-08-21-imweb-w0/published-desktop.png
-- Create: docs/superpowers/research/2026-08-21-imweb-w0/published-mobile.png
+- Create: docs/superpowers/research/2026-08-21-imweb-w0/preview-desktop.png
+- Create: docs/superpowers/research/2026-08-21-imweb-w0/preview-mobile.png
 
 **Interfaces:**
 - Consumes: the approved design v2 §11 W0 contract, chrome:control-chrome, the user's existing Imweb login, data-mach-expo-w0-box markers.
@@ -214,9 +215,9 @@ Inspect visible tabs only. Select the already logged-in Imweb admin context. If 
 In the Imweb UI, verify all of the following from visible state:
 
 1. The page is a duplicate or dedicated test page.
-2. Its visibility is private.
+2. It is the exact working page designated by the user and its operating-menu entry is hidden.
 3. It is absent from the operating menu.
-4. Publishing that page does not publish unrelated site changes.
+4. No step requires Publish or an access-permission change; only draft save and authenticated admin preview are allowed.
 5. No global header, site theme, or domain change is needed.
 
 If any item is unprovable, stop before editing. Do not create or duplicate a page automatically.
@@ -317,7 +318,7 @@ If Imweb has no distinct full-width section option, do not simulate one with glo
 
 - [ ] **Step 7: Add the one-time controller code widget**
 
-Create one additional private-page code widget and paste this exact controller. It uses a pinned parser-inserted dayjs GET, a pinned dynamically inserted dayjs GET, and a DB-free Mach OPTIONS request. It never sends business data.
+Create one additional working-page code widget and paste this exact controller. It uses a pinned parser-inserted dayjs GET, a pinned dynamically inserted dayjs GET, and a DB-free Mach OPTIONS request. It never sends business data.
 
 ~~~html
 <div data-mach-expo-w0-controller
@@ -806,9 +807,9 @@ Create one additional private-page code widget and paste this exact controller. 
 </script>
 ~~~
 
-- [ ] **Step 8: Save the private draft and measure editor desktop**
+- [ ] **Step 8: Save the unpublished draft and measure editor desktop**
 
-Keep the page private and unlinked. Save only the test-page changes. Wait 12 seconds after the editor reloads.
+Keep the page unpublished and menu-hidden. Save only the working-page draft changes. Do not click Publish. Wait 12 seconds after the editor reloads.
 
 Capture the exact return value of:
 
@@ -872,13 +873,11 @@ If the editor does not execute scripts, record the same explicit false result an
 
 Use the Step 8 fallback expression with runLabel changed only to editor-mobile-390x844.
 
-- [ ] **Step 10: Publish only the private test page**
+- [ ] **Step 10: Open only the authenticated admin preview**
 
-Reconfirm the page is private and menu-unlinked immediately before publishing. Publish only that page. If Imweb indicates unrelated changes will be published, cancel and stop.
+Reconfirm the target is the user-designated working page and its operating-menu entry is hidden. Open the existing authenticated admin preview from the editor. Do not click Publish, change access permissions, open a public sharing flow, use localhost, or use a dev harness. The preview must visibly identify itself as an administrator preview that includes unpublished changes; otherwise stop.
 
-Open its private published view in a new tab. Do not use localhost or a dev harness.
-
-- [ ] **Step 11: Measure published desktop**
+- [ ] **Step 11: Measure admin-preview desktop**
 
 At 1440×1000, reload, wait 12 seconds, and require all three of these script proofs:
 
@@ -890,11 +889,11 @@ Capture:
 
 ~~~js
 window.__MACH_EXPO_W0__?.export(
-  "published-desktop-1440x1000"
+  "preview-desktop-1440x1000"
 )
 ~~~
 
-If the controller is undefined, save the Step 8 fallback expression with runLabel published-desktop-1440x1000, mark the Published classic script gate BLOCKED, continue only to capture mobile evidence and clean up, and do not unlock W1.
+If the controller is undefined, save the Step 8 fallback expression with runLabel preview-desktop-1440x1000, mark the Admin-preview classic script gate BLOCKED, continue only to capture mobile evidence and clean up, and do not unlock W1 implementation planning.
 
 If a widget still has visibility hidden or opacity 0 at t+2000, run:
 
@@ -908,19 +907,19 @@ Promise.all(
 
 Then export the desktop run again. Save the final JSON and probe-only crop.
 
-- [ ] **Step 12: Measure published mobile**
+- [ ] **Step 12: Measure admin-preview mobile**
 
 At 390×844, reload, wait 12 seconds, and capture:
 
 ~~~js
 window.__MACH_EXPO_W0__?.export(
-  "published-mobile-390x844"
+  "preview-mobile-390x844"
 )
 ~~~
 
 Save the exact JSON and probe-only crop. Record Console errors, CSP violations, the dayjs request status/MIME, the Mach OPTIONS status, and the main document's Content-Security-Policy response header in README.md. Do not save a HAR.
 
-If the controller is undefined, save the Step 8 fallback expression with runLabel published-mobile-390x844 and keep the W1 verdict BLOCKED.
+If the controller is undefined, save the Step 8 fallback expression with runLabel preview-mobile-390x844 and keep the W1 implementation verdict BLOCKED.
 
 - [ ] **Step 13: Apply the pass/fail rules**
 
@@ -928,15 +927,15 @@ Use these exact rules:
 
 | Gate | PASS | Result |
 |---|---|---|
-| Published classic script | parserExternalExecuted and dynamicHeadExternalExecuted are true in both published runs | False blocks W1 |
+| Admin-preview classic script | parserExternalExecuted and dynamicHeadExternalExecuted are true in both admin-preview runs | False blocks W1 implementation planning |
 | Canonical Mach CORS | machCors is status 204, type cors, ok true | False blocks W1 |
 | Canonical Mach CSP | No enforced script-src, connect-src, font-src, or fallback default-src rule excludes https://machstudio.vercel.app; no relevant securitypolicyviolation | Any exclusion blocks W1 |
 | Required platform APIs | attachShadow, FontFace, documentFonts, ResizeObserver, MutationObserver are true | Any false blocks W1 |
 | Shadow style stability | For each layout, shadow StyleSignature at raf2 and t+10000 is identical | Difference blocks W1 until explained and redesigned |
 | Portal stability | At t+10000 portal remains fixed at 0,0, 1×1, visible, transform none, filter none | Difference blocks W1 until host defense is revised |
-| wg_animated | Natural published state is visible by t+2000, or testUnhide returns visible with opacity 1 | Failure blocks W1 |
+| wg_animated | Natural admin-preview state is visible by t+2000, or testUnhide returns visible with opacity 1 | Failure blocks W1 implementation planning |
 | Editor contract | Both editor scripts true means render; otherwise placeholder | Selects contract; does not alone block |
-| kv.full | Full layout exists; in both published runs full.root.visibleWidth / viewport.clientWidth is at least 0.98, full.bleed clipLeft and clipRight are at most 2px, and documentOverflow is at most 2px | True enables kv.full; false withholds it |
+| kv.full | Full layout exists; in both admin-preview runs full.root.visibleWidth / viewport.clientWidth is at least 0.98, full.bleed clipLeft and clipRight are at most 2px, and documentOverflow is at most 2px | True enables W1 implementation behind the release gate; false withholds it |
 
 Column remains the default W1 kv variant even if kv.full passes; full becomes an explicit variant only.
 
@@ -948,7 +947,7 @@ In each loaded probe context, run:
 window.__MACH_EXPO_W0__?.dispose()
 ~~~
 
-Remove only the four W0 code widgets from the private test page, save, and publish that private page again. Reload editor and private published view, then require:
+Remove only the four W0 code widgets from the working page and save the unpublished draft. Do not click Publish. Reload the editor and authenticated admin preview, then require:
 
 ~~~js
 ({
@@ -970,20 +969,20 @@ Remove only the four W0 code widgets from the private test page, save, and publi
 })
 ~~~
 
-Expected: markers 0, controllers 0, portals 0, hasGlobal false after reload. Reconfirm private and menu-unlinked status. Do not delete the test page.
+Expected: markers 0, controllers 0, portals 0, hasGlobal false after reload. Reconfirm unpublished and menu-hidden status. Do not delete or rename the working page.
 
 - [ ] **Step 15: Write the evidence README**
 
 README.md must contain:
 
 1. Measurement time and browser version, but no account or URL.
-2. Literal safety-gate evidence: duplicated/private/menu-unlinked and no unrelated publish.
+2. Literal safety-gate evidence: user-designated working page, menu-hidden, no permission change, and Publish never clicked.
 3. A four-run matrix for script preservation/execution, CSP/CORS, capabilities, and console errors.
 4. A layout matrix for standard/wide/full with clientWidth, root width, visible ratio, clip, overflow, and blockers.
 5. The editorMode and allowKvFull decisions.
 6. The final W1 PASS or BLOCKED verdict with the exact failing gate names.
-7. Cleanup proof and confirmation that the private page remains private and unlinked.
-8. A note that actual self-host Pretendard and /h runtime requests must be reverified from the canonical Mach origin during W1 release; W0 only proves APIs, generic external classic execution, canonical-origin script/connect/font CSP inspection, and Mach OPTIONS CORS.
+7. Cleanup proof and confirmation that the working page remains unpublished and menu-hidden.
+8. A note that actual self-host Pretendard, the actual /h runtime, and the real public rendering path must be reverified from the canonical Mach origin during a later user-approved release verification; preview W0 only proves APIs, generic external classic execution, canonical-origin script/connect/font CSP inspection, and Mach OPTIONS CORS in authenticated admin preview.
 
 - [ ] **Step 16: Verify evidence sanitation and commit**
 
@@ -1011,7 +1010,7 @@ Commit:
 ~~~bash
 git add docs/superpowers/research/2026-08-21-imweb-w0
 git commit -m "docs: 아임웹 W0 실측 증거를 고정" \
-  -m "운영 페이지나 제품 로더를 건드리지 않고 비공개 복제 페이지에서 폭·스크립트·Shadow·CSP 계약을 측정해 W1의 전제를 추측이 아닌 증거로 바꾼다." \
+  -m "게시나 권한 변경 없이 인증된 관리자 미리보기에서 폭·스크립트·Shadow·CSP 계약을 측정해 W1 구현 전제를 추측이 아닌 증거로 바꾼다." \
   -m "Co-Authored-By: Codex <noreply@openai.com>"
 ~~~
 
@@ -1025,11 +1024,11 @@ git commit -m "docs: 아임웹 W0 실측 증거를 고정" \
 
 **Interfaces:**
 - Consumes: Task 1 W1 verdict, editorMode, allowKvFull, four ExpoW0Record files, and cleanup proof.
-- Produces: a design v2 whose W0 section and W1 gates contain only measured choices, ready for the data/runtime/admin implementation plans.
+- Produces: a design v2 whose preview W0 section and W1 implementation gates contain only measured choices, while public launch remains blocked on release verification.
 
 - [ ] **Step 1: Update the design status line**
 
-If Task 1 is PASS, change the status to say W0 measurement complete and W1 planning unlocked. If Task 1 is BLOCKED, state W0 blocked and name the exact gate; do not unlock W1.
+If Task 1 is PASS, change the status to say preview W0 measurement complete and W1 implementation planning unlocked, with public launch still blocked on release verification. If Task 1 is BLOCKED, state preview W0 blocked and name the exact gate; do not unlock W1.
 
 - [ ] **Step 2: Replace the W0 future-tense section with measured facts**
 
@@ -1038,7 +1037,7 @@ In §11 W0, link the research README and record:
 - editorMode = render or placeholder;
 - allowKvFull = true or false;
 - exact standard/wide/full visible-width ratios;
-- published classic-script verdict;
+- admin-preview classic-script verdict;
 - canonical Mach CSP/CORS verdict;
 - required API verdict;
 - wg_animated/unhide verdict;
@@ -1053,16 +1052,16 @@ Apply the measured result consistently:
 - If allowKvFull is true, mark kv.full W1-available but keep column as default.
 - If allowKvFull is false, remove kv.full from W1 and leave it behind a later layout redesign gate.
 - If editorMode is render, remove placeholder-only instructions.
-- If editorMode is placeholder, make the stable placeholder and published/our-preview verification path the only editor contract.
-- Preserve the W1 release requirement to load the actual self-host Pretendard file and actual /h script from https://machstudio.vercel.app on the same private page before claiming complete isolation.
+- If editorMode is placeholder, make the stable placeholder and admin-preview verification path the editor contract.
+- Preserve the release requirement to load the actual self-host Pretendard file and actual /h script from https://machstudio.vercel.app through a user-approved real serving path before claiming complete isolation or public readiness.
 
 - [ ] **Step 4: Run the plan self-review checks**
 
 Spec coverage:
 
-- W0 private-page safety is linked to evidence.
+- Preview W0 unpublished/menu-hidden safety is linked to evidence.
 - Standard/wide/full geometry has a measured outcome.
-- Editor and private-published external classic execution have outcomes.
+- Editor and authenticated admin-preview external classic execution have outcomes.
 - CSP, Mach CORS, late CSS, Shadow, portal, FontFace capability, and wg_animated have outcomes.
 - No local dev server or DB/product loader was used.
 - Probe cleanup is proven.
@@ -1112,9 +1111,9 @@ git commit -m "docs: 아임웹 실측으로 홈페이지 임베드 계약을 확
 
 ## W0 Completion Gate
 
-W0 is complete only when both tasks are committed, the worktree is clean, the private page is still private and menu-unlinked, the probe is absent after reload, and the design says either:
+Preview W0 is complete only when both tasks are committed, the worktree is clean, the working page is still unpublished and menu-hidden, Publish was never clicked, the probe is absent after editor and admin-preview reload, and the design says either:
 
-- PASS — W1 planning is unlocked with measured editorMode and allowKvFull values; or
-- BLOCKED — W1 remains stopped on named evidence, without a speculative workaround.
+- PREVIEW PASS — W1 implementation planning is unlocked with measured editorMode and allowKvFull values, while public launch remains blocked on release verification; or
+- BLOCKED — W1 implementation planning remains stopped on named evidence, without a speculative workaround.
 
 Do not write the W1 data, runtime, template, or admin implementation plans before this gate.
