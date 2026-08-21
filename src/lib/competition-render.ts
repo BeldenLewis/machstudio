@@ -124,6 +124,14 @@ export function buildCompetitionCss(theme: CompetitionTheme): string {
 .mc-check { display:flex; align-items:flex-start; gap:8px; font-size:13px; line-height:1.5; margin-bottom:8px; cursor:pointer; }
 .mc-check input { margin-top: 2px; flex: none; }
 .mc-consent-link { text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+/* 파일 선택 버튼 — 네이티브 input 은 시각적으로만 숨긴다(display:none 이면 탭 순서에서도
+   빠져 키보드로 못 연다). 사전등록 폼의 .msf-chip 과 같은 숨김 기법. */
+.mc-file-input { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+.mc-file-btn { display:inline-flex; align-items:center; padding:10px 16px; font-size:13px; font-weight:600;
+  border:1px solid rgba(120,120,128,.35); border-radius:10px; cursor:pointer; color:inherit; background:transparent;
+  transition:border-color .15s ease,color .15s ease; }
+.mc-file-btn:hover { border-color: var(--mc-accent); color: var(--mc-accent); }
+.mc-file-btn:has(.mc-file-input:focus-visible) { outline:2px solid var(--mc-accent); outline-offset:2px; }
 .mc-files { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
 .mc-thumb { position:relative; width:72px; height:72px; border-radius:10px; overflow:hidden; background:rgba(120,120,128,.12); }
 .mc-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
@@ -259,8 +267,13 @@ export function renderFormFieldsHtml(config: CompetitionConfig): string {
 
       if (field.type === "image") {
         const max = field.maxFiles ?? 3;
+        // 네이티브 <input type=file> 의 "파일 선택" 버튼 라벨은 브라우저 UI 언어를 따른다
+        // (페이지 언어와 무관) — 영문 폼에서도 한글로 남는다. 입력을 시각적으로 숨기고
+        // 라벨을 우리 사전 문구로 직접 그린다(competition-strings.ts 참고).
         return `<div class="mc-field">${label}
-          <input type="file" accept="image/jpeg,image/png,image/webp" multiple ${common} data-mc-image data-mc-max="${max}" class="mc-input">
+          <label class="mc-file-btn">${escapeHtml(t.chooseFile)}
+            <input type="file" accept="image/jpeg,image/png,image/webp" multiple ${common} data-mc-image data-mc-max="${max}" class="mc-file-input">
+          </label>
           <p class="mc-hint">${escapeHtml(t.imageHint(max))}</p>
           <div class="mc-files" data-mc-files></div></div>`;
       }

@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, Reorder } from "framer-motion";
 import {
-  AlignLeft, ImageIcon, ListChecks, ListPlus, Mail, Phone, Plus, SquareCheck, Trash2, Video,
+  AlignLeft, GripVertical, ImageIcon, ListChecks, ListPlus, Mail, Phone, Plus, SquareCheck, Trash2, Video,
 } from "lucide-react";
 import { toast } from "sonner";
 import { NOTICE_LANGUAGES } from "@/lib/notice/config";
@@ -146,12 +146,14 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
           <span className="text-[11px] text-muted-foreground">{form.fields.length}개</span>
         </div>
 
-        <div className="mt-4 space-y-2">
+        <Reorder.Group axis="y" values={form.fields} onReorder={(fields) => update({ fields })} className="mt-4 space-y-2">
           {form.fields.map((field, index) => {
             const Icon = TYPE_META[field.type]?.icon ?? AlignLeft;
             return (
-              <div key={field.id} className={`bg-secondary/20 p-3 ${R.surface} ${FINISH.s2}`}>
+              <Reorder.Item key={field.id} value={field} className={`bg-secondary/20 p-3 ${R.surface} ${FINISH.s2}`}>
                 <div className="flex flex-wrap items-center gap-2">
+                  <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground/40" aria-hidden="true" />
+                  {/* 드래그는 마우스·터치 전용이라, 키보드로도 옮길 수 있게 화살표를 같이 둔다. */}
                   <div className="flex flex-col">
                     <button onClick={() => move(index, -1)} disabled={index === 0} className="text-muted-foreground disabled:opacity-30" aria-label="위로">▴</button>
                     <button onClick={() => move(index, 1)} disabled={index === form.fields.length - 1} className="text-muted-foreground disabled:opacity-30" aria-label="아래로">▾</button>
@@ -253,10 +255,10 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                     제출 시 링크에서 영상 ID만 저장해요. 비공개 영상은 재생되지 않아 신청자에게 안내가 나갑니다.
                   </p>
                 )}
-              </div>
+              </Reorder.Item>
             );
           })}
-        </div>
+        </Reorder.Group>
 
         <button
           onClick={addField}

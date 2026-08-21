@@ -35,6 +35,21 @@ describe("신청 폼 문구 언어", () => {
     expect(hints.some(hasHangul)).toBe(true);
   });
 
+  /**
+   * 네이티브 <input type=file> 의 "파일 선택" 버튼은 페이지 언어가 아니라 브라우저 UI
+   * 언어를 따라서, 사전을 영어로 채워도 이 버튼만 한글로 남았다 — 그래서 입력을 숨기고
+   * 우리 문구로 직접 그린다(competition-render.ts mc-file-btn).
+   */
+  it("이미지 항목의 '파일 선택' 버튼도 언어를 따른다 — 네이티브 라벨은 숨긴다", () => {
+    const en = renderFormFieldsHtml(configFor("en"));
+    expect(en).toContain('<label class="mc-file-btn">Choose file');
+    expect(en).toContain('class="mc-file-input"');
+    expect(hasHangul(en.split('class="mc-file-btn">')[1]?.split("</label>")[0] ?? "")).toBe(false);
+
+    const ko = renderFormFieldsHtml(configFor("ko"));
+    expect(ko).toContain('<label class="mc-file-btn">파일 선택');
+  });
+
   it("선택 항목의 기본 안내도 언어를 따른다", () => {
     expect(renderFormFieldsHtml(configFor("en"))).toContain("Please select");
     expect(renderFormFieldsHtml(configFor("ko"))).toContain("선택해주세요");
