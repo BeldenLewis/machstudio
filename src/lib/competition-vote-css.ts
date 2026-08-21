@@ -3,24 +3,27 @@
  * 색은 전부 공고 쪽이 심어 둔 --mc-* 변수를 쓴다(하드코딩 금지).
  */
 export const VOTE_CSS = `
-/* 960px 는 공고 페이지(notice shell)와 같은 최대 폭이다 — 대회 임베드 화면 전체가 같은 리듬을 쓴다.
-   호스트 페이지가 폭을 제한하지 않는 아임웹 사이트에 붙었을 때, 좌우 여백 없이 뷰포트
-   끝까지 카드가 붙어버리는 걸 여기서 막는다(임베드는 호스트 CSS 에 기대면 안 된다). */
-.mcv { max-width: 960px; margin: 0 auto; padding: 20px 20px 40px; box-sizing: border-box; }
+/* 공고 페이지(960px)와 같은 리듬을 쓰던 걸 투표 화면만 1120px 로 넓힌다 — 참가작 카드는
+   텍스트보다 영상이 주인공인데, 960px 폭에서는 카드가 300px 로 눌려 영상(16:9)보다 제목·팀명·
+   버튼이 차지하는 세로 비중이 더 커 보였다. 카드를 키우면 텍스트 영역 높이는 거의 그대로인 채
+   영상 높이만 폭에 비례해 늘어나 자연히 영상이 더 크게 보인다. 호스트 페이지가 폭을 제한하지
+   않는 아임웹 사이트에 붙었을 때 좌우 끝까지 붙어버리는 것도 여기서 막는다. */
+.mcv { max-width: 1120px; margin: 0 auto; padding: 20px 20px 40px; box-sizing: border-box; }
 .mcv-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between;
   gap: 12px; padding: 12px 0; margin-bottom: 14px; background: var(--mc-surface);
   border-bottom: 1px solid rgba(120,120,128,.18); }
 .mcv-bar-title { font-size: 16px; font-weight: 800; }
 .mcv-remain { font-size: 13px; font-weight: 700; color: var(--mc-accent); }
 /*
- * 카드 폭을 240~300px 로 **고정 범위**에 묶는다. minmax(240px, 1fr) 이었을 때는 참가작이
+ * 카드 폭을 280~360px 로 **고정 범위**에 묶는다. minmax(240px, 1fr) 이었을 때는 참가작이
  * 1~2개만 있어도(오픈 초기·리허설) 남는 폭을 전부 그 카드가 흡수해 카드 하나가 900px
  * 가까이 늘어났다(참고로 준 레퍼런스 이미지의 3열 고정 카드 크기와 정반대였다). 1fr 을
  * 없애면 카드는 더 늘어나지 않고, 대신 남는 폭이 줄 안에서 뜨는데 justify-content: center
  * 로 그 여백을 카드 좌우가 아니라 줄 전체의 좌우 여백으로 돌려 가운데 정렬한다.
  * auto-fit 을 쓰는 이유는 그대로다 — 빈 트랙을 접어야 이 center 정렬이 실제 카드 기준으로 먹는다.
+ * 상한을 300→360 으로 올린 건 카드를 더 키워 영상(16:9) 비중을 텍스트보다 우세하게 만들기 위함.
  */
-.mcv-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 300px)); justify-content: center; }
+.mcv-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 360px)); justify-content: center; }
 .mcv-card { display: flex; flex-direction: column; overflow: hidden; border-radius: var(--mc-radius);
   background: var(--mc-surface); box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 6px 20px rgba(0,0,0,.06);
   transition: box-shadow .18s ease, transform .18s ease; }
@@ -37,7 +40,7 @@ export const VOTE_CSS = `
   display: flex; align-items: center; justify-content: center; font-size: 17px; color: #fff;
   background: rgba(0,0,0,.55); pointer-events: none; }
 .mcv-frame { width: 100%; aspect-ratio: 16 / 9; border: 0; display: block; }
-.mcv-body { display: flex; flex-direction: column; gap: 6px; padding: 13px 14px 14px; }
+.mcv-body { display: flex; flex-direction: column; gap: 5px; padding: 11px 14px 12px; }
 .mcv-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .mcv-no { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 20px; padding: 0 6px;
   border-radius: 999px; background: color-mix(in srgb, var(--mc-accent) 12%, transparent);
