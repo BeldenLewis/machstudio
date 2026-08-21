@@ -7,6 +7,7 @@
  * SMS 마케팅을 다루지 않는다 — 사전 동의 없는 문자 발송은 절대 하지 않는다는 전제로 썼다.
  */
 import type { CountrySections, GenerateInput, Section } from "../types";
+import { ORG_TOKEN } from "../tokens";
 import {
   blankEn,
   categoryLabelEn,
@@ -40,7 +41,7 @@ const PRIVACY_SECTIONS: Section[] = [
     render: (ctx) =>
       `## Privacy Policy\n\n` +
       `**Effective Date:** ${effectiveDate(ctx)}\n\n` +
-      `This Privacy Policy explains how ${orgLineEn(ctx.org)} ("we," "us," or "our") collects, uses, ` +
+      `This Privacy Policy explains how ${orgLineEn()} ("we," "us," or "our") collects, uses, ` +
       `and protects personal information when you ${purposeVerb(ctx)} **${eventName(ctx)}** ` +
       `(${formatDateRangeEn(ctx.event.eventDates)}, ${venue(ctx)}). By submitting this form, you ` +
       `acknowledge that you have read this Privacy Policy.`,
@@ -135,9 +136,9 @@ const PRIVACY_SECTIONS: Section[] = [
   {
     id: "cross-border",
     purposes: "any",
-    render: (ctx) =>
+    render: () =>
       `## International Data Transfer\n\n` +
-      `${orgLineEn(ctx.org)} is affiliated with an organization based in the Republic of Korea, and the systems ` +
+      `${orgLineEn()} is affiliated with an organization based in the Republic of Korea, and the systems ` +
       `we use to process registrations may store or process your information on servers located outside the ` +
       `United States, including in the Republic of Korea. We take reasonable measures to protect your ` +
       `information consistent with this Privacy Policy regardless of where it is processed. ` +
@@ -211,8 +212,8 @@ const PRIVACY_SECTIONS: Section[] = [
     render: (ctx) =>
       `## Contact Us\n\n` +
       `To exercise your privacy rights or if you have questions about this Privacy Policy, contact us at:\n\n` +
-      `- **Email:** ${contactEmailEn(ctx.org, ctx.event)}\n` +
-      `- **Mailing Address:** ${blankEn(ctx.org.address, "[Business Mailing Address]")}`,
+      `- **Email:** ${contactEmailEn(ctx.event)}\n` +
+      `- **Mailing Address:** ${ORG_TOKEN.address}`,
   },
 ];
 
@@ -240,7 +241,7 @@ const MARKETING_SECTIONS: Section[] = [
     purposes: "any",
     render: (ctx) =>
       `You can unsubscribe at any time using the link included in every marketing email, or by contacting us ` +
-      `at ${contactEmailEn(ctx.org, ctx.event)}.`,
+      `at ${contactEmailEn(ctx.event)}.`,
   },
 ];
 
@@ -273,7 +274,7 @@ const THIRD_PARTY_SECTIONS: Section[] = [
     id: "thirdparty-withdraw",
     purposes: "any",
     render: (ctx) =>
-      `You can withdraw this consent at any time by contacting us at ${contactEmailEn(ctx.org, ctx.event)}. ` +
+      `You can withdraw this consent at any time by contacting us at ${contactEmailEn(ctx.event)}. ` +
       `Withdrawal does not affect sharing that already took place before your request.`,
   },
 ];

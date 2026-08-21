@@ -15,7 +15,13 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getClientIp, rateLimitAsync } from "@/lib/ratelimit";
-import { REGISTRATION_STATUSES, normalizeCollectForm, type RegistrationStatus } from "@/lib/collect-form-config";
+import {
+  REGISTRATION_STATUSES,
+  normalizeCollectForm,
+  resolveCollectFormConfigOrgTokens,
+  type RegistrationStatus,
+} from "@/lib/collect-form-config";
+import { resolveOrgProfile, type WorkspaceLegalProfile } from "@/lib/legal-templates";
 import { CollectFormRuntime } from "@/components/form-builder/CollectFormRuntime";
 import { PreviewSwitcher } from "./PreviewSwitcher";
 
@@ -69,7 +75,10 @@ export default async function CollectFormPreviewPage({
   const source = token
     ? await prisma.collectSource.findUnique({
         where: { previewToken: token },
-        select: { id: true, name: true, mode: true, formConfig: true, deletedAt: true },
+        select: {
+          id: true, name: true, mode: true, formConfig: true, deletedAt: true,
+          workspace: { select: { legalProfile: true } },
+        },
       })
     : null;
 
@@ -81,7 +90,9 @@ export default async function CollectFormPreviewPage({
    */
   if (!source || source.mode !== "builder" || source.deletedAt) notFound();
 
-  const config = normalizeCollectForm(source.formConfig);
+  const normalizedConfig = normalizeCollectForm(source.formConfig);
+  const org = resolveOrgProfile(source.workspace.legalProfile as WorkspaceLegalProfile | null, normalizedConfig.legal.country);
+  const config = resolveCollectFormConfigOrgTokens(normalizedConfig, org);
 
   const statusParam = one(sp.status);
   const langParam = one(sp.lang);

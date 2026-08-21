@@ -6,6 +6,7 @@
  * 제공 항목·제공 목적·보유기간은 형식이 정해져 있어 빠지면 안 된다. 실제 배포 전 법무 검토가 필요하다.
  */
 import type { CountrySections, GenerateInput, Section } from "../types";
+import { ORG_TOKEN } from "../tokens";
 import {
   blankKo,
   categoryLabelKo,
@@ -39,7 +40,7 @@ const PRIVACY_SECTIONS: Section[] = [
     render: (ctx) =>
       `## 개인정보처리방침\n\n` +
       `**시행일:** ${effectiveDate(ctx)}\n\n` +
-      `${orgLineKo(ctx.org)}(이하 "회사")는 「개인정보 보호법」에 따라 이용자의 개인정보를 보호하고 ` +
+      `${orgLineKo()}(이하 "회사")는 「개인정보 보호법」에 따라 이용자의 개인정보를 보호하고 ` +
       `이와 관련한 고충을 신속하고 원활하게 처리할 수 있도록 다음과 같이 개인정보처리방침을 수립·공개합니다. ` +
       `본 방침은 **${eventName(ctx)}**(${formatDateRangeKo(ctx.event.eventDates)}, ${venue(ctx)}) ` +
       `${purposeVerb(ctx)} 과정에서 수집하는 개인정보에 적용됩니다.`,
@@ -134,9 +135,9 @@ const PRIVACY_SECTIONS: Section[] = [
   {
     id: "cross-border",
     purposes: "any",
-    render: (ctx) =>
+    render: () =>
       `## 6. 개인정보의 국외 이전\n\n` +
-      `${orgLineKo(ctx.org)}가 운영하는 등록 시스템의 특성상 이용자의 개인정보가 대한민국 내 서버 또는 ` +
+      `${orgLineKo()}가 운영하는 등록 시스템의 특성상 이용자의 개인정보가 대한민국 내 서버 또는 ` +
       `해외 서버에 저장·처리될 수 있습니다. 회사는 국외 이전이 발생하는 경우 관계 법령이 정한 절차와 ` +
       `보호조치를 따릅니다. *[운영 참고: 실제 인프라 소재지를 개발팀에 확인한 뒤 정확한 국가명으로 ` +
       `채워 넣으세요.]*`,
@@ -194,12 +195,12 @@ const PRIVACY_SECTIONS: Section[] = [
   {
     id: "dpo",
     purposes: "any",
-    render: (ctx) =>
+    render: () =>
       `## 11. 개인정보 보호책임자\n\n` +
       `회사는 개인정보 처리에 관한 업무를 총괄하고 이용자의 불만처리 및 피해구제를 위해 아래와 같이 ` +
       `개인정보 보호책임자를 지정하고 있습니다.\n\n` +
-      `- **연락처:** ${ctx.org.dpoContactEmail?.trim() || contactEmailKo(ctx.org, ctx.event)}\n` +
-      `- **주소:** ${blankKo(ctx.org.address, "[사업장 주소 미입력]")}`,
+      `- **연락처:** ${ORG_TOKEN.dpoEmail}\n` +
+      `- **주소:** ${ORG_TOKEN.address}`,
   },
   {
     id: "changes",
@@ -239,7 +240,7 @@ const MARKETING_SECTIONS: Section[] = [
     id: "marketing-withdraw",
     purposes: "any",
     render: (ctx) =>
-      `수신에 동의하신 후에도 이메일 하단의 수신거부 링크를 이용하거나 ${contactEmailKo(ctx.org, ctx.event)}로 ` +
+      `수신에 동의하신 후에도 이메일 하단의 수신거부 링크를 이용하거나 ${contactEmailKo(ctx.event)}로 ` +
       `연락하시면 언제든지 동의를 철회하실 수 있습니다.`,
   },
 ];
@@ -283,7 +284,7 @@ const THIRD_PARTY_SECTIONS: Section[] = [
     id: "thirdparty-withdraw",
     purposes: "any",
     render: (ctx) =>
-      `동의하신 후에도 ${contactEmailKo(ctx.org, ctx.event)}로 연락하시면 언제든지 동의를 철회하실 수 있으며, ` +
+      `동의하신 후에도 ${contactEmailKo(ctx.event)}로 연락하시면 언제든지 동의를 철회하실 수 있으며, ` +
       `철회 이전에 이루어진 제공에는 영향을 미치지 않습니다.`,
   },
 ];

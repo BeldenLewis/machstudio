@@ -16,7 +16,8 @@
 // 한쪽만 고쳐도 컴파일이 통과하고, 그 순간 빌더와 제출 경로가 서로 다른 목록을 보게 된다.
 import { FIELD_TYPES as WEBINAR_FIELD_TYPES, safeHttpUrl, type WebinarFieldType } from "@/lib/webinar-config";
 // 법률 문구 생성기(§legal)도 이 파일처럼 React·Next 에 의존하지 않는 순수 모듈이라 그대로 들여온다.
-import { isLegalCountry, type Country, type ThirdParty } from "@/lib/legal-templates/types";
+import { isLegalCountry, type Country, type ThirdParty, type OrgProfile } from "@/lib/legal-templates/types";
+import { resolveOrgTokens } from "@/lib/legal-templates/tokens";
 
 // ── 다국어 ────────────────────────────────────────────────────────────
 /**
@@ -530,6 +531,29 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
     statusOverride: REGISTRATION_STATUSES.includes(override as RegistrationStatus)
       ? (override as RegistrationStatus)
       : null,
+  };
+}
+
+/**
+ * 동의 전문에 남아 있는 조직 토큰({{ORG_ADDRESS}} 등, §legal-templates/tokens)을 지금 워크스페이스
+ * 값으로 채운다. 공개 화면에 config 를 내보내기 **직전**(임베드 로더·미리보기 페이지)에 불러야
+ * 방문자가 항상 최신 회사 정보를 본다 — 저장 시점에 풀어 버리면 나중에 주소가 바뀌어도
+ * 이미 저장된 문서는 옛 값에 묶인다.
+ */
+export function resolveCollectFormConfigOrgTokens(
+  config: CollectFormConfig,
+  org: OrgProfile,
+): CollectFormConfig {
+  const locale = config.legal.country === "kr" ? "ko" : "en";
+  const resolveLocalized = (value: Localized): Localized =>
+    Object.fromEntries(Object.entries(value).map(([k, v]) => [k, resolveOrgTokens(v, org, locale)]));
+  return {
+    ...config,
+    consent: {
+      privacy: { ...config.consent.privacy, body: resolveLocalized(config.consent.privacy.body) },
+      marketing: { ...config.consent.marketing, body: resolveLocalized(config.consent.marketing.body) },
+      thirdParty: { ...config.consent.thirdParty, body: resolveLocalized(config.consent.thirdParty.body) },
+    },
   };
 }
 

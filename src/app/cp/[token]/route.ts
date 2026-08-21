@@ -12,10 +12,11 @@
  */
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { normalizeCompetitionConfig } from "@/lib/competition-config";
+import { normalizeCompetitionConfig, resolveCompetitionConfigOrgTokens } from "@/lib/competition-config";
 import { normalizeCriteria } from "@/lib/competition-scoring";
 import { escapeHtml } from "@/lib/competition-render";
 import { resolveCompetitionStatus, type CompetitionPhase } from "@/lib/competition-status";
+import { resolveOrgProfile, type WorkspaceLegalProfile } from "@/lib/legal-templates";
 import { COMPETITION_RUNTIME_JS } from "@/generated/competition-runtime";
 import { COMPETITION_RESULT_RUNTIME_JS } from "@/generated/competition-result-runtime";
 import { COMPETITION_VOTE_RUNTIME_JS } from "@/generated/competition-vote-runtime";
@@ -32,7 +33,10 @@ function jsonForScript(value: unknown): string {
 
 export async function GET(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const competition = await prisma.competition.findUnique({ where: { previewToken: token } });
+  const competition = await prisma.competition.findUnique({
+    where: { previewToken: token },
+    include: { workspace: { select: { legalProfile: true } } },
+  });
 
   if (!competition) {
     return new NextResponse("<!doctype html><meta charset=utf-8><p>미리보기 링크를 찾을 수 없어요.</p>", {
@@ -107,6 +111,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
     select: { kind: true, name: true, publicWeight: true, judgeWeight: true, judgeCriteria: true },
   });
 
+  const normalizedConfig = normalizeCompetitionConfig(competition.config);
+  const previewOrg = resolveOrgProfile(competition.workspace.legalProfile as WorkspaceLegalProfile | null, normalizedConfig.legal.country);
   const payload = {
     competitionId: competition.id,
     competitionName: competition.name,
@@ -114,7 +120,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
     phase,
     canApply,
     theme: competition.theme,
-    config: normalizeCompetitionConfig(competition.config),
+    config: resolveCompetitionConfigOrgTokens(normalizedConfig, previewOrg),
     preview: true,
     description: competition.description,
     recruitOpenAt: competition.recruitOpenAt,
