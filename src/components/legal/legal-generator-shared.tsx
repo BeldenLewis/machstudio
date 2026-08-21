@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import { EditableList, ROW_KEY, withRowKeys } from "@/components/ui/editable-list";
 import { FINISH, R } from "@/components/ui/primitives";
-import type { ThirdParty, WorkspaceLegalProfile } from "@/lib/legal-templates";
+import { encodeOrgTokens, resolveOrgTokens, type OrgProfile, type ThirdParty, type WorkspaceLegalProfile } from "@/lib/legal-templates";
 
 /**
  * 워크스페이스의 법률 조직 정보를 읽어온다. 아직 안 채워져 있으면 null.
@@ -40,6 +40,62 @@ export function useWorkspaceLegalProfile(workspaceId: string | undefined): { pro
   }, [workspaceId]);
 
   return { profile, loaded };
+}
+
+/**
+ * 동의 전문(privacy/marketing/thirdParty body) 편집 칸.
+ *
+ * 저장된 값에는 `{{ORG_ADDRESS}}` 같은 조직 토큰이 들어 있을 수 있다(§legal-templates/tokens —
+ * 워크스페이스 정보가 바뀌어도 재생성 없이 반영되게 하려고 일부러 남겨 둔다). 하지만 운영자가
+ * 편집할 때 중괄호 문법을 보게 하면 "이게 뭐지, 왜 안 채워져 있지"로 읽힌다 — 실제로 그런
+ * 피드백을 받았다("이런거 없게 입력할 수 있게 해줘! 입력폼으로 채우고싶어"). 그래서 화면에는
+ * 항상 지금 조직 정보로 풀어 보여주고(`resolveOrgTokens`), 저장 직전에만 다시 토큰으로
+ * 접어 넣는다(`encodeOrgTokens`) — 편집 경험은 "그냥 실제 값" 이면서 저장은 여전히 살아있게.
+ *
+ * blur 에만 저장하는 이유: 매 타이핑마다 풀고-접으면 커서가 있는 자리 앞뒤 글자 수가
+ * (`{{ORG_ADDRESS}}` 열여섯 자 ↔ 실제 주소 길이) 달라져 커서가 튄다.
+ */
+export function ConsentBodyField({
+  value,
+  org,
+  locale,
+  onSave,
+  placeholder,
+  ariaLabel,
+  rows = 2,
+  className = "w-full resize-y rounded-lg bg-background px-2 py-1.5 text-[12px] shadow-sm outline-none",
+}: {
+  value: string;
+  org: OrgProfile;
+  locale: "en" | "ko";
+  onSave: (nextRawValue: string) => void;
+  placeholder?: string;
+  ariaLabel?: string;
+  rows?: number;
+  className?: string;
+}) {
+  const [draft, setDraft] = useState(() => resolveOrgTokens(value, org, locale));
+
+  // 다른 곳에서 값이 바뀌었을 때(예: "생성" 버튼)만 다시 풀어서 보여준다 — 타이핑 중에
+  // org 참조가 재계산돼도 내용이 같으면 이 effect 는 다시 안 돈다(호출부가 useMemo 로 넘긴다).
+  useEffect(() => {
+    setDraft(resolveOrgTokens(value, org, locale));
+  }, [value, org, locale]);
+
+  return (
+    <textarea
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        const encoded = encodeOrgTokens(draft, org);
+        if (encoded !== value) onSave(encoded);
+      }}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+      rows={rows}
+      className={className}
+    />
+  );
 }
 
 export function ThirdPartiesEditor({

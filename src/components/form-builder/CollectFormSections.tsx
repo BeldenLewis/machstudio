@@ -6,6 +6,7 @@
  * 전부 **편집 영역**이라 값이 항상 보이고 그 자리에서 고쳐진다(AGENTS.md §2).
  * 섹션은 블록 카드로 나누되 접지 않는다 — 접으면 "무엇이 켜져 있는지" 를 매번 열어 확인해야 한다.
  */
+import { useMemo } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { EditableList, ROW_KEY, withRowKeys } from "@/components/ui/editable-list";
@@ -22,6 +23,8 @@ import {
   type NoticePlacement,
 } from "@/lib/collect-form-config";
 import { CollectLegalGenerator } from "@/components/form-builder/CollectLegalGenerator";
+import { ConsentBodyField, useWorkspaceLegalProfile } from "@/components/legal/legal-generator-shared";
+import { resolveOrgProfile } from "@/lib/legal-templates";
 
 const CONSENT_KIND_META = {
   privacy: { label: "개인정보 (필수)", noun: "개인정보", placeholder: "개인정보 수집·이용에 동의합니다" },
@@ -76,6 +79,11 @@ export function CollectFormSections({
   const ev = config.eventInfo;
   const win = ev.registrationWindow;
   const countryBad = !isSupportedCountry(config.validation.defaultCountry);
+
+  // 동의 전문 편집 칸이 {{ORG_ADDRESS}} 같은 조직 토큰을 실제 값으로 풀어 보여주는 데 쓴다.
+  const { profile: orgProfile } = useWorkspaceLegalProfile(workspaceId);
+  const org = useMemo(() => resolveOrgProfile(orgProfile, config.legal.country), [orgProfile, config.legal.country]);
+  const legalLocale = config.legal.country === "kr" ? "ko" : "en";
 
   const setEvent = (next: Partial<typeof ev>) => patch({ eventInfo: { ...ev, ...next } });
   const setWindow = (next: Partial<typeof win>) =>
@@ -270,20 +278,14 @@ export function CollectFormSections({
                 aria-label={`${kind} 문구`}
                 className="w-full bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/50"
               />
-              <textarea
+              <ConsentBodyField
                 value={localize(item.body, DEFAULT_LOCALE)}
-                onChange={(e) => patch({ consent: { ...config.consent, [kind]: { ...item, body: toLocalized(e.target.value) } } })}
+                org={org}
+                locale={legalLocale}
+                onSave={(next) => patch({ consent: { ...config.consent, [kind]: { ...item, body: toLocalized(next) } } })}
                 placeholder="'자세히' 팝업 전문 (선택) — 아래 '법률 문구 생성기'로 채울 수 있어요"
-                aria-label={`${kind} 전문`}
-                rows={2}
-                className="w-full resize-y rounded-lg bg-background px-2 py-1.5 text-[12px] shadow-sm outline-none"
+                ariaLabel={`${kind} 전문`}
               />
-              {/* {{ORG_ADDRESS}} 같은 중괄호 토큰은 문법이 아니라 자리표시자다 — 워크스페이스
-                  설정의 회사 정보가 바뀔 때마다 노출 시점에 최신 값으로 풀린다(resolveOrgTokens). */}
-              <p className="px-1 text-[10px] leading-snug text-muted-foreground/60">
-                {"{{ORG_NAME}}"}·{"{{ORG_ADDRESS}}"}·{"{{ORG_EMAIL}}"} 같은 중괄호 자리표시자는 그대로 둬도 돼요 —
-                워크스페이스 설정 › 약관 탭의 회사 정보가 바뀌면 자동으로 최신 값으로 보여요.
-              </p>
               <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <Switch
                   checked={item.defaultChecked}
