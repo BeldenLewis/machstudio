@@ -27,11 +27,19 @@ export interface CompetitionFormStrings {
   removeRow: string;
   youtubeHint: string;
   modalTitle: string;
+  /** 공고 페이지의 "참가 신청" CTA 버튼 기본값 — 운영자가 applyLabel 을 안 채웠을 때만 쓴다. */
+  applyLabel: string;
   submit: string;
   submitting: string;
   close: string;
   consent: string;
   terms: string;
+  /** 약관 팝업의 "동의합니다" 버튼. */
+  agree: string;
+  /** 이미지 항목의 장수 초과 alert. {max} 를 장수로 바꿔 쓴다. */
+  maxImagesReached: (max: number) => string;
+  /** 이미지 항목의 용량 초과 alert. {name} 을 파일명으로 바꿔 쓴다. */
+  imageTooLarge: (name: string) => string;
   agreeRequired: string;
   submitted: string;
   submitFailed: string;
@@ -61,11 +69,15 @@ const KO: CompetitionFormStrings = {
   removeRow: "삭제",
   youtubeHint: "비공개(Private) 영상은 심사·투표 화면에서 재생되지 않아요. 미등록(Unlisted) 또는 공개로 설정해주세요.",
   modalTitle: "참가 신청",
+  applyLabel: "참가 신청하기",
   submit: "신청서 제출",
   submitting: "제출 중...",
   close: "닫기",
   consent: "동의",
   terms: "약관",
+  agree: "동의합니다",
+  maxImagesReached: (max) => `이미지는 최대 ${max}장까지 올릴 수 있어요.`,
+  imageTooLarge: (name) => `'${name}' 은 4MB를 넘어요.`,
   agreeRequired: "개인정보 수집 및 이용에 동의해주세요.",
   submitted: "신청이 접수되었어요.",
   submitFailed: "접수에 실패했어요. 잠시 후 다시 시도해주세요.",
@@ -92,11 +104,15 @@ const EN: CompetitionFormStrings = {
   removeRow: "Remove",
   youtubeHint: "Private videos won't play on the judging and voting screens. Please set your video to Unlisted or Public.",
   modalTitle: "Apply",
+  applyLabel: "Apply now",
   submit: "Submit application",
   submitting: "Submitting…",
   close: "Close",
   consent: "Consent",
   terms: "Terms",
+  agree: "I agree",
+  maxImagesReached: (max) => `You can upload up to ${max} images.`,
+  imageTooLarge: (name) => `'${name}' is over 4MB.`,
   agreeRequired: "Please agree to the collection and use of personal data.",
   submitted: "Your application has been received.",
   submitFailed: "Submission failed. Please try again in a moment.",
@@ -125,11 +141,15 @@ const FR: CompetitionFormStrings = {
   youtubeHint:
     "Les vidéos privées ne peuvent pas être lues sur les écrans de vote et du jury. Choisissez « Non répertoriée » ou « Publique ».",
   modalTitle: "Inscription",
+  applyLabel: "Postuler maintenant",
   submit: "Envoyer ma candidature",
   submitting: "Envoi en cours…",
   close: "Fermer",
   consent: "Consentement",
   terms: "Conditions",
+  agree: "J'accepte",
+  maxImagesReached: (max) => `Vous pouvez envoyer jusqu'à ${max} images.`,
+  imageTooLarge: (name) => `« ${name} » dépasse 4 Mo.`,
   agreeRequired: "Veuillez accepter la collecte et l'utilisation de vos données personnelles.",
   submitted: "Votre candidature a bien été reçue.",
   submitFailed: "L'envoi a échoué. Merci de réessayer dans un instant.",
@@ -157,11 +177,15 @@ const JA: CompetitionFormStrings = {
   youtubeHint:
     "非公開（Private）の動画は審査・投票画面で再生されません。限定公開（Unlisted）または公開に設定してください。",
   modalTitle: "エントリー",
+  applyLabel: "参加申し込み",
   submit: "応募する",
   submitting: "送信中…",
   close: "閉じる",
   consent: "同意",
   terms: "利用規約",
+  agree: "同意します",
+  maxImagesReached: (max) => `画像は最大${max}枚までアップロードできます。`,
+  imageTooLarge: (name) => `「${name}」は4MBを超えています。`,
   agreeRequired: "個人情報の収集・利用にご同意ください。",
   submitted: "応募を受け付けました。",
   submitFailed: "受付に失敗しました。しばらくしてからもう一度お試しください。",

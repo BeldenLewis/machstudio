@@ -223,13 +223,15 @@ export interface RenderNoticeOptions {
 
 export function renderNoticeHtml({ config, competitionName, phase, canApply, preview }: RenderNoticeOptions): string {
   const { notice, statusMessages } = config;
+  const t = competitionFormStrings(config.language);
   const heroImage = notice.heroImageUrl ? safeUrl(notice.heroImageUrl) : "";
   const title = notice.heroTitle.trim() || competitionName;
 
   // 접수 기간 밖에서는 버튼 자리에 이유를 적는다. 눌리지 않는 버튼만 두면 사람들이 계속 누른다.
+  // applyLabel 기본값도 언어를 따른다 — 운영자가 안 채웠다고 영문 공고에 한글 버튼이 뜨면 안 된다.
   const ctaHtml = canApply
-    ? `<button type="button" class="mc-btn" data-mc-apply>${escapeHtml(notice.applyLabel || "참가 신청하기")}</button>`
-    : `<button type="button" class="mc-btn" disabled>${escapeHtml(notice.applyLabel || "참가 신청하기")}</button>
+    ? `<button type="button" class="mc-btn" data-mc-apply>${escapeHtml(notice.applyLabel || t.applyLabel)}</button>`
+    : `<button type="button" class="mc-btn" disabled>${escapeHtml(notice.applyLabel || t.applyLabel)}</button>
        <p class="mc-note">${escapeHtml(phase === "upcoming" ? statusMessages.upcoming : statusMessages.closed)}</p>`;
 
   return `

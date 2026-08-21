@@ -118,6 +118,12 @@ export const COLLECT_FORM_CSS = `
 .msf-check{display:flex;align-items:flex-start;gap:9px;font-size:13px;cursor:pointer;min-height:24px}
 .msf-check input{width:18px;height:18px;margin:2px 0 0;flex:0 0 auto;accent-color:var(--msf-accent);cursor:pointer}
 
+/* 동의 항목 한 줄 — 체크박스 라벨(가변 폭)과 "Details" 버튼(고정 폭)을 한 줄에 둔다.
+   Details 가 라벨 아래 혼자 떨어져 있으면 그 항목과 상관없는 것처럼 보인다. */
+.msf-consent-row{display:flex;align-items:flex-start;gap:10px}
+.msf-consent-row .msf-check{flex:1;min-width:0}
+.msf-consent-row .msf-more{flex:0 0 auto;margin-top:1px}
+
 /* ── 안내 블록 ─────────────────────────────── */
 .msf-notice{background:var(--msf-soft);border-radius:var(--msf-radius);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
 .msf-notice-title{font-size:13px;font-weight:700}
