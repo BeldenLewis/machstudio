@@ -144,7 +144,8 @@ describe("아임웹 경로 — 오늘의 동작을 고정한다", () => {
       ]),
       buildScript([
         { index: 0, key: "name", label: "이름" },
-        { index: 2, key: "email", label: "이메일" },
+        // 런타임과 필드 감지기는 입력 없는 블록을 같은 방식으로 제외하므로 이메일은 두 번째다.
+        { index: 1, key: "email", label: "이메일" },
       ]),
     );
     await h.submitAndLeave();
