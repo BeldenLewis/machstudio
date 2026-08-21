@@ -143,13 +143,14 @@ interface ExpoW0NoExecution {
     probeType: string;
     dayjsType: string;
   };
+  capabilityObservation: "unobserved-read-only-driver";
   capabilities: {
-    attachShadow: boolean;
+    attachShadow: null;
     adoptedStyleSheets: boolean;
-    FontFace: boolean;
+    FontFace: null;
     documentFonts: boolean;
-    ResizeObserver: boolean;
-    MutationObserver: boolean;
+    ResizeObserver: null;
+    MutationObserver: null;
   };
 }
 
@@ -224,7 +225,7 @@ If any item is unprovable, stop before editing. Do not create or duplicate a pag
 
 - [ ] **Step 3: Record the pre-install baseline**
 
-At desktop 1440×1000, record:
+At desktop 1440×1000 CSS pixels, record the following. The Chrome browser-control read-only evaluator intentionally hides DOM mutation constructors, so baseline capability detection is deferred to the in-page controller. If site zoom makes the first viewport override report a different innerWidth or innerHeight, do not change browser zoom; request `Math.round(targetCssPixels * devicePixelRatio)` and require the resulting innerWidth and innerHeight to equal the target exactly.
 
 ~~~js
 ({
@@ -236,16 +237,10 @@ At desktop 1440×1000, record:
     innerWidth: window.innerWidth,
     innerHeight: window.innerHeight,
     clientWidth: document.documentElement.clientWidth,
-    scrollWidth: document.documentElement.scrollWidth
+    scrollWidth: document.documentElement.scrollWidth,
+    devicePixelRatio: window.devicePixelRatio
   },
-  capabilities: {
-    attachShadow: typeof Element.prototype.attachShadow === "function",
-    adoptedStyleSheets: "adoptedStyleSheets" in Document.prototype,
-    FontFace: "FontFace" in window,
-    documentFonts: "fonts" in document,
-    ResizeObserver: "ResizeObserver" in window,
-    MutationObserver: "MutationObserver" in window
-  }
+  capabilityObservation: "deferred-to-in-page-controller"
 })
 ~~~
 
@@ -844,15 +839,15 @@ JSON.stringify({
     probeType: typeof window.__MACH_EXPO_W0__,
     dayjsType: typeof window.dayjs
   },
+  capabilityObservation: "unobserved-read-only-driver",
   capabilities: {
-    attachShadow:
-      typeof Element.prototype.attachShadow === "function",
+    attachShadow: null,
     adoptedStyleSheets:
-      "adoptedStyleSheets" in Document.prototype,
-    FontFace: "FontFace" in window,
+      "adoptedStyleSheets" in document,
+    FontFace: null,
     documentFonts: "fonts" in document,
-    ResizeObserver: "ResizeObserver" in window,
-    MutationObserver: "MutationObserver" in window
+    ResizeObserver: null,
+    MutationObserver: null
   }
 }, null, 2)
 ~~~
