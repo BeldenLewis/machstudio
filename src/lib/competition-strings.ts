@@ -13,6 +13,12 @@ import type { NoticeLanguage } from "@/lib/notice/config";
 export interface CompetitionFormStrings {
   required: string;
   choosePlaceholder: string;
+  /**
+   * 파일 선택 버튼 — 브라우저 기본 `<input type="file">` 의 "파일 선택/Choose File" 라벨은
+   * 페이지 언어가 아니라 **브라우저 UI 언어**를 따라서, 폼을 영문으로 바꿔도 이 버튼만
+   * 한글로 남는다(운영자가 못 고친다). 그래서 네이티브 버튼을 숨기고 이 문구로 직접 그린다.
+   */
+  chooseFile: string;
   /** 이미지 항목 아래 안내. {max} 를 장수로 바꿔 쓴다. */
   imageHint: (max: number) => string;
   youtubeHint: string;
@@ -45,6 +51,7 @@ export interface CompetitionFormStrings {
 const KO: CompetitionFormStrings = {
   required: " (필수)",
   choosePlaceholder: "선택해주세요",
+  chooseFile: "파일 선택",
   imageHint: (max) => `장당 4MB 이하, 최대 ${max}장`,
   youtubeHint: "비공개(Private) 영상은 심사·투표 화면에서 재생되지 않아요. 미등록(Unlisted) 또는 공개로 설정해주세요.",
   modalTitle: "참가 신청",
@@ -73,6 +80,7 @@ const KO: CompetitionFormStrings = {
 const EN: CompetitionFormStrings = {
   required: " (required)",
   choosePlaceholder: "Please select",
+  chooseFile: "Choose file",
   imageHint: (max) => `Up to 4MB each, ${max} file${max > 1 ? "s" : ""} max`,
   youtubeHint: "Private videos won't play on the judging and voting screens. Please set your video to Unlisted or Public.",
   modalTitle: "Apply",
@@ -102,6 +110,7 @@ const EN: CompetitionFormStrings = {
 const FR: CompetitionFormStrings = {
   required: " (obligatoire)",
   choosePlaceholder: "Veuillez choisir",
+  chooseFile: "Choisir un fichier",
   imageHint: (max) => `4 Mo maximum par fichier, ${max} fichier${max > 1 ? "s" : ""} au total`,
   youtubeHint:
     "Les vidéos privées ne peuvent pas être lues sur les écrans de vote et du jury. Choisissez « Non répertoriée » ou « Publique ».",
@@ -131,6 +140,7 @@ const FR: CompetitionFormStrings = {
 const JA: CompetitionFormStrings = {
   required: "（必須）",
   choosePlaceholder: "選択してください",
+  chooseFile: "ファイルを選択",
   imageHint: (max) => `1枚あたり4MB以下、最大${max}枚`,
   youtubeHint:
     "非公開（Private）の動画は審査・投票画面で再生されません。限定公開（Unlisted）または公開に設定してください。",
