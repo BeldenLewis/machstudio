@@ -37,7 +37,7 @@ function buildScript(fieldMappings: CollectFieldMapping[], patterns: string[] = 
 }
 
 interface Harness {
-  window: JSDOM["window"];
+  window: ReturnType<typeof makeWindow>;
   doc: Document;
   sent: Array<Record<string, unknown>>;
   /** 제출 클릭 → 페이지 이탈. 실제 사용자의 경로와 같은 순서. */
@@ -48,13 +48,17 @@ interface Harness {
  * 새 창을 열고, 폼을 그리고, 생성된 스크립트를 그 안에서 실행한다.
  * `url` 은 폼 페이지 패턴 판정에 쓰인다.
  */
-function mount(html: string, script: string, url = "https://example.com/pre-registration"): Harness {
+function makeWindow(html: string, url: string) {
   const dom = new JSDOM(`<!doctype html><html><body>${html}</body></html>`, {
     url,
     runScripts: "dangerously",
     pretendToBeVisual: true,
   });
-  const w = dom.window as unknown as Window & typeof globalThis & { sent: Array<Record<string, unknown>> };
+  return dom.window as unknown as Window & typeof globalThis;
+}
+
+function mount(html: string, script: string, url = "https://example.com/pre-registration"): Harness {
+  const w = makeWindow(html, url);
   const sent: Array<Record<string, unknown>> = [];
 
   const record = (body: unknown) => {
@@ -174,6 +178,105 @@ describe("아임웹 경로 — 오늘의 동작을 고정한다", () => {
     await h.submitAndLeave();
 
     expect(h.sent).toHaveLength(0);
+  });
+});
+
+/**
+ * 대행전시(비아임웹) — 실물 마크업으로 검증한다.
+ * 아래 HTML 은 edtechkorea.or.kr/fairVst2.do 에서 그대로 가져온 모양이다(2026-08-21 확인):
+ * `.form-group` 이 하나도 없고 `div.field` + `label.field-label` + 안정적인 input name.
+ */
+describe("대행전시 경로 — 앵커로 지목해 읽는다", () => {
+  const edtechForm = `<form id="frmRegist">
+    <div class="field row1 fr_mod3808_in1">
+      <label class="field-label main-label" for="mod3808_in1"><span>성명<i>*</i></span></label>
+      <div id="i_mod3808_in1" class="input-area f_text">
+        <input type="text" name="mod3808_in1" id="mod3808_in1" value="김에듀">
+      </div>
+    </div>
+    <div class="field row1 fr_mod3808_in6">
+      <label class="field-label main-label" for="mod3808_in6"><span>e-mail<i>*</i></span></label>
+      <div id="i_mod3808_in6" class="input-area f_text">
+        <input type="text" name="mod3808_in6" id="mod3808_in6" value="kim@example.com">
+      </div>
+    </div>
+    <div class="field row1 fr_mod3810_in1">
+      <label class="field-label main-label"><span>관람 목적<i>*</i></span></label>
+      <div id="i_mod3810_in1" class="input-area f_checkbox">
+        <label><input type="checkbox" name="mod3810_in1" value="Y" checked>제품 구매</label>
+        <label><input type="checkbox" name="mod3810_in1" value="Y">정보 수집</label>
+      </div>
+    </div>
+    <a href="javascript: f_regist()" class="btn1 common btn_submit" id="go"><span>확인</span></a>
+  </form>`;
+
+  const ANCHORED: CollectFieldMapping[] = [
+    { index: 0, key: "name", label: "성명", matchBy: "name", matchValue: "mod3808_in1" },
+    { index: 1, key: "email", label: "e-mail", matchBy: "name", matchValue: "mod3808_in6" },
+    { index: 2, key: "purpose", label: "관람 목적", matchBy: "name", matchValue: "mod3810_in1" },
+  ];
+
+  it("`.form-group` 이 없어도 name 으로 찾아 읽는다", async () => {
+    const h = mount(edtechForm, buildScript(ANCHORED, ["/fairVst2.do"]), "https://edtechkorea.or.kr/fairVst2.do");
+    await h.submitAndLeave();
+
+    expect(h.sent[0]?.data).toEqual({
+      name: "김에듀",
+      email: "kim@example.com",
+      // 체크박스는 감싼 라벨 텍스트로 — 아임웹 경로와 같은 규칙이다.
+      purpose: "제품 구매",
+    });
+  });
+
+  it("id 앵커는 감싼 요소 안의 입력을 찾는다", async () => {
+    const h = mount(
+      edtechForm,
+      buildScript([{ index: 0, key: "name", label: "성명", matchBy: "id", matchValue: "i_mod3808_in1" }], ["/fairVst2.do"]),
+      "https://edtechkorea.or.kr/fairVst2.do",
+    );
+    await h.submitAndLeave();
+    expect(h.sent[0]?.data).toEqual({ name: "김에듀" });
+  });
+
+  /**
+   * 에듀테크는 **같은 URL 에 동의 화면과 등록 폼이 순서대로** 나온다(동의 후 POST 로 폼이 렌더).
+   * 동의 화면에서 앵커가 하나도 안 풀리므로 아무것도 보내면 안 된다 —
+   * 이게 없으면 1필드짜리 쓰레기 레코드가 쌓인다.
+   */
+  it("같은 URL 의 동의 화면에서는 아무것도 보내지 않는다", async () => {
+    const agreeScreen = `<form id="frmRegist" class="agree-container">
+      <div class="chkArea"><label><input type="checkbox" class="necessary" name="agree_yn">동의합니다</label></div>
+      <a href="javascript: f_confirm_vst()" class="btn_submit" id="go"><span>확인</span></a>
+    </form>`;
+    const h = mount(agreeScreen, buildScript(ANCHORED, ["/fairVst2.do"]), "https://edtechkorea.or.kr/fairVst2.do");
+    await h.submitAndLeave();
+
+    expect(h.sent).toHaveLength(0);
+  });
+
+  /** 앵커 절반 미만만 풀리면 우리 폼이 아니다 — 부분 일치로 반쪽 레코드를 만들지 않는다. */
+  it("앵커가 일부만 걸리는 페이지에서는 보내지 않는다", async () => {
+    const partial = `<form><input name="mod3808_in1" value="어쩌다 같은 이름"><button id="go">확인</button></form>`;
+    const h = mount(partial, buildScript(ANCHORED, ["/fairVst2.do"]), "https://edtechkorea.or.kr/fairVst2.do");
+    await h.submitAndLeave();
+
+    expect(h.sent).toHaveLength(0);
+  });
+
+  /** name 에 셀렉터 메타문자가 들어와도 깨지지 않아야 한다(querySelector 보간 금지의 이유). */
+  it("name 에 대괄호·따옴표가 있어도 찾는다", async () => {
+    const weird = `<form><input name='data["x"][0]' value="값"><input name="b" value="2"><button id="go">확인</button></form>`;
+    const h = mount(
+      weird,
+      buildScript([
+        { index: 0, key: "x", label: "X", matchBy: "name", matchValue: 'data["x"][0]' },
+        { index: 1, key: "b", label: "B", matchBy: "name", matchValue: "b" },
+      ], ["/fairVst2.do"]),
+      "https://edtechkorea.or.kr/fairVst2.do",
+    );
+    await h.submitAndLeave();
+
+    expect(h.sent[0]?.data).toEqual({ x: "값", b: "2" });
   });
 });
 

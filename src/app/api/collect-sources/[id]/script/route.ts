@@ -35,6 +35,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       index: f.index,
       key: f.key,
       label: f.label,
+      // 앵커는 대행전시 소스에만 있다 — null 이면 생성물에 실리지 않고 위치 경로를 탄다.
+      matchBy: f.matchBy as "id" | "name" | null,
+      matchValue: f.matchValue,
     })),
     baseUrl,
   });
