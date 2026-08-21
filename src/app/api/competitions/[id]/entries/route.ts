@@ -6,6 +6,7 @@ import {
   extractYoutubeId,
   normalizeCompetitionConfig,
   normalizeMedia,
+  normalizeRepeaterSubmission,
   type CompetitionMediaItem,
 } from "@/lib/competition-config";
 import { resolveCompetitionStatus } from "@/lib/competition-status";
@@ -88,9 +89,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const phoneCountries = (body.phoneCountries && typeof body.phoneCountries === "object" ? body.phoneCountries : {}) as Record<string, unknown>;
 
   // 정의에 없는 키는 저장하지 않는다(임의 필드 주입 차단). 필수 누락은 400.
+  //
+  // repeater 는 값이 문자열이 아니라 행 배열이라 별도 객체에 모은다 — data 를
+  // Record<string, string> 그대로 둬야 title/teamName/contactEmail 등 아래에서 문자열
+  // 메서드로 바로 쓰는 자리들이 매번 타입 좁히기 없이 그대로 동작한다.
   const data: Record<string, string> = {};
+  const repeaterData: Record<string, Record<string, string>[]> = {};
   for (const field of config.form.fields) {
     if (field.type === "image" || field.type === "youtube") continue; // 미디어는 아래에서 따로
+
+    if (field.type === "repeater") {
+      const result = normalizeRepeaterSubmission(field, incoming[field.key]);
+      if ("errorLabel" in result) {
+        return NextResponse.json({ error: t.fieldRequired(result.errorLabel) }, { status: 400, headers: CORS_HEADERS });
+      }
+      if (result.items.length > 0) repeaterData[field.key] = result.items;
+      continue;
+    }
+
     const raw = incoming[field.key];
     const value = typeof raw === "string" ? raw.trim() : "";
     if (field.required && !value) {
@@ -157,7 +173,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           title,
           teamName: data.teamName || null,
           summary: data.summary || null,
-          data,
+          data: { ...data, ...repeaterData },
           media: JSON.parse(JSON.stringify(media)),
           contactName: data.name || null,
           contactEmail,
