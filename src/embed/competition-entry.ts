@@ -181,6 +181,7 @@ function openForm(payload: BootPayload) {
   bindConsentPopups(form, payload);
   const uploaded = bindImageInputs(form, payload);
   const phoneCountries = bindPhoneInputs(form);
+  bindRepeaterInputs(form);
   bindSubmit(form, payload, uploaded, phoneCountries, close);
 
   form.querySelector<HTMLInputElement>("input,select,textarea")?.focus();
@@ -288,6 +289,55 @@ function renderThumbs(gallery: HTMLElement | null | undefined, key: string, uplo
 }
 
 /**
+ * 반복 항목(팀원 등) — 행 추가·삭제, 최소/최대 개수, 행 번호 매기기.
+ *
+ * 새 행은 서버에서 이미 구운 <template> 을 그대로 복제한다 — 여기서 다시 마크업을
+ * 만들면 renderFormFieldsHtml 과 두 곳에서 같은 구조를 관리하게 되어 어긋나기 쉽다.
+ */
+function bindRepeaterInputs(form: HTMLFormElement) {
+  form.querySelectorAll<HTMLElement>("[data-mc-rep-rows]").forEach((rowsHost) => {
+    const key = rowsHost.getAttribute("data-mc-key") ?? "";
+    const min = Number(rowsHost.getAttribute("data-mc-rep-min") || 0);
+    const max = Number(rowsHost.getAttribute("data-mc-rep-max") || 10);
+    const label = rowsHost.getAttribute("data-mc-rep-label") ?? "";
+    const addBtn = form.querySelector<HTMLButtonElement>(`[data-mc-rep-add-for="${CSS.escape(key)}"]`);
+    // 행 template 은 renderFormFieldsHtml 이 rowsHost 바로 다음 형제로 굽는다 — 필드가
+    // 여러 개일 때 form.querySelector 로 아무 template 이나 집으면 섞인다.
+    const ownTemplate = rowsHost.nextElementSibling?.tagName === "TEMPLATE"
+      ? (rowsHost.nextElementSibling as HTMLTemplateElement)
+      : null;
+
+    const renumber = () => {
+      const rows = Array.from(rowsHost.querySelectorAll<HTMLElement>("[data-mc-rep-row]"));
+      rows.forEach((row, i) => {
+        const title = row.querySelector<HTMLElement>("[data-mc-rep-title]");
+        if (title) title.textContent = `${label} ${i + 1}`;
+        const removeBtn = row.querySelector<HTMLButtonElement>("[data-mc-rep-remove]");
+        // 최소 개수 밑으로는 못 지운다 — 버튼을 숨기지 않고 비활성화해, 몇 명까지 필수인지 계속 보이게 한다.
+        if (removeBtn) removeBtn.disabled = rows.length <= Math.max(min, 1);
+      });
+      if (addBtn) addBtn.disabled = rows.length >= max;
+    };
+
+    rowsHost.addEventListener("click", (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-mc-rep-remove]");
+      if (!btn || btn.disabled) return;
+      btn.closest("[data-mc-rep-row]")?.remove();
+      renumber();
+    });
+
+    addBtn?.addEventListener("click", () => {
+      const rows = rowsHost.querySelectorAll("[data-mc-rep-row]").length;
+      if (rows >= max || !ownTemplate) return;
+      rowsHost.appendChild(ownTemplate.content.cloneNode(true));
+      renumber();
+    });
+
+    renumber();
+  });
+}
+
+/**
  * 전화 항목 — 국가 선택 + 숫자만 입력(사전등록과 같은 계약, §6.3).
  *
  * 값에 국가번호를 붙이지 않고 **고른 국가를 그대로** phoneCountries 에 담아 제출과 함께
@@ -341,10 +391,42 @@ function bindSubmit(
     const privacy = form.querySelector<HTMLInputElement>("[data-mc-privacy]");
     if (privacy && !privacy.checked) { show("error", t.agreeRequired); return; }
 
-    const data: Record<string, string> = {};
+    const data: Record<string, string | Record<string, string>[]> = {};
     for (const field of payload.config.form.fields) {
       if (!field.enabled) continue;
       if (field.type === "image") continue;
+
+      if (field.type === "repeater") {
+        const rowsHost = form.querySelector<HTMLElement>(`[data-mc-rep-rows][data-mc-key="${CSS.escape(field.key)}"]`);
+        const subFields = field.subFields ?? [];
+        const minItems = field.minItems ?? 0;
+        const rows = rowsHost ? Array.from(rowsHost.querySelectorAll<HTMLElement>("[data-mc-rep-row]")) : [];
+        const items: Record<string, string>[] = [];
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i];
+          const item: Record<string, string> = {};
+          let hasAny = false;
+          for (const sf of subFields) {
+            const input = row.querySelector<HTMLInputElement>(`[data-mc-rep-field="${CSS.escape(sf.key)}"]`);
+            const v = String(input?.value ?? "").trim();
+            if (v) { item[sf.key] = v; hasAny = true; }
+          }
+          // 최소 필수 행을 넘는 보너스 행은, 아무것도 안 채웠으면 그냥 버린다 — 채우기
+          // 시작했는데 일부만 비었으면(hasAny 인데 필수값 누락) 그건 아래서 오류로 잡는다.
+          if (!hasAny && i >= Math.max(minItems, 1)) continue;
+          for (const sf of subFields) {
+            if (sf.required && !item[sf.key]) {
+              show("error", t.fieldRequired(`${field.label} ${i + 1} · ${sf.label}`));
+              return;
+            }
+          }
+          items.push(item);
+        }
+        if (field.required && items.length === 0) { show("error", t.fieldRequired(field.label)); return; }
+        if (items.length > 0) data[field.key] = items;
+        continue;
+      }
+
       const node = form.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
         `[data-mc-key="${CSS.escape(field.key)}"]`,
       );
@@ -358,7 +440,7 @@ function bindSubmit(
       } else {
         value = String(node.value ?? "").trim();
       }
-      if (field.required && !value) { show("error", `${field.label} 항목을 입력해주세요.`); return; }
+      if (field.required && !value) { show("error", t.fieldRequired(field.label)); return; }
       if (value) data[field.key] = value;
     }
 

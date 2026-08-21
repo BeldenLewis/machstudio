@@ -137,6 +137,17 @@ export function buildCompetitionCss(theme: CompetitionTheme): string {
 .mc-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
 .mc-thumb button { position:absolute; top:2px; right:2px; border:0; border-radius:999px; width:18px; height:18px; line-height:1;
   background:rgba(0,0,0,.6); color:#fff; cursor:pointer; font-size:12px; }
+/* 반복 항목(팀원 등) — 행 하나가 mc-field 여러 개를 묶는다. */
+.mc-rep-rows { display: flex; flex-direction: column; gap: 10px; }
+.mc-rep-row { padding: 12px; border: 1px solid rgba(120,120,128,.22); border-radius: var(--mc-radius); display: flex; flex-direction: column; gap: 10px; }
+.mc-rep-row-head { display: flex; align-items: center; justify-content: space-between; }
+.mc-rep-row-title { font-size: 12px; font-weight: 700; opacity: .7; }
+.mc-rep-remove { border: 0; background: transparent; color: inherit; opacity: .55; cursor: pointer; font-size: 18px; line-height: 1; padding: 2px 6px; }
+.mc-rep-remove:hover { opacity: 1; color: #dc2626; }
+.mc-rep-add { margin-top: 10px; display: inline-flex; align-items: center; padding: 9px 14px; font-size: 13px; font-weight: 600;
+  border: 1px dashed rgba(120,120,128,.4); border-radius: 10px; cursor: pointer; color: inherit; background: transparent; }
+.mc-rep-add:hover { border-color: var(--mc-accent); color: var(--mc-accent); }
+.mc-rep-add[disabled] { opacity: .4; cursor: not-allowed; }
 .mc-msg { margin-top: 10px; font-size: 13px; min-height: 18px; }
 .mc-msg-error { color: #dc2626; }
 .mc-msg-success { color: #059669; }
@@ -276,6 +287,33 @@ export function renderFormFieldsHtml(config: CompetitionConfig): string {
           </label>
           <p class="mc-hint">${escapeHtml(t.imageHint(max))}</p>
           <div class="mc-files" data-mc-files></div></div>`;
+      }
+      if (field.type === "repeater") {
+        const subFields = field.subFields ?? [];
+        const min = field.minItems ?? 1;
+        const max = field.maxItems ?? 10;
+        const rowFieldsHtml = subFields
+          .map((sf) => {
+            const req = sf.required ? '<span class="mc-req">*</span>' : "";
+            return `<div class="mc-field"><label class="mc-label">${escapeHtml(sf.label)}${req}</label>
+              <input type="${sf.type === "email" ? "email" : "text"}" class="mc-input" data-mc-rep-field="${escapeHtml(sf.key)}"></div>`;
+          })
+          .join("");
+        // 초기 화면에도 최소 행 수만큼 미리 그린다 — 빈 화면에서 "+ 추가"를 누르는 것보다
+        // 몇 명분을 채워야 하는지 바로 보이는 편이 낫다(최소 0이어도 1행은 보여준다).
+        const initialCount = Math.max(min, 1);
+        const rowHtml = `<div class="mc-rep-row" data-mc-rep-row>
+            <div class="mc-rep-row-head"><span class="mc-rep-row-title" data-mc-rep-title></span>
+              <button type="button" class="mc-rep-remove" data-mc-rep-remove aria-label="${escapeHtml(t.removeRow)}">&times;</button></div>
+            ${rowFieldsHtml}
+          </div>`;
+        const rows = Array.from({ length: initialCount }, () => rowHtml).join("");
+        return `<div class="mc-field">${label}
+          <div class="mc-rep-rows" data-mc-rep-rows data-mc-key="${escapeHtml(field.key)}"
+            data-mc-rep-min="${min}" data-mc-rep-max="${max}" data-mc-rep-label="${escapeHtml(field.label)}">${rows}</div>
+          <template data-mc-rep-template>${rowHtml}</template>
+          <button type="button" class="mc-rep-add" data-mc-rep-add data-mc-rep-add-for="${escapeHtml(field.key)}">+ ${escapeHtml(t.addRow)}</button>
+        </div>`;
       }
       if (field.type === "youtube") {
         return `<div class="mc-field">${label}

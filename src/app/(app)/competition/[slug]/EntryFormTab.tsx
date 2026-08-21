@@ -3,13 +3,13 @@
 import { useMemo, useState } from "react";
 import { motion, Reorder } from "framer-motion";
 import {
-  AlignLeft, GripVertical, ImageIcon, ListChecks, ListPlus, Mail, Phone, Plus, SquareCheck, Trash2, Video,
+  AlignLeft, GripVertical, ImageIcon, ListChecks, ListPlus, Mail, Phone, Plus, SquareCheck, Trash2, Users, Video,
 } from "lucide-react";
 import { toast } from "sonner";
 import { NOTICE_LANGUAGES } from "@/lib/notice/config";
 import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 import { Switch } from "@/components/ui/switch";
-import type { CompetitionFieldType, CompetitionFormField } from "@/lib/competition-config";
+import type { CompetitionFieldType, CompetitionFormField, CompetitionRepeaterSubField } from "@/lib/competition-config";
 import { CompetitionLegalGenerator } from "./CompetitionLegalGenerator";
 import { ConsentBodyField, useWorkspaceLegalProfile } from "@/components/legal/legal-generator-shared";
 import { resolveOrgProfile } from "@/lib/legal-templates";
@@ -38,10 +38,17 @@ const TYPE_META: Record<CompetitionFieldType, { label: string; icon: typeof Alig
   checkbox: { label: "체크박스", icon: SquareCheck },
   image: { label: "이미지", icon: ImageIcon },
   youtube: { label: "YouTube", icon: Video },
+  repeater: { label: "반복 그룹(팀원 등)", icon: Users },
 };
 
-const TYPE_ORDER: CompetitionFieldType[] = ["text", "email", "tel", "select", "multiple", "checkbox", "image", "youtube"];
+const TYPE_ORDER: CompetitionFieldType[] = ["text", "email", "tel", "select", "multiple", "checkbox", "image", "youtube", "repeater"];
 const CHOICE_TYPES: CompetitionFieldType[] = ["select", "multiple"];
+
+/** 반복 그룹으로 막 바꿨을 때 아무 서브필드도 없으면 아무것도 못 받는 빈 항목이 된다. */
+const DEFAULT_REPEATER_SUB_FIELDS: CompetitionRepeaterSubField[] = [
+  { key: "name", label: "이름", type: "text", required: true },
+  { key: "email", label: "이메일", type: "email", required: true },
+];
 
 export default function EntryFormTab({ competition, patch, workspaceId }: Props) {
   const [form, setForm] = useState(competition.config.form);
@@ -177,7 +184,15 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                   />
                   <select
                     value={field.type}
-                    onChange={(e) => updateField(field.id, { type: e.target.value as CompetitionFieldType })}
+                    onChange={(e) => {
+                      const type = e.target.value as CompetitionFieldType;
+                      // 반복 그룹으로 막 바꿨는데 서브필드가 하나도 없으면 아무것도 못
+                      // 받는 빈 항목이 된다 — 이름·이메일 기본값을 미리 채워 둔다.
+                      const subFields = type === "repeater" && (field.subFields?.length ?? 0) === 0
+                        ? DEFAULT_REPEATER_SUB_FIELDS
+                        : field.subFields;
+                      updateField(field.id, { type, subFields, minItems: field.minItems ?? 1, maxItems: field.maxItems ?? 10 });
+                    }}
                     disabled={field.system}
                     className={`${FIELD_CLS} h-8 w-28 disabled:opacity-60`}
                   >
@@ -254,6 +269,81 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                   <p className="mt-2 pl-9 text-[11px] text-muted-foreground">
                     제출 시 링크에서 영상 ID만 저장해요. 비공개 영상은 재생되지 않아 신청자에게 안내가 나갑니다.
                   </p>
+                )}
+
+                {field.type === "repeater" && (
+                  <div className="mt-2 space-y-2 pl-9">
+                    <p className="text-[11px] text-muted-foreground">
+                      신청자가 &ldquo;{field.label || "항목"} 추가&rdquo; 버튼으로 행을 늘려가며 채우는 항목이에요.
+                      한 행에 들어갈 서브필드를 정하세요 (예: 이름, 이메일).
+                    </p>
+                    {(field.subFields ?? []).map((sub, i) => {
+                      const updateSub = (patch: Partial<CompetitionRepeaterSubField>) => {
+                        const subFields = (field.subFields ?? []).map((s, idx) => (idx === i ? { ...s, ...patch } : s));
+                        updateField(field.id, { subFields });
+                      };
+                      return (
+                        <div key={i} className="flex items-center gap-1.5">
+                          <input
+                            value={sub.label}
+                            onChange={(e) => updateSub({ label: e.target.value })}
+                            placeholder="서브필드 이름 (예: 이름)"
+                            className={`${FIELD_CLS} h-8 flex-1`}
+                          />
+                          <input
+                            value={sub.key}
+                            onChange={(e) => updateSub({ key: e.target.value })}
+                            placeholder="key"
+                            className={`${FIELD_CLS} h-8 w-24 font-mono text-xs`}
+                          />
+                          <select
+                            value={sub.type}
+                            onChange={(e) => updateSub({ type: e.target.value as CompetitionRepeaterSubField["type"] })}
+                            className={`${FIELD_CLS} h-8 w-24`}
+                          >
+                            <option value="text">텍스트</option>
+                            <option value="email">이메일</option>
+                          </select>
+                          <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <input type="checkbox" checked={sub.required} onChange={(e) => updateSub({ required: e.target.checked })} />
+                            필수
+                          </label>
+                          <button
+                            onClick={() => updateField(field.id, { subFields: (field.subFields ?? []).filter((_, idx) => idx !== i) })}
+                            className="rounded p-1 text-muted-foreground hover:text-red-500"
+                            aria-label="서브필드 삭제"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                    <button
+                      onClick={() => updateField(field.id, {
+                        subFields: [...(field.subFields ?? []), { key: `field_${(field.subFields?.length ?? 0) + 1}`, label: "", type: "text", required: false }],
+                      })}
+                      className={`flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground ${R.control}`}
+                    >
+                      <ListPlus className="h-3 w-3" /> 서브필드 추가
+                    </button>
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <span>최소</span>
+                      <input
+                        type="number" min={0} max={field.maxItems ?? 10}
+                        value={field.minItems ?? 1}
+                        onChange={(e) => updateField(field.id, { minItems: Math.max(0, Number(e.target.value) || 0) })}
+                        className={`${FIELD_CLS} h-8 w-16`}
+                      />
+                      <span>~ 최대</span>
+                      <input
+                        type="number" min={field.minItems ?? 1} max={20}
+                        value={field.maxItems ?? 10}
+                        onChange={(e) => updateField(field.id, { maxItems: Math.max(1, Number(e.target.value) || 1) })}
+                        className={`${FIELD_CLS} h-8 w-16`}
+                      />
+                      <span>명</span>
+                    </div>
+                  </div>
                 )}
               </Reorder.Item>
             );

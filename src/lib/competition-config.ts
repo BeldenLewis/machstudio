@@ -13,14 +13,28 @@ import type { WebinarRegistrationField } from "./webinar-config";
 import { isLegalCountry, type Country, type OrgProfile, type ThirdParty } from "@/lib/legal-templates/types";
 import { resolveOrgTokens } from "@/lib/legal-templates/tokens";
 
-/** 대회 신청 폼에만 있는 추가 타입 — 사진 업로드와 YouTube 링크. */
-export type CompetitionExtraFieldType = "image" | "youtube";
+/** 대회 신청 폼에만 있는 추가 타입 — 사진 업로드와 YouTube 링크, 반복 항목(팀원 등). */
+export type CompetitionExtraFieldType = "image" | "youtube" | "repeater";
 export type CompetitionFieldType = WebinarRegistrationField["type"] | CompetitionExtraFieldType;
+
+/** repeater 한 행을 이루는 항목 — 팀원의 "이름", "이메일" 같은 것. */
+export interface CompetitionRepeaterSubField {
+  key: string;
+  label: string;
+  type: "text" | "email";
+  required: boolean;
+}
 
 export interface CompetitionFormField extends Omit<WebinarRegistrationField, "type"> {
   type: CompetitionFieldType;
   /** image 전용 — 받을 장 수. 1장당 요청 1번으로 올린다(Vercel 요청 본문 상한). */
   maxFiles?: number;
+  /** repeater 전용 — 반복되는 한 행의 구성(예: 이름+이메일). */
+  subFields?: CompetitionRepeaterSubField[];
+  /** repeater 전용 — 최소 행 수(0 이면 전부 선택). 최초 화면에도 이만큼 빈 행을 미리 그린다. */
+  minItems?: number;
+  /** repeater 전용 — 최대 행 수. */
+  maxItems?: number;
 }
 
 /** 공고 페이지 블록. 대회 소개·참가 자격·신청 절차·일정·FAQ 를 구조로 표현한다. */
@@ -160,12 +174,31 @@ function clampFontSize(value: unknown, fallback: number, min: number, max: numbe
   return Math.min(max, Math.max(min, Math.round(n)));
 }
 
+/** repeater 한 행의 서브필드 하나 — 잘못된 행(키 없음)은 버린다. */
+function normalizeSubField(raw: unknown, index: number): CompetitionRepeaterSubField | null {
+  if (!raw || typeof raw !== "object") return null;
+  const f = raw as Record<string, unknown>;
+  const key = str(f.key).trim();
+  if (!key) return null;
+  const type = str(f.type, "text") === "email" ? "email" : "text";
+  return { key, label: str(f.label) || key, type, required: bool(f.required, true) };
+}
+
+/** 새로 반복 타입으로 바꿨는데 서브필드가 하나도 없으면 아무것도 못 받는 빈 항목이 된다. */
+const DEFAULT_REPEATER_SUB_FIELDS: CompetitionRepeaterSubField[] = [
+  { key: "name", label: "이름", type: "text", required: true },
+  { key: "email", label: "이메일", type: "email", required: true },
+];
+
 function normalizeField(raw: unknown, index: number): CompetitionFormField | null {
   if (!raw || typeof raw !== "object") return null;
   const f = raw as Record<string, unknown>;
   const key = str(f.key).trim();
   if (!key) return null;
   const type = str(f.type, "text") as CompetitionFieldType;
+  const subFields = Array.isArray(f.subFields)
+    ? f.subFields.map(normalizeSubField).filter((s): s is CompetitionRepeaterSubField => s !== null)
+    : [];
   return {
     id: str(f.id) || `f-${index}-${key}`,
     key,
@@ -179,6 +212,13 @@ function normalizeField(raw: unknown, index: number): CompetitionFormField | nul
     ...(typeof f.maxSelect === "number" && f.maxSelect >= 1 ? { maxSelect: Math.floor(f.maxSelect) } : {}),
     ...(typeof f.allowOther === "boolean" ? { allowOther: f.allowOther } : {}),
     ...(typeof f.maxFiles === "number" && f.maxFiles >= 1 ? { maxFiles: Math.floor(f.maxFiles) } : {}),
+    ...(type === "repeater"
+      ? {
+          subFields: subFields.length > 0 ? subFields : DEFAULT_REPEATER_SUB_FIELDS,
+          minItems: typeof f.minItems === "number" && f.minItems >= 0 ? Math.floor(f.minItems) : 1,
+          maxItems: typeof f.maxItems === "number" && f.maxItems >= 1 ? Math.floor(f.maxItems) : 10,
+        }
+      : {}),
   };
 }
 
@@ -395,4 +435,48 @@ export function normalizeMedia(raw: unknown): CompetitionMediaItem[] {
     }
   });
   return out.sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+/**
+ * 반복 항목(팀원 등) 제출값 검증·정리 — 서버가 클라이언트를 못 믿고 다시 하는 부분.
+ *
+ * 대회 신청 API(entries/route.ts)와 여기서 로직을 나눠 두는 이유: 이 함수는 순수 함수라
+ * DB·Request 없이 테스트할 수 있다 — 몇 번째 행의 어떤 서브필드가 비었는지까지 검증하는
+ * 로직을 라우트 안에 그대로 두면 그 부분만 따로 확인할 방법이 없다.
+ *
+ * 성공하면 { items }, 실패하면 어느 라벨이 문제인지(`t.fieldRequired(label)` 에 바로 꽂는 값)
+ * 를 { errorLabel } 로 돌려준다 — 문구 자체는 호출자가 언어 사전으로 채운다.
+ */
+export function normalizeRepeaterSubmission(
+  field: CompetitionFormField,
+  raw: unknown,
+): { items: Record<string, string>[] } | { errorLabel: string } {
+  const subFields = field.subFields ?? [];
+  const minItems = field.minItems ?? 0;
+  const rawItems = Array.isArray(raw) ? raw : [];
+  const items: Record<string, string>[] = [];
+
+  for (let i = 0; i < rawItems.length; i++) {
+    const rawItem = rawItems[i];
+    if (!rawItem || typeof rawItem !== "object") continue;
+    const source = rawItem as Record<string, unknown>;
+    const item: Record<string, string> = {};
+    let hasAny = false;
+    for (const sf of subFields) {
+      const v = typeof source[sf.key] === "string" ? (source[sf.key] as string).trim() : "";
+      if (v) { item[sf.key] = v; hasAny = true; }
+    }
+    // 필수 행 수를 넘는 보너스 행이 완전히 비어 있으면 조용히 버린다 — 채우다 만 흔적이
+    // 아니라 애초에 안 쓴 행이다.
+    if (!hasAny && i >= Math.max(minItems, 1)) continue;
+    for (const sf of subFields) {
+      if (sf.required && !item[sf.key]) {
+        return { errorLabel: `${field.label} ${i + 1} · ${sf.label}` };
+      }
+    }
+    items.push(item);
+  }
+
+  if (field.required && items.length === 0) return { errorLabel: field.label };
+  return { items };
 }

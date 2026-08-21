@@ -21,6 +21,10 @@ export interface CompetitionFormStrings {
   chooseFile: string;
   /** 이미지 항목 아래 안내. {max} 를 장수로 바꿔 쓴다. */
   imageHint: (max: number) => string;
+  /** 반복 항목(팀원 등)에 행을 추가하는 버튼. */
+  addRow: string;
+  /** 반복 항목의 행 삭제 버튼 aria-label. */
+  removeRow: string;
   youtubeHint: string;
   modalTitle: string;
   submit: string;
@@ -53,6 +57,8 @@ const KO: CompetitionFormStrings = {
   choosePlaceholder: "선택해주세요",
   chooseFile: "파일 선택",
   imageHint: (max) => `장당 4MB 이하, 최대 ${max}장`,
+  addRow: "추가",
+  removeRow: "삭제",
   youtubeHint: "비공개(Private) 영상은 심사·투표 화면에서 재생되지 않아요. 미등록(Unlisted) 또는 공개로 설정해주세요.",
   modalTitle: "참가 신청",
   submit: "신청서 제출",
@@ -82,6 +88,8 @@ const EN: CompetitionFormStrings = {
   choosePlaceholder: "Please select",
   chooseFile: "Choose file",
   imageHint: (max) => `Up to 4MB each, ${max} file${max > 1 ? "s" : ""} max`,
+  addRow: "Add",
+  removeRow: "Remove",
   youtubeHint: "Private videos won't play on the judging and voting screens. Please set your video to Unlisted or Public.",
   modalTitle: "Apply",
   submit: "Submit application",
@@ -112,6 +120,8 @@ const FR: CompetitionFormStrings = {
   choosePlaceholder: "Veuillez choisir",
   chooseFile: "Choisir un fichier",
   imageHint: (max) => `4 Mo maximum par fichier, ${max} fichier${max > 1 ? "s" : ""} au total`,
+  addRow: "Ajouter",
+  removeRow: "Supprimer",
   youtubeHint:
     "Les vidéos privées ne peuvent pas être lues sur les écrans de vote et du jury. Choisissez « Non répertoriée » ou « Publique ».",
   modalTitle: "Inscription",
@@ -142,6 +152,8 @@ const JA: CompetitionFormStrings = {
   choosePlaceholder: "選択してください",
   chooseFile: "ファイルを選択",
   imageHint: (max) => `1枚あたり4MB以下、最大${max}枚`,
+  addRow: "追加",
+  removeRow: "削除",
   youtubeHint:
     "非公開（Private）の動画は審査・投票画面で再生されません。限定公開（Unlisted）または公開に設定してください。",
   modalTitle: "エントリー",
