@@ -1,6 +1,6 @@
 # 홈페이지 메뉴 — 전시 웹사이트 빌더 · CMS 설계 (v2)
 
-작성일: 2026-08-21 · 상태: **사용자 승인 — §12 확인 완료** · 착수 순서는 §11 (W0 실측이 먼저다)
+작성일: 2026-08-21 · 상태: **사용자 승인 · W0 인증 관리자 미리보기 실측 PASS · W1 구현 계획 착수 가능 · 공개 출시는 별도 사용자 승인 릴리스 검증 전까지 차단** · 증거: [W0 실측 기록](../research/2026-08-21-imweb-w0/README.md)
 
 > 세 관점 설계(A: 데이터 모델, B: 편집 UX, C: 런타임·임베드)와 적대적 비판을 통합했다.
 > 갈린 곳은 전부 하나로 결정하고 근거를 남겼다. 비판의 각 지적은 §1 결정 표와 본문에서
@@ -11,7 +11,7 @@
 > `collect-form-config.ts eventInfo`(192·408·439행), 번들 실측(landing 135,445B · form 55,488B),
 > `previewToken` 패턴 2벌(schema 269·1053행), `src/embed/` 4벌 + `src/generated/` 5벌.
 >
-> **v2 승인 변경:** 이 기능은 LA 및 특정 행사 일정과 무관한 범용 제품이다. 첫 출시부터 템플릿을
+> **v2 승인 변경:** 이 기능은 특정 지역·행사 일정과 무관한 범용 제품이다. 첫 출시부터 템플릿을
 > 포함하고, 홈페이지 빌더가 직접 그리거나 포함하는 first-party 공개 UI는 모두 self-host Pretendard +
 > Shadow DOM 경계 안에서 그린다.
 > `custom-code` 안의 제3자 위젯만 서체 강제의 예외다. 자세한 확인 결과는 §12.
@@ -54,7 +54,7 @@
 | D13 | 전환 절차·롤백 | **유일 권장 절차 = "임베드 전용 아임웹 새 페이지 + 아임웹 메뉴 링크가 라우터"**(C §9). B 의 체크리스트 UI 를 이 절차로 재작성. 롤백 = `liveAt` OFF 또는 메뉴 원복 — 자기신고 `switchedAt` 폐기(스위치가 실서빙을 바꾸므로 신고 축 불필요) | 5-1·3-4·3-5. 상태는 3상태 + lastSeenAt 관측 병기(B) |
 | D14 | 섹션 편집 표면 | 좌측 섹션 내비게이터에서 하나를 선택하고, **중앙 편집 열에는 선택 섹션의 모든 값을 항상 노출**한다. 접힘 카드·모달 편집 비채택 | 가변 N개를 한 열에 모두 펼치지 않으면서도 "고치는 값은 숨기지 않는다"는 Direct Manipulation 원칙을 지킨다. 미리보기 클릭도 같은 선택 상태로 연결 |
 | D15 | event-info 게이트 | 정본은 `CollectSource.formConfig.eventInfo` 참조(A) — 단 **소스 isActive 는 접수 게이트지 정보 게이트가 아니다**: 소스가 비활성이어도 eventInfo 는 읽어 서빙 | 3-2. /f/ 의 "비활성이면 formConfig 미탑재"를 그대로 이식하면 안 되는 지점 |
-| D16 | 섹션 다중 번들 다운로드 | W1 은 로더 관례 유지(응답=번들+boot) + **스니펫 UI 에 "한 아임웹 페이지에 섹션 스니펫 3개 이하 권장" 명시**. W0/브라우저 실측에서 문제면 W2 에 "boot 전용 응답 + 공용 번들 1회" 분리 | expo 번들은 초기 카탈로그 기준 landing(135KB)보다 작고 CDN 압축 후 실전 비용을 모른 채 관례 첫 이탈을 감행하지 않는다. 이탈 트리거를 수치로 명시하는 쪽 선택 |
+| D16 | 섹션 다중 번들 다운로드 | W1 은 로더 관례 유지(응답=번들+boot) + **스니펫 UI 에 "한 아임웹 페이지에 섹션 스니펫 3개 이하 권장" 명시**. 다중 Expo 번들은 W0 미실측 영역이며, W1/W2 실제 다중 스니펫 브라우저 측정에서 문제가 확인될 때 "boot 전용 응답 + 공용 번들 1회"로 분리 | expo 번들은 초기 카탈로그 기준 landing(135KB)보다 작고 CDN 압축 후 실전 비용을 모른 채 관례 첫 이탈을 감행하지 않는다. 이탈 트리거를 수치로 명시하는 쪽 선택 |
 | D17 | 색 유틸 승격 | `onAccentColor`·`paperFor`·hex 검증 → `src/lib/color.ts` 승격은 **별도 커밋 + 라이브 없는 주간**에 선행 | 6-2 — LiveContentStk(라이브 시청 화면)를 건드리므로. 승격 전 W1 착수가 막히지 않게 expo 쪽은 import 경로만 바꾸면 되는 구조로 |
 | D18 | 카탈로그 픽커 | W1 은 텍스트 라벨 + 한 줄 설명. 변형 썸네일 비채택 | 5-3 — 썸네일 20~30장 제작 비용이 어느 설계에도 없다 |
 | D19 | 템플릿 시기 | **첫 출시 W1 포함.** `design`(기본) / `full` 두 저장 모드. 인스턴스화 때 sid·sourceRef·아임웹 URL·공개 상태·토큰은 제거 | 특정 행사 일정과 무관한 범용 제품이고 템플릿은 확정 핵심 요구다. 구조가 있는 첫 버전부터 왕복 계약을 검증해야 한다(§12 Q4) |
@@ -237,7 +237,7 @@ transaction이 실패하면 이번 작업에서 복사한 객체만 보상 삭�
 
 | 타입 | 제네시스 원형 | 변형 | 슬롯 (kind) | multi | 단계 |
 |---|---|---|---|---|---|
-| `kv` 키비주얼 | kv-basic | `column`(콘텐츠 폭 — **기본**, 7-1 실측 전까지) · `full`(풀블리드 — 실측 통과 시) · `minimal`(텍스트만, 하위페이지 헤더) | eyebrow(text) · title(text, req) · subtitle(text) · media(media — embed 금지) · cta(link) — design: overlay 강도·정렬 | ✗ 페이지당 1, 최상단 | W1 |
+| `kv` 키비주얼 | kv-basic | `column`(콘텐츠 폭 — **기본**) · `minimal`(텍스트만, 하위페이지 헤더). `full`은 W0에서 기존 콘텐츠와 분리된 전폭 레이아웃을 안전하게 확보하지 못해 미등록; 후속 레이아웃 재설계와 동일 geometry 재실측을 통과할 때만 재검토 | eyebrow(text) · title(text, req) · subtitle(text) · media(media — embed 금지) · cta(link) — design: overlay 강도·정렬 | ✗ 페이지당 1, 최상단 | W1 |
 | `textblock` 본문 | — | `statement`(대형 한 문단) · `prose`(제목+본문) · `twocol` | heading(text) · body(textarea, req) · media(media) | ✓ | W1 |
 | `cardgrid` 카드 | card-newsfeed/-multicolumn/-dualshape | `multicolumn`(3열) · `newsfeed`(태그+날짜) · `dualshape`(2장 대비) | heading(text) · items(list{media, tag(text), title(text, req), description(textarea), link(link), date(text)}) | ✓ (dualshape ×2 실측) | W1(multicolumn) → W2(나머지 변형) |
 | `toolbox` 퀵 액션 | toolbox | `tiles`(4타일) · `strip`(가로 바) | items(list{icon(text), label(text, req), link(link, req)}) — 사전등록/오시는 길/브로슈어/참가신청 | ✗ | W1 |
@@ -383,8 +383,8 @@ box-sizing·width/min/max-width·height·margin·padding·border·background·op
 position/inset·z-index·pointer-events를 충돌 방지용 inline-important로 정규화하되 `width:100%`로 아임웹이
 제공한 바깥 컨테이너 폭은 존중한다. portal host는 같은 시각 속성을 초기화한 뒤 body viewport 기준
 fixed/inset/z-index/pointer-events 계약을 별도로 적용한다. hostile 테스트는 Shadow 내부뿐 아니라 이 두
-light-DOM host도 앞·뒤 삽입 규칙으로 공격한다. 아임웹이 그 바깥 조상을 숨기거나 폭을 제한하는 것은 내부
-디자인 격리와 구분해 W0 실측·인라인 안내로 다룬다.
+light-DOM host도 앞·뒤 삽입 규칙으로 공격한다. 아임웹 바깥 조상 폭은 W0에서 standard·wide를 검증했고
+독립 full은 확보하지 못했다. 바깥 조상 숨김·폭 제한은 내부 디자인 격리와 구분해 W1 인라인 안내로 다룬다.
 
 #### Pretendard 단일 서체(D23)
 
@@ -485,8 +485,9 @@ bg/paper 2벌) + 나머지는 `EXPO_CSS` 안 `color-mix` 파생. host document �
   공개중 테마 변경, 영구 템플릿 삭제처럼 실제 공개 상태나 복구 가능성을 바꾸는 저빈도 액션에만 쓴다.
   공개 ON은 발행 상태·설치 체크를 같은 화면에서 인라인 검증한 뒤 1클릭으로 실행한다.
 - 이행 현황(레일 하단): 읽는 영역 — 헤드라인("3/7 공개중") → 다음 후보 → 표(페이지·상태·lastSeenAt·
-  코드 버튼). 체크리스트는 D13 의 유일 권장 절차로 작성. W0에서 편집 모드의 외부 script 미실행이
-  확인된 경우에만 "아임웹 편집기에서는 placeholder만 보이고 게시 화면에서 렌더됩니다" 안내를 붙인다.
+  코드 버튼). 체크리스트는 D13 의 유일 권장 절차로 작성. W0 결과 `editorMode=placeholder`이므로
+  "아임웹 편집기에서는 placeholder만 보이며, 인증 관리자 미리보기 또는 Mach 미리보기에서 렌더를 확인하세요"
+  안내를 항상 붙인다. 실제 공개 화면 동작은 별도 릴리스 검증 전까지 단정하지 않는다.
 
 ---
 
@@ -510,16 +511,24 @@ Shadow DOM은 스타일 격리 경계일 뿐 서버 메타를 만들지 않으�
 
 ## 11. 검증 계획 · 롤아웃
 
-### W0 — 착수 전 아임웹 실측·확정 (프로덕션 기능 코드 0줄)
+### W0 — 인증 관리자 미리보기 실측 완료 (프로덕션 기능 코드 0줄)
 
-- 사용자가 허용한 실제 아임웹 관리자 환경의 **복제/비공개 테스트 페이지**에서 확인한다. 운영 페이지를
-  직접 실험 대상으로 쓰지 않는다. 실행 여부·폭만 재는 폐기 가능한 inert probe snippet은 허용한다.
-- ① 코드블럭의 표준 칼럼·와이드/전폭 배치 실제 폭과 clipping ② 편집 모드와 게시 모드 각각의 외부
-  classic script 실행 여부 ③ 늦게 삽입되는 테마 CSS·CSP/CORS·`wg_animated` 동작을 측정한다.
-- 결과가 `kv.full` 기본 제공 여부와 편집기 placeholder/게시 미리보기 안내를 결정한다. 편집 모드에서
-  스크립트가 실행되지 않으면 편집기 안 placeholder를 정상 계약으로 두고 게시/우리 미리보기에서 검수한다.
-- 이름·URL·마운트 속성(D4), §12 사용자 결정, Shadow DOM 지원 브라우저 하한을 이 문서로 확정한다.
-- 로컬 dev 서버가 필요한 실브라우저 검증은 라이브 방송 일정을 먼저 확인한 뒤 실행한다.
+[원시 JSON·판정·정리 증거](../research/2026-08-21-imweb-w0/README.md)는 사용자가 지정한 메뉴 비노출·미게시 작업 페이지에서 Publish나 권한 변경 없이 수집했다.
+
+| 배치 | 데스크톱 1440 | 모바일 390 | 결정 |
+|---|---:|---:|---|
+| standard | root `1410/1440 = 0.9791666667`, bleed `1440/1440 = 1` | root `360/390 = 0.9230769231`, bleed `390/390 = 1` | PASS |
+| wide | root·bleed `1440/1440 = 1` | root·bleed `390/390 = 1` | PASS |
+| full | 안전한 독립 전폭 섹션 없음 | 안전한 독립 전폭 섹션 없음 | `full-layout-unavailable`, `allowKvFull=false` |
+
+- 편집기에서 probe HTML과 외부 코드는 실행되지 않았다. `editorMode=placeholder`이며 native 모바일 캔버스는 375px, 인증 관리자 미리보기 모바일 기준은 390×844다.
+- 데스크톱·모바일 인증 관리자 미리보기에서 parser onload·parser classic script·dynamic classic script가 모두 실행됐다.
+- Mach CORS는 `204 / cors / ok=true`; 실제 사용한 CDN script/font와 Mach connect 중 CSP violation은 0이었다. 원본 CSP 응답 헤더는 드라이버에 노출되지 않았으므로 canonical `/h`와 self-host font CSP는 아직 증명하지 않는다.
+- `attachShadow`, `adoptedStyleSheets`, `FontFace`, `document.fonts`, `ResizeObserver`, `MutationObserver`가 두 미리보기에서 모두 PASS했다.
+- 고정 CDN Pretendard probe의 load/check가 PASS했고, Shadow signature는 `font-loaded`부터 `t+10000`까지 동일했다. 고유 Pretendard alias도 유지됐다.
+- portal은 `t+10000`에도 fixed `(0,0)`, 1×1, visible, transform/filter none이었고, `wg_animated` 위젯은 `t+2000` 전에 자연 노출됐다.
+- 임시 위젯은 설치 전 8개 → 측정 중 11개 → 제거·새로고침 후 8개로 복구됐다. marker/controller/portal/global 잔여물은 0이다.
+- 결론은 **W1 구현 계획만 해제**한다. 실제 self-host Pretendard, 실제 `/h`, 실제 공개 렌더는 별도 사용자 승인 릴리스 검증 전까지 차단한다.
 
 ### W1 — 첫 출시: 부분 이행 + 템플릿 + 완전 격리
 
@@ -568,14 +577,16 @@ Shadow DOM은 스타일 격리 경계일 뿐 서버 메타를 만들지 않으�
 - 폰트: 우리 HTTPS 오리진 요청만 200, WOFF2 MIME/CORS/immutable cache, 외부 폰트 요청 0,
   한글·영문·숫자 표본으로 `document.fonts.check` 400~900, 실제 Rendered Fonts=
   `__mach_expo_pretendard_v1`, 등록번호 tabular numerals, 섹션 3개 중복 전송 0을 검증한다.
-- Chromium·WebKit·실제 iPhone Safari와 W0 아임웹 비공개 페이지에서 편집/게시·데스크톱/모바일을 확인한다.
-  이 네 겹을 모두 통과하기 전에는 "아임웹 스타일 완전 격리" 완료를 주장하지 않는다.
+- Chromium·WebKit·실제 iPhone Safari, 아임웹 편집기 placeholder, 인증 관리자 미리보기 데스크톱·모바일을 확인한다.
+  실제 self-host Pretendard 파일, 실제 `/h` 런타임, 실제 공개 데스크톱·모바일 렌더는 별도 사용자 승인
+  릴리스 검증에서 확인한다. 그전에는 공개 출시나 "아임웹 스타일 완전 격리" 완료를 주장하지 않는다.
 
 ### W2 — 페이지 전환 운영 + 표현력
 
 - 이행 현황 대시보드 + ConnectionBadge. W1 체크리스트의 진행 상태를 페이지별로 모은다.
-- 카탈로그: cardroller·event-info(§5 계약)·faq·sponsors·directions·media-banner, cardgrid 변형 확장,
-  kv `full`(W0 실측 통과 시).
+- 카탈로그: cardroller·event-info(§5 계약)·faq·sponsors·directions·media-banner, cardgrid 변형 확장.
+- `kv.full`은 `allowKvFull=false`이므로 W2 기본 범위에서도 제외한다. 기존 콘텐츠와 분리된 전폭 레이아웃을
+  마련하고 동일 geometry gate를 재통과할 때만 재검토한다.
 - 영상 업로드·YouTube embed, 페이지 트리 깊이 2, 메타 복붙 안내, 미리보기 발행본 비교.
 - 섹션 다중 스니펫 실측 → 필요 시 boot 전용 응답 분리(D16 트리거).
 
@@ -591,18 +602,16 @@ Shadow DOM은 스타일 격리 경계일 뿐 서버 메타를 만들지 않으�
 ## 12. 사용자 확인 결과 (2026-08-21 승인)
 
 1. **SEO·OG:** §10 한계를 승인했다. 검색 유입용 보도자료·뉴스는 아임웹 네이티브로 남긴다.
-2. **첫 사용 흐름:** 기존 아임웹에 섹션을 끼우는 부분 이행부터 한다. 이는 LA 일정이 아니라 범용 제품의
+2. **첫 사용 흐름:** 기존 아임웹에 섹션을 끼우는 부분 이행부터 한다. 특정 행사 일정과 무관한 범용 제품의
    낮은 위험 검증 순서다.
 3. **서체·격리:** 홈페이지 빌더가 직접 그리거나 포함하는 공개 UI는 전부 self-host Pretendard. 별도
    웨비나·대회 임베드의 전면 서체 개편은 Queue B 범위가 아니다. light DOM 맞불을 폐기하고
    Shadow DOM 하이브리드(D22~D24)를 승인했다. `custom-code` 제3자 위젯 내부만 예외다.
 4. **템플릿:** W3로 미루지 않고 첫 출시 W1에 저장·인스턴스화를 포함한다.
-5. **아임웹 실측:** 사용자 로그인 환경의 비공개 테스트 페이지에서 W0 실측하는 데 동의했다.
+5. **아임웹 실측:** 사용자 로그인 환경의 메뉴 비노출·미게시 작업 페이지에서 게시나 권한 변경 없이
+   인증 관리자 미리보기로 W0를 실측하는 데 동의했고, 공개 게시 금지를 재확인했다.
 6. **운영 주체:** 사용자가 아임웹 코드블럭·게시·메뉴 링크 교체의 주 담당자다. 제품 내 절차는
    비개발자 체크리스트와 즉시 원복 단계로 제공한다.
-
-추가 범위 확인: 홈페이지 빌더는 **LA와 아무 관련이 없는 범용 기능**이다. 문서·코드·테스트 이름과
-샘플 데이터도 특정 행사 일정을 제품 근거로 사용하지 않는다.
 
 ---
 
