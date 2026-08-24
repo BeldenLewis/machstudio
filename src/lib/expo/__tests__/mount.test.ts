@@ -5,6 +5,7 @@ import { EXPO_HOST_TAG } from "@/lib/expo/shadow";
 import { resetExpoPortal } from "@/lib/expo/overlay";
 import { resetFormTargets } from "@/lib/collect-form/target-registry";
 import { resetExpoFontRegistry } from "@/lib/expo/font";
+import { resetExpoSeen } from "@/lib/expo/seen";
 import { scrollLockDepth, unlockScroll } from "@/lib/dom/scroll-lock";
 
 /**
@@ -46,6 +47,14 @@ const mount = (over: Partial<Parameters<typeof mountExpo>[0]> = {}) => {
 
 beforeEach(() => {
   vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  /**
+   * 라이브 마운트는 "붙어 있다" 비콘을 보낸다. jsdom 에는 sendBeacon 이 없어 fetch 로
+   * 떨어지고, 그게 실제 네트워크를 때린다 — 목으로 막고 매 테스트마다 초기화한다.
+   */
+  resetExpoSeen(globalThis as never);
+  vi.stubGlobal("navigator", Object.assign(Object.create(Object.getPrototypeOf(navigator)), navigator, {
+    sendBeacon: vi.fn(() => true),
+  }));
   document.body.innerHTML = "";
   document.head.innerHTML = "";
   resetExpoPortal(window as never);
@@ -240,6 +249,40 @@ describe("실패해도 파트너 페이지를 깨지 않는다", () => {
     mount({ container, payload: payload({ sections: [] }) });
     const root = container.querySelector(EXPO_HOST_TAG)!.shadowRoot!.querySelector<HTMLElement>(".msx-root")!;
     expect(root.getAttribute("data-msx-ready")).toBe("1");
+  });
+});
+
+describe("붙어 있다 비콘", () => {
+  const beacon = () => (navigator.sendBeacon as unknown as ReturnType<typeof vi.fn>);
+
+  it("라이브는 한 번 보낸다", () => {
+    mount();
+    expect(beacon()).toHaveBeenCalledTimes(1);
+    const [url, body] = beacon().mock.calls[0];
+    expect(url).toBe("https://mach.example.com/api/expo-embed/seen");
+    expect(JSON.parse(body as string)).toEqual({ pageId: "pg1" });
+  });
+
+  /**
+   * 운영자가 편집기를 열어 본 것이 "붙어 있음" 으로 기록되면 그 배지가 **거짓**이 된다.
+   * 배지의 존재 이유가 "내가 붙였는지 모르겠다" 를 해결하는 것이므로 치명적이다.
+   */
+  it("미리보기는 보내지 않는다", () => {
+    mount({ payload: payload({ mode: "preview-draft" }) });
+    expect(beacon()).not.toHaveBeenCalled();
+    mount({ container: host().container, payload: payload({ mode: "preview-published" }) });
+    expect(beacon()).not.toHaveBeenCalled();
+  });
+
+  /** 내용이 없는 연결 확인 상태에서도 보낸다 — 이 값의 뜻은 "붙어 있는지" 다. */
+  it("연결 확인 상태에서도 보낸다", () => {
+    mount({ payload: payload({ connectionOnly: true }) });
+    expect(beacon()).toHaveBeenCalledTimes(1);
+  });
+
+  it("구획 단독은 sid 를 함께 보낸다", () => {
+    mount({ payload: payload({ sectionId: SID }) });
+    expect(JSON.parse(beacon().mock.calls[0][1] as string)).toEqual({ pageId: "pg1", sectionId: SID });
   });
 });
 

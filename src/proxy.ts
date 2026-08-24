@@ -45,6 +45,11 @@ export async function proxy(request: NextRequest) {
     // 빌더형 등록 폼 미리보기(/p/{previewToken}) — 검토자는 워크스페이스 멤버가 아니다.
     // 권한은 추측 불가능한 토큰이 대신하고, 페이지 자체가 조회 외의 부작용을 갖지 않는다.
     pathname.startsWith("/p/") ||
+    // 홈페이지 임베드 — 파트너 사이트에 부착되는 로더·미리보기·비콘.
+    // **어드민 CRUD(/api/expo/*)는 여기 없다** — 그건 로그인 흐름을 그대로 탄다.
+    pathname.startsWith("/h/") ||   // 페이지·구획 로더
+    pathname.startsWith("/hp/") ||  // 토큰 미리보기(검토자는 워크스페이스 멤버가 아니다)
+    pathname === "/api/expo-embed/seen" ||
     // 홈페이지 임베드 서체 — 파트너 사이트에서 익명으로 받아 간다.
     // matcher 가 제외하는 확장자에 woff2 는 없어서, 이게 없으면 로그인으로 307 된다(실측).
     // 버전이 박힌 정확한 접두사만 연다 — public/ 전체를 여는 것과는 다르다.

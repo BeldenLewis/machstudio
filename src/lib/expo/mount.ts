@@ -13,6 +13,7 @@
 import { expoThemeVars } from "@/lib/expo/css";
 import { mountExpoShell, type ExpoShellHandle } from "@/lib/expo/shadow";
 import { renderExpoSections } from "@/lib/expo/view-page";
+import { reportExpoSeen } from "@/lib/expo/seen";
 import type { PayloadSection } from "@/lib/expo/view-sections";
 import type { FormMountMode } from "@/lib/collect-form/target-registry";
 import type { ExpoTheme } from "@/lib/expo/types";
@@ -26,6 +27,11 @@ export interface ExpoRuntimePayload {
   /** 서체·폼 스크립트를 받아 올 절대 주소. 서버가 정한다. */
   origin: string;
   sections: PayloadSection[];
+  /**
+   * 발행은 됐지만 공개 스위치가 꺼져 있다 — **의도한 호스트만 확보하고 아무것도 안 그린다.**
+   * 그래야 운영자가 전환일 전에 스니펫을 미리 붙여 두고 "붙었는지" 를 확인할 수 있다.
+   */
+  connectionOnly?: boolean;
   /** 부작용을 내도 되는가. 없으면 라이브다. */
   mode?: FormMountMode;
   preview?: { allowCustomCode?: boolean };
@@ -90,7 +96,9 @@ export function mountExpo(options: ExpoMountOptions): ExpoMountHandle | null {
     shell = next;
 
     try {
-      const output = renderExpoSections(payload.sections ?? [], {
+      // 연결 확인 상태에서는 내용을 한 글자도 그리지 않는다.
+      const list = payload.connectionOnly ? [] : (payload.sections ?? []);
+      const output = renderExpoSections(list, {
         origin: payload.origin,
         mode,
         themeVars: expoThemeVars(payload.theme),
@@ -116,6 +124,18 @@ export function mountExpo(options: ExpoMountOptions): ExpoMountHandle | null {
        * 둘 다 안 돌아서 방문자가 탭을 볼 때까지 구획이 안 보인다.
        */
       next.ready();
+    }
+
+    /**
+     * "코드가 실제로 붙었다" 를 한 번 알린다 — 운영자가 아임웹에 붙여 넣고 나서
+     * 확인할 방법이 이것뿐이다. **미리보기에서는 절대 보내지 않는다**: 운영자가
+     * 편집기를 열어 본 것이 "붙어 있음" 으로 기록되면 그 배지가 거짓이 된다.
+     *
+     * 내용이 없는 연결 확인 상태(발행됐지만 공개 스위치가 꺼짐)에서도 보낸다 —
+     * 그게 이 값의 뜻이다: 붙어 있는지이지, 보이는지가 아니다.
+     */
+    if (mode === "live") {
+      reportExpoSeen({ origin: payload.origin, pageId: payload.pageId, sectionId: payload.sectionId ?? null });
     }
     return true;
   };

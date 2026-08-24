@@ -120,6 +120,7 @@ export function expoSourceFiles(root) {
     join(root, "src/lib/expo/view-sections.ts"),
     join(root, "src/lib/expo/custom-code.ts"),
     join(root, "src/lib/expo/form-bridge.ts"),
+    join(root, "src/lib/expo/seen.ts"),
     join(root, "src/lib/expo/font.ts"),
     join(root, "src/lib/expo/css.ts"),
     join(root, "src/lib/expo/registry.ts"),
