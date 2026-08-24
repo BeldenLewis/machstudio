@@ -27,7 +27,9 @@ export const COLLECT_FORM_CSS = `
   /* 호스트 상속 차단 — 상속되는 속성만 모아 다시 못 박는다 */
   all:initial;
   display:block; box-sizing:border-box;
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  /* 홈페이지 Shadow 안에서는 --msx-font(Pretendard 별칭)를 물려받고,
+     단독 /f 에서는 그 변수가 없어 **지금까지의 스택 그대로**다. */
+  font-family:var(--msx-font,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Apple SD Gothic Neo","Malgun Gothic",sans-serif);
   font-size:15px; line-height:1.5; color:var(--msf-fg);
   text-align:left; letter-spacing:normal; word-break:break-word;
   /* 520px 은 호스트가 좁은 칸(사이드바 등)에 넣을 때 기준이었는데, 폼을 페이지 본문
@@ -164,10 +166,16 @@ export const COLLECT_FORM_CSS = `
 .msf-done-title{font-size:17px;font-weight:700}
 /**
  * 등록번호는 **현장에서 눈으로 읽고 손으로 친다**(설계 §9.1·§12).
- * 등폭 글꼴 + 넓은 자간이라야 0/O, 1/l 을 헷갈리지 않는다.
+ * 넓은 자간과 **자릿수가 고르게 서는 숫자**라야 불러 주고 받아 적기 좋다.
+ *
+ * 홈페이지 안에서는 --msx-font(Pretendard)를 물려받고 tabular-nums 로 자릿수를 세운다.
+ * 단독 /f 에서는 그 변수가 없어 **지금까지의 등폭 글꼴 그대로**다 — 9/1 오픈을 앞둔
+ * 화면의 생김새를 바꾸지 않는다.
  */
 .msf-regno{
-  margin-top:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  margin-top:12px;
+  font-family:var(--msx-font,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);
+  font-variant-numeric:tabular-nums;
   font-size:19px;font-weight:700;letter-spacing:.14em;
 }
 .msf-regno-label{font-size:11px;color:var(--msf-muted);margin-top:4px;letter-spacing:normal}
@@ -254,3 +262,35 @@ export const COLLECT_FORM_CSS = `
   .msf *{transition:none !important;animation:none !important}
 }
 `;
+
+/** 문서든 ShadowRoot 든 **한 벌만** 넣는다. */
+export const COLLECT_FORM_STYLE_ID = "msf-css";
+
+/**
+ * 스타일을 그 루트에 설치한다.
+ *
+ * 단독 `/f` 는 문서 head 에 넣는다(지금까지와 같다). 홈페이지 섹션은 **그 ShadowRoot 안**에
+ * 넣는다 — 문서 head 에 넣으면 Shadow 안까지 닿지 않아 폼이 스타일 없이 그려지고,
+ * 동시에 파트너 사이트의 전역 스타일을 우리가 늘리는 셈이 된다.
+ */
+export function ensureFormStyles(root?: Document | ShadowRoot): void {
+  const target = root ?? (typeof document !== "undefined" ? document : null);
+  if (!target) return;
+
+  if (target.nodeType === 9) {
+    const doc = target as Document;
+    if (doc.getElementById(COLLECT_FORM_STYLE_ID)) return;
+    const style = doc.createElement("style");
+    style.id = COLLECT_FORM_STYLE_ID;
+    style.textContent = COLLECT_FORM_CSS;
+    doc.head.appendChild(style);
+    return;
+  }
+
+  const shadow = target as ShadowRoot;
+  if (shadow.querySelector("#" + COLLECT_FORM_STYLE_ID)) return;
+  const style = shadow.ownerDocument.createElement("style");
+  style.id = COLLECT_FORM_STYLE_ID;
+  style.textContent = COLLECT_FORM_CSS;
+  shadow.appendChild(style);
+}

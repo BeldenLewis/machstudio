@@ -23,16 +23,30 @@ function hashFiles(files) {
   return "sha256:" + hash.digest("hex").slice(0, 32);
 }
 
+/**
+ * 타입만 있는 파일은 번들 입력이 아니다 — esbuild 가 통째로 지운다.
+ * 목록에 남겨 두면 metafile 대조가 영영 안 맞고, 그 검사를 느슨하게 만들게 된다.
+ * (타입 변경은 런타임 출력을 바꾸지 못하므로 빠져도 stale 검사에 구멍이 생기지 않는다.)
+ */
+const TYPE_ONLY = new Set(["src/lib/landing/types.ts"]);
+
 function dirTs(root, rel) {
   return readdirSync(join(root, rel))
     .filter((f) => f.endsWith(".ts"))
+    .filter((f) => !TYPE_ONLY.has(`${rel}/${f}`))
     .sort()
     .map((f) => join(root, rel, f));
 }
 
-/** 랜딩 런타임(src/embed/landing-entry.ts + src/lib/landing/*) */
-export function landingSourceHash(root) {
-  return hashFiles([
+/**
+ * 랜딩 런타임의 입력 파일 — 목록과 해시를 나눠 둔다.
+ *
+ * 목록을 따로 내보내는 이유: 이 목록이 **실제 번들 입력보다 짧으면** stale 검사는 초록인데
+ * 커밋된 번들은 낡을 수 있다. 그게 이 검사가 막으려던 바로 그 상황이라, 목록 자체를
+ * esbuild metafile 과 대조하는 테스트가 따로 있다(embed-runtime-manifest.test.ts).
+ */
+export function landingSourceFiles(root) {
+  return ([
     join(root, "src/embed/landing-entry.ts"),
     ...dirTs(root, "src/lib/landing"),
     // 랜딩 밖에 있지만 번들에 들어간다 (esbuild metafile 로 실측한 목록)
@@ -45,12 +59,19 @@ export function landingSourceHash(root) {
     join(root, "src/lib/attribution-client.ts"),
     join(root, "src/lib/attribution-normalize.ts"),
     join(root, "src/lib/webinar-share.ts"),
-  ]);
+    // 세션·연사 링크 — 랜딩 모델이 쓴다. **목록에 없었다**(metafile 대조로 발견, 2026-08-24).
+    join(root, "src/lib/webinar-sessions.ts"),
+    join(root, "src/lib/webinar-speaker-links.ts"),
+  ]).sort();
+}
+
+export function landingSourceHash(root) {
+  return hashFiles(landingSourceFiles(root));
 }
 
 /** 등록 폼 런타임(src/embed/form-entry.ts + src/lib/collect-form/*) */
-export function formSourceHash(root) {
-  return hashFiles([
+export function formSourceFiles(root) {
+  return ([
     join(root, "src/embed/form-entry.ts"),
     ...dirTs(root, "src/lib/collect-form"),
     // 폼 밖에 있지만 번들에 들어간다 — 검증 규칙·DOM 빌더·UTM 봉투
@@ -65,5 +86,14 @@ export function formSourceHash(root) {
     join(root, "src/lib/attribution-client.ts"),
     join(root, "src/lib/attribution-normalize.ts"),
     join(root, "src/lib/webinar-share.ts"),
-  ]);
+    // 동의 전문·대회 문구를 거쳐 들어온다. **목록에 없었다**(metafile 대조로 발견, 2026-08-24).
+    join(root, "src/lib/competition-render.ts"),
+    join(root, "src/lib/competition-strings.ts"),
+    join(root, "src/lib/legal-templates/tokens.ts"),
+    join(root, "src/lib/legal-templates/types.ts"),
+  ]).sort();
+}
+
+export function formSourceHash(root) {
+  return hashFiles(formSourceFiles(root));
 }

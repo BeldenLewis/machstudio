@@ -9,11 +9,10 @@
  * 조용히 고장 나면 현장 문의가 그대로 늘어난다.
  */
 import { h, clearNode } from "@/lib/dom/h";
-import { COLLECT_FORM_CSS } from "./css";
+import { ensureFormStyles } from "./css";
 import { onAccentColor } from "@/lib/competition-render";
 import type { CollectFormConfig } from "@/lib/collect-form-config";
 
-const STYLE_ID = "msf-css";
 
 const COPY = {
   title: "Find my QR",
@@ -46,6 +45,8 @@ export interface MountLookupOptions {
   sourceId: string;
   /** 미리보기 — 조회를 실제로 보내지 않고 표본 결과를 그린다. */
   preview?: boolean;
+  /** 스타일을 넣을 루트. 안 주면 문서(지금까지와 같다). */
+  styleRoot?: Document | ShadowRoot;
 }
 
 export interface LookupHandle {
@@ -61,13 +62,7 @@ export interface LookupHandle {
  */
 const PREVIEW_REG_NO = "0000000000001";
 
-function ensureStyles(): void {
-  if (typeof document === "undefined" || document.getElementById(STYLE_ID)) return;
-  const style = document.createElement("style");
-  style.id = STYLE_ID;
-  style.textContent = COLLECT_FORM_CSS;
-  document.head.appendChild(style);
-}
+
 
 type DataLayerWindow = Window & { dataLayer?: unknown[] };
 function track(preview: boolean, event: string): void {
@@ -82,7 +77,7 @@ function track(preview: boolean, event: string): void {
 }
 
 export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
-  ensureStyles();
+  ensureFormStyles(opts.styleRoot);
   const { config, mount } = opts;
   const preview = opts.preview === true;
 
