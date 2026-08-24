@@ -14,6 +14,8 @@
     "build:competition-vote-runtime": "node scripts/build-competition-vote-runtime.mjs",
     "build:competition-result-runtime": "node scripts/build-competition-result-runtime.mjs",
     "build:form-runtime": "node scripts/build-form-runtime.mjs",
+  "build:expo-shell-css": "node scripts/build-expo-shell-css.mjs",
+  "check:expo-font": "node scripts/check-expo-font.mjs",
     "build:embed-runtimes": "node scripts/build-landing-runtime.mjs && node scripts/build-competition-runtime.mjs && node scripts/build-competition-vote-runtime.mjs && node scripts/build-competition-result-runtime.mjs && node scripts/build-form-runtime.mjs",
     "prebuild": "npm run build:embed-runtimes",
     "predev": "npm run build:embed-runtimes"

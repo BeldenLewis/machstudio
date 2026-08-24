@@ -1,0 +1,522 @@
+/*
+ * 홈페이지 임베드의 **모든** 스타일. 이 파일만이 렌더 루트 안을 칠한다.
+ *
+ * ── 이 파일이 지켜야 하는 것 ──────────────────────────────────────────
+ * 이 CSS 는 파트너 사이트(아임웹 등)의 문서 안에서, **Shadow 경계 안쪽에만** 적용된다.
+ * 그래서 문서 전역을 가리키는 선택자는 하나도 있으면 안 된다:
+ *   html · body · :root · slot · ::part · @import · @font-face
+ * 정적 테스트가 이걸 막는다. 하나라도 새면 남의 사이트 레이아웃이 우리 때문에 바뀐다.
+ *
+ * ── rem 을 쓰지 않는 이유 ─────────────────────────────────────────────
+ * `rem` 은 **문서 루트**의 글꼴 크기를 따른다. Shadow 안이라도 마찬가지다. 파트너 사이트가
+ * `html { font-size: 10px }` 같은 걸 쓰면(흔하다) 우리 화면이 통째로 줄어든다.
+ * 그래서 px 와 em 만 쓴다.
+ *
+ * ── 색은 전부 토큰에서 나온다 ─────────────────────────────────────────
+ * `--msx-*` 는 런타임이 사이트 테마(accent/lightBg/darkBg)에서 계산해 렌더 루트에 얹는다.
+ * 여기서 색을 하드코딩하지 않는다 — 키컬러 설정이 화면에 안 먹는 자리가 생긴다.
+ */
+
+/* ── 렌더 루트 ────────────────────────────────────────────────────── */
+
+/*
+ * 호스트에서 `all: initial` 로 끊고 들어온 자리다. 그래서 상속시킬 것을 여기서 다시 세운다.
+ * 폭은 건드리지 않는다 — 바깥 컨테이너가 정한 폭을 그대로 쓴다.
+ *
+ * 토큰의 **기본값도 여기 둔다.** 런타임이 테마 색을 못 얹어도(폰트 실패·payload 이상)
+ * 화면이 읽히는 상태로 남아야 한다 — 빈 var() 는 글자를 투명하게 만든다.
+ * 런타임은 이 중 색 토큰만 렌더 루트의 인라인 스타일로 덮는다.
+ */
+.msx-root {
+  /* 디자인 언어 — 테마와 무관한 고정값. */
+  --msx-radius: 14px;
+  --msx-shadow: 0 1px 2px rgba(9, 11, 16, 0.06), 0 8px 24px rgba(9, 11, 16, 0.08);
+  --msx-shadow-lifted: 0 2px 6px rgba(9, 11, 16, 0.1), 0 16px 40px rgba(9, 11, 16, 0.16);
+  --msx-font: "__mach_expo_pretendard_v1", system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+
+  /* 테마 색 — 런타임이 사이트 설정으로 덮는다. */
+  --msx-accent: #1f3a5f;
+  --msx-on-accent: #ffffff;
+  --msx-surface: #ffffff;
+  --msx-text: #101828;
+  --msx-muted: rgba(16, 24, 40, 0.68);
+  --msx-dark-bg: #111318;
+  --msx-dark-text: #f6f8ff;
+  --msx-dark-muted: rgba(246, 248, 255, 0.68);
+
+  display: block;
+  box-sizing: border-box;
+  font-family: var(--msx-font);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--msx-text);
+  text-align: left;
+  /* W1 은 한국어·기본 로케일 계약이다. 바깥 문서가 rtl 이어도 여기는 고정한다. */
+  direction: ltr;
+  unicode-bidi: isolate;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+.msx-root *,
+.msx-root *::before,
+.msx-root *::after {
+  box-sizing: border-box;
+}
+
+/* ── 구획 ─────────────────────────────────────────────────────────── */
+
+.msx-section {
+  display: block;
+  padding: 72px 20px;
+  background: var(--msx-surface);
+  color: var(--msx-text);
+}
+
+.msx-section[data-bg="dark"] {
+  background: var(--msx-dark-bg);
+  color: var(--msx-dark-text);
+}
+
+.msx-section[data-bg="dark"] .msx-muted {
+  color: var(--msx-dark-muted);
+}
+
+/* 콘텐츠 폭. 바깥이 좁으면 자연히 그 폭을 쓴다. */
+.msx-inner {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.msx-section[data-variant="full"] > .msx-inner {
+  max-width: none;
+}
+
+.msx-muted {
+  color: var(--msx-muted);
+}
+
+/* 사용자가 입력한 텍스트는 줄바꿈을 보존한다. */
+.msx-prose {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ── 키비주얼 ─────────────────────────────────────────────────────── */
+
+.msx-kv {
+  display: grid;
+  gap: 20px;
+  align-content: center;
+  min-height: 320px;
+}
+
+.msx-kv[data-align="center"] {
+  justify-items: center;
+  text-align: center;
+}
+
+.msx-kv-eyebrow {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--msx-accent);
+}
+
+.msx-kv-title {
+  margin: 0;
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.msx-kv-sub {
+  margin: 0;
+  max-width: 42em;
+  font-size: 18px;
+  color: var(--msx-muted);
+}
+
+.msx-kv-media {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 8px;
+  border-radius: var(--msx-radius);
+  box-shadow: var(--msx-shadow);
+}
+
+/* 텍스트만 변형은 이미지 자리를 아예 만들지 않는다. */
+.msx-kv[data-variant="minimal"] .msx-kv-media {
+  display: none;
+}
+
+/* ── 본문 ─────────────────────────────────────────────────────────── */
+
+.msx-text {
+  display: grid;
+  gap: 16px;
+}
+
+.msx-text-heading {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.msx-text-body {
+  font-size: 17px;
+  max-width: 46em;
+}
+
+.msx-text[data-variant="statement"] .msx-text-body {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.45;
+  max-width: 24em;
+}
+
+.msx-text[data-variant="twocol"] .msx-text-body {
+  max-width: none;
+  columns: 2;
+  column-gap: 48px;
+}
+
+.msx-text-media {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--msx-radius);
+  box-shadow: var(--msx-shadow);
+}
+
+/* ── 카드 ─────────────────────────────────────────────────────────── */
+
+.msx-cards {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 28px;
+}
+
+.msx-card {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 20px;
+  border-radius: var(--msx-radius);
+  background: var(--msx-surface);
+  color: var(--msx-text);
+  /* 외곽선 대신 그림자로 마감한다. */
+  box-shadow: var(--msx-shadow);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.msx-card-media {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: calc(var(--msx-radius) - 4px);
+}
+
+.msx-card-tag {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--msx-accent);
+}
+
+.msx-card-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.msx-card-desc {
+  font-size: 15px;
+  color: var(--msx-muted);
+}
+
+/* 링크가 붙은 카드만 반응한다 — 못 누르는 카드가 눌릴 것처럼 보이면 안 된다. */
+a.msx-card {
+  text-decoration: none;
+  color: inherit;
+}
+
+a.msx-card:hover,
+a.msx-card:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: var(--msx-shadow-lifted);
+}
+
+/* ── 퀵 액션 ──────────────────────────────────────────────────────── */
+
+.msx-tools {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.msx-tools[data-variant="strip"] {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.msx-tool {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px 16px;
+  border-radius: var(--msx-radius);
+  background: var(--msx-surface);
+  color: var(--msx-text);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  box-shadow: var(--msx-shadow);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.msx-tools[data-variant="strip"] .msx-tool {
+  flex: 1 1 180px;
+  padding: 12px 18px;
+}
+
+.msx-tool:hover,
+.msx-tool:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: var(--msx-shadow-lifted);
+}
+
+/* ── 버튼 ─────────────────────────────────────────────────────────── */
+
+.msx-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  /* 터치 대상 최소 크기. */
+  min-height: 44px;
+  padding: 12px 22px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--msx-accent);
+  color: var(--msx-on-accent);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--msx-shadow);
+  transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+}
+
+.msx-btn:hover {
+  filter: brightness(1.06);
+  box-shadow: var(--msx-shadow-lifted);
+}
+
+.msx-btn:active {
+  transform: translateY(1px);
+  box-shadow: var(--msx-shadow);
+}
+
+.msx-btn[data-tone="quiet"] {
+  background: transparent;
+  color: var(--msx-accent);
+  box-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* 포커스 링은 어떤 배경에서도 보여야 한다 — 두 겹으로 그린다. */
+.msx-root :focus-visible {
+  outline: 2px solid var(--msx-accent);
+  outline-offset: 3px;
+}
+
+.msx-section[data-bg="dark"] :focus-visible {
+  outline-color: var(--msx-dark-text);
+}
+
+/* ── 사전등록 폼 ──────────────────────────────────────────────────── */
+
+.msx-form {
+  display: grid;
+  gap: 16px;
+  max-width: 640px;
+}
+
+.msx-form[data-variant="cta"] {
+  justify-items: start;
+}
+
+.msx-form-note {
+  font-size: 15px;
+  color: var(--msx-muted);
+}
+
+/* 폼 런타임이 이 안에 자기 스타일을 심는다 — 서체만 물려준다. */
+.msx-form-slot {
+  display: block;
+  width: 100%;
+}
+
+/* 등록번호처럼 자리 맞춰 읽는 숫자. */
+.msx-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 직접 넣은 코드 ───────────────────────────────────────────────── */
+
+.msx-code {
+  display: grid;
+  gap: 12px;
+}
+
+.msx-code-frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  /* 높이는 런타임이 프레임에서 받은 값으로 정한다(40~5000px 로 제한). */
+  height: 240px;
+  background: transparent;
+}
+
+/* 미리보기에서 실행 전에는 자리만 보여 준다. */
+.msx-code-placeholder {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  padding: 24px;
+  border-radius: var(--msx-radius);
+  background: var(--msx-surface);
+  box-shadow: var(--msx-shadow);
+  font-size: 14px;
+  color: var(--msx-muted);
+}
+
+/* ── body 직계 레이어(모달) ──────────────────────────────────────── */
+
+/*
+ * 이 규칙들은 **자체 Shadow 를 가진 포털 호스트** 안에서만 쓰인다.
+ * 파트너 사이트의 body 라이트 DOM 에는 우리 요소가 놓이지 않는다.
+ */
+.msx-portal {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(9, 11, 16, 0.62);
+}
+
+.msx-modal {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: min(86vh, 760px);
+  overflow: auto;
+  padding: 28px;
+  border-radius: 18px;
+  background: var(--msx-surface);
+  color: var(--msx-text);
+  box-shadow: 0 24px 64px rgba(9, 11, 16, 0.28);
+}
+
+.msx-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--msx-muted);
+  font-family: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.msx-modal-close:hover {
+  color: var(--msx-text);
+}
+
+/* ── 상태 ─────────────────────────────────────────────────────────── */
+
+/* 로드 전에는 감춘다 — 스타일 없는 콘텐츠가 한 프레임 번쩍이지 않게. */
+.msx-root[data-msx-ready="0"] {
+  visibility: hidden;
+}
+
+/* ── 좁은 화면 ────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .msx-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .msx-tools {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .msx-text[data-variant="twocol"] .msx-text-body {
+    columns: 1;
+  }
+}
+
+@media (max-width: 600px) {
+  .msx-section {
+    padding: 48px 16px;
+  }
+
+  .msx-kv-title {
+    font-size: 32px;
+  }
+
+  .msx-kv-sub {
+    font-size: 16px;
+  }
+
+  .msx-text-heading {
+    font-size: 24px;
+  }
+
+  .msx-text[data-variant="statement"] .msx-text-body {
+    font-size: 20px;
+  }
+
+  .msx-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ── 모션을 원치 않는 사용자 ─────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .msx-root *,
+  .msx-root *::before,
+  .msx-root *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}

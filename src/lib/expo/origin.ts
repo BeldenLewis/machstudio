@@ -18,6 +18,8 @@
  * 프리플라이트 없이 교차 출처로 날아올 수 있는 형식이라 애초에 거절한다.
  */
 
+import { getPublicAppOrigin } from "@/lib/app-url";
+
 export type OriginGuardFailure = "cross-site" | "bad-media-type";
 
 export interface OriginGuardResult {
@@ -68,4 +70,104 @@ export function originGuardMessage(failure: OriginGuardFailure): string {
   return failure === "bad-media-type"
     ? "이 요청 형식은 받지 않아요"
     : "다른 사이트에서 온 요청은 처리하지 않아요";
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// 공개 임베드가 쓰는 **절대 주소**
+// ────────────────────────────────────────────────────────────────────────
+
+/**
+ * 왜 `getPublicAppOrigin()` 만으로 부족한가.
+ *
+ * 그 함수는 "이 배포가 밖에 내보내도 되는 주소" 를 준다. 홈페이지 임베드는 그보다 한 겹
+ * 더 엄격해야 한다 — 여기서 나온 주소는 **파트너 사이트의 HTML 에 박혀서** 우리가 회수할
+ * 수 없다. 프리뷰 배포에서 한 번 복사된 주소는 그 배포가 사라진 뒤에도 남아, 전시 홈페이지가
+ * 조용히 죽는다. 그래서 운영자가 **명시적으로 선언한 주소**와 정확히 같을 때만 통과시킨다.
+ *
+ * 실패는 빈 문자열이나 상대경로로 **덮지 않는다.** 이유를 그대로 돌려주고, 호출부가
+ * 코드를 만들지 않는다. 잘못된 주소가 박힌 코드는 없는 코드보다 나쁘다.
+ */
+export type ExpoOriginFailure =
+  /** `EXPO_CANONICAL_PUBLIC_ORIGIN` 이 없다. */
+  | "not-configured"
+  /** https 가 아니거나 자격증명이 붙었다. */
+  | "insecure"
+  /** 경로·쿼리·해시가 붙었다 — 오리진만 받는다. */
+  | "not-origin"
+  /** 프로덕션 배포가 아니다. */
+  | "not-production"
+  /** 이 배포에 자동 부여된 호스트다 — 사라지는 주소다. */
+  | "deployment-host"
+  /** 이 배포가 밖에 쓰는 주소와 다르다. */
+  | "not-canonical";
+
+export type ExpoOriginResult =
+  | { ok: true; origin: string }
+  | { ok: false; reason: ExpoOriginFailure };
+
+export function expoOriginMessage(reason: ExpoOriginFailure): string {
+  switch (reason) {
+    case "not-configured": return "공개 주소가 설정되지 않아 코드를 만들 수 없어요";
+    case "insecure": return "공개 주소는 https 여야 해요";
+    case "not-origin": return "공개 주소에는 경로 없이 도메인만 넣어 주세요";
+    case "not-production": return "프로덕션 배포에서만 코드를 만들 수 있어요";
+    case "deployment-host": return "이 배포에 임시로 붙은 주소예요. 고정 도메인을 설정해 주세요";
+    case "not-canonical": return "공개 주소 설정 두 곳이 서로 달라요";
+  }
+}
+
+const hostOf = (value: string | undefined): string => {
+  const raw = (value ?? "").trim();
+  if (!raw) return "";
+  try {
+    return new URL(raw.includes("://") ? raw : `https://${raw}`).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+};
+
+/**
+ * 임베드에 박아도 되는 주소. **서버에서만** 부른다.
+ *
+ * 브라우저에서 부르면 `EXPO_CANONICAL_PUBLIC_ORIGIN` 이 없어 조용히 "설정 안 됨" 이
+ * 되는데, 그건 사실이 아니라 **부른 자리가 틀린 것**이다. 그래서 던진다.
+ */
+export function getRequiredExpoPublicOrigin(): ExpoOriginResult {
+  if (typeof window !== "undefined") {
+    throw new Error("getRequiredExpoPublicOrigin 은 서버에서만 부를 수 있어요");
+  }
+
+  const declared = (process.env.EXPO_CANONICAL_PUBLIC_ORIGIN ?? "").trim();
+  if (!declared) return { ok: false, reason: "not-configured" };
+
+  let url: URL;
+  try {
+    url = new URL(declared);
+  } catch {
+    return { ok: false, reason: "not-origin" };
+  }
+  if (url.protocol !== "https:" || url.username || url.password) {
+    return { ok: false, reason: "insecure" };
+  }
+  if (url.pathname !== "/" || url.search || url.hash) {
+    return { ok: false, reason: "not-origin" };
+  }
+
+  // Vercel 위에서 돌 때만 스코프를 볼 수 있다. 프리뷰 배포가 임베드 코드를 만들면
+  // 그 배포가 사라진 뒤 파트너 사이트에서 코드가 죽는다.
+  if (process.env.VERCEL && process.env.VERCEL_ENV !== "production") {
+    return { ok: false, reason: "not-production" };
+  }
+
+  // 배포마다 새로 붙는 호스트는 고정 주소가 아니다.
+  const host = url.hostname.toLowerCase();
+  if (host === hostOf(process.env.VERCEL_URL) || host === hostOf(process.env.VERCEL_BRANCH_URL)) {
+    return { ok: false, reason: "deployment-host" };
+  }
+
+  // 마지막으로, 이 배포가 다른 면에서 쓰는 주소와 같아야 한다. 두 설정이 갈라지면
+  // 홈페이지 코드와 사전등록 코드가 서로 다른 곳을 가리킨다.
+  if (getPublicAppOrigin() !== url.origin) return { ok: false, reason: "not-canonical" };
+
+  return { ok: true, origin: url.origin };
 }

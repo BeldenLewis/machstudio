@@ -75,3 +75,19 @@ export function paperFor(bg: string): string {
   const luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
   return luminance > 0.45 ? "#101828" : "#f6f8ff";
 }
+
+/**
+ * 같은 색을 **흐리게** 쓴다 — 보조 문구용.
+ *
+ * 별도의 회색을 상수로 두지 않는 이유: 다크 배경에서는 회색이 안 읽히고, 밝은 배경에서는
+ * 너무 튄다. 본문 색에 알파를 얹으면 어느 배경에서든 같은 관계가 유지된다.
+ * hex 가 아니면 원래 값을 그대로 돌려준다 — 색을 지어내지 않는다.
+ */
+export function withAlpha(color: string, alpha: number): string {
+  const normalized = normalizeHexColor(color);
+  if (!normalized) return color;
+  const hex = normalized.slice(1);
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const a = Math.min(1, Math.max(0, alpha));
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}

@@ -45,6 +45,10 @@ export async function proxy(request: NextRequest) {
     // 빌더형 등록 폼 미리보기(/p/{previewToken}) — 검토자는 워크스페이스 멤버가 아니다.
     // 권한은 추측 불가능한 토큰이 대신하고, 페이지 자체가 조회 외의 부작용을 갖지 않는다.
     pathname.startsWith("/p/") ||
+    // 홈페이지 임베드 서체 — 파트너 사이트에서 익명으로 받아 간다.
+    // matcher 가 제외하는 확장자에 woff2 는 없어서, 이게 없으면 로그인으로 307 된다(실측).
+    // 버전이 박힌 정확한 접두사만 연다 — public/ 전체를 여는 것과는 다르다.
+    pathname.startsWith("/fonts/pretendard/v1.3.9/") ||
     pathname.startsWith("/api/cron") ||
     // 개발 전용 하니스(/dev/*) — 로그인 뒤에 있는 컴포넌트를 격리해 검증할 때 쓴다.
     // 프로덕션에서는 이 조건이 false 이고, 각 페이지도 notFound() 로 한 번 더 막는다.

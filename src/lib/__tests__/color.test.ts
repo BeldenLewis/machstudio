@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isHexColor, normalizeHexColor, onAccentColor, paperFor } from "@/lib/color";
+import { isHexColor, normalizeHexColor, onAccentColor, paperFor, withAlpha } from "@/lib/color";
 
 /**
  * 색 계산의 **공용 계약**.
@@ -132,5 +132,23 @@ describe("paperFor — 배경 위 글자색", () => {
     expect(paperFor("#fff")).toBe("#101828");
     expect(paperFor("#fff")).toBe(paperFor("#ffffff"));
     expect(paperFor("#000")).toBe(paperFor("#000000"));
+  });
+});
+
+describe("withAlpha", () => {
+  it("hex 를 rgba 로 편다", () => {
+    expect(withAlpha("#101828", 0.68)).toBe("rgba(16, 24, 40, 0.68)");
+    expect(withAlpha("#fff", 0.5)).toBe("rgba(255, 255, 255, 0.5)");
+  });
+
+  it("알파를 0~1 로 가둔다", () => {
+    expect(withAlpha("#000000", -1)).toBe("rgba(0, 0, 0, 0)");
+    expect(withAlpha("#000000", 5)).toBe("rgba(0, 0, 0, 1)");
+  });
+
+  /** 색을 지어내지 않는다 — 못 읽으면 받은 값을 그대로 돌려준다. */
+  it("hex 가 아니면 원래 값을 그대로 준다", () => {
+    expect(withAlpha("rebeccapurple", 0.5)).toBe("rebeccapurple");
+    expect(withAlpha("var(--x)", 0.5)).toBe("var(--x)");
   });
 });
