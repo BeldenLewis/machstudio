@@ -533,7 +533,17 @@ export function EditableList<T>({
       {visible.length === 0 ? (
         emptyState ?? null
       ) : reorderable ? (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        /**
+         * `id` 를 준다. 안 주면 dnd-kit 이 **모듈 전역 카운터**로 만들고
+         * (`useUniqueId("DndDescribedBy")`), 그 순서가 서버와 브라우저에서 다르다 —
+         * 목록이 겹쳐 있으면 특히 어긋난다. 결과는 드래그 핸들의 `aria-describedby` 가
+         * 없는 요소를 가리키는 하이드레이션 불일치이고, React 는 이걸 **고쳐 주지 않는다**
+         * ("This won't be patched up"). 즉 스크린리더가 순서 변경 안내를 못 읽는다.
+         * /dev/expo-sections-harness 에서 실측했다.
+         *
+         * listId 는 이미 목록마다 다르게 주기로 한 값이라 그대로 쓴다.
+         */
+        <DndContext id={listId} sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={visible.map((r) => r.key)} strategy={verticalListSortingStrategy}>
             {rows}
           </SortableContext>

@@ -71,8 +71,12 @@ export interface SlotFieldProps {
   /** 어느 로케일에 쓰는가 — 사이트의 defaultLocale. */
   locale: string;
   /**
-   * 라벨을 접는다 — 목록 행처럼 무슨 칸인지 이미 보이는 자리에서. 라벨은 사라져도
-   * 접근성 이름은 남는다(각 컨트롤이 aria-label 로 def.label 을 계속 쓴다).
+   * 목록 행 안의 칸 — 더 촘촘하게 그린다.
+   *
+   * **라벨은 그대로 둔다.** 처음엔 접었는데 하니스에서 보니 카드 한 행이 이미지·태그·제목·
+   * 설명·링크로 **세로로 쌓여서**, 값을 채우고 나면 어느 칸이 태그이고 어느 칸이 제목인지
+   * 구분할 수 없었다(placeholder 는 타이핑하는 순간 사라진다). 열이 아니라 스택이라
+   * 테이블 머리글이 대신해 주지도 않는다. 라벨만 작게 만든다.
    */
   compact?: boolean;
 }
@@ -95,7 +99,6 @@ export function SlotField({
             disabled={disabled}
             /* 서버가 자르는 길이와 같다 — 잘린 뒤에 알려 주면 이미 늦다. */
             maxLength={EXPO_LIMITS.textChars}
-            placeholder={compact ? def.label : undefined}
           />
         );
 
@@ -108,7 +111,6 @@ export function SlotField({
             onChange={(event) => onChange(writeLocalized(value, locale, event.target.value))}
             disabled={disabled}
             rows={compact ? 2 : 4}
-            placeholder={compact ? def.label : undefined}
           />
         );
 
@@ -158,15 +160,17 @@ export function SlotField({
   })();
 
   if (!control) return null;
-  if (compact) return <div className="min-w-0">{control}</div>;
 
   return (
     <div className="min-w-0">
-      <label htmlFor={id} className="block text-xs font-medium text-muted-foreground">
+      <label
+        htmlFor={id}
+        className={`block font-medium text-muted-foreground ${compact ? "text-[11px]" : "text-xs"}`}
+      >
         {def.label}
         {def.required ? <span className="ml-1 text-[var(--destructive)]">필수</span> : null}
       </label>
-      <div className="mt-1">{control}</div>
+      <div className={compact ? "mt-0.5" : "mt-1"}>{control}</div>
     </div>
   );
 }

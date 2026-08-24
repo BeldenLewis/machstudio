@@ -254,24 +254,27 @@ function SectionCard({
       {def.variants.length > 1 || designKeys.length > 0 ? (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           {def.variants.length > 1 ? (
-            <Segmented
-              label={`${def.label} 형태`}
-              value={section.variant}
-              onChange={(variant) => patch({ variant })}
-              options={def.variants.map((v) => ({ value: v.id, label: v.label }))}
-            />
+            <Knob label="형태">
+              <Segmented
+                label={`${def.label} 형태`}
+                value={section.variant}
+                onChange={(variant) => patch({ variant })}
+                options={def.variants.map((v) => ({ value: v.id, label: v.label }))}
+              />
+            </Knob>
           ) : null}
           {designKeys.map((key) => (
-            <Segmented
-              key={key}
-              label={`${def.label} ${designLabel(key)}`}
-              value={section.design[key] ?? design[key][0]}
-              onChange={(value) => patch({ design: { ...section.design, [key]: value } })}
-              options={design[key].map((value) => ({
-                value,
-                label: designValueLabel(key, value),
-              }))}
-            />
+            <Knob key={key} label={designLabel(key)}>
+              <Segmented
+                label={`${def.label} ${designLabel(key)}`}
+                value={section.design[key] ?? design[key][0]}
+                onChange={(value) => patch({ design: { ...section.design, [key]: value } })}
+                options={design[key].map((value) => ({
+                  value,
+                  label: designValueLabel(key, value),
+                }))}
+              />
+            </Knob>
           ))}
         </div>
       ) : null}
@@ -343,6 +346,23 @@ function SectionCard({
         </label>
       </div>
     </div>
+  );
+}
+
+/**
+ * 모양 노브 한 벌 — **눈에 보이는 라벨을 단다.**
+ *
+ * 라벨 없이 세그먼트만 늘어놓으면 좁은 편집 칸에서 알약이 한 줄로 이어져 어디까지가
+ * "형태" 이고 어디부터가 "배경" 인지 알 수 없다(하니스 실측: 키비주얼 카드에
+ * `콘텐츠 폭|텍스트만` `밝게|어둡게` `왼쪽|가운데` 가 한 띠로 읽혔다).
+ * aria-label 은 이미 있었지만 그건 눈으로 보는 사람에게는 없는 것과 같다.
+ */
+function Knob({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="shrink-0 text-[11px] text-muted-foreground">{label}</span>
+      {children}
+    </span>
   );
 }
 
