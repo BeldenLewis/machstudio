@@ -36,7 +36,15 @@ describe("임베드 번들이 소스와 동기화돼 있다", () => {
  * 도메인 전체가 XSS 에 노출된다. h.ts 머리말이 "이 테스트가 강제한다" 고 적고 있는데
  * **실제로는 그 테스트가 없었다** — 여기서 만든다.
  */
-const HOST_MOUNTED_DIRS = ["src/lib/landing", "src/lib/collect-form", "src/lib/dom", "src/embed"];
+/**
+ * `src/lib/expo` 도 여기 든다 — 홈페이지 임베드는 파트너 문서 안의 Shadow 에 마운트된다.
+ * Shadow 경계는 **CSS 를 막지 XSS 를 막지 않는다**: Shadow 안에서 실행된 스크립트도
+ * 파트너 도메인의 스크립트이고, 그 페이지의 쿠키·DOM 에 전부 닿는다.
+ *
+ * 예외는 `iframe.srcdoc` 하나다(custom-code). 그건 운영자가 붙여넣은 코드를 **격리해서**
+ * 실행하려고 일부러 쓰는 것이고, 아래 금지 목록에 들어 있지 않다.
+ */
+const HOST_MOUNTED_DIRS = ["src/lib/landing", "src/lib/collect-form", "src/lib/dom", "src/lib/expo", "src/embed"];
 const BANNED = ["innerHTML", "outerHTML", "insertAdjacentHTML", "document.write"];
 
 /**

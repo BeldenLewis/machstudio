@@ -164,7 +164,8 @@
   gap: 16px;
 }
 
-.msx-text-heading {
+/* 구획 제목 — 본문·카드가 함께 쓴다. 한 위계를 두 이름으로 두지 않는다. */
+.msx-heading {
   margin: 0;
   font-size: 30px;
   font-weight: 700;
@@ -495,7 +496,7 @@ a.msx-card:focus-visible {
     font-size: 16px;
   }
 
-  .msx-text-heading {
+  .msx-heading {
     font-size: 24px;
   }
 
