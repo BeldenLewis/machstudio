@@ -10,17 +10,16 @@
  *  - 호스트/다른 스크립트도 스크롤을 잠글 수 있다 → refcount + 원본 style 문자열 통째 복원.
  */
 
-const LOCK_STATE = "__machLandingScrollLock";
 const LAYER_ATTR = "data-ms-landing-layer";
 
-interface LockState {
-  locks: number;
-  savedStyle: string | null;
-  savedY: number;
-  hadModalOpen: boolean;
-}
-
-type WithLock = typeof globalThis & { [LOCK_STATE]?: LockState };
+/**
+ * 스크롤 잠금은 **문서 하나에 카운트 하나**여야 한다. 한 아임웹 사이트에 랜딩 임베드와
+ * 홈페이지 임베드가 같이 붙을 수 있고, 각자 카운트를 들면 서로 파괴적으로 끼어들어
+ * 파트너 사이트가 영영 스크롤되지 않는다(src/lib/dom/scroll-lock.ts 머리말).
+ * 그래서 구현을 공용 모듈로 옮기고 여기서는 그대로 다시 내보낸다 — 소비처의 import
+ * 경로는 바뀌지 않는다.
+ */
+export { lockScroll, unlockScroll } from "@/lib/dom/scroll-lock";
 
 /** body 직계 고정 레이어 — 없으면 만들고, 참조 카운트로 공유한다. */
 export function acquireLayer(uid: string): HTMLElement {
@@ -65,44 +64,6 @@ export function createTocLayer(
   layer.style.setProperty("--bg-dark", bgDark);
   document.body.appendChild(layer);
   return layer;
-}
-
-export function lockScroll(): void {
-  const g = globalThis as WithLock;
-  const state = g[LOCK_STATE] ?? (g[LOCK_STATE] = { locks: 0, savedStyle: null, savedY: 0, hadModalOpen: false });
-  if (state.locks++ > 0) return;
-
-  const body = document.body;
-  const docEl = document.documentElement;
-  const y = window.scrollY || docEl.scrollTop || body.scrollTop || 0;
-  const scrollbar = window.innerWidth - docEl.clientWidth;
-
-  state.savedStyle = body.getAttribute("style");
-  state.savedY = y;
-  state.hadModalOpen = body.classList.contains("modal-open");
-
-  body.style.position = "fixed";
-  body.style.top = `${-y}px`;
-  body.style.left = "0";
-  body.style.right = "0";
-  body.style.width = "100%";
-  body.style.overflow = "hidden";
-  if (scrollbar > 0) body.style.paddingRight = `${scrollbar}px`;
-  if (!state.hadModalOpen) body.classList.add("modal-open"); // 아임웹 자체 관례와 공유
-  docEl.setAttribute("data-ms-landing-modal", "open");
-}
-
-export function unlockScroll(): void {
-  const g = globalThis as WithLock;
-  const state = g[LOCK_STATE];
-  if (!state || --state.locks > 0) return;
-
-  const body = document.body;
-  if (state.savedStyle === null) body.removeAttribute("style");
-  else body.setAttribute("style", state.savedStyle);
-  if (!state.hadModalOpen) body.classList.remove("modal-open");
-  document.documentElement.removeAttribute("data-ms-landing-modal");
-  window.scrollTo(0, state.savedY);
 }
 
 const FOCUSABLE =

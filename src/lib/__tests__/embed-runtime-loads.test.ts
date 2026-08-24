@@ -5,6 +5,7 @@ import { COMPETITION_RUNTIME_JS } from "@/generated/competition-runtime";
 import { COMPETITION_VOTE_RUNTIME_JS } from "@/generated/competition-vote-runtime";
 import { COMPETITION_RESULT_RUNTIME_JS } from "@/generated/competition-result-runtime";
 import { FORM_RUNTIME_JS } from "@/generated/form-runtime";
+import { EXPO_RUNTIME_JS } from "@/generated/expo-runtime";
 
 /**
  * 임베드 번들이 **브라우저에서 로드되는가.**
@@ -23,6 +24,7 @@ const RUNTIMES = [
   ["competition-vote", COMPETITION_VOTE_RUNTIME_JS],
   ["competition-result", COMPETITION_RESULT_RUNTIME_JS],
   ["form", FORM_RUNTIME_JS],
+  ["expo", EXPO_RUNTIME_JS],
 ] as const;
 
 /** 브라우저 흉내 — **process 를 넣지 않는다.** 그게 이 테스트의 전부다. */

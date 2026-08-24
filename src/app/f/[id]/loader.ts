@@ -142,7 +142,7 @@ export async function serveFormRuntime(
       serverNow: new Date().toISOString(),
       active: source.isActive,
       view,
-    })});\n`;
+    })}, document.currentScript);\n`;
 
   /**
    * ETag 필수 — 검증자가 없으면 브라우저가 재검증을 못 해 낡은 스크립트를 계속 실행한다

@@ -23,16 +23,30 @@ function hashFiles(files) {
   return "sha256:" + hash.digest("hex").slice(0, 32);
 }
 
+/**
+ * 타입만 있는 파일은 번들 입력이 아니다 — esbuild 가 통째로 지운다.
+ * 목록에 남겨 두면 metafile 대조가 영영 안 맞고, 그 검사를 느슨하게 만들게 된다.
+ * (타입 변경은 런타임 출력을 바꾸지 못하므로 빠져도 stale 검사에 구멍이 생기지 않는다.)
+ */
+const TYPE_ONLY = new Set(["src/lib/landing/types.ts"]);
+
 function dirTs(root, rel) {
   return readdirSync(join(root, rel))
     .filter((f) => f.endsWith(".ts"))
+    .filter((f) => !TYPE_ONLY.has(`${rel}/${f}`))
     .sort()
     .map((f) => join(root, rel, f));
 }
 
-/** 랜딩 런타임(src/embed/landing-entry.ts + src/lib/landing/*) */
-export function landingSourceHash(root) {
-  return hashFiles([
+/**
+ * 랜딩 런타임의 입력 파일 — 목록과 해시를 나눠 둔다.
+ *
+ * 목록을 따로 내보내는 이유: 이 목록이 **실제 번들 입력보다 짧으면** stale 검사는 초록인데
+ * 커밋된 번들은 낡을 수 있다. 그게 이 검사가 막으려던 바로 그 상황이라, 목록 자체를
+ * esbuild metafile 과 대조하는 테스트가 따로 있다(embed-runtime-manifest.test.ts).
+ */
+export function landingSourceFiles(root) {
+  return ([
     join(root, "src/embed/landing-entry.ts"),
     ...dirTs(root, "src/lib/landing"),
     // 랜딩 밖에 있지만 번들에 들어간다 (esbuild metafile 로 실측한 목록)
@@ -45,12 +59,21 @@ export function landingSourceHash(root) {
     join(root, "src/lib/attribution-client.ts"),
     join(root, "src/lib/attribution-normalize.ts"),
     join(root, "src/lib/webinar-share.ts"),
-  ]);
+    // 세션·연사 링크 — 랜딩 모델이 쓴다. **목록에 없었다**(metafile 대조로 발견, 2026-08-24).
+    join(root, "src/lib/webinar-sessions.ts"),
+    join(root, "src/lib/webinar-speaker-links.ts"),
+    // 스크롤 잠금 — 랜딩과 홈페이지가 body 하나를 공유하므로 구현이 한 벌이어야 한다.
+    join(root, "src/lib/dom/scroll-lock.ts"),
+  ]).sort();
+}
+
+export function landingSourceHash(root) {
+  return hashFiles(landingSourceFiles(root));
 }
 
 /** 등록 폼 런타임(src/embed/form-entry.ts + src/lib/collect-form/*) */
-export function formSourceHash(root) {
-  return hashFiles([
+export function formSourceFiles(root) {
+  return ([
     join(root, "src/embed/form-entry.ts"),
     ...dirTs(root, "src/lib/collect-form"),
     // 폼 밖에 있지만 번들에 들어간다 — 검증 규칙·DOM 빌더·UTM 봉투
@@ -65,5 +88,59 @@ export function formSourceHash(root) {
     join(root, "src/lib/attribution-client.ts"),
     join(root, "src/lib/attribution-normalize.ts"),
     join(root, "src/lib/webinar-share.ts"),
-  ]);
+    // 동의 전문·대회 문구를 거쳐 들어온다. **목록에 없었다**(metafile 대조로 발견, 2026-08-24).
+    join(root, "src/lib/competition-render.ts"),
+    join(root, "src/lib/competition-strings.ts"),
+    join(root, "src/lib/legal-templates/tokens.ts"),
+    join(root, "src/lib/legal-templates/types.ts"),
+  ]).sort();
+}
+
+export function formSourceHash(root) {
+  return hashFiles(formSourceFiles(root));
+}
+
+/**
+ * 홈페이지 런타임(src/embed/expo-entry.ts + src/lib/expo/*).
+ *
+ * `src/lib/expo` 에는 서버 전용 파일(라우트 서비스·Prisma 를 만지는 것들)도 있는데,
+ * 그것들은 번들에 안 들어간다. 그래서 디렉터리를 통째로 넣지 않고 **metafile 이 실제로
+ * 보고한 목록**을 적는다 — embed-runtime-manifest 테스트가 이 목록을 감시한다.
+ */
+export function expoSourceFiles(root) {
+  return ([
+    join(root, "src/embed/expo-entry.ts"),
+    // 런타임 경로
+    join(root, "src/lib/expo/mount.ts"),
+    join(root, "src/lib/expo/shadow.ts"),
+    join(root, "src/lib/expo/sheet.ts"),
+    join(root, "src/lib/expo/host-reset.ts"),
+    join(root, "src/lib/expo/overlay.ts"),
+    join(root, "src/lib/expo/view-page.ts"),
+    join(root, "src/lib/expo/view-sections.ts"),
+    join(root, "src/lib/expo/custom-code.ts"),
+    join(root, "src/lib/expo/form-bridge.ts"),
+    join(root, "src/lib/expo/seen.ts"),
+    join(root, "src/lib/expo/preview-bridge.ts"),
+    join(root, "src/lib/expo/config.ts"),
+    // collect-form-config 가 동의 전문 토큰을 거쳐 이 둘을 끌어온다(metafile 실측).
+    join(root, "src/lib/collect-form-config.ts"),
+    join(root, "src/lib/legal-templates/tokens.ts"),
+    join(root, "src/lib/legal-templates/types.ts"),
+    join(root, "src/lib/expo/font.ts"),
+    join(root, "src/lib/expo/css.ts"),
+    join(root, "src/lib/expo/registry.ts"),
+    join(root, "src/lib/expo/shell-css.ts"),
+    // 공용
+    join(root, "src/lib/collect-form/target-registry.ts"),
+    join(root, "src/lib/color.ts"),
+    join(root, "src/lib/dom/h.ts"),
+    join(root, "src/lib/dom/focus.ts"),
+    join(root, "src/lib/dom/scroll-lock.ts"),
+    join(root, "src/lib/webinar-config.ts"),
+  ]).sort();
+}
+
+export function expoSourceHash(root) {
+  return hashFiles(expoSourceFiles(root));
 }

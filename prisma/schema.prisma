@@ -79,6 +79,8 @@ model Workspace {
   adPerformanceImports AdPerformanceImportBatch[]
   adPerformanceRecords AdPerformanceRecord[]
   competitions         Competition[]
+  expoSites            ExpoSite[]
+  expoTemplates        ExpoTemplate[]
 }
 
 model WorkspaceMember {
@@ -157,6 +159,7 @@ model Project {
   adPerformanceImports AdPerformanceImportBatch[]
   adPerformanceRecords AdPerformanceRecord[]
   competitions         Competition[]
+  expoSites            ExpoSite[]
 }
 
 model AdPerformanceImportBatch {
@@ -248,48 +251,49 @@ model UTMTemplate {
 }
 
 model CollectSource {
-  id               String    @id @default(cuid())
-  projectId        String
-  workspaceId      String
-  name             String
-  description      String?
-  apiKey           String    @unique @default(cuid())
-  siteUrl          String?
-  successTrigger   String    @default("정상적으로 접수되었습니다")
-  redirectUrl      String?
-  isActive         Boolean   @default(true)
-  discoveredFields Json?
-  webhookUrl       String?
-  notifyOnSubmit   Boolean   @default(false)
-  allowedOrigins   String[]  @default([])
-  formPagePatterns String[]  @default([])
-  dedupKeyFields   String[]  @default([])
+  id                 String    @id @default(cuid())
+  projectId          String
+  workspaceId        String
+  name               String
+  description        String?
+  apiKey             String    @unique @default(cuid())
+  siteUrl            String?
+  successTrigger     String    @default("정상적으로 접수되었습니다")
+  redirectUrl        String?
+  isActive           Boolean   @default(true)
+  discoveredFields   Json?
+  webhookUrl         String?
+  notifyOnSubmit     Boolean   @default(false)
+  allowedOrigins     String[]  @default([])
+  formPagePatterns   String[]  @default([])
+  dedupKeyFields     String[]  @default([])
   /// 연동형(capture)이 필드 하나를 감지할 때 묶음으로 보는 CSS 선택자. 기본값은 아임웹 폼
   /// 빌더가 항상 넣는 ".form-group" — 그 밖의 사이트(직접 만든 신청서 등)는 이 값을
   /// 그 사이트에 맞는 선택자(예: 표 형태면 "table tr")로 바꿔야 필드가 잡힌다.
-  fieldGroupSelector String  @default(".form-group")
+  fieldGroupSelector String    @default(".form-group")
   /// 수집 방식 — "capture"(외부 폼에 스크립트를 붙여 가로챔, 기존) | "builder"(여기서 폼을 만들어 렌더).
   /// formConfig 가 비었는지로 유추하지 않는다 — 빌더형인데 아직 문항을 안 채운 상태와 구분이 안 된다.
   /// 기본값이 capture 라 기존 소스는 전부 그대로 동작한다(백필 불필요).
-  mode             String    @default("capture")
+  mode               String    @default("capture")
   /// 미리보기 링크 /p/{token}. 소스 id 를 그대로 노출하지 않는 이유는 **재발급으로 링크를 끊기 위해서**다
   /// (Project.analyticsShareToken 과 같은 패턴).
-  previewToken     String?   @unique
+  previewToken       String?   @unique
   /// 문항·개요·안내·검증·동의·완료·등록확인. 스키마와 정규화는 src/lib/collect-form-config.ts.
-  formConfig       Json?
+  formConfig         Json?
   /// 발신·제목·본문·QR 첨부 설정.
-  emailConfig      Json?
+  emailConfig        Json?
   /// 개최일·게이트·배지 등 현장 운영 설정.
-  venueConfig      Json?
-  deletedAt        DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  venueConfig        Json?
+  deletedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   workspace     Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   fieldMappings FieldMapping[]
   records       CollectRecord[]
   activityLogs  ActivityLog[]
+  expoSites     ExpoSite[]
 }
 
 model FieldMapping {
@@ -1254,4 +1258,92 @@ model CompetitionAward {
   entry       CompetitionEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
 
   @@index([competitionId, rank])
+}
+
+/// 전시(프로젝트) 하나의 공식 홈페이지. 아임웹 사이트를 대체하는 게 아니라, 페이지 단위로
+/// 옮겨 붙일 수 있게 만든 우리 쪽 원본이다(설계 §2).
+model ExpoSite {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  projectId       String
+  name            String
+  /// { accent, lightBg, darkBg } — 6자리 hex 만 통과. 나머지 색은 전부 파생(설계 §7).
+  theme           Json
+  /// 대표 사전등록 소스 — register-form 섹션의 기본 참조.
+  /// SetNull: 소스가 지워져도 사이트는 살아 있어야 한다.
+  collectSourceId String?
+  defaultLocale   String    @default("ko")
+  /// /hp/{token} draft 미리보기 — 재발급으로 회수한다(CollectSource.previewToken 과 같은 패턴).
+  previewToken    String?   @unique
+  /// 아임웹 사이트 주소 — 안내·바로가기 표시용이고 검증에는 쓰지 않는다.
+  siteUrl         String?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  collectSource CollectSource? @relation(fields: [collectSourceId], references: [id], onDelete: SetNull)
+  pages         ExpoPage[]
+
+  @@index([projectId])
+  @@index([workspaceId])
+}
+
+model ExpoPage {
+  id        String  @id @default(cuid())
+  siteId    String
+  /// 트리 — UI 는 깊이 2까지(W1 은 평면).
+  parentId  String?
+  /// 어드민 표시·미리보기용. **임베드 URL 에는 쓰지 않는다** — 운영자가 바꾸는 값이라
+  /// 파트너 사이트에 박힌 주소가 끊긴다(설계 D10).
+  slug      String
+  title     String
+  /// 홈 1개 — 삭제·최상단 고정.
+  isHome    Boolean @default(false)
+  sortOrder Int     @default(0)
+
+  /// 편집 상태 { sections: ExpoSectionInstance[] } — 자동저장 대상. 정규화는 src/lib/expo/config.ts.
+  draft          Json
+  /// 편집 경로 전용 CAS. seen/live/publish/reorder 가 updatedAt 을 바꿔도 자동저장 충돌을 만들지 않는다.
+  draftRevision  Int       @default(0)
+  /// 발행 스냅샷 — 공개 로더가 읽는 **유일한** 원본. null = 미발행.
+  /// 발행은 서버가 재정규화한 draft 의 사본이다(설계 D1) — 편집 중인 것이 공개로 새지 않는다.
+  published      Json?
+  publishedAt    DateTime?
+  /// 페이지 임베드 노출 스위치. null 이면 발행본 내용 없이 연결 확인만 하는 boot 를 준다(D2).
+  liveAt         DateTime?
+  /// 이 페이지에 대응하는 아임웹 페이지 URL — 이행 현황 표시·내부 링크 해석용.
+  imwebUrl       String?
+  /// 런타임이 의도한 host 를 확보하면 갱신 — "코드가 실제로 붙어 있다" 배지(D9).
+  lastSeenAt     DateTime?
+  lastSeenOrigin String?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  site     ExpoSite   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  parent   ExpoPage?  @relation("ExpoPageTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children ExpoPage[] @relation("ExpoPageTree")
+
+  @@unique([siteId, slug])
+  @@index([siteId, sortOrder])
+}
+
+/// 완성된 디자인을 다음 전시가 골라 쓰는 틀. 워크스페이스 소속인 이유가 곧 존재 이유다 —
+/// 다음 전시는 다음 프로젝트다.
+model ExpoTemplate {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  /// { version, contentMode:"design"|"full", theme, pages:[...] }
+  /// 섹션 sid·DB id·sourceRef·미리보기 토큰은 저장하지 않는다 — 인스턴스화 때 새로 발급한다.
+  snapshot    Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt(sort: Desc)])
 }

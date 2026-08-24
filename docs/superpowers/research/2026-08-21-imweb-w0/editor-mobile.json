@@ -1,0 +1,29 @@
+{
+  "execution": "not-observed",
+  "runLabel": "editor-mobile-390x844",
+  "version": "2026-08-21.1",
+  "observedAt": "2026-08-21T08:07:55.462Z",
+  "dom": {
+    "boxCount": 0,
+    "controllerCount": 0,
+    "parserScriptCount": 0
+  },
+  "globals": {
+    "dayjsType": "undefined",
+    "probeType": "undefined"
+  },
+  "capabilityObservation": "unobserved-read-only-driver",
+  "capabilities": {
+    "attachShadow": null,
+    "adoptedStyleSheets": true,
+    "FontFace": null,
+    "documentFonts": true,
+    "ResizeObserver": null,
+    "MutationObserver": null
+  },
+  "editorCanvas": {
+    "height": 5200,
+    "mode": "mobile",
+    "width": 375
+  }
+}

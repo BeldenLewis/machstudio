@@ -2,7 +2,28 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  async headers() {
+    return [
+      {
+        /**
+         * 홈페이지 임베드 서체 — **다른 오리진에서 받아 간다.**
+         *
+         * 파트너 사이트(아임웹 등)의 문서가 우리 서체를 요청한다. 폰트는 이미지와 달리
+         * 항상 CORS 로 받으므로, 이 헤더가 없으면 콘솔에만 보이는 조용한 실패가 되고
+         * 화면은 대체 서체로 그려진다. `Cross-Origin-Resource-Policy` 도 같이 필요하다 —
+         * 그게 없으면 COEP 를 켠 사이트에서 막힌다.
+         *
+         * 경로에 버전이 박혀 있어 1년 불변 캐시가 안전하다. 새 버전은 새 경로다.
+         */
+        source: "/fonts/pretendard/v1.3.9/:path*",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
+      },
+    ];
+  },
 };
 
 export default withSentryConfig(nextConfig, {

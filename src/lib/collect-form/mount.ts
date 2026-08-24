@@ -12,7 +12,7 @@
  */
 import { h, clearNode } from "@/lib/dom/h";
 import { onAccentColor } from "@/lib/competition-render";
-import { COLLECT_FORM_CSS } from "./css";
+import { ensureFormStyles } from "./css";
 import {
   DEFAULT_LOCALE,
   REGISTRATION_STATUSES,
@@ -33,7 +33,6 @@ import { resolveRedirect } from "@/lib/collect-redirect";
 // 로더가 심어 둔 first-touch UTM 을 그대로 쓴다 — 파트너 사이트를 먼저 거친 방문자의 정본이다.
 import { buildUtmEnvelope } from "@/lib/attribution-client";
 
-const STYLE_ID = "msf-css";
 
 /**
  * 미리보기 완료 화면에 쓰는 더미 등록번호(설계 §16.1 "화면 확인용 더미 번호로 렌더").
@@ -107,6 +106,11 @@ export interface MountCollectFormOptions {
   serverNow?: string | null;
   /** 응답이 CDN 캐시에 머문 시간(ms). serverNow 가 그만큼 과거라 되돌린다. */
   ageMs?: number;
+  /**
+   * 스타일을 넣을 루트. 홈페이지 섹션은 자기 ShadowRoot 를 준다 — 문서 head 에 넣으면
+   * Shadow 안까지 닿지 않아 폼이 스타일 없이 그려진다. 안 주면 문서(지금까지와 같다).
+   */
+  styleRoot?: Document | ShadowRoot;
 }
 
 export interface CollectFormHandle {
@@ -114,13 +118,7 @@ export interface CollectFormHandle {
 }
 
 /** 스타일은 문서당 1벌. 폼이 두 개 붙어도 한 번만 넣는다. */
-function ensureStyles(): void {
-  if (typeof document === "undefined" || document.getElementById(STYLE_ID)) return;
-  const style = document.createElement("style");
-  style.id = STYLE_ID;
-  style.textContent = COLLECT_FORM_CSS;
-  document.head.appendChild(style);
-}
+
 
 /**
  * dataLayer 단일 창구(설계 §18). Meta 픽셀·Google Ads 를 직접 부르지 않는다 —
@@ -144,7 +142,7 @@ function str(v: unknown): string {
 }
 
 export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHandle {
-  ensureStyles();
+  ensureFormStyles(opts.styleRoot);
 
   const { config, mount } = opts;
   const preview = opts.preview === true;
