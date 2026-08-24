@@ -741,8 +741,24 @@ function ThemePanel({
 
   const set = (key: keyof ExpoTheme, value: string) => onStage({ ...current, [key]: value });
 
+  /**
+   * **미리보기가 거짓말하는 자리다.** 색이 아닌 값은 미리보기 주소에서 빠지므로
+   * (아래 PreviewPane) 프레임에는 저장돼 있던 옛 색이 그대로 보인다 — 화면은 멀쩡한데
+   * 저장하면 값이 거절된다. 그래서 **그 칸 바로 아래**에서 미리 말한다(AGENTS.md 공통).
+   */
+  const badKeys = (["accent", "lightBg", "darkBg"] as const).filter(
+    (key) => !normalizeHexColor(current[key]),
+  );
+  const invalid = badKeys.length > 0;
+  const hint = (key: keyof ExpoTheme) =>
+    badKeys.includes(key) ? (
+      <p className="text-[11px] leading-relaxed text-[var(--destructive)]">
+        #RRGGBB 형식으로 적어 주세요. 지금 값은 저장되지 않아요.
+      </p>
+    ) : null;
+
   const apply = async () => {
-    if (!staged) return;
+    if (!staged || invalid) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/expo/${encodeURIComponent(siteId)}`, {
@@ -774,17 +790,20 @@ function ThemePanel({
         value={current.accent}
         onChange={(next) => set("accent", next)}
       />
+      {hint("accent")}
       <ColorField
         label="밝은 배경"
         value={current.lightBg}
         onChange={(next) => set("lightBg", next)}
       />
+      {hint("lightBg")}
       <ColorField
         label="어두운 배경"
         note="배경을 어둡게 한 구획"
         value={current.darkBg}
         onChange={(next) => set("darkBg", next)}
       />
+      {hint("darkBg")}
 
       {dirty ? (
         <div className={`${R.surface} ${FINISH.s2} space-y-2 bg-secondary p-2.5`}>
@@ -800,7 +819,7 @@ function ThemePanel({
             <button
               type="button"
               onClick={() => void apply()}
-              disabled={saving}
+              disabled={saving || invalid}
               className={`inline-flex min-h-9 items-center gap-1.5 ${R.control} ${FINISH.control} bg-violet-500 px-3 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-60`}
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}

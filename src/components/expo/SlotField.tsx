@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { ImagePlus, Link2, Loader2, X } from "lucide-react";
 import { Field, FieldArea, FieldSelect, FINISH, R, UrlField } from "@/components/ui/primitives";
 import { safeHttpUrl } from "@/lib/webinar-config";
@@ -271,6 +271,19 @@ function MediaField({
   const write = (next: { url?: string; alt?: string }) =>
     onChange({ kind: "image", url, alt, ...next });
 
+  /**
+   * 업로드는 **몇 초를 산다.** 그 사이 사용자는 같은 구획의 다른 칸을 계속 고칠 수 있다.
+   *
+   * 클릭 시점의 `onChange` 를 그대로 들고 있으면, 그것이 붙잡은 `section.content` 를
+   * 통째로 펼쳐 쓰는 바람에(SectionEditor 의 setSlot) **올리는 동안 친 글이 전부 그때
+   * 값으로 롤백되고 그대로 자동저장된다.** 응답이 성공이라 아무 경고도 없다.
+   *
+   * 그래서 응답이 왔을 때는 **그 순간의** onChange·alt 를 읽는다. ref 갱신은 렌더가
+   * 아니라 효과에서 한다(react-hooks 규칙).
+   */
+  const latest = useRef({ alt, onChange });
+  useEffect(() => { latest.current = { alt, onChange }; }, [alt, onChange]);
+
   const upload = useCallback(async (file: File) => {
     setUploading(true);
     setUploadError(null);
@@ -287,13 +300,14 @@ function MediaField({
         setUploadError(body.error ?? "올리지 못했어요.");
         return;
       }
-      onChange({ kind: "image", url: body.url, alt });
+      latest.current.onChange({ kind: "image", url: body.url, alt: latest.current.alt });
     } catch {
       setUploadError("올리지 못했어요. 연결을 확인해 주세요.");
     } finally {
       setUploading(false);
     }
-  }, [siteId, alt, onChange]);
+    // siteId 만 의존한다 — 나머지는 위 ref 로 읽으므로 업로드 중 렌더에 흔들리지 않는다.
+  }, [siteId]);
 
   return (
     <div className="space-y-1.5">

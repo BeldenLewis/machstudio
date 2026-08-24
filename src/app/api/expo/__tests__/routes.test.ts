@@ -351,6 +351,57 @@ describe("역할 — 화면이 숨긴 것은 API 도 막는다", () => {
   });
 });
 
+/**
+ * 색은 **되돌리지 않고 거절한다.**
+ *
+ * `normalizeExpoTheme` 는 색이 아닌 값을 기본 남색으로 되돌린다 — 읽는 경로에서는 그게
+ * 맞지만, 쓰는 경로에서 그러면 저장돼 있던 브랜드 색이 파괴되고 그 결과가 즉시 공개
+ * 페이지로 나간다. 화면에는 "색을 적용했어요" 만 뜨고 옛 값은 어디에도 안 남는다.
+ */
+describe("사이트 색 저장", () => {
+  const site = {
+    id: "s1", workspaceId: "w1", projectId: "p1", name: "사이트",
+    theme: { accent: "#e2532c", lightBg: "#fffdf8", darkBg: "#161310" },
+    collectSourceId: null, defaultLocale: "ko", previewToken: "t", siteUrl: null,
+  };
+
+  const patchTheme = async (theme: unknown) => {
+    prismaMock.expoSite.findFirst.mockResolvedValue(site);
+    prismaMock.expoSite.update.mockResolvedValue({ ...site });
+    const { PATCH } = await import("@/app/api/expo/[siteId]/route");
+    return PATCH(write({ theme }), { params: Promise.resolve({ siteId: "s1" }) });
+  };
+
+  it("색이 아닌 값은 400 이고 아무것도 바꾸지 않는다", async () => {
+    // Figma 에서 복사하면 알파가 붙은 8자리가 온다.
+    const res = await patchTheme({ accent: "#E2532CFF", lightBg: "#ffffff", darkBg: "#111318" });
+    expect(res.status).toBe(400);
+    expect((await res.json()).fields).toEqual(["accent"]);
+    expect(prismaMock.expoSite.update).not.toHaveBeenCalled();
+  });
+
+  it("저장된 색을 기본값으로 되돌리지 않는다", async () => {
+    const res = await patchTheme({ accent: "지금은맛있는", lightBg: "", darkBg: "#111318" });
+    expect(res.status).toBe(400);
+    expect(prismaMock.expoSite.update).not.toHaveBeenCalled();
+  });
+
+  /** 빠뜨린 칸까지 기본값으로 채우면 부분 저장이 나머지를 지운다. */
+  it("보낸 칸만 바꾼다", async () => {
+    const res = await patchTheme({ accent: "#00aa55" });
+    expect(res.status).toBe(200);
+    expect(prismaMock.expoSite.update.mock.calls[0][0].data.theme).toEqual({
+      accent: "#00aa55", lightBg: "#fffdf8", darkBg: "#161310",
+    });
+  });
+
+  it("3자리 HEX 도 받아서 6자리로 편다", async () => {
+    const res = await patchTheme({ accent: "#f80" });
+    expect(res.status).toBe(200);
+    expect(prismaMock.expoSite.update.mock.calls[0][0].data.theme.accent).toBe("#ff8800");
+  });
+});
+
 describe("발행·공개", () => {
   const base = { id: "pg1", siteId: "s1", site: { id: "s1", workspaceId: "w1", projectId: "p1" } };
 

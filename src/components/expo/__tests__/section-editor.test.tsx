@@ -322,3 +322,85 @@ describe("카탈로그에 없는 타입", () => {
     expect(host.querySelector('button[aria-label="쓰지 않는 구획 삭제"]')).toBeTruthy();
   });
 });
+
+/**
+ * 올리는 동안에도 화면은 살아 있다 — 그 사이의 편집이 **되돌아가면 안 된다.**
+ *
+ * 업로드는 클릭 시점의 클로저를 들고 몇 초를 산다. 그 클로저가 붙잡은 `onChange` 는
+ * 그때의 `section.content` 를 통째로 펼쳐 쓰므로(SectionEditor 의 setSlot), 응답이 오는
+ * 순간 **올리는 동안 친 글이 전부 그때 값으로 롤백되고 그대로 자동저장된다.**
+ */
+describe("이미지를 올리는 동안", () => {
+  /** 응답을 테스트가 원할 때 풀 수 있는 업로드. */
+  function deferredUpload() {
+    let release: ((url: string) => void) | null = null;
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => {
+      release = (url) => resolve({ ok: true, status: 201, json: async () => ({ url }) } as Response);
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    return { release: (url: string) => release!(url) };
+  }
+
+  it("같은 구획의 다른 칸에 친 글을 되돌리지 않는다", async () => {
+    const upload = deferredUpload();
+    await render([newSection("textblock")]);
+
+    // 파일을 고른다 — 업로드가 시작되고 응답은 아직 안 온다.
+    const file = new File([new Uint8Array([1, 2, 3])], "a.jpg", { type: "image/jpeg" });
+    const input = field<HTMLInputElement>('input[type="file"]');
+    await act(async () => {
+      Object.defineProperty(input, "files", { value: [file], configurable: true });
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    // 올라가는 동안 제목을 친다.
+    await type(field<HTMLInputElement>('input[aria-label="제목"]'), "빛의 시간");
+    expect((latest[0].content.heading as Record<string, string>).ko).toBe("빛의 시간");
+
+    // 응답 도착.
+    await act(async () => { upload.release("https://cdn.example.com/a.jpg"); });
+
+    expect(latest[0].content.media).toMatchObject({ url: "https://cdn.example.com/a.jpg" });
+    // 여기가 핵심 — 올리는 동안 친 글이 살아 있어야 한다.
+    expect((latest[0].content.heading as Record<string, string>)?.ko).toBe("빛의 시간");
+  });
+
+  /** 대체 텍스트도 같은 클로저에 잡혀 있다. */
+  it("올리는 동안 고친 대체 텍스트를 덮어쓰지 않는다", async () => {
+    const upload = deferredUpload();
+    await render([newSection("textblock")]);
+
+    const file = new File([new Uint8Array([1])], "a.jpg", { type: "image/jpeg" });
+    const input = field<HTMLInputElement>('input[type="file"]');
+    await act(async () => {
+      Object.defineProperty(input, "files", { value: [file], configurable: true });
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    await type(field<HTMLInputElement>('input[aria-label="이미지 대체 텍스트"]'), "전시 전경");
+    await act(async () => { upload.release("https://cdn.example.com/a.jpg"); });
+
+    expect(latest[0].content.media).toMatchObject({
+      kind: "image", url: "https://cdn.example.com/a.jpg", alt: "전시 전경",
+    });
+  });
+});
+
+/**
+ * 하나만 놓을 수 있는 타입을 지운 **직후** 다시 넣으면, 유예가 끝나기 전에는 배열에
+ * 같은 타입이 둘이 된다. 저장하면 서버가 **먼저 것(=지우려던 것)** 을 남기고 새것을 버린다
+ * (`config.ts` 의 usedSingletons). 실행취소까지 누르면 그 상태가 영구가 된다.
+ */
+describe("하나만 놓는 구획을 지운 직후", () => {
+  it("같은 타입이 배열에 둘이 되지 않는다", async () => {
+    await render([newSection("kv")]);
+
+    await click(host.querySelector('button[aria-label="키비주얼 구획 삭제"]') ?? undefined);
+    // 유예 중 — 화면에서는 사라졌지만 배열에는 남아 있다.
+    const kvButton = buttonByText("키비주얼");
+    if (kvButton && !kvButton.disabled) await click(kvButton);
+
+    const kvs = latest.filter((s) => s.type === "kv");
+    expect(kvs.length, "kv 가 둘이면 저장 때 하나가 조용히 버려진다").toBeLessThanOrEqual(1);
+  });
+});

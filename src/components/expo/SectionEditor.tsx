@@ -82,8 +82,13 @@ export function SectionsEditor({
   sections, onChange, canEdit, siteId, sources, pages, locale,
 }: SectionsEditorProps) {
   /**
-   * 삭제 유예(5초) 중인 구획. 이걸 알아야 **하나만 놓을 수 있는 타입을 지운 직후에 다시
-   * 추가할 수 있다** — 모르면 화면에서 사라진 구획 때문에 5초 동안 "이미 있어요" 가 뜬다.
+   * 삭제 유예(5초) 중인 구획 — **화면에서만** 사라진 것들이다. 배열에는 그대로 있다.
+   *
+   * 이걸 아는 이유는 카탈로그 버튼을 열어 주기 위해서가 아니라, **왜 못 누르는지**
+   * 제대로 말하기 위해서다. 한때 유예 중인 것을 없는 셈 치고 버튼을 열었는데, 그러면
+   * 배열에 같은 타입이 둘이 되고 저장할 때 서버가 **먼저 것(=지우려던 것)** 을 남기고
+   * 새것을 버린다(`config.ts` 의 usedSingletons). 실행취소까지 누르면 영구가 된다.
+   * 5초를 기다리게 하는 편이 조용히 잃는 것보다 낫다.
    */
   const [pendingRemove, setPendingRemove] = useState<ReadonlySet<string>>(new Set());
 
@@ -92,13 +97,19 @@ export function SectionsEditor({
     [onChange],
   );
 
-  /** 지금 페이지에 살아 있는(유예 중이 아닌) 타입들. */
-  const usedTypes = useMemo(() => {
-    const set = new Set<string>();
+  /**
+   * 배열에 들어 있는 타입들. **유예 중인 것도 센다** — 저장 payload 에 그대로 나가므로.
+   * `pendingTypes` 는 그중 화면에서 사라진 것뿐인 타입이라, 버튼 설명을 가른다.
+   */
+  const { usedTypes, pendingTypes } = useMemo(() => {
+    const used = new Set<string>();
+    const live = new Set<string>();
     for (const section of sections) {
-      if (!pendingRemove.has(section.sid)) set.add(section.type);
+      used.add(section.type);
+      if (!pendingRemove.has(section.sid)) live.add(section.type);
     }
-    return set;
+    const pending = new Set([...used].filter((type) => !live.has(type)));
+    return { usedTypes: used, pendingTypes: pending };
   }, [sections, pendingRemove]);
 
   return (
@@ -144,7 +155,11 @@ export function SectionsEditor({
                 한 페이지에 구획은 {EXPO_LIMITS.sectionsPerPage}개까지예요.
               </p>
             ) : (
-              <SectionCatalog usedTypes={usedTypes} onAdd={(type) => add(newSection(type))} />
+              <SectionCatalog
+                usedTypes={usedTypes}
+                pendingTypes={pendingTypes}
+                onAdd={(type) => add(newSection(type))}
+              />
             )
           }
         />
@@ -158,22 +173,35 @@ export function SectionsEditor({
  * 6종뿐이라 접을 이유가 없고, 접으면 "무엇을 만들 수 있는가" 가 한 번 더 클릭 뒤로 간다.
  */
 function SectionCatalog({
-  usedTypes, onAdd,
-}: { usedTypes: ReadonlySet<string>; onAdd: (type: string) => void }) {
+  usedTypes, pendingTypes, onAdd,
+}: {
+  usedTypes: ReadonlySet<string>;
+  /** 배열에는 있는데 화면에서는 지워진(유예 중인) 타입 — 못 누르는 이유가 다르다. */
+  pendingTypes: ReadonlySet<string>;
+  onAdd: (type: string) => void;
+}) {
   return (
     <div>
       <p className="mb-1.5 text-[11px] text-muted-foreground">구획 추가</p>
       <div className="flex flex-wrap gap-1.5">
         {EXPO_SECTIONS.map((def) => {
           const taken = !def.multi && usedTypes.has(def.type);
+          const waiting = taken && pendingTypes.has(def.type);
           return (
             <button
               key={def.type}
               type="button"
               disabled={taken}
               onClick={() => onAdd(def.type)}
-              /* 왜 못 누르는지 말한다 — 회색 버튼만 두면 고장으로 읽힌다. */
-              title={taken ? `${topicParticle(def.label)} 한 페이지에 하나만 놓을 수 있어요` : undefined}
+              /* 왜 못 누르는지 말한다 — 회색 버튼만 두면 고장으로 읽힌다.
+                 방금 지워서 못 누르는 것과, 이미 있어서 못 누르는 것은 다른 말이다. */
+              title={
+                waiting
+                  ? "방금 지운 것을 아직 되돌릴 수 있어요. 실행취소하거나 잠시 뒤에 다시 넣어 주세요."
+                  : taken
+                    ? `${topicParticle(def.label)} 한 페이지에 하나만 놓을 수 있어요`
+                    : undefined
+              }
               className={`inline-flex min-h-9 items-center gap-1.5 border border-dashed px-3 py-2 text-xs font-medium transition-colors ${R.control} ${
                 taken
                   ? "cursor-not-allowed border-border text-muted-foreground/50"

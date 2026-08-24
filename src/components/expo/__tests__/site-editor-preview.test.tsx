@@ -277,6 +277,23 @@ describe("사이트 색", () => {
     return fields[0];
   };
 
+  /** ColorField 의 HEX 텍스트 칸. `type="color"` 는 8자리 값을 아예 못 받는다. */
+  const hexText = () => {
+    const el = [...host.querySelectorAll<HTMLInputElement>("input")]
+      .find((i) => i.type === "text" && /^#/.test(i.value));
+    if (!el) throw new Error("HEX 칸이 없다");
+    return el;
+  };
+
+  const typeHex = async (value: string) => {
+    const el = hexText();
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setter.call(el, value);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+
   const setColor = async (value: string) => {
     const el = hexInput();
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
@@ -376,5 +393,58 @@ describe("페이지 상세를 아직 모를 때", () => {
     await act(async () => { release({ page: pageBody }); });
     expect(host.querySelector("iframe")).not.toBeNull();
     expect(frameSrc()).toContain(`page=${PAGE_ID}`);
+  });
+});
+
+/**
+ * 색이 아닌 값을 적었을 때 — **미리보기가 거짓말하는 자리다.**
+ *
+ * 색이 아닌 값은 미리보기 주소에서 빠지므로 프레임에는 저장돼 있던 옛 색이 그대로 보인다.
+ * 화면은 멀쩡한데 적용을 누르면 서버가 거절한다(혹은 예전에는 기본 남색으로 되돌렸다).
+ * 그래서 제출 전에, 그 칸 바로 아래에서 말해야 한다.
+ */
+describe("색이 아닌 값", () => {
+  const hexText = () => {
+    const el = [...host.querySelectorAll<HTMLInputElement>("input")]
+      .find((i) => i.type === "text" && /^#/.test(i.value));
+    if (!el) throw new Error("HEX 칸이 없다");
+    return el;
+  };
+
+  const typeHex = async (value: string) => {
+    const el = hexText();
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setter.call(el, value);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+
+  it("그 칸 아래에서 미리 말한다", async () => {
+    await render();
+    // Figma 에서 복사하면 알파가 붙은 8자리가 온다.
+    await typeHex("#E2532CFF");
+    expect(host.textContent).toContain("#RRGGBB 형식으로 적어 주세요");
+  });
+
+  it("적용을 못 누르게 한다", async () => {
+    await render();
+    await typeHex("#E2532CFF");
+    expect(buttonByText("적용")?.disabled).toBe(true);
+  });
+
+  it("눌러도 서버로 나가지 않는다", async () => {
+    await render();
+    await typeHex("#E2532CFF");
+    await click(buttonByText("적용"));
+    expect(sitePatches).toEqual([]);
+  });
+
+  it("고치면 다시 누를 수 있다", async () => {
+    await render();
+    await typeHex("#E2532CFF");
+    await typeHex("#e2532c");
+    expect(host.textContent).not.toContain("#RRGGBB 형식으로 적어 주세요");
+    expect(buttonByText("적용")?.disabled).toBe(false);
   });
 });
