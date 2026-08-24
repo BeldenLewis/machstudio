@@ -155,4 +155,48 @@ describe("generateConsentDocuments — 국가 × 목적 전수", () => {
     const result = generateConsentDocuments(baseInput({ country: "de" as Country }));
     expect(result.privacy.body).toContain("Privacy Policy");
   });
+
+  it.each(COUNTRIES)(
+    "%s — adultsOnly 기본값(false)에서는 미성년자 법정대리인 동의 문단이 항상 들어간다",
+    (country) => {
+      const result = generateConsentDocuments(baseInput({ country }));
+      const body = result.privacy.body;
+      if (country === "kr") {
+        expect(body).toContain("만 19세 미만");
+        expect(body).toContain("법정대리인");
+        expect(body).not.toContain("성인 전용 안내");
+      } else {
+        expect(body).toMatch(/Minors Under the Age of Majority/);
+        expect(body).toMatch(/parent or legal guardian/);
+        expect(body).not.toMatch(/Adults Only/);
+      }
+    },
+  );
+
+  it.each(COUNTRIES)(
+    "%s — adultsOnly 를 켜면 법정대리인 동의 문단 대신 성인 전용 고지로 바뀐다",
+    (country) => {
+      const result = generateConsentDocuments(
+        baseInput({ country, event: { ...emptyEventLegalBlanks(), eventName: "X", adultsOnly: true } }),
+      );
+      const body = result.privacy.body;
+      if (country === "kr") {
+        expect(body).toContain("성인 전용 안내");
+        expect(body).not.toContain("법정대리인 동의서");
+      } else {
+        expect(body).toMatch(/Adults Only/);
+        expect(body).not.toMatch(/parent or legal guardian/);
+      }
+    },
+  );
+
+  it.each(COUNTRIES)("%s — 만 14세 미만 아동 개인정보 고지는 adultsOnly 여부와 무관하게 항상 들어간다", (country) => {
+    const withMinors = generateConsentDocuments(baseInput({ country }));
+    const adultsOnly = generateConsentDocuments(
+      baseInput({ country, event: { ...emptyEventLegalBlanks(), eventName: "X", adultsOnly: true } }),
+    );
+    const marker = country === "kr" ? "만 14세 미만" : "COPPA";
+    expect(withMinors.privacy.body).toContain(marker);
+    expect(adultsOnly.privacy.body).toContain(marker);
+  });
 });

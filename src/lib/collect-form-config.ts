@@ -202,6 +202,8 @@ export interface CollectEventLegal {
   thirdParties: ThirdParty[];
   dataRetentionNote: string;
   effectiveDate: string;
+  /** 성인 전용 행사 여부 — 끄면(기본) 미성년자 참가를 전제로 한 법정대리인 동의 문단이 들어간다. */
+  adultsOnly: boolean;
 }
 
 /**
@@ -268,7 +270,7 @@ export const EMPTY_FORM_CONFIG: CollectFormConfig = {
      보여 주는 화면이라, 운영자가 의식적으로 켜야 한다. 이 파일의 다른 토글도 전부 닫힘이 기본이다
      (eventInfo.enabled, consent.marketing.enabled, branch.enabled). or/showQr 은 켠 뒤의 기본값. */
   lookup: { enabled: false, fields: ["email", "phone"], logic: "or", showQr: true },
-  legal: { country: "us", eventName: "", onSitePhotography: false, thirdParties: [], dataRetentionNote: "", effectiveDate: "" },
+  legal: { country: "us", eventName: "", onSitePhotography: false, thirdParties: [], dataRetentionNote: "", effectiveDate: "", adultsOnly: false },
   theme: { accentColor: "", textColor: "", surfaceColor: "" },
   submitLabel: {},
   defaultLocale: DEFAULT_LOCALE,
@@ -541,6 +543,7 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
         .filter((t) => t.name !== ""),
       dataRetentionNote: str(legalRaw.dataRetentionNote),
       effectiveDate: str(legalRaw.effectiveDate),
+      adultsOnly: legalRaw.adultsOnly === true,
     },
     theme: {
       accentColor: hexOrEmpty(themeRaw.accentColor),

@@ -125,6 +125,8 @@ export interface CompetitionConfig {
     thirdParties: ThirdParty[];
     dataRetentionNote: string;
     effectiveDate: string;
+    /** 성인 전용 대회 여부 — 끄면(기본) 미성년자 참가를 전제로 한 법정대리인 동의 문단이 들어간다. */
+    adultsOnly: boolean;
   };
   /**
    * 투표 화면 상단 소개 문구. 참가작 카드보다 먼저 보이는, 대회 전체가 공유하는 한 블록이다
@@ -377,6 +379,7 @@ export function normalizeCompetitionConfig(
         .filter((t) => t.name !== ""),
       dataRetentionNote: str(legalRaw.dataRetentionNote),
       effectiveDate: str(legalRaw.effectiveDate),
+      adultsOnly: bool(legalRaw.adultsOnly),
     },
     voteIntro: {
       enabled: bool(voteIntroRaw.enabled),

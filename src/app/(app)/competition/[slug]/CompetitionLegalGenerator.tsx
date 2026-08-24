@@ -62,6 +62,7 @@ export function CompetitionLegalGenerator({
           thirdParties: legal.thirdParties,
           dataRetentionNote: legal.dataRetentionNote,
           effectiveDate: legal.effectiveDate,
+          adultsOnly: legal.adultsOnly,
         },
         collectedCategories,
         // 마케팅 체크박스는 privacy 와 같이 항상 렌더된다(대회 신청 폼에 사용 여부 스위치가 없다).
@@ -153,6 +154,11 @@ export function CompetitionLegalGenerator({
       <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
         <Switch checked={legal.onSitePhotography} onChange={(v) => onLegalChange({ onSitePhotography: v })} label="현장 촬영·녹화 있음" />
         행사장에서 사진·영상 촬영이 있어요
+      </label>
+
+      <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+        <Switch checked={legal.adultsOnly} onChange={(v) => onLegalChange({ adultsOnly: v })} label="성인(만 19세 이상) 전용 대회" />
+        성인 전용이에요 — 꺼두면(기본) 미성년자 참가를 전제로 법정대리인 동의 안내가 들어가요
       </label>
 
       <ThirdPartiesEditor items={legal.thirdParties} onChange={(next) => onLegalChange({ thirdParties: next })} />
