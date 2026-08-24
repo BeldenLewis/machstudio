@@ -16,14 +16,27 @@ import { EXPO_LIMITS } from "@/lib/expo/registry";
 import { getExpoCapabilities, type ExpoCapabilities } from "@/lib/expo/capability";
 import { probeExpoSchema } from "@/lib/expo/schema-probe";
 import { guardWriteOrigin, originGuardMessage, originGuardStatus } from "@/lib/expo/origin";
-import { messageFor, statusFor, type ExpoAuthFailure } from "@/lib/expo/auth";
+import { messageFor, statusFor, type ExpoAuthFailure, type WorkspaceRole } from "@/lib/expo/auth";
 import { getPublicAppOrigin } from "@/lib/app-url";
+import type { Prisma } from "@/generated/prisma";
+
+/**
+ * Prisma 의 Json 입력 타입은 **인덱스 시그니처**를 요구한다. 우리 설정 타입은 고정 키라
+ * 구조는 맞는데 타입이 안 맞는다 — 저장 직전에 한 번만 넓힌다.
+ * (`JSON.parse(JSON.stringify(...))` 는 큰 스냅샷을 한 번 더 복사하므로 쓰지 않는다.)
+ */
+export const asJson = <T>(value: T): Prisma.InputJsonValue => value as unknown as Prisma.InputJsonValue;
 
 export interface ExpoRouteContext {
   caps: ExpoCapabilities;
   userId: string;
   /** 이 사람이 속한 워크스페이스들 — 소유권 판정에 쓴다. */
   memberWorkspaceIds: string[];
+  /**
+   * 워크스페이스별 역할. 멤버가 아니면 null.
+   * 워크스페이스 전역 자원(템플릿)의 이름 변경·영구 삭제가 이걸 본다.
+   */
+  workspaceRole: (workspaceId: string) => WorkspaceRole | null;
 }
 
 /**
@@ -71,12 +84,18 @@ export async function guardExpoRoute(
 
   const memberships = await prisma.workspaceMember.findMany({
     where: { userId: user.id },
-    select: { workspaceId: true },
+    select: { workspaceId: true, role: true },
   });
+  const roles = new Map(memberships.map((m) => [m.workspaceId, m.role as WorkspaceRole]));
 
   return {
     ok: true,
-    ctx: { caps, userId: user.id, memberWorkspaceIds: memberships.map((m) => m.workspaceId) },
+    ctx: {
+      caps,
+      userId: user.id,
+      memberWorkspaceIds: memberships.map((m) => m.workspaceId),
+      workspaceRole: (workspaceId) => roles.get(workspaceId) ?? null,
+    },
   };
 }
 

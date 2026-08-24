@@ -124,6 +124,26 @@ export function requireOwnedTemplate(
   return ok(template);
 }
 
+/** 워크스페이스 역할 — Prisma 의 `Role` 과 같은 값이다. */
+export type WorkspaceRole = "OWNER" | "ADMIN" | "MEMBER";
+
+/**
+ * 워크스페이스 **전역** 자원을 관리해도 되는가 — 템플릿 이름 변경·영구 삭제.
+ *
+ * 템플릿은 프로젝트가 아니라 워크스페이스에 매달려 있다. 한 전시의 관리자가 지우면
+ * **다른 전시들이 쓰던 틀이 같이 사라진다.** 그래서 프로젝트 권한으로는 부족하고
+ * 워크스페이스 OWNER·ADMIN 만 손댈 수 있다.
+ */
+export function requireWorkspaceAdmin(
+  userId: string | null,
+  role: WorkspaceRole | null,
+): ExpoAuthResult<WorkspaceRole> {
+  if (!userId) return fail("unauthenticated");
+  // 멤버가 아닌 경우는 호출부의 소유권 판정이 이미 404 로 막았다 — 여기 오면 권한 문제다.
+  if (!role) return fail("not-found");
+  return role === "OWNER" || role === "ADMIN" ? ok(role) : fail("forbidden");
+}
+
 /**
  * 두 자원이 **같은 사이트** 소속인가 — 형제 자원을 다룰 때 서버가 마지막으로 확인한다.
  * 클라이언트를 고쳐도 이 검증이 없으면 같은 사고가 다른 경로로 재발한다.
