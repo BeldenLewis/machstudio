@@ -25,6 +25,33 @@ async function authorizeProject(projectId: string, userId: string) {
   return { project, canManage };
 }
 
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "인증 필요" }, { status: 401 });
+
+  const { id } = await params;
+  const project = await prisma.project.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      workspaceId: true,
+      deletedAt: true,
+      ga4PropertyId: true,
+      ga4RegistrationPagePath: true,
+    },
+  });
+  if (!project || project.deletedAt) return NextResponse.json({ error: "프로젝트 없음" }, { status: 404 });
+
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { userId_workspaceId: { userId: user.id, workspaceId: project.workspaceId } },
+  });
+  if (!membership) return NextResponse.json({ error: "접근 권한 없음" }, { status: 403 });
+
+  return NextResponse.json({ project });
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -32,11 +59,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const { id } = await params;
   const body = await request.json();
-  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const nameProvided = typeof body.name === "string";
+  const name = nameProvided ? body.name.trim() : "";
   const description = body.description;
+  const ga4PropertyId = body.ga4PropertyId;
+  const ga4RegistrationPagePath = body.ga4RegistrationPagePath;
 
-  if (!name) return NextResponse.json({ error: "프로젝트 이름을 입력해주세요" }, { status: 400 });
-  if (name.length > 80) return NextResponse.json({ error: "프로젝트 이름은 80자 이하로 입력해주세요" }, { status: 400 });
+  if (nameProvided) {
+    if (!name) return NextResponse.json({ error: "프로젝트 이름을 입력해주세요" }, { status: 400 });
+    if (name.length > 80) return NextResponse.json({ error: "프로젝트 이름은 80자 이하로 입력해주세요" }, { status: 400 });
+  }
 
   const { project, canManage } = await authorizeProject(id, user.id);
   if (!project) return NextResponse.json({ error: "프로젝트 없음" }, { status: 404 });
@@ -45,9 +77,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const updated = await prisma.project.update({
     where: { id },
     data: {
-      name,
+      ...(nameProvided && { name }),
       ...(description !== undefined && {
         description: typeof description === "string" && description.trim() ? description.trim() : null,
+      }),
+      ...(ga4PropertyId !== undefined && {
+        ga4PropertyId: typeof ga4PropertyId === "string" && ga4PropertyId.trim() ? ga4PropertyId.trim() : null,
+      }),
+      ...(ga4RegistrationPagePath !== undefined && {
+        ga4RegistrationPagePath:
+          typeof ga4RegistrationPagePath === "string" && ga4RegistrationPagePath.trim()
+            ? ga4RegistrationPagePath.trim()
+            : null,
       }),
     },
   });
