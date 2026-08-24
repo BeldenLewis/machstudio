@@ -19,6 +19,8 @@
  * (Supabase 이미지 변환은 유료라 403 이 난다 — 줄이는 일은 업로드 시점이 정본이다.)
  */
 
+import { expoSitePrefix, isUnderExpoPrefix } from "@/lib/expo/media";
+
 /** 받는 형식. GIF·SVG·영상은 받지 않는다. */
 export const EXPO_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 
@@ -110,13 +112,16 @@ export function checkDownscaled(result: { bytes: number; width?: number; height?
   return null;
 }
 
-/** 이 사이트가 소유한 Storage 경로인가 — 지우거나 복사할 때 경계를 벗어나지 않게. */
+/**
+ * 이 사이트가 소유한 Storage 경로인가 — 지우거나 복사할 때 경계를 벗어나지 않게.
+ *
+ * 규칙 자체는 `media.ts` 에 한 벌만 둔다. 업로드가 만드는 경로와 복사·삭제가 소유로
+ * 판정하는 경로가 **갈라지면** 올린 파일을 못 지우거나 남의 파일을 지운다.
+ */
 export function expoObjectPrefix(workspaceId: string, siteId: string): string {
-  return `${workspaceId}/expo/${siteId}/`;
+  return expoSitePrefix(workspaceId, siteId);
 }
 
 export function isOwnedExpoObject(path: string, workspaceId: string, siteId: string): boolean {
-  const prefix = expoObjectPrefix(workspaceId, siteId);
-  // 정확히 그 접두사여야 한다 — `..` 이나 다른 사이트 경로가 섞이면 안 된다.
-  return path.startsWith(prefix) && !path.slice(prefix.length).includes("/") && !path.includes("..");
+  return isUnderExpoPrefix(path, expoSitePrefix(workspaceId, siteId));
 }
