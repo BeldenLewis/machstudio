@@ -38,27 +38,28 @@ export default function FormPreview({
       </div>
 
       <div className={`overflow-hidden bg-white ${R.panel} ${FINISH.s1}`}>
-        <div className="max-h-[70vh] overflow-y-auto">
-          <style>{css}</style>
-          {/*
-            실제 팝업(.mc-modal)은 자기 자신이 뷰포트 높이에 맞춰 내부 스크롤한다
-            (max-height: calc(100dvh - 32px) + .mc-modal-body{overflow-y:auto}) — 화면
-            한가운데 떠 있는 고정 오버레이라서다. 여기서는 이미 바깥 div(max-h-[70vh])가
-            스크롤을 맡고 있어서, 안쪽까지 따로 스크롤 영역이 생기면 두 스크롤이 중첩돼
-            내용 일부가 바깥 스크롤로도 안쪽 스크롤로도 안 닿는 자리에 갇힌다 — 그래서
-            여기서만 안쪽 캡을 풀어 스크롤이 바깥 div 하나로 모이게 한다.
-          */}
-          <style>{`.mc-preview .mc-modal-body { overflow: visible; }`}</style>
-          {/* 실제 팝업과 같은 클래스 구조(mc > mc-modal). form 태그가 아니라 div 라 제출이 아예 안 된다. */}
-          <div className="mc mc-preview">
-            <div
-              className="mc-modal"
-              style={{ maxWidth: "100%", maxHeight: "none", boxShadow: "none", borderRadius: 0, overflow: "visible" }}
-              /* 미리보기에서 탭 키가 갇히지 않게 — 어드민 폼과 포커스 순서를 섞지 않는다. */
-              inert
-              dangerouslySetInnerHTML={{ __html: html }}
-            />
-          </div>
+        <style>{css}</style>
+        {/*
+          실제 팝업(.mc-modal)은 자기 자신이 뷰포트 높이에 맞춰 내부 스크롤한다
+          (max-height: calc(100dvh - 32px) + .mc-modal-body{overflow-y:auto}) — 화면
+          한가운데 떠 있는 고정 오버레이라서다. 여기서는 그 캡을 풀고(스타일로 override)
+          내용이 자연스러운 높이만큼 늘어나게 둔다 — 예전엔 바깥에 max-h-[70vh]로 따로
+          스크롤 상자를 만들었는데, 이 패널이 옆 칸에서 sticky 로 붙어 있다 보니 "페이지를
+          스크롤"하는 손짓과 "미리보기 상자 안에서만 스크롤"하는 손짓이 서로 다른 영역이라
+          신청자는 페이지를 내렸는데 미리보기는 그대로 멈춰 있는 것처럼 보였다(실제로는
+          안 보이는 좁은 상자 안에 갇혀 있었을 뿐). 스크롤을 페이지 하나로 모아서 신청 항목이
+          많아도 페이지를 계속 내리면 끝까지 보이게 한다.
+        */}
+        <style>{`.mc-preview .mc-modal-body { overflow: visible; }`}</style>
+        {/* 실제 팝업과 같은 클래스 구조(mc > mc-modal). form 태그가 아니라 div 라 제출이 아예 안 된다. */}
+        <div className="mc mc-preview">
+          <div
+            className="mc-modal"
+            style={{ maxWidth: "100%", maxHeight: "none", boxShadow: "none", borderRadius: 0, overflow: "visible" }}
+            /* 미리보기에서 탭 키가 갇히지 않게 — 어드민 폼과 포커스 순서를 섞지 않는다. */
+            inert
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
         </div>
       </div>
 
