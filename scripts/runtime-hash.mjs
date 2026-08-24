@@ -121,6 +121,12 @@ export function expoSourceFiles(root) {
     join(root, "src/lib/expo/custom-code.ts"),
     join(root, "src/lib/expo/form-bridge.ts"),
     join(root, "src/lib/expo/seen.ts"),
+    join(root, "src/lib/expo/preview-bridge.ts"),
+    join(root, "src/lib/expo/config.ts"),
+    // collect-form-config 가 동의 전문 토큰을 거쳐 이 둘을 끌어온다(metafile 실측).
+    join(root, "src/lib/collect-form-config.ts"),
+    join(root, "src/lib/legal-templates/tokens.ts"),
+    join(root, "src/lib/legal-templates/types.ts"),
     join(root, "src/lib/expo/font.ts"),
     join(root, "src/lib/expo/css.ts"),
     join(root, "src/lib/expo/registry.ts"),

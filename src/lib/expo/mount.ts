@@ -14,6 +14,7 @@ import { expoThemeVars } from "@/lib/expo/css";
 import { mountExpoShell, type ExpoShellHandle } from "@/lib/expo/shadow";
 import { renderExpoSections } from "@/lib/expo/view-page";
 import { reportExpoSeen } from "@/lib/expo/seen";
+import { attachExpoPreviewBridge } from "@/lib/expo/preview-bridge";
 import type { PayloadSection } from "@/lib/expo/view-sections";
 import type { FormMountMode } from "@/lib/collect-form/target-registry";
 import type { ExpoTheme } from "@/lib/expo/types";
@@ -34,7 +35,17 @@ export interface ExpoRuntimePayload {
   connectionOnly?: boolean;
   /** 부작용을 내도 되는가. 없으면 라이브다. */
   mode?: FormMountMode;
-  preview?: { allowCustomCode?: boolean };
+  preview?: {
+    allowCustomCode?: boolean;
+    /**
+     * 편집기와 주고받을 통로. 서버가 정한 오리진과 URL 로 받은 채널이다.
+     * **라이브에는 이 값이 없다** — 있어도 mode 가 live 면 붙지 않는다.
+     */
+    parentOrigin?: string;
+    channel?: string;
+    /** 붙여넣은 코드의 서버 계산 digest — 떴다고 알릴 때 그대로 되돌려 보낸다. */
+    codeDigest?: string;
+  };
 }
 
 export interface ExpoMountOptions {
@@ -136,6 +147,38 @@ export function mountExpo(options: ExpoMountOptions): ExpoMountHandle | null {
      */
     if (mode === "live") {
       reportExpoSeen({ origin: payload.origin, pageId: payload.pageId, sectionId: payload.sectionId ?? null });
+      return true;
+    }
+
+    /**
+     * 미리보기 전용 통로. **라이브에서는 이 아래로 오지 않는다** — 구획 클릭이 편집기로
+     * 새어 나가거나 부모가 색을 바꿀 수 있는 경로를 방문자 화면에 두지 않는다.
+     */
+    const parentOrigin = payload.preview?.parentOrigin;
+    const channel = payload.preview?.channel;
+    if (!parentOrigin || !channel) return true;
+
+    const bridge = attachExpoPreviewBridge({
+      parentOrigin,
+      channel,
+      pageId: payload.pageId,
+      // 색만 바꾼다 — 저장하지 않는다.
+      onTheme: (theme) => next.applyTheme(theme),
+    });
+    if (!bridge) return true;
+    next.addCleanup(() => bridge.destroy());
+
+    // 구획을 누르면 편집기가 그 구획으로 이동한다. 기본 동작은 막지 않는다.
+    next.renderRoot.addEventListener("click", (event) => {
+      const target = event.target as Element | null;
+      const section = target?.closest?.(".msx-section") as HTMLElement | null;
+      const sid = section?.getAttribute("data-msx-sid");
+      if (sid) bridge.notifySelect(sid);
+    }, { signal: next.signal });
+
+    // 붙여넣은 코드를 실제로 실행한 경우에만 알린다 — 편집기가 그 후보에 대해서만 발행을 연다.
+    if (allowCustomCode && payload.preview?.codeDigest) {
+      bridge.notifyCustomCodeReady(payload.preview.codeDigest);
     }
     return true;
   };

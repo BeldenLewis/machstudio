@@ -79,6 +79,8 @@ export interface ExpoShellHandle {
   readonly signal: AbortSignal;
   /** 콘텐츠를 다 넣은 뒤 보이게 한다. 두 번 불러도 안전. */
   ready(): void;
+  /** 색만 바꾼다 — 미리보기가 쓰기 없이 테마를 미리 보여 줄 때 쓴다. */
+  applyTheme(theme: ExpoTheme): void;
   /** 재진입 — 정리를 먼저 돌리고 렌더 루트를 비운다. */
   reset(theme?: ExpoTheme): void;
   /** 정리 등록. **역순으로** 실행된다. */
@@ -223,6 +225,10 @@ export function mountExpoShell(options: ExpoShellOptions): ExpoShellHandle | nul
 
       ready() {
         renderRoot.setAttribute("data-msx-ready", "1");
+      },
+
+      applyTheme(next: ExpoTheme) {
+        applyTokens(renderRoot, next);
       },
 
       reset(nextTheme?: ExpoTheme) {
