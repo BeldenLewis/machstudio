@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { guardExpoRoute, readJsonBody, authFailure } from "@/lib/expo/route-guard";
-import { requireOwnedSite, requireSameProjectSource } from "@/lib/expo/auth";
+import { requireOwnedSite, requireSameProjectSource, requireWorkspaceAdmin } from "@/lib/expo/auth";
 import { normalizeExpoTheme } from "@/lib/expo/config";
 import { pageSummary } from "@/lib/expo/site-service";
 import { safeHttpUrl } from "@/lib/webinar-config";
@@ -84,7 +84,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ si
 
   const data: Record<string, unknown> = {};
   if (typeof body.name === "string") data.name = body.name.trim().slice(0, 120);
-  if (body.theme !== undefined) data.theme = { ...normalizeExpoTheme(body.theme) };
+
+  /**
+   * 색은 **이미 공개된 것을 바꾼다.** 공개 로더가 사이트 테마를 실시간으로 읽으므로
+   * (`app/h/[pageId]/loader.ts`) 저장하는 순간 파트너 사이트에 붙어 있는 페이지의 색이
+   * 같이 바뀐다 — 발행·공개 스위치와 같은 무게다. 그래서 여기만 역할까지 본다.
+   * 이름·주소·소스 연결은 초안 편집 쪽이라 그대로 둔다.
+   */
+  if (body.theme !== undefined) {
+    const admin = requireWorkspaceAdmin(guard.ctx.userId, guard.ctx.workspaceRole(owned.value.workspaceId));
+    if (!admin.ok) return authFailure(admin.failure);
+    data.theme = { ...normalizeExpoTheme(body.theme) };
+  }
   if (body.siteUrl !== undefined) data.siteUrl = safeHttpUrl(body.siteUrl) || null;
 
   // 사전등록 소스는 **같은 전시**여야 한다 — 아니면 홈페이지 폼이 다른 전시 등록을 받는다.
@@ -121,6 +132,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ s
 
   const { site, owned } = await loadOwned(siteId, guard.ctx);
   if (!owned.ok) return authFailure(owned.failure);
+
+  // 사이트 삭제는 `canManageSite` 다 — 화면이 MEMBER 에게 숨기는 버튼이므로 라우트도 막는다.
+  const admin = requireWorkspaceAdmin(guard.ctx.userId, guard.ctx.workspaceRole(owned.value.workspaceId));
+  if (!admin.ok) return authFailure(admin.failure);
 
   // 소프트 삭제 — 되돌릴 수 있어야 한다. 공개 로더는 deletedAt 을 보고 즉시 404 를 낸다.
   await prisma.expoSite.update({ where: { id: site!.id }, data: { deletedAt: new Date() } });

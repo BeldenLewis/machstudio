@@ -47,7 +47,7 @@ beforeEach(() => {
   vi.stubEnv("EXPO_PUBLIC_EMBED_RELEASE", "");
   probe.mockResolvedValue(true);
   getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
-  prismaMock.workspaceMember.findMany.mockResolvedValue([{ workspaceId: "w1" }]);
+  prismaMock.workspaceMember.findMany.mockResolvedValue([{ workspaceId: "w1", role: "OWNER" }]);
 });
 
 describe("① 기능 게이트가 첫 줄", () => {
@@ -245,6 +245,109 @@ describe("draft 저장 — 편집 충돌", () => {
     const body = await res.json();
     expect(body.fields[0].path).toBe("sections[0].content.title");
     expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * **버튼을 숨기는 것은 인가가 아니다.**
+ *
+ * 화면은 MEMBER 에게 `canPublish: false`·`canManageSite: false` 라고 말한다
+ * (`permissions.ts`). 그런데 라우트가 멤버십만 보면 숨긴 버튼을 API 로는 누를 수 있다 —
+ * MEMBER 가 발행하고, 공개 스위치를 켜고, 사이트를 지울 수 있는 상태였다.
+ *
+ * 여기서 그 다섯 자리를 못 박는다. 초안 편집은 MEMBER 도 되어야 하므로 함께 확인한다.
+ */
+describe("역할 — 화면이 숨긴 것은 API 도 막는다", () => {
+  const page = {
+    id: "pg1", siteId: "s1", slug: "home", title: "홈", isHome: false, sortOrder: 1,
+    draft: { sections: [] }, draftRevision: 3, published: { sections: [] }, publishedAt: null,
+    liveAt: null, imwebUrl: null, updatedAt: new Date(),
+    site: { id: "s1", workspaceId: "w1", projectId: "p1" },
+  };
+  const site = { id: "s1", workspaceId: "w1", projectId: "p1", name: "사이트", theme: null,
+    collectSourceId: null, defaultLocale: "ko", previewToken: "t", siteUrl: null };
+
+  const asMember = () =>
+    prismaMock.workspaceMember.findMany.mockResolvedValue([{ workspaceId: "w1", role: "MEMBER" }]);
+
+  it("MEMBER 는 발행할 수 없다", async () => {
+    asMember();
+    prismaMock.expoPage.findFirst.mockResolvedValue(page);
+    const { POST } = await import("@/app/api/expo/pages/[pageId]/publish/route");
+    const res = await POST(write({}), { params: Promise.resolve({ pageId: "pg1" }) });
+    expect(res.status).toBe(403);
+    expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
+  });
+
+  /** 끄는 것도 막는다 — 남이 켠 것을 아무나 끄면 전시 기간 중에 파트너 사이트가 빈다. */
+  it("MEMBER 는 공개 스위치를 만질 수 없다", async () => {
+    asMember();
+    prismaMock.expoPage.findFirst.mockResolvedValue(page);
+    const { POST } = await import("@/app/api/expo/pages/[pageId]/live/route");
+    const res = await POST(write({ live: false }), { params: Promise.resolve({ pageId: "pg1" }) });
+    expect(res.status).toBe(403);
+    expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
+  });
+
+  it("MEMBER 는 미리보기 토큰을 재발급할 수 없다", async () => {
+    asMember();
+    prismaMock.expoSite.findFirst.mockResolvedValue(site);
+    const { POST } = await import("@/app/api/expo/[siteId]/regenerate-preview-token/route");
+    const res = await POST(write({}), { params: Promise.resolve({ siteId: "s1" }) });
+    expect(res.status).toBe(403);
+    expect(prismaMock.expoSite.update).not.toHaveBeenCalled();
+  });
+
+  it("MEMBER 는 사이트를 지울 수 없다", async () => {
+    asMember();
+    prismaMock.expoSite.findFirst.mockResolvedValue(site);
+    const { DELETE } = await import("@/app/api/expo/[siteId]/route");
+    const res = await DELETE(write({}), { params: Promise.resolve({ siteId: "s1" }) });
+    expect(res.status).toBe(403);
+    expect(prismaMock.expoSite.update).not.toHaveBeenCalled();
+  });
+
+  it("MEMBER 는 페이지를 지울 수 없다", async () => {
+    asMember();
+    prismaMock.expoPage.findFirst.mockResolvedValue(page);
+    const { DELETE } = await import("@/app/api/expo/pages/[pageId]/route");
+    const res = await DELETE(write({}), { params: Promise.resolve({ pageId: "pg1" }) });
+    expect(res.status).toBe(403);
+    expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
+  });
+
+  /** 색은 이미 공개된 것을 바꾼다 — 공개 로더가 사이트 테마를 실시간으로 읽는다. */
+  it("MEMBER 는 색을 바꿀 수 없다", async () => {
+    asMember();
+    prismaMock.expoSite.findFirst.mockResolvedValue(site);
+    const { PATCH } = await import("@/app/api/expo/[siteId]/route");
+    const res = await PATCH(write({ theme: { accent: "#ff0000" } }), { params: Promise.resolve({ siteId: "s1" }) });
+    expect(res.status).toBe(403);
+    expect(prismaMock.expoSite.update).not.toHaveBeenCalled();
+  });
+
+  /** 초안 편집은 MEMBER 도 된다 — 좁히려다 편집까지 막으면 안 된다. */
+  it("MEMBER 도 초안은 저장할 수 있다", async () => {
+    asMember();
+    prismaMock.expoPage.findFirst.mockResolvedValue(page);
+    prismaMock.expoPage.update.mockResolvedValue({ id: "pg1", draftRevision: 4 });
+    const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
+    const res = await PATCH(
+      write({ draft: { sections: [] }, draftRevision: 3 }),
+      { params: Promise.resolve({ pageId: "pg1" }) },
+    );
+    expect(res.status).toBe(200);
+    expect(prismaMock.expoPage.update).toHaveBeenCalled();
+  });
+
+  /** 사이트 이름 바꾸기도 편집 쪽이다. */
+  it("MEMBER 도 사이트 이름은 바꿀 수 있다", async () => {
+    asMember();
+    prismaMock.expoSite.findFirst.mockResolvedValue(site);
+    prismaMock.expoSite.update.mockResolvedValue({ ...site });
+    const { PATCH } = await import("@/app/api/expo/[siteId]/route");
+    const res = await PATCH(write({ name: "새 이름" }), { params: Promise.resolve({ siteId: "s1" }) });
+    expect(res.status).toBe(200);
   });
 });
 

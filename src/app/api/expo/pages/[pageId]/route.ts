@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { guardExpoRoute, readJsonBody, authFailure, fieldErrors } from "@/lib/expo/route-guard";
-import { requireOwnedPage } from "@/lib/expo/auth";
+import { requireOwnedPage, requireWorkspaceAdmin } from "@/lib/expo/auth";
 import { validatePageDraft } from "@/lib/expo/request";
 import { prepareDeletePage, prepareDraftWrite, serviceMessage, serviceStatus } from "@/lib/expo/site-service";
 import { normalizeExpoPage } from "@/lib/expo/config";
@@ -135,6 +135,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ p
 
   const { page, owned } = await ownedPage(pageId, guard.ctx);
   if (!owned.ok) return authFailure(owned.failure);
+
+  // 페이지 삭제도 `canManageSite` 다(`permissions.ts`).
+  const admin = requireWorkspaceAdmin(guard.ctx.userId, guard.ctx.workspaceRole(owned.value.site.workspaceId));
+  if (!admin.ok) return authFailure(admin.failure);
 
   const prepared = prepareDeletePage(page!);
   if (!prepared.ok) {

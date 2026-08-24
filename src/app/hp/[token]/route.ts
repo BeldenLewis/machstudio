@@ -23,6 +23,7 @@ import { EXPO_SCHEMA_CAPABILITY_VERSION, getExpoCapabilities } from "@/lib/expo/
 import { probeExpoSchema } from "@/lib/expo/schema-probe";
 import { getRequiredExpoPublicOrigin } from "@/lib/expo/origin";
 import { normalizeExpoTheme } from "@/lib/expo/config";
+import { normalizeHexColor } from "@/lib/color";
 import { buildExpoPayload, collectInternalPageIds, collectSourceRefs } from "@/lib/expo/payload";
 import { expoCustomCodeDigest, previewSections } from "@/lib/expo/code-digest";
 
@@ -197,9 +198,26 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
     pages: siblings,
   });
 
+  /**
+   * 색은 **아직 저장하지 않은 값으로도** 그려 볼 수 있다.
+   *
+   * 사이트 테마는 공개 로더가 실시간으로 읽는다(`app/h/[pageId]/loader.ts`) — 저장하는
+   * 순간 이미 붙여 둔 파트너 사이트의 색이 바뀐다. 그래서 편집기는 확인을 받기 전에
+   * 여기로 색을 실어 보내 먼저 보여 준다. **저장은 하지 않는다.**
+   *
+   * 값이 색이 아니면 저장된 색으로 돌아간다 — 타이핑 중인 반쪽짜리 값이 화면을 깨지 않게.
+   */
+  const saved = normalizeExpoTheme(site.theme);
+  const pick = (key: string, fallback: string) =>
+    normalizeHexColor(url.searchParams.get(key) ?? "") ?? fallback;
+
   const payload = {
     pageId: page.id,
-    theme: normalizeExpoTheme(site.theme),
+    theme: {
+      accent: pick("accent", saved.accent),
+      lightBg: pick("lightBg", saved.lightBg),
+      darkBg: pick("darkBg", saved.darkBg),
+    },
     origin,
     sections: resolved.sections,
     // 초안인지 발행본인지가 화면 문구의 축이다 — 둘 다 저장·추적을 끈다.

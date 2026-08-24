@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { guardExpoRoute, readJsonBody, authFailure } from "@/lib/expo/route-guard";
-import { requireOwnedPage } from "@/lib/expo/auth";
+import { requireOwnedPage, requireWorkspaceAdmin } from "@/lib/expo/auth";
 import { prepareLiveToggle } from "@/lib/expo/site-service";
 import { liveIssues } from "@/lib/expo/readiness";
 
@@ -32,6 +32,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ pag
   });
   const owned = requireOwnedPage(page, guard.ctx.userId, guard.ctx.memberWorkspaceIds);
   if (!owned.ok) return authFailure(owned.failure);
+
+  // 공개 스위치도 `canPublish` 다 — 끄는 것까지 포함해서. 남이 켠 것을 아무나 끄면
+  // 전시 기간 중에 파트너 사이트가 조용히 빈다.
+  const admin = requireWorkspaceAdmin(guard.ctx.userId, guard.ctx.workspaceRole(owned.value.site.workspaceId));
+  if (!admin.ok) return authFailure(admin.failure);
 
   // 켤 때만 막는다 — 끄는 것은 언제나 되어야 한다(되돌리기를 막으면 안 된다).
   if (live) {
