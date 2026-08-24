@@ -430,6 +430,8 @@ a.msx-card:focus-visible {
 
 .msx-modal {
   position: relative;
+  /* 모달 안에서 끝까지 스크롤했을 때 파트너 페이지로 스크롤이 이어지지 않게. */
+  overscroll-behavior: contain;
   width: min(560px, 100%);
   max-height: min(86vh, 760px);
   overflow: auto;

@@ -62,6 +62,8 @@ export function landingSourceFiles(root) {
     // 세션·연사 링크 — 랜딩 모델이 쓴다. **목록에 없었다**(metafile 대조로 발견, 2026-08-24).
     join(root, "src/lib/webinar-sessions.ts"),
     join(root, "src/lib/webinar-speaker-links.ts"),
+    // 스크롤 잠금 — 랜딩과 홈페이지가 body 하나를 공유하므로 구현이 한 벌이어야 한다.
+    join(root, "src/lib/dom/scroll-lock.ts"),
   ]).sort();
 }
 
