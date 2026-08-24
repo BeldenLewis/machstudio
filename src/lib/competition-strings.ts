@@ -55,6 +55,8 @@ export interface CompetitionFormStrings {
   fieldRequired: (label: string) => string;
   /** 전화 형식 오류. {label} 을 항목 이름으로 채워 쓴다. */
   phoneInvalid: (label: string) => string;
+  /** 숫자 항목에 정수가 아닌 값이 들어왔을 때. {label} 을 항목 이름으로 채워 쓴다. */
+  numberInvalid: (label: string) => string;
   youtubeInvalid: string;
   busy: string;
   duplicateEntry: string;
@@ -90,6 +92,7 @@ const KO: CompetitionFormStrings = {
   notAcceptingNow: "지금은 접수 기간이 아니에요.",
   fieldRequired: (label) => `${label} 항목을 입력해주세요.`,
   phoneInvalid: (label) => `${label} 항목의 번호를 확인해주세요.`,
+  numberInvalid: (label) => `${label} 항목에 숫자만 입력해주세요.`,
   youtubeInvalid: "YouTube 링크를 확인해주세요.",
   busy: "신청이 몰리고 있어요. 잠시 후 다시 시도해주세요.",
   duplicateEntry: "이미 신청하셨어요.",
@@ -125,6 +128,7 @@ const EN: CompetitionFormStrings = {
   notAcceptingNow: "Applications aren't open right now.",
   fieldRequired: (label) => `Please fill in ${label}.`,
   phoneInvalid: (label) => `Please check the number for ${label}.`,
+  numberInvalid: (label) => `Please enter a number for ${label}.`,
   youtubeInvalid: "Please check the YouTube link.",
   busy: "Applications are coming in fast. Please try again in a moment.",
   duplicateEntry: "You've already applied.",
@@ -162,6 +166,7 @@ const FR: CompetitionFormStrings = {
   notAcceptingNow: "Les inscriptions ne sont pas ouvertes en ce moment.",
   fieldRequired: (label) => `Merci de renseigner « ${label} ».`,
   phoneInvalid: (label) => `Merci de vérifier le numéro pour « ${label} ».`,
+  numberInvalid: (label) => `Merci d'indiquer un nombre pour « ${label} ».`,
   youtubeInvalid: "Merci de vérifier le lien YouTube.",
   busy: "Les candidatures affluent. Merci de réessayer dans un instant.",
   duplicateEntry: "Vous avez déjà candidaté.",
@@ -198,6 +203,7 @@ const JA: CompetitionFormStrings = {
   notAcceptingNow: "現在は受付期間ではありません。",
   fieldRequired: (label) => `${label}を入力してください。`,
   phoneInvalid: (label) => `${label}の番号をご確認ください。`,
+  numberInvalid: (label) => `${label}には数字を入力してください。`,
   youtubeInvalid: "YouTubeのリンクをご確認ください。",
   busy: "応募が集中しています。しばらくしてからもう一度お試しください。",
   duplicateEntry: "すでに応募済みです。",

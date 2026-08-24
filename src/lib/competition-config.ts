@@ -13,8 +13,8 @@ import type { WebinarRegistrationField } from "./webinar-config";
 import { isLegalCountry, type Country, type OrgProfile, type ThirdParty } from "@/lib/legal-templates/types";
 import { resolveOrgTokens } from "@/lib/legal-templates/tokens";
 
-/** 대회 신청 폼에만 있는 추가 타입 — 사진 업로드와 YouTube 링크, 반복 항목(팀원 등). */
-export type CompetitionExtraFieldType = "image" | "youtube" | "repeater";
+/** 대회 신청 폼에만 있는 추가 타입 — 사진 업로드와 YouTube 링크, 반복 항목(팀원 등), 정수 입력. */
+export type CompetitionExtraFieldType = "image" | "youtube" | "repeater" | "number";
 export type CompetitionFieldType = WebinarRegistrationField["type"] | CompetitionExtraFieldType;
 
 /** repeater 한 행을 이루는 항목 — 팀원의 "이름", "이메일" 같은 것. */
@@ -35,6 +35,16 @@ export interface CompetitionFormField extends Omit<WebinarRegistrationField, "ty
   minItems?: number;
   /** repeater 전용 — 최대 행 수. */
   maxItems?: number;
+  /**
+   * repeater 전용 — 이 키를 가진 다른 항목의 값(숫자)에서 countExclude 를 뺀 만큼 행 수를
+   * 자동으로 맞춘다(예: "리더 포함 인원수"와 연동해 리더 1명을 뺀 팀원 수만큼 행을 채운다).
+   * 비어 있으면 신청자가 수동으로만 +/- 한다.
+   */
+  countFromKey?: string;
+  /** repeater 전용 — countFromKey 값에서 제외할 인원 수(리더 등). countFromKey 없으면 무시된다. */
+  countExclude?: number;
+  /** 눈에 띄게 강조 표시한다 — 참가자격 확인처럼 놓치면 안 되는 체크박스에 쓴다. */
+  emphasized?: boolean;
 }
 
 /** 공고 페이지 블록. 대회 소개·참가 자격·신청 절차·일정·FAQ 를 구조로 표현한다. */
@@ -219,8 +229,15 @@ function normalizeField(raw: unknown, index: number): CompetitionFormField | nul
           subFields: subFields.length > 0 ? subFields : DEFAULT_REPEATER_SUB_FIELDS,
           minItems: typeof f.minItems === "number" && f.minItems >= 0 ? Math.floor(f.minItems) : 1,
           maxItems: typeof f.maxItems === "number" && f.maxItems >= 1 ? Math.floor(f.maxItems) : 10,
+          ...(str(f.countFromKey).trim()
+            ? {
+                countFromKey: str(f.countFromKey).trim(),
+                countExclude: typeof f.countExclude === "number" && f.countExclude >= 0 ? Math.floor(f.countExclude) : 0,
+              }
+            : {}),
         }
       : {}),
+    ...(type === "checkbox" ? { emphasized: bool(f.emphasized) } : {}),
   };
 }
 

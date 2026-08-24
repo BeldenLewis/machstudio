@@ -333,6 +333,28 @@ function bindRepeaterInputs(form: HTMLFormElement) {
       renumber();
     });
 
+    // 인원수 연동 — "리더 포함 인원수" 같은 다른 항목의 값에서 countExclude 를 뺀 만큼
+    // 행 수를 자동으로 맞춘다. 수동 +/- 버튼은 그대로 살려 둔다(자동 값이 틀렸을 때 손으로
+    // 고칠 수 있어야 한다) — 여기서는 그 값이 바뀔 때 한 번씩 행 수만 다시 맞춰줄 뿐이다.
+    const countFromKey = rowsHost.getAttribute("data-mc-rep-count-from") || "";
+    const countExclude = Number(rowsHost.getAttribute("data-mc-rep-count-exclude") || 0);
+    if (countFromKey && ownTemplate) {
+      const sourceInput = form.querySelector<HTMLInputElement>(`[data-mc-key="${CSS.escape(countFromKey)}"]`);
+      const syncCount = () => {
+        if (!sourceInput || sourceInput.value.trim() === "") return;
+        const raw = Number(sourceInput.value);
+        if (!Number.isFinite(raw)) return;
+        const floor = Math.max(min, 1);
+        const desired = Math.min(max, Math.max(floor, Math.round(raw) - countExclude));
+        let rows = rowsHost.querySelectorAll("[data-mc-rep-row]").length;
+        while (rows < desired) { rowsHost.appendChild(ownTemplate!.content.cloneNode(true)); rows++; }
+        while (rows > desired) { rowsHost.querySelector("[data-mc-rep-row]:last-child")?.remove(); rows--; }
+        renumber();
+      };
+      sourceInput?.addEventListener("input", syncCount);
+      syncCount();
+    }
+
     renumber();
   });
 }
