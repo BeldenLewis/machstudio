@@ -22,10 +22,9 @@ import { EXPO_RUNTIME_JS } from "@/generated/expo-runtime";
 import { EXPO_SCHEMA_CAPABILITY_VERSION, getExpoCapabilities } from "@/lib/expo/capability";
 import { probeExpoSchema } from "@/lib/expo/schema-probe";
 import { getRequiredExpoPublicOrigin } from "@/lib/expo/origin";
-import { normalizeExpoPage, normalizeExpoTheme } from "@/lib/expo/config";
-import { hasContent } from "@/lib/expo/model";
+import { normalizeExpoTheme } from "@/lib/expo/config";
 import { buildExpoPayload, collectInternalPageIds, collectSourceRefs } from "@/lib/expo/payload";
-import { expoCustomCodeDigest } from "@/lib/expo/code-digest";
+import { expoCustomCodeDigest, previewSections } from "@/lib/expo/code-digest";
 
 export const dynamic = "force-dynamic";
 
@@ -160,12 +159,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
   if (!page) return notFound();
 
   const source = wantPublished ? page.published : page.draft;
-  const normalized = normalizeExpoPage(source);
-  /**
-   * 편집기 미리보기는 `liveAt`·`embedEnabled` 를 **보지 않는다** — 아직 안 켠 것을
-   * 보려고 여는 화면이다. 다만 내용이 없는 구획은 여기서도 그리지 않는다(빈 껍데기).
-   */
-  const sections = normalized.sections.filter((section) => hasContent(section));
+  // 무엇을 그릴지는 `previewSections` 한 곳이 정한다 — 편집기가 지문을 계산할 때도
+  // 같은 함수를 쓰므로 두 판정이 갈라질 수 없다(code-digest.ts).
+  const sections = previewSections(source);
 
   // 지문은 **서버가** 계산한다. 요청이 보낸 값과 정확히 같을 때만 실행을 허용한다.
   const codeDigest = expoCustomCodeDigest(sections);

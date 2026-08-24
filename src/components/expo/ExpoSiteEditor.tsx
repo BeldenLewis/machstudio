@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ExternalLink, Globe, Loader2, Plus } from "lucide-react";
+import { ExternalLink, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { AutosaveScope, AggregateAutosaveIndicator, useReportAutosave } from "@/components/ui/autosave-scope";
-import { Field, FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
+import { Field, FIELD_CLS, FINISH, R, Segmented } from "@/components/ui/primitives";
+import { PreviewFrame } from "@/components/ui/PreviewFrame";
 import { ExpoProjectSync } from "@/components/expo/ExpoProjectSync";
 import { SectionsEditor } from "@/components/expo/SectionEditor";
 import { attachExpoRowKeys, stripExpoRowKeys } from "@/lib/expo/row-key";
@@ -57,6 +58,20 @@ interface PageDetail {
   draftRevision: number;
   hasPublished: boolean;
   liveAt: string | null;
+  /** 붙여넣은 코드의 지문 — 미리보기에서 실행 허가를 요청할 때 그대로 되돌려 보낸다. */
+  codeDigest: string;
+  publishedCodeDigest: string;
+}
+
+/**
+ * 미리보기가 알아야 하는 것. 편집기 가운데 칸에서 **위로 올려** 오른쪽 칸으로 흐른다 —
+ * 저장 번호가 바뀔 때마다 미리보기를 다시 불러야 하는데, 그 번호를 아는 건 폼 쪽이다.
+ */
+interface PreviewInfo {
+  revision: number;
+  codeDigest: string;
+  publishedCodeDigest: string;
+  hasPublished: boolean;
 }
 
 export interface ExpoSiteEditorProps {
@@ -107,6 +122,7 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
   const [site, setSite] = useState<SiteInfo | null>(null);
   const [pages, setPages] = useState<PageSummary[] | null>(null);
   const [sources, setSources] = useState<SourceOption[]>([]);
+  const [preview, setPreview] = useState<PreviewInfo | null>(null);
   const [loadError, setLoadError] = useState(false);
 
   const requestedPageId = params.get("page");
@@ -220,6 +236,7 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
             linkTargets={linkTargets}
             locale={site.defaultLocale || "ko"}
             onSaved={reload}
+            onPreviewInfo={setPreview}
           />
         ) : (
           <div className={`${R.panel} ${FINISH.s1} bg-card p-5 text-sm text-muted-foreground`}>
@@ -231,6 +248,7 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
           previewToken={site.previewToken}
           pageId={selected?.id ?? null}
           release={release}
+          info={preview}
         />
       </div>
     </Shell>
@@ -342,11 +360,12 @@ interface PageEditorProps {
   /** 사이트의 defaultLocale — 공개 로더가 이 값으로 글을 읽는다. */
   locale: string;
   onSaved: () => void;
+  onPreviewInfo: (info: PreviewInfo) => void;
 }
 
 /** 페이지 하나의 편집 — 기본값과 구획. */
 function PageEditor({
-  pageId, siteId, canEdit, sources, linkTargets, locale, onSaved,
+  pageId, siteId, canEdit, sources, linkTargets, locale, onSaved, onPreviewInfo,
 }: PageEditorProps) {
   const [page, setPage] = useState<PageDetail | null>(null);
   const [failed, setFailed] = useState(false);
@@ -401,12 +420,13 @@ function PageEditor({
       linkTargets={linkTargets}
       locale={locale}
       onSaved={onSaved}
+      onPreviewInfo={onPreviewInfo}
     />
   );
 }
 
 function PageForm({
-  page, siteId, canEdit, sources, linkTargets, locale, onSaved,
+  page, siteId, canEdit, sources, linkTargets, locale, onSaved, onPreviewInfo,
 }: Omit<PageEditorProps, "pageId"> & { page: PageDetail }) {
   const [title, setTitle] = useState(page.title);
   const [imwebUrl, setImwebUrl] = useState(page.imwebUrl ?? "");
@@ -417,6 +437,25 @@ function PageForm({
     () => ({ title, imwebUrl, sections }),
     [title, imwebUrl, sections],
   );
+
+  /**
+   * 부모에게 알리는 콜백은 ref 로 잡는다 — 의존성에 넣으면 부모가 렌더될 때마다 `save` 가
+   * 새로 만들어지고, 자동저장 훅이 그걸 보고 기준선을 다시 잡는다. 동기화는 렌더가 아니라
+   * 효과에서 한다(`use-page-autosave.ts` 와 같은 패턴).
+   */
+  const reportRef = useRef(onPreviewInfo);
+  useEffect(() => { reportRef.current = onPreviewInfo; }, [onPreviewInfo]);
+
+  /**
+   * 발행본 쪽 값은 PATCH 가 바꾸지 않으므로 처음 읽은 것이 계속 맞다. 페이지를 바꾸면
+   * 이 컴포넌트가 통째로 새로 마운트되므로(key=pageId) 낡을 수도 없다.
+   */
+  const { publishedCodeDigest, hasPublished, draftRevision, codeDigest } = page;
+
+  // 처음 한 번 — 미리보기가 무엇을 볼지 알아야 첫 프레임을 그린다.
+  useEffect(() => {
+    reportRef.current({ revision: draftRevision, codeDigest, publishedCodeDigest, hasPublished });
+  }, [draftRevision, codeDigest, publishedCodeDigest, hasPublished]);
 
   const save = useCallback(async (
     next: typeof value, revision: number,
@@ -438,9 +477,16 @@ function PageForm({
     }
     if (!res.ok) return { kind: "failed" };
     const body = await res.json().catch(() => ({}));
+    const savedRevision = Number(body.page?.draftRevision ?? revision + 1);
+    // 미리보기는 **저장된 것**을 읽는다 — 번호가 바뀌었으니 다시 불러야 한다.
+    reportRef.current({
+      revision: savedRevision,
+      codeDigest: String(body.page?.codeDigest ?? ""),
+      publishedCodeDigest, hasPublished,
+    });
     onSaved();
-    return { kind: "saved", revision: Number(body.page?.draftRevision ?? revision + 1) };
-  }, [page.id, onSaved]);
+    return { kind: "saved", revision: savedRevision };
+  }, [page.id, onSaved, publishedCodeDigest, hasPublished]);
 
   const autosave = usePageAutosave({
     pageId: page.id,
@@ -502,33 +548,108 @@ function PageForm({
   );
 }
 
+/**
+ * 오른쪽 칸 — **저장된 것**을 그린다.
+ *
+ * 편집 중인 값이 아니라 서버에 저장된 초안을 읽는다. 그래서 자동저장이 한 바퀴 돈 뒤에
+ * 따라온다 — 진실이 둘인 게 아니라 하나의 진실에 시차가 있는 것이고, 저장 번호를
+ * `reloadKey` 로 넘겨 그 시차를 눈에 보이게 좁힌다.
+ *
+ * ── 붙여넣은 코드는 기본으로 실행하지 않는다 ──────────────────────────
+ * 남이 준 스크립트를 편집기에서 자동으로 돌리지 않는다. 운영자가 한 번 확인하면 그
+ * 허가는 **그때 본 그 코드에만** 붙는다 — 지문이 다르면 서버가 거절하므로, 코드를 고친
+ * 순간 허가가 저절로 낡는다(`code-digest.ts`). 허가는 저장하지 않는다.
+ */
 function PreviewPane({
-  previewToken, pageId, release,
-}: { previewToken: string | null; pageId: string | null; release: ExpoRelease }) {
+  previewToken, pageId, release, info,
+}: {
+  previewToken: string | null;
+  pageId: string | null;
+  release: ExpoRelease;
+  info: PreviewInfo | null;
+}) {
+  const [showPublished, setShowPublished] = useState(false);
+  /** 실행을 허가한 지문. 세션 한 번의 판단이라 저장하지 않는다. */
+  const [approvedDigest, setApprovedDigest] = useState("");
+
+  const wantPublished = showPublished && Boolean(info?.hasPublished);
+  const digest = (wantPublished ? info?.publishedCodeDigest : info?.codeDigest) ?? "";
+  const codeApproved = digest !== "" && approvedDigest === digest;
+
   const src = useMemo(() => {
     if (!previewToken || !pageId) return null;
-    return `/hp/${encodeURIComponent(previewToken)}?page=${encodeURIComponent(pageId)}`;
-  }, [previewToken, pageId]);
+    const query = new URLSearchParams({ page: pageId });
+    if (wantPublished) query.set("published", "1");
+    if (codeApproved) {
+      query.set("customCode", "run");
+      query.set("codeDigest", digest);
+    }
+    return `/hp/${encodeURIComponent(previewToken)}?${query.toString()}`;
+  }, [previewToken, pageId, wantPublished, codeApproved, digest]);
+
+  if (!src) {
+    return (
+      <aside className={`${R.panel} ${FINISH.s1} bg-card p-3`} aria-label="미리보기">
+        <h2 className="px-1 pb-2 text-sm font-semibold">미리보기</h2>
+        <p className="px-1 py-10 text-sm text-muted-foreground">미리보기를 준비하는 중이에요.</p>
+      </aside>
+    );
+  }
 
   return (
-    <aside className={`${R.panel} ${FINISH.s1} bg-card p-3`} aria-label="미리보기">
-      <div className="flex items-baseline justify-between gap-2 px-1 pb-2">
-        <h2 className="text-sm font-semibold">미리보기</h2>
-        {!release.publicEmbedEnabled ? (
-          <span className="text-[11px] text-muted-foreground">공개 전</span>
-        ) : null}
-      </div>
-      {src ? (
-        <iframe
-          src={src}
-          title="홈페이지 미리보기"
-          className={`h-[520px] w-full ${R.surface} bg-background`}
-        />
-      ) : (
-        <p className="flex items-center gap-2 px-1 py-10 text-sm text-muted-foreground">
-          <Globe className="h-4 w-4" aria-hidden />
-          미리보기를 준비하는 중이에요.
+    <aside className={`${R.panel} ${FINISH.s1} space-y-2 bg-card p-3`} aria-label="미리보기">
+      <PreviewFrame
+        title="미리보기"
+        src={src}
+        /* 저장될 때마다 다시 불러온다 — 안 그러면 고친 내용이 영영 안 보인다. */
+        reloadKey={`${info?.revision ?? 0}:${codeApproved ? "code" : "safe"}`}
+        openLabel="새 탭에서 미리보기 열기"
+        note={release.publicEmbedEnabled ? undefined : "공개 전"}
+        controls={
+          /* 발행본이 실제로 있을 때만 고르게 한다 — 없는 것을 고르는 칸은 고장으로 읽힌다. */
+          info?.hasPublished ? (
+            <Segmented
+              label="무엇을 보는가"
+              value={showPublished ? "published" : "draft"}
+              onChange={(next) => setShowPublished(next === "published")}
+              options={[
+                { value: "draft", label: "초안" },
+                { value: "published", label: "발행본" },
+              ]}
+            />
+          ) : null
+        }
+      />
+
+      {digest === "" ? null : codeApproved ? (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+          붙여넣은 코드를 실행 중이에요.
+          <button
+            type="button"
+            onClick={() => setApprovedDigest("")}
+            className="underline underline-offset-4 hover:text-foreground"
+          >
+            멈추기
+          </button>
         </p>
+      ) : (
+        <div className={`${R.surface} ${FINISH.s2} space-y-1.5 bg-secondary p-2.5`}>
+          <p className="text-[11px] leading-relaxed">
+            <span className="font-medium">붙여넣은 코드는 아직 실행하지 않았어요.</span>
+            <span className="mt-0.5 block text-muted-foreground">
+              {approvedDigest === ""
+                ? "지도·위젯처럼 밖에서 가져온 코드는 확인한 뒤에 돌립니다."
+                : "코드가 바뀌었어요. 바뀐 내용을 확인하고 다시 실행해 주세요."}
+            </span>
+          </p>
+          <button
+            type="button"
+            onClick={() => setApprovedDigest(digest)}
+            className={`inline-flex min-h-9 items-center gap-1.5 ${R.control} ${FINISH.control} bg-background px-3 text-xs font-medium transition-colors hover:bg-background/70`}
+          >
+            이 코드 실행하기
+          </button>
+        </div>
       )}
     </aside>
   );

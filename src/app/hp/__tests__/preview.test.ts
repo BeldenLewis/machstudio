@@ -209,6 +209,23 @@ describe("초안과 발행본", () => {
     expect(args).toContain("초안 제목");
   });
 
+  /**
+   * `enabled` 는 **본다.** 공개 로더가 그 기준으로 거르므로(`renderableSections`),
+   * 여기서만 보여 주면 꺼 놓은 구획이 미리보기에는 있고 발행본에는 없다.
+   * 편집기에 그 스위치가 붙은 뒤로 실제로 누를 수 있는 경로다.
+   */
+  it("페이지에 표시를 끈 구획은 미리보기에도 안 나온다", async () => {
+    prismaMock.expoSite.findFirst.mockResolvedValue(site({
+      pages: [{
+        id: "pg1", isHome: true, sortOrder: 0,
+        draft: { sections: [section({ enabled: false })] },
+        published: null, imwebUrl: null, deletedAt: null,
+      }],
+    }));
+    const args = bootArgs(await (await get()).text());
+    expect(args).not.toContain("초안 제목");
+  });
+
   /** 부작용 판정은 mode 에서 온다 — 미리보기는 저장도 추적도 하지 않는다. */
   it("미리보기 mode 가 라이브가 되는 경로가 없다", async () => {
     for (const query of ["", "?published=1", "?container=wide", "?customCode=run"]) {
