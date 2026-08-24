@@ -34,7 +34,9 @@ let latest: ExpoSection[] = [];
  * `latest` 는 **onChange 에서만** 기록한다. 렌더 중에 바깥 변수를 쓰면 그 자체가 부작용이라
  * 언제 다시 렌더되느냐에 따라 값이 달라진다(react-hooks 규칙).
  */
-function Harness({ initial, canEdit = true }: { initial: ExpoSection[]; canEdit?: boolean }) {
+function Harness({
+  initial, canEdit = true, locale = "ko",
+}: { initial: ExpoSection[]; canEdit?: boolean; locale?: string }) {
   const [sections, setSections] = useState(initial);
   return (
     <SectionsEditor
@@ -44,17 +46,18 @@ function Harness({ initial, canEdit = true }: { initial: ExpoSection[]; canEdit?
       siteId="site-1"
       sources={[{ id: "src-1", name: "관람 신청", isActive: true }]}
       pages={[{ id: "page-2", title: "전시 소개" }]}
+      locale={locale}
     />
   );
 }
 
-async function render(initial: ExpoSection[] = [], canEdit = true) {
+async function render(initial: ExpoSection[] = [], canEdit = true, locale = "ko") {
   host = document.createElement("div");
   document.body.appendChild(host);
   latest = initial;
   await act(async () => {
     root = createRoot(host);
-    root.render(<Harness initial={initial} canEdit={canEdit} />);
+    root.render(<Harness initial={initial} canEdit={canEdit} locale={locale} />);
   });
 }
 
@@ -165,6 +168,22 @@ describe("텍스트 슬롯", () => {
 
     await type(field<HTMLInputElement>('input[aria-label="제목"]'), "빛의 시간");
     expect(latest[0].content.title).toEqual({ ko: "빛의 시간", en: "Light" });
+  });
+
+  /**
+   * 글은 **사이트가 말하는 언어**에 들어간다. 편집 UI 의 언어가 아니다 —
+   * 공개 로더가 `site.defaultLocale` 로 읽으므로 다른 칸에 넣으면 폴백에 기대게 된다.
+   */
+  it("사이트의 로케일에 쓴다", async () => {
+    const kv = newSection("kv");
+    kv.content.title = { ja: "光" };
+    await render([kv], true, "ja");
+
+    const title = field<HTMLInputElement>('input[aria-label="제목"]');
+    expect(title.value).toBe("光");
+
+    await type(title, "光の時間");
+    expect(latest[0].content.title).toEqual({ ja: "光の時間" });
   });
 
   it("서버가 자르는 길이를 입력에서 먼저 막는다", async () => {

@@ -218,6 +218,7 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
             canEdit={permissions.canEdit}
             sources={sources}
             linkTargets={linkTargets}
+            locale={site.defaultLocale || "ko"}
             onSaved={reload}
           />
         ) : (
@@ -338,11 +339,15 @@ interface PageEditorProps {
   canEdit: boolean;
   sources: SourceOption[];
   linkTargets: { id: string; title: string }[];
+  /** 사이트의 defaultLocale — 공개 로더가 이 값으로 글을 읽는다. */
+  locale: string;
   onSaved: () => void;
 }
 
 /** 페이지 하나의 편집 — 기본값과 구획. */
-function PageEditor({ pageId, siteId, canEdit, sources, linkTargets, onSaved }: PageEditorProps) {
+function PageEditor({
+  pageId, siteId, canEdit, sources, linkTargets, locale, onSaved,
+}: PageEditorProps) {
   const [page, setPage] = useState<PageDetail | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -394,13 +399,14 @@ function PageEditor({ pageId, siteId, canEdit, sources, linkTargets, onSaved }: 
       canEdit={canEdit}
       sources={sources}
       linkTargets={linkTargets}
+      locale={locale}
       onSaved={onSaved}
     />
   );
 }
 
 function PageForm({
-  page, siteId, canEdit, sources, linkTargets, onSaved,
+  page, siteId, canEdit, sources, linkTargets, locale, onSaved,
 }: Omit<PageEditorProps, "pageId"> & { page: PageDetail }) {
   const [title, setTitle] = useState(page.title);
   const [imwebUrl, setImwebUrl] = useState(page.imwebUrl ?? "");
@@ -490,6 +496,7 @@ function PageForm({
         siteId={siteId}
         sources={sources}
         pages={linkTargets}
+        locale={locale}
       />
     </div>
   );

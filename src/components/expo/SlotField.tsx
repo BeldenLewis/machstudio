@@ -18,7 +18,11 @@ import type { SlotDef } from "@/lib/expo/types";
  * 접기·모달 뒤에 숨기지 않는다. 값 하나 바꾸는 데 **0클릭**(바로 타이핑)이다(AGENTS.md §2).
  *
  * ── 로케일 ────────────────────────────────────────────────────────────
- * W1 은 한국어 한 벌만 편집한다. 맵에 다른 로케일이 이미 있을 수 있으므로 **지우지 않는다** —
+ * 편집하는 로케일은 **사이트의 defaultLocale** 이다. 방문자에게 나가는 글이므로 편집 UI 의
+ * 언어가 아니라 그 사이트가 말하는 언어에 넣어야 한다(공개 로더도 그 값으로 읽는다 —
+ * `app/h/[pageId]/loader.ts`).
+ *
+ * W1 은 한 번에 한 벌만 편집한다. 맵에 다른 로케일이 이미 있을 수 있으므로 **지우지 않는다** —
  * 우리가 안 보여 주는 값을 우리가 없애면 안 된다.
  *
  * 그리고 편집 중에는 **trim 하지 않는다.** 공용 `toLocalized` 는 값을 trim 하는데, 그걸
@@ -26,25 +30,24 @@ import type { SlotDef } from "@/lib/expo/types";
  * 어차피 다듬는다(`config.ts`).
  */
 
-/** W1 편집 로케일. 사이트의 defaultLocale 이 아니라 **편집 UI 의 언어**다. */
-const EDIT_LOCALE = "ko";
-
 type Dict = Record<string, unknown>;
 const asDict = (v: unknown): Dict => (v && typeof v === "object" && !Array.isArray(v) ? (v as Dict) : {});
 
-function readLocalized(value: unknown): string {
+function readLocalized(value: unknown, locale: string): string {
   if (typeof value === "string") return value;
-  const own = asDict(value)[EDIT_LOCALE];
+  const dict = asDict(value);
+  // **자기 속성만** 본다 — 맵은 객체 리터럴이라 "constructor" 같은 상속 키가 함수를 준다.
+  const own = Object.prototype.hasOwnProperty.call(dict, locale) ? dict[locale] : undefined;
   return typeof own === "string" ? own : "";
 }
 
 /** 다른 로케일은 그대로 두고 편집 로케일만 갈아 끼운다. */
-function writeLocalized(current: unknown, text: string): Record<string, string> {
+function writeLocalized(current: unknown, locale: string, text: string): Record<string, string> {
   const next: Record<string, string> = {};
-  for (const [locale, value] of Object.entries(asDict(current))) {
-    if (typeof value === "string") next[locale] = value;
+  for (const [key, value] of Object.entries(asDict(current))) {
+    if (typeof value === "string") next[key] = value;
   }
-  next[EDIT_LOCALE] = text;
+  next[locale] = text;
   return next;
 }
 
@@ -65,6 +68,8 @@ export interface SlotFieldProps {
   sources?: readonly { id: string; name: string; isActive: boolean }[];
   /** 내부 링크 후보. */
   pages?: readonly LinkTarget[];
+  /** 어느 로케일에 쓰는가 — 사이트의 defaultLocale. */
+  locale: string;
   /**
    * 라벨을 접는다 — 목록 행처럼 무슨 칸인지 이미 보이는 자리에서. 라벨은 사라져도
    * 접근성 이름은 남는다(각 컨트롤이 aria-label 로 def.label 을 계속 쓴다).
@@ -73,7 +78,7 @@ export interface SlotFieldProps {
 }
 
 export function SlotField({
-  def, value, onChange, disabled, siteId, sources, pages, compact,
+  def, value, onChange, disabled, siteId, sources, pages, locale, compact,
 }: SlotFieldProps) {
   const uid = useId();
   const id = `${uid}-${def.key}`;
@@ -85,8 +90,8 @@ export function SlotField({
           <Field
             id={id}
             aria-label={def.label}
-            value={readLocalized(value)}
-            onChange={(event) => onChange(writeLocalized(value, event.target.value))}
+            value={readLocalized(value, locale)}
+            onChange={(event) => onChange(writeLocalized(value, locale, event.target.value))}
             disabled={disabled}
             /* 서버가 자르는 길이와 같다 — 잘린 뒤에 알려 주면 이미 늦다. */
             maxLength={EXPO_LIMITS.textChars}
@@ -99,8 +104,8 @@ export function SlotField({
           <FieldArea
             id={id}
             aria-label={def.label}
-            value={readLocalized(value)}
-            onChange={(event) => onChange(writeLocalized(value, event.target.value))}
+            value={readLocalized(value, locale)}
+            onChange={(event) => onChange(writeLocalized(value, locale, event.target.value))}
             disabled={disabled}
             rows={compact ? 2 : 4}
             placeholder={compact ? def.label : undefined}

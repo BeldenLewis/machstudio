@@ -74,10 +74,12 @@ export interface SectionsEditorProps {
   sources?: readonly { id: string; name: string; isActive: boolean }[];
   /** 내부 링크 후보 — 지금 편집 중인 페이지를 포함한 이 사이트의 모든 페이지. */
   pages?: readonly LinkTarget[];
+  /** 사이트의 defaultLocale — 글이 어느 로케일에 들어가는가. */
+  locale: string;
 }
 
 export function SectionsEditor({
-  sections, onChange, canEdit, siteId, sources, pages,
+  sections, onChange, canEdit, siteId, sources, pages, locale,
 }: SectionsEditorProps) {
   /**
    * 삭제 유예(5초) 중인 구획. 이걸 알아야 **하나만 놓을 수 있는 타입을 지운 직후에 다시
@@ -133,6 +135,7 @@ export function SectionsEditor({
               siteId={siteId}
               sources={sources}
               pages={pages}
+              locale={locale}
             />
           )}
           renderAdd={({ add, atMax }) =>
@@ -198,9 +201,12 @@ interface SectionCardProps {
   siteId: string;
   sources?: readonly { id: string; name: string; isActive: boolean }[];
   pages?: readonly LinkTarget[];
+  locale: string;
 }
 
-function SectionCard({ section, controls, canEdit, siteId, sources, pages }: SectionCardProps) {
+function SectionCard({
+  section, controls, canEdit, siteId, sources, pages, locale,
+}: SectionCardProps) {
   const def = sectionDef(section.type);
 
   /**
@@ -283,6 +289,7 @@ function SectionCard({ section, controls, canEdit, siteId, sources, pages }: Sec
               siteId={siteId}
               sources={sources}
               pages={pages}
+              locale={locale}
               sid={section.sid}
             />
           ) : (
@@ -295,6 +302,7 @@ function SectionCard({ section, controls, canEdit, siteId, sources, pages }: Sec
               siteId={siteId}
               sources={sources}
               pages={pages}
+              locale={locale}
             />
           ),
         )}
@@ -352,7 +360,7 @@ function SectionCard({ section, controls, canEdit, siteId, sources, pages }: Sec
  * (editable-list.tsx 가 순수 함수를 따로 빼 둔 이유도 같다). 실제 끌기는 브라우저에서 본다.
  */
 function ListSlot({
-  slot, value, onChange, canEdit, siteId, sources, pages, sid,
+  slot, value, onChange, canEdit, siteId, sources, pages, locale, sid,
 }: {
   slot: SlotDef;
   value: unknown;
@@ -361,6 +369,7 @@ function ListSlot({
   siteId: string;
   sources?: readonly { id: string; name: string; isActive: boolean }[];
   pages?: readonly LinkTarget[];
+  locale: string;
   sid: string;
 }) {
   const rows = listRows(value);
@@ -429,6 +438,7 @@ function ListSlot({
                     siteId={siteId}
                     sources={sources}
                     pages={pages}
+                    locale={locale}
                     compact
                   />
                 ))}
