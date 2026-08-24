@@ -2,7 +2,7 @@
 import { build } from "esbuild";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { formSourceFiles, landingSourceFiles } from "../../../scripts/runtime-hash.mjs";
+import { expoSourceFiles, formSourceFiles, landingSourceFiles } from "../../../scripts/runtime-hash.mjs";
 
 /**
  * 소스 목록이 **실제 번들 입력과 같은지**.
@@ -46,5 +46,10 @@ describe("소스 목록 ↔ 실제 번들 입력", () => {
   it("랜딩 런타임", async () => {
     const actual = await bundleInputs("src/embed/landing-entry.ts");
     expect(landingSourceFiles(ROOT)).toEqual(actual);
+  }, 30_000);
+
+  it("홈페이지 런타임", async () => {
+    const actual = await bundleInputs("src/embed/expo-entry.ts");
+    expect(expoSourceFiles(ROOT)).toEqual(actual);
   }, 30_000);
 });

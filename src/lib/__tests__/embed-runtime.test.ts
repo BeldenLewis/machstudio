@@ -3,8 +3,9 @@ import { join, resolve, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 import { LANDING_RUNTIME_JS, LANDING_RUNTIME_SRC_HASH } from "@/generated/landing-runtime";
 import { FORM_RUNTIME_JS, FORM_RUNTIME_SRC_HASH } from "@/generated/form-runtime";
+import { EXPO_RUNTIME_JS, EXPO_RUNTIME_SRC_HASH } from "@/generated/expo-runtime";
 import { COLLECT_FORM_CSS } from "@/lib/collect-form/css";
-import { formSourceHash, landingSourceHash } from "../../../scripts/runtime-hash.mjs";
+import { expoSourceHash, formSourceHash, landingSourceHash } from "../../../scripts/runtime-hash.mjs";
 
 const ROOT = resolve(__dirname, "../../..");
 
@@ -25,6 +26,59 @@ describe("임베드 번들이 소스와 동기화돼 있다", () => {
 
   it("등록 폼 런타임", () => {
     expect(FORM_RUNTIME_SRC_HASH).toBe(formSourceHash(ROOT));
+  });
+
+  /**
+   * 홈페이지는 **여섯 번째 생성물**이다(설계 문서의 "다섯 번째 제품 파이프라인" 과
+   * 숫자가 다른 것은 착오가 아니다 — main 에 이미 다섯 개가 있었다).
+   */
+  it("홈페이지 런타임", () => {
+    expect(EXPO_RUNTIME_SRC_HASH).toBe(expoSourceHash(ROOT));
+  });
+});
+
+/**
+ * ── 홈페이지 번들이 파트너 문서에 실려도 되는 모양인가 ──────────────
+ *
+ * 이 문자열은 `/h/...` 라우트가 스크립트 본문으로 내려보낸다. 그래서 **읽는 순간
+ * 죽는 것**과 **태그를 조기에 닫는 것**을 여기서 막는다.
+ */
+describe("홈페이지 번들 정적 검사", () => {
+  it("process.env 가 남아 있지 않다", () => {
+    // 브라우저에는 process 가 없다 — 남아 있으면 파일을 읽는 순간 ReferenceError 다.
+    expect(EXPO_RUNTIME_JS).not.toContain("process.env");
+  });
+
+  /** `%2F` 로 주석을 닫고 임의 JS 를 끼우는 실제 취약점이 있었다(랜딩 로더). */
+  it("</script 리터럴이 없다", () => {
+    expect(EXPO_RUNTIME_JS).not.toContain("</script");
+  });
+
+  /**
+   * `getPublicAppOrigin()` 은 서버 환경변수를 읽는다. 번들에 들어가면 파트너
+   * 브라우저에서 빈 문자열이 되어 스니펫 주소가 통째로 사라진다 — 주소는 **서버가 실어
+   * 보낸 payload.origin** 에서만 온다.
+   */
+  it("서버 전용 주소 헬퍼를 안고 들어가지 않는다", () => {
+    expect(EXPO_RUNTIME_JS).not.toContain("NEXT_PUBLIC_CANONICAL_APP_URL");
+    expect(EXPO_RUNTIME_JS).not.toContain("EXPO_CANONICAL_PUBLIC_ORIGIN");
+  });
+
+  /** 서체는 우리 오리진에서만 받는다 — CDN 도 local() 도 아니다. */
+  it("외부 서체 출처가 없다", () => {
+    for (const needle of ["fonts.googleapis.com", "fonts.gstatic.com", "cdn.jsdelivr.net", "local("]) {
+      expect(`${needle}: ${EXPO_RUNTIME_JS.includes(needle)}`).toBe(`${needle}: false`);
+    }
+  });
+
+  /** 시트가 번들 안에 있어야 문서 head 를 건드리지 않고 Shadow 에 넣을 수 있다. */
+  it("셸 스타일시트를 안고 있다", () => {
+    expect(EXPO_RUNTIME_JS).toContain(".msx-root");
+    expect(EXPO_RUNTIME_JS).toContain("prefers-reduced-motion");
+  });
+
+  it("전역 이름으로 부트 진입점을 노출한다", () => {
+    expect(EXPO_RUNTIME_JS).toContain("__msExpo");
   });
 });
 

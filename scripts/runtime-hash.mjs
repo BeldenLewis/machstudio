@@ -99,3 +99,41 @@ export function formSourceFiles(root) {
 export function formSourceHash(root) {
   return hashFiles(formSourceFiles(root));
 }
+
+/**
+ * 홈페이지 런타임(src/embed/expo-entry.ts + src/lib/expo/*).
+ *
+ * `src/lib/expo` 에는 서버 전용 파일(라우트 서비스·Prisma 를 만지는 것들)도 있는데,
+ * 그것들은 번들에 안 들어간다. 그래서 디렉터리를 통째로 넣지 않고 **metafile 이 실제로
+ * 보고한 목록**을 적는다 — embed-runtime-manifest 테스트가 이 목록을 감시한다.
+ */
+export function expoSourceFiles(root) {
+  return ([
+    join(root, "src/embed/expo-entry.ts"),
+    // 런타임 경로
+    join(root, "src/lib/expo/mount.ts"),
+    join(root, "src/lib/expo/shadow.ts"),
+    join(root, "src/lib/expo/sheet.ts"),
+    join(root, "src/lib/expo/host-reset.ts"),
+    join(root, "src/lib/expo/overlay.ts"),
+    join(root, "src/lib/expo/view-page.ts"),
+    join(root, "src/lib/expo/view-sections.ts"),
+    join(root, "src/lib/expo/custom-code.ts"),
+    join(root, "src/lib/expo/form-bridge.ts"),
+    join(root, "src/lib/expo/font.ts"),
+    join(root, "src/lib/expo/css.ts"),
+    join(root, "src/lib/expo/registry.ts"),
+    join(root, "src/lib/expo/shell-css.ts"),
+    // 공용
+    join(root, "src/lib/collect-form/target-registry.ts"),
+    join(root, "src/lib/color.ts"),
+    join(root, "src/lib/dom/h.ts"),
+    join(root, "src/lib/dom/focus.ts"),
+    join(root, "src/lib/dom/scroll-lock.ts"),
+    join(root, "src/lib/webinar-config.ts"),
+  ]).sort();
+}
+
+export function expoSourceHash(root) {
+  return hashFiles(expoSourceFiles(root));
+}
