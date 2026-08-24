@@ -133,23 +133,50 @@ describe("아임웹 경로 — 오늘의 동작을 고정한다", () => {
 
   /**
    * 실물에서 `.form-group` 개수(18)와 매핑 개수(8·15)가 다르다 — 입력 없는 블록이 섞여 있다.
-   * 그 블록은 건너뛰고 나머지는 그대로 읽어야 한다.
+   *
+   * **그 블록은 번호를 차지하지 않는다.** 수집이 세는 순서와 "필드 자동 감지" 스니퍼가 세는
+   * 순서가 같아야 운영자가 화면에서 고른 번호가 실제로 그 칸을 가리킨다(#153에서 맞춘 계약).
+   * 아래에서 이메일은 세 번째 블록이지만 **인덱스는 1** 이다.
    */
-  it("입력이 없는 블록이 섞여 있어도 나머지를 읽는다", async () => {
+  it("입력이 없는 블록은 번호를 차지하지 않는다", async () => {
+    const form = imwebForm([
+      { label: "이름", html: `<input value="홍길동">` },
+      { label: "구분선", html: `<p>안내 문구만 있는 블록</p>` },
+      { label: "이메일", html: `<input value="hong@example.com">` },
+    ]);
+
+    const aligned = mount(form, buildScript([
+      { index: 0, key: "name", label: "이름" },
+      { index: 1, key: "email", label: "이메일" },
+    ]));
+    await aligned.submitAndLeave();
+    expect(aligned.sent[0]?.data).toEqual({ name: "홍길동", email: "hong@example.com" });
+
+    // 빈 블록까지 세던 옛 방식(인덱스 2)은 이제 아무것도 못 찾는다.
+    const stale = mount(form, buildScript([
+      { index: 0, key: "name", label: "이름" },
+      { index: 2, key: "email", label: "이메일" },
+    ]));
+    await stale.submitAndLeave();
+    expect(stale.sent[0]?.data).toEqual({ name: "홍길동" });
+  });
+
+  /** 발견 스니퍼와 수집이 같은 순서를 세는지 — 어긋나면 운영자가 고른 번호가 딴 칸을 가리킨다. */
+  it("필드 메타의 순서와 수집 인덱스가 일치한다", async () => {
     const h = mount(
       imwebForm([
         { label: "이름", html: `<input value="홍길동">` },
-        { label: "구분선", html: `<p>안내 문구만 있는 블록</p>` },
+        { label: "구분선", html: `<p>입력 없음</p>` },
         { label: "이메일", html: `<input value="hong@example.com">` },
       ]),
-      buildScript([
-        { index: 0, key: "name", label: "이름" },
-        { index: 2, key: "email", label: "이메일" },
-      ]),
+      buildScript([{ index: 1, key: "second", label: "두번째" }]),
     );
     await h.submitAndLeave();
 
-    expect(h.sent[0]?.data).toEqual({ name: "홍길동", email: "hong@example.com" });
+    const meta = h.sent[0]?._fieldMeta as Array<{ index: number; label: string }>;
+    expect(meta.map((m) => m.label)).toEqual(["이름", "이메일"]);
+    // 메타에서 index 1 이 "이메일" 이면, 수집도 같은 칸을 읽어야 한다.
+    expect(h.sent[0]?.data).toEqual({ second: "hong@example.com" });
   });
 
   /** 값이 하나도 없으면 캡처 자체가 일어나지 않는다. */
