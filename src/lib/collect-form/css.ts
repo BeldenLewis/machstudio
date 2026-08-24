@@ -254,8 +254,10 @@ export const COLLECT_FORM_CSS = `
 /* QR 저장 — 캡처가 안 되는 기기(일부 사내폰·키오스크)가 있어 파일로도 준다. */
 .msf-save{
   display:block;width:100%;margin-top:16px;padding:14px 18px;border:0;border-radius:var(--msf-radius);
-  background:var(--msf-accent);color:var(--msf-accent-fg);font:inherit;font-weight:800;cursor:pointer;
-  text-align:center;text-decoration:none;
+  background:var(--msf-accent) !important;color:var(--msf-accent-fg) !important;
+  -webkit-text-fill-color:var(--msf-accent-fg) !important;
+  font:inherit;font-weight:800;cursor:pointer;
+  text-align:center;text-decoration:none !important;
 }
 .msf-save:hover{filter:brightness(1.08)}
 .msf-save-hint{margin-top:8px;font-size:11px;color:var(--msf-muted)}
