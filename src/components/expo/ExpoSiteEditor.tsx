@@ -8,13 +8,16 @@ import { toast } from "sonner";
 import { AutosaveScope, AggregateAutosaveIndicator, useReportAutosave } from "@/components/ui/autosave-scope";
 import { Field, FIELD_CLS, FINISH, R, Segmented } from "@/components/ui/primitives";
 import { PreviewFrame } from "@/components/ui/PreviewFrame";
+import { ColorField } from "@/components/ui/ColorField";
+import { normalizeHexColor } from "@/lib/color";
+import { EXPO_DEFAULT_THEME, normalizeExpoTheme } from "@/lib/expo/config";
 import { ExpoProjectSync } from "@/components/expo/ExpoProjectSync";
 import { SectionsEditor } from "@/components/expo/SectionEditor";
 import { attachExpoRowKeys, stripExpoRowKeys } from "@/lib/expo/row-key";
 import { usePageAutosave, type ExpoSaveOutcome } from "@/lib/expo/use-page-autosave";
 import { derivePageState } from "@/lib/expo/model";
 import type { ExpoPermissions, ExpoRelease } from "@/lib/expo/permissions";
-import type { ExpoPageState, ExpoSection } from "@/lib/expo/types";
+import type { ExpoPageState, ExpoSection, ExpoTheme } from "@/lib/expo/types";
 
 /**
  * 홈페이지 편집 — **탐색 · 편집 · 미리보기 3열**.
@@ -47,6 +50,8 @@ interface SiteInfo {
   previewToken: string | null;
   siteUrl: string | null;
   defaultLocale: string;
+  /** 사이트 색. **공개 로더가 실시간으로 읽는다** — 저장하는 순간 공개 페이지가 바뀐다. */
+  theme: ExpoTheme;
 }
 
 interface PageDetail {
@@ -123,6 +128,8 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
   const [pages, setPages] = useState<PageSummary[] | null>(null);
   const [sources, setSources] = useState<SourceOption[]>([]);
   const [preview, setPreview] = useState<PreviewInfo | null>(null);
+  /** 아직 적용하지 않은 색. null 이면 바꾼 것이 없다. */
+  const [stagedTheme, setStagedTheme] = useState<ExpoTheme | null>(null);
   const [loadError, setLoadError] = useState(false);
 
   const requestedPageId = params.get("page");
@@ -140,7 +147,12 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
       .then((result) => {
         if (result === "error") { setLoadError(true); return; }
         setLoadError(false);
-        setSite(result.site);
+        /**
+         * 색은 경계에서 한 번 다듬는다. 라우트가 이미 정규화해 주지만, 여기서 `undefined`
+         * 가 들어오면 색 패널이 `saved.accent` 를 읽다가 **편집기 전체가 죽는다** —
+         * 한 필드 때문에 화면이 통째로 안 뜨는 종류의 사고다.
+         */
+        setSite({ ...result.site, theme: normalizeExpoTheme(result.site.theme) });
         setPages(result.pages);
         setSources(result.sources ?? []);
       })
@@ -214,13 +226,29 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
   return (
     <Shell siteName={site.name} siteUrl={site.siteUrl}>
       <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(200px,240px)_minmax(0,1fr)_minmax(280px,380px)]">
-        <PageNavigator
-          pages={pages}
-          selectedId={selected?.id ?? null}
-          canEdit={permissions.canEdit}
-          onSelect={selectPage}
-          onAdd={addPage}
-        />
+        <div className="space-y-3">
+          <PageNavigator
+            pages={pages}
+            selectedId={selected?.id ?? null}
+            canEdit={permissions.canEdit}
+            onSelect={selectPage}
+            onAdd={addPage}
+          />
+          {/* 색은 `canPublish` 다 — 저장하는 순간 이미 공개된 페이지가 바뀐다. */}
+          {permissions.canPublish ? (
+            <ThemePanel
+              siteId={siteId}
+              saved={site.theme}
+              staged={stagedTheme}
+              onStage={setStagedTheme}
+              onApplied={(theme) => {
+                setSite((prev) => (prev ? { ...prev, theme } : prev));
+                setStagedTheme(null);
+              }}
+              anyLive={pages.some((page) => page.liveAt)}
+            />
+          ) : null}
+        </div>
 
         {selected ? (
           /**
@@ -249,6 +277,7 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
           pageId={selected?.id ?? null}
           release={release}
           info={preview}
+          theme={stagedTheme}
         />
       </div>
     </Shell>
@@ -561,12 +590,14 @@ function PageForm({
  * 순간 허가가 저절로 낡는다(`code-digest.ts`). 허가는 저장하지 않는다.
  */
 function PreviewPane({
-  previewToken, pageId, release, info,
+  previewToken, pageId, release, info, theme,
 }: {
   previewToken: string | null;
   pageId: string | null;
   release: ExpoRelease;
   info: PreviewInfo | null;
+  /** 아직 적용하지 않은 색. 미리보기에만 실어 보낸다 — 저장하지 않는다. */
+  theme: ExpoTheme | null;
 }) {
   const [showPublished, setShowPublished] = useState(false);
   /** 실행을 허가한 지문. 세션 한 번의 판단이라 저장하지 않는다. */
@@ -584,8 +615,18 @@ function PreviewPane({
       query.set("customCode", "run");
       query.set("codeDigest", digest);
     }
+    /**
+     * **색이 될 때만** 싣는다. 타이핑 중인 반쪽짜리 값(`#1f`)까지 실으면 글자 하나마다
+     * 주소가 바뀌어 iframe 이 다시 뜬다 — 색을 고르는 동안 미리보기가 계속 깜빡인다.
+     */
+    if (theme) {
+      for (const key of ["accent", "lightBg", "darkBg"] as const) {
+        const hex = normalizeHexColor(theme[key]);
+        if (hex) query.set(key, hex);
+      }
+    }
     return `/hp/${encodeURIComponent(previewToken)}?${query.toString()}`;
-  }, [previewToken, pageId, wantPublished, codeApproved, digest]);
+  }, [previewToken, pageId, wantPublished, codeApproved, digest, theme]);
 
   if (!src) {
     return (
@@ -652,5 +693,119 @@ function PreviewPane({
         </div>
       )}
     </aside>
+  );
+}
+
+/**
+ * 사이트 색 — **자동저장하지 않는다.**
+ *
+ * 이 화면에서 유일하게 자동저장이 아닌 값이다. 공개 로더가 사이트 테마를 실시간으로
+ * 읽으므로(`app/h/[pageId]/loader.ts`) 저장하는 순간 **이미 파트너 사이트에 붙여 둔
+ * 페이지의 색까지 바뀐다.** 타이핑 중인 색이 그대로 나가면 안 된다.
+ *
+ * 그래서 고치는 동안은 화면 안에만 있고(미리보기에는 실어 보낸다), 적용을 눌러야 나간다.
+ * 되돌릴 수 있는 변경이라 확인 모달까지 두지는 않는다 — 대신 무엇이 바뀌는지 적는다.
+ */
+function ThemePanel({
+  siteId, saved, staged, onStage, onApplied, anyLive,
+}: {
+  siteId: string;
+  saved: ExpoTheme;
+  staged: ExpoTheme | null;
+  onStage: (next: ExpoTheme | null) => void;
+  onApplied: (theme: ExpoTheme) => void;
+  anyLive: boolean;
+}) {
+  const [saving, setSaving] = useState(false);
+  const current = staged ?? saved;
+  const dirty = staged !== null;
+
+  const set = (key: keyof ExpoTheme, value: string) => onStage({ ...current, [key]: value });
+
+  const apply = async () => {
+    if (!staged) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/expo/${encodeURIComponent(siteId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ theme: staged }),
+      });
+      if (!res.ok) {
+        toast.error((await res.json().catch(() => ({}))).error ?? "색을 바꾸지 못했어요");
+        return;
+      }
+      const body = (await res.json()) as { site: { theme: ExpoTheme } };
+      // 서버가 정규화한 값을 받는다 — 화면이 보낸 값과 저장된 값이 다를 수 있다.
+      onApplied(body.site.theme);
+      toast.success("색을 적용했어요");
+    } catch {
+      toast.error("색을 바꾸지 못했어요. 연결을 확인해 주세요.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className={`${R.panel} ${FINISH.s1} space-y-2.5 bg-card p-3`} aria-labelledby="expo-theme-heading">
+      <h2 id="expo-theme-heading" className="text-sm font-semibold">색</h2>
+
+      <ColorField
+        label="키컬러"
+        value={current.accent}
+        onChange={(next) => set("accent", next)}
+      />
+      <ColorField
+        label="밝은 배경"
+        value={current.lightBg}
+        onChange={(next) => set("lightBg", next)}
+      />
+      <ColorField
+        label="어두운 배경"
+        note="배경을 어둡게 한 구획"
+        value={current.darkBg}
+        onChange={(next) => set("darkBg", next)}
+      />
+
+      {dirty ? (
+        <div className={`${R.surface} ${FINISH.s2} space-y-2 bg-secondary p-2.5`}>
+          <p className="text-[11px] leading-relaxed">
+            <span className="font-medium">아직 적용하지 않았어요.</span>
+            <span className="mt-0.5 block text-muted-foreground">
+              {anyLive
+                ? "적용하면 이미 공개 중인 페이지의 색도 바로 바뀝니다. 오른쪽에서 먼저 확인하세요."
+                : "오른쪽 미리보기에는 지금 이 색으로 보이고 있어요."}
+            </span>
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => void apply()}
+              disabled={saving}
+              className={`inline-flex min-h-9 items-center gap-1.5 ${R.control} ${FINISH.control} bg-violet-500 px-3 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-60`}
+            >
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+              적용
+            </button>
+            <button
+              type="button"
+              onClick={() => onStage(null)}
+              disabled={saving}
+              className={`inline-flex min-h-9 items-center ${R.control} px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:opacity-60`}
+            >
+              되돌리기
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onStage({ ...EXPO_DEFAULT_THEME })}
+          className="text-[11px] text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
+        >
+          기본 색으로
+        </button>
+      )}
+    </section>
   );
 }

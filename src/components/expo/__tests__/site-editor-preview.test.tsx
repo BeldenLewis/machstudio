@@ -53,7 +53,7 @@ const { ExpoSiteEditor } = await import("@/components/expo/ExpoSiteEditor");
 const TOKEN = "prev-token";
 const PAGE_ID = "pg1";
 
-const permissions = {
+let permissions = {
   canEdit: true, canPublish: true, canManageSite: true, canManageTemplates: true,
 };
 
@@ -63,9 +63,12 @@ let root: Root;
 let nextSave: { draftRevision: number; codeDigest: string };
 let pageBody: Record<string, unknown>;
 let patchCount = 0;
+let liveAt: string | null = null;
+/** 사이트 PATCH 로 실제로 나간 본문들. 색은 자동저장이 아니라는 것을 여기서 본다. */
+let sitePatches: unknown[] = [];
 
 function stubFetch() {
-  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: { method?: string }) => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
     const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body } as Response);
     if (url.startsWith("/api/expo/pages/")) {
       if (init?.method === "PATCH") {
@@ -75,14 +78,20 @@ function stubFetch() {
       return ok({ page: pageBody });
     }
     if (url.startsWith("/api/expo/")) {
+      if (init?.method === "PATCH") {
+        const body = JSON.parse(String(init.body ?? "{}"));
+        sitePatches.push(body);
+        return ok({ site: { theme: body.theme } });
+      }
       return ok({
         site: {
           id: "s1", name: "사이트", projectId: "p1",
           previewToken: TOKEN, siteUrl: null, defaultLocale: "ko",
+          theme: { accent: "#1f3a5f", lightBg: "#ffffff", darkBg: "#111318" },
         },
         pages: [{
           id: PAGE_ID, slug: "home", title: "홈", isHome: true, sortOrder: 0,
-          imwebUrl: null, hasPublished: Boolean(pageBody.hasPublished), liveAt: null,
+          imwebUrl: null, hasPublished: Boolean(pageBody.hasPublished), liveAt,
         }],
         sources: [],
       });
@@ -115,9 +124,14 @@ async function click(el: Element | undefined) {
   await act(async () => { el.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
 }
 
-/** 페이지 이름을 고쳐 자동저장을 한 바퀴 돌린다. */
+/**
+ * 페이지 이름을 고쳐 자동저장을 한 바퀴 돌린다.
+ * 라벨로 찾는다 — `querySelector("input")` 는 왼쪽 칸의 색 입력을 먼저 집는다.
+ */
 async function editAndSave(title: string) {
-  const input = host.querySelector<HTMLInputElement>('input[value="홈"], input');
+  const label = [...host.querySelectorAll("label")]
+    .find((el) => el.textContent?.startsWith("페이지 이름"));
+  const input = label?.querySelector("input");
   if (!input) throw new Error("이름 칸이 없다");
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
   await act(async () => {
@@ -131,6 +145,9 @@ async function editAndSave(title: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   patchCount = 0;
+  sitePatches = [];
+  liveAt = null;
+  permissions = { canEdit: true, canPublish: true, canManageSite: true, canManageTemplates: true };
   nextSave = { draftRevision: 8, codeDigest: "" };
   pageBody = {
     id: PAGE_ID, slug: "home", title: "홈", imwebUrl: null,
@@ -235,5 +252,91 @@ describe("붙여넣은 코드", () => {
     pageBody.codeDigest = "";
     await render();
     expect(host.textContent).not.toContain("아직 실행하지 않았어요");
+  });
+});
+
+/**
+ * 색은 이 화면에서 **유일하게 자동저장이 아닌 값**이다.
+ *
+ * 공개 로더가 사이트 테마를 실시간으로 읽으므로(`app/h/[pageId]/loader.ts`) 저장하는
+ * 순간 이미 붙여 둔 파트너 사이트의 색까지 바뀐다. 타이핑 중인 색이 그대로 나가면 안 된다.
+ */
+describe("사이트 색", () => {
+  const hexInput = () => {
+    const fields = [...host.querySelectorAll<HTMLInputElement>('input[type="color"]')];
+    if (fields.length === 0) throw new Error("색 칸이 없다");
+    return fields[0];
+  };
+
+  const setColor = async (value: string) => {
+    const el = hexInput();
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setter.call(el, value);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+
+  it("고치는 동안에는 서버로 나가지 않는다", async () => {
+    vi.useFakeTimers();
+    await render();
+    await setColor("#ff0000");
+    // 자동저장 디바운스를 훌쩍 넘겨도 나가지 않아야 한다.
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(sitePatches).toEqual([]);
+  });
+
+  it("미리보기에는 바로 반영된다", async () => {
+    await render();
+    await setColor("#ff0000");
+    expect(frameSrc()).toContain("accent=%23ff0000");
+  });
+
+  it("적용해야 서버로 나간다", async () => {
+    await render();
+    await setColor("#ff0000");
+    await click(buttonByText("적용"));
+
+    expect(sitePatches).toHaveLength(1);
+    expect((sitePatches[0] as { theme: { accent: string } }).theme.accent).toBe("#ff0000");
+  });
+
+  it("적용한 뒤에는 미적용 안내가 사라진다", async () => {
+    await render();
+    await setColor("#ff0000");
+    expect(host.textContent).toContain("아직 적용하지 않았어요");
+
+    await click(buttonByText("적용"));
+    expect(host.textContent).not.toContain("아직 적용하지 않았어요");
+  });
+
+  it("되돌리면 저장된 색으로 가고 미리보기에서도 빠진다", async () => {
+    await render();
+    await setColor("#ff0000");
+    await click(buttonByText("되돌리기"));
+
+    expect(sitePatches).toEqual([]);
+    expect(frameSrc()).not.toContain("accent=%23ff0000");
+  });
+
+  /** 공개 중인 페이지가 있을 때만 그렇게 말한다 — 없는데 겁을 주면 문구를 안 믿게 된다. */
+  it("공개 중인 페이지가 있으면 그 사실을 말한다", async () => {
+    liveAt = "2026-08-01T00:00:00.000Z";
+    await render();
+    await setColor("#ff0000");
+    expect(host.textContent).toContain("이미 공개 중인 페이지의 색도 바로 바뀝니다");
+  });
+
+  it("공개 중인 페이지가 없으면 그런 말을 하지 않는다", async () => {
+    await render();
+    await setColor("#ff0000");
+    expect(host.textContent).not.toContain("이미 공개 중인 페이지의 색도");
+  });
+
+  /** 눌러도 실패할 버튼은 보여주지 않는다 — 서버도 MEMBER 의 색 변경을 막는다. */
+  it("색을 바꿀 수 없는 사람에게는 패널을 보여주지 않는다", async () => {
+    permissions = { ...permissions, canPublish: false };
+    await render();
+    expect(host.querySelector('input[type="color"]')).toBeNull();
   });
 });
