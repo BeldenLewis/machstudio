@@ -83,6 +83,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       OR COALESCE("utmMedium",'') ILIKE ${pattern}
       OR COALESCE("utmCampaign",'') ILIKE ${pattern}
       OR COALESCE("referrer",'') ILIKE ${pattern}
+      OR COALESCE("registrationNo",'') ILIKE ${pattern}
     )`);
   }
   const whereClause = Prisma.join(conditions, " AND ");

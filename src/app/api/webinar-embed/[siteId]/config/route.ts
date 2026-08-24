@@ -10,8 +10,8 @@ import { buildIcs } from "@/lib/webinar-calendar";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveWebinarStatus } from "@/lib/webinar-status";
-import { normalizeRegistrationForm, safeHttpUrl } from "@/lib/webinar-config";
 import { endedSurveyLinks } from "@/lib/webinar-ended-surveys";
+import { buildPublicRegistrationFormPayload } from "@/lib/webinar-public-registration-form";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -20,32 +20,6 @@ const CORS_HEADERS = {
 
 const CACHE_OK = "public, s-maxage=60, stale-while-revalidate=300";
 const CACHE_MISS = "public, s-maxage=60";
-
-/** 외부 로더에 필요한 등록 폼 계약만 내보낸다 — 완료 CTA URL은 공개 전 서버에서 한 번 더 정제한다. */
-export function buildPublicRegistrationFormPayload(config: unknown) {
-  const registrationForm = normalizeRegistrationForm(config);
-  return {
-    fields: registrationForm.fields,
-    privacyText: registrationForm.privacyText,
-    marketingText: registrationForm.marketingText,
-    privacyBody: registrationForm.privacyBody,
-    marketingBody: registrationForm.marketingBody,
-    privacyDefaultChecked: registrationForm.privacyDefaultChecked,
-    marketingDefaultChecked: registrationForm.marketingDefaultChecked,
-    submitLabel: registrationForm.submitLabel,
-    successCta: {
-      enabled: registrationForm.successCta.enabled,
-      label: registrationForm.successCta.label,
-      url: safeHttpUrl(registrationForm.successCta.url),
-    },
-    /**
-     * 완료 팝업의 확인 버튼이 이동할 주소. 여기서 안 내려주면 로더는 이 값을 알 수 없고
-     * 확인은 그냥 모달만 닫는다 — 자체 대기 화면에서는 이동하는데 임베드에서만 안 되는
-     * 상태가 됐다(실제로 그랬다). 안전성은 서버에서 걸러 로더가 그대로 쓰게 한다.
-     */
-    successRedirectUrl: safeHttpUrl(registrationForm.successRedirectUrl),
-  };
-}
 
 export async function OPTIONS() {
   return new NextResponse(null, {

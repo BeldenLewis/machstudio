@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
+import { normalizeCollectForm } from "@/lib/collect-form-config";
+import { isBuilderSource } from "@/lib/collect-columns";
+import { normalizeEmail, primaryFieldKey } from "@/lib/collect-submit";
+import { toE164 } from "@/lib/collect-phone";
 
 async function authorize(id: string, requireAdmin = false) {
   const supabase = await createClient();
@@ -52,7 +56,30 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   };
 
   const updateData: Record<string, unknown> = {};
-  if (data !== undefined && typeof data === "object" && data !== null) updateData.data = data;
+  if (data !== undefined && typeof data === "object" && data !== null) {
+    updateData.data = data;
+    /**
+     * **정규화 키를 같이 다시 계산한다.**
+     *
+     * emailNormalized·phoneE164 는 data 에서 파생된 값이고, 중복 차단(§6.2)과 등록
+     * 확인 조회(§10.1)가 그 둘만 본다. data 만 고치면 두 값이 옛 주소를 계속 가리켜서
+     * ① 같은 사람이 고친 주소로 다시 등록해도 중복에 안 걸리고
+     * ② 아무도 쓰지 않는 옛 주소가 그 전시에서 영구 차단되고
+     * ③ 등록자는 고친 주소로 자기 QR 을 못 찾는다.
+     * 셋 다 조용히 어긋나는 종류라, 오타 하나 고쳐 준 것이 원인이라고는 아무도 못 찾는다.
+     *
+     * 빌더형만 해당한다 — 연동형은 이 컬럼들을 쓰지 않고(항상 null), 그쪽 화면은
+     * 레코드 52,000건이 그대로 돌아가야 한다.
+     */
+    if (isBuilderSource(auth.source)) {
+      const config = normalizeCollectForm(auth.source.formConfig);
+      const emailKey = primaryFieldKey(config, data, "email");
+      const phoneKey = primaryFieldKey(config, data, "tel");
+      const phoneRaw = phoneKey ? String(data[phoneKey] ?? "").trim() : "";
+      updateData.emailNormalized = emailKey ? normalizeEmail(data[emailKey]) : null;
+      updateData.phoneE164 = phoneRaw ? toE164(phoneRaw, config.validation.defaultCountry) : null;
+    }
+  }
   if (utmSource !== undefined) updateData.utmSource = utmSource || null;
   if (utmMedium !== undefined) updateData.utmMedium = utmMedium || null;
   if (utmCampaign !== undefined) updateData.utmCampaign = utmCampaign || null;
@@ -74,10 +101,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   });
   if (!target) return NextResponse.json({ error: "레코드를 찾을 수 없어요" }, { status: 404 });
 
-  const record = await prisma.collectRecord.update({
-    where: { id: target.id },
-    data: updateData,
-  });
+  /**
+   * 이메일을 **이미 등록된 주소로** 고치면 부분 유니크 인덱스에 부딪힌다(§6.2).
+   * 잡지 않으면 500 이 나가고 운영자는 "저장이 안 된다" 만 본다 — 무엇이 문제인지,
+   * 어느 레코드와 겹치는지 알 수 없다.
+   */
+  let record;
+  try {
+    record = await prisma.collectRecord.update({
+      where: { id: target.id },
+      data: updateData,
+    });
+  } catch (e) {
+    if (typeof e === "object" && e !== null && (e as { code?: unknown }).code === "P2002") {
+      return NextResponse.json(
+        { error: "그 이메일로 등록된 사람이 이미 있어요. 중복이면 한쪽을 지우고 고쳐 주세요." },
+        { status: 409 },
+      );
+    }
+    throw e;
+  }
 
   await logActivity({
     workspaceId: auth.source.workspaceId,

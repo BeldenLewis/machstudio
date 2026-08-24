@@ -13,7 +13,7 @@
 
 import { LANDING_CSS } from "./css";
 import { buildLandingModel } from "./build-model";
-import { h, clearNode } from "./h";
+import { h, clearNode } from "@/lib/dom/h";
 import { renderHero, renderToc, scrollToSectionIn } from "./view-hero";
 import { renderIntro, renderAudience, renderPrograms, renderHighlights, renderJoin, renderFaq, renderSponsors } from "./view-sections";
 import { renderSessions, renderTimetable, createSessionDialog } from "./view-sessions";

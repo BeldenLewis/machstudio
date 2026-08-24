@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
+import { IMAGE_PRESETS, buildTransformUrl, transformedImageUrl } from "@/lib/webinar-image";
 
 /**
  * 이미지 변환 URL — 이걸 잘못 만들면 **이미지가 잘리거나 안 보인다.**
@@ -19,20 +19,20 @@ describe("resize=contain 을 반드시 붙인다 — 없으면 이미지가 잘�
    */
   it("모든 프리셋 결과에 resize=contain 이 들어간다", () => {
     for (const [name, preset] of Object.entries(IMAGE_PRESETS)) {
-      const out = transformedImageUrl(OBJ, preset);
+      const out = buildTransformUrl(OBJ, preset);
       expect(out, name).toContain("resize=contain");
     }
   });
 
   it("width·height·quality 를 프리셋 값 그대로 싣는다", () => {
-    const out = new URL(transformedImageUrl(OBJ, IMAGE_PRESETS.sessionLogo));
+    const out = new URL(buildTransformUrl(OBJ, IMAGE_PRESETS.sessionLogo));
     expect(out.searchParams.get("width")).toBe(String(IMAGE_PRESETS.sessionLogo.width));
     expect(out.searchParams.get("height")).toBe(String(IMAGE_PRESETS.sessionLogo.height));
     expect(out.searchParams.get("quality")).toBe(String(IMAGE_PRESETS.sessionLogo.quality));
   });
 
   it("object → render 경로로 바꾼다", () => {
-    const out = transformedImageUrl(OBJ, IMAGE_PRESETS.sessionCardPhoto);
+    const out = buildTransformUrl(OBJ, IMAGE_PRESETS.sessionCardPhoto);
     expect(out).toContain("/storage/v1/render/image/public/");
     expect(out).not.toContain("/storage/v1/object/public/");
   });
@@ -42,25 +42,25 @@ describe("건드리면 안 되는 입력은 원본 그대로 — 빈 화면보�
   /** 벡터를 래스터화하면 흐려지고 용량도 커질 수 있다 — 줄이려는 목적과 반대다. */
   it("SVG 는 변환하지 않는다", () => {
     const svg = OBJ.replace(".png", ".svg");
-    expect(transformedImageUrl(svg, IMAGE_PRESETS.sessionLogo)).toBe(svg);
+    expect(buildTransformUrl(svg, IMAGE_PRESETS.sessionLogo)).toBe(svg);
     const svgz = OBJ.replace(".png", ".SVGZ");
-    expect(transformedImageUrl(svgz, IMAGE_PRESETS.sessionLogo)).toBe(svgz);
+    expect(buildTransformUrl(svgz, IMAGE_PRESETS.sessionLogo)).toBe(svgz);
   });
 
   /** 어드민이 붙여넣은 외부 이미지 URL — 우리 Storage 가 아니라 변환 엔드포인트가 없다. */
   it("우리 Storage 가 아닌 URL 은 그대로 둔다", () => {
     const ext = "https://cdn.partner.com/hero.jpg";
-    expect(transformedImageUrl(ext, IMAGE_PRESETS.heroBackground)).toBe(ext);
+    expect(buildTransformUrl(ext, IMAGE_PRESETS.heroBackground)).toBe(ext);
   });
 
   it("이미 변환된 URL 을 두 번 변환하지 않는다", () => {
-    const once = transformedImageUrl(OBJ, IMAGE_PRESETS.sessionLogo);
-    expect(transformedImageUrl(once, IMAGE_PRESETS.modalPhoto)).toBe(once);
+    const once = buildTransformUrl(OBJ, IMAGE_PRESETS.sessionLogo);
+    expect(buildTransformUrl(once, IMAGE_PRESETS.modalPhoto)).toBe(once);
   });
 
   it("빈 값·공백·null 은 빈 문자열", () => {
     for (const bad of [null, undefined, "", "   "]) {
-      expect(transformedImageUrl(bad, IMAGE_PRESETS.modalAvatar)).toBe("");
+      expect(buildTransformUrl(bad, IMAGE_PRESETS.modalAvatar)).toBe("");
     }
   });
 });
@@ -84,5 +84,30 @@ describe("프리셋 크기 — 표시 크기의 2배(레티나)여야 한다", (
   /** 와이드 로고가 폭에 걸려 세로로 눌리지 않게 폭 상자를 넉넉히 둔다(5.47:1 실측 사례). */
   it("로고 상자는 6:1 보다 넓은 비율까지 담는다", () => {
     expect(IMAGE_PRESETS.sessionLogo.width / IMAGE_PRESETS.sessionLogo.height).toBeGreaterThan(6);
+  });
+});
+
+/**
+ * 변환 게이트.
+ *
+ * Supabase 이미지 변환은 **유료 플랜에서만** 켜진다. 안 켜진 프로젝트에서 변환 URL 을
+ * 부르면 403 FeatureNotEnabled JSON 이 오고, 업로드는 멀쩡한데 화면에는 아무것도 안 보인다
+ * (공고 히어로 배경이 실제로 그랬고, 웨비나 랜딩·연사 사진까지 같이 안 나오고 있었다).
+ * 기본값이 꺼짐이어야 하는 이유다 — 용량은 크지만 **보이기는 한다**.
+ */
+describe("변환 게이트", () => {
+  const stored =
+    "https://x.supabase.co/storage/v1/object/public/webinar-assets/a/b/hero.jpg";
+
+  it("기본값은 꺼짐 — 원본 URL 을 그대로 돌려준다", () => {
+    expect(process.env.NEXT_PUBLIC_SUPABASE_IMAGE_TRANSFORM).not.toBe("on");
+    expect(transformedImageUrl(stored, IMAGE_PRESETS.heroBackground)).toBe(stored);
+    // 변환 경로로 바뀌면 403 이 된다.
+    expect(transformedImageUrl(stored, IMAGE_PRESETS.heroBackground)).not.toContain("/render/image/");
+  });
+
+  it("빈 값은 빈 문자열 — 꺼져 있어도 규칙은 같다", () => {
+    expect(transformedImageUrl("", IMAGE_PRESETS.heroBackground)).toBe("");
+    expect(transformedImageUrl(null, IMAGE_PRESETS.heroBackground)).toBe("");
   });
 });

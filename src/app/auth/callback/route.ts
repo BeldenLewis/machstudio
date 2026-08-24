@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { redeemInvitationToken } from "@/app/api/invitations/redeem/route";
+import { redeemInvitationToken } from "@/lib/invitation-redeem";
 import { NextResponse } from "next/server";
 
 // next 는 origin 기준 상대경로만 허용한다. 문자열을 이어붙이면(`${origin}${next}`)

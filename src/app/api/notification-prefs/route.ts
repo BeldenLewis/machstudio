@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 
-export const NOTIFICATION_EVENTS = [
+const NOTIFICATION_EVENTS = [
   { id: "WORKSPACE_INVITE",  label: "워크스페이스 초대",       defaultEnabled: true },
   { id: "COLLECT_SUBMITTED", label: "새 폼 제출",              defaultEnabled: false },
   { id: "REPORT_SENT",       label: "정기 리포트 발송 완료",   defaultEnabled: true },

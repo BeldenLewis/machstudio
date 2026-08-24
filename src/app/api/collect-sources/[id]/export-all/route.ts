@@ -41,6 +41,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       webhookUrl: source.webhookUrl,
       notifyOnSubmit: source.notifyOnSubmit,
       allowedOrigins: source.allowedOrigins,
+      // 빌더형 설정 — 빠지면 복구본이 폼 정의 없는 연동형으로 되살아나고, 그 손실이
+      // 에러 없이 조용히 일어난다(_schema 도 그대로라 나중에 알아챌 방법이 없다).
+      // previewToken 은 **일부러 뺀다** — 복구본은 새 링크를 받아야 한다.
+      mode: source.mode,
+      formConfig: source.formConfig,
+      emailConfig: source.emailConfig,
+      venueConfig: source.venueConfig,
       fieldMappings: source.fieldMappings.map((f) => ({
         index: f.index, key: f.key, label: f.label, type: f.type, isRequired: f.isRequired, sortOrder: f.sortOrder,
       })),

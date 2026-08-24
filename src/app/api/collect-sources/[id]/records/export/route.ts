@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { collectColumnsFor, isBuilderSource } from "@/lib/collect-columns";
 import { formatKstDateTime, kstDateString } from "@/lib/datetime";
 import { logActivity } from "@/lib/activity";
 
@@ -33,9 +34,20 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     orderBy: { createdAt: "desc" },
   });
 
+  // 빌더형은 열을 formConfig 에서 파생한다 — 표와 **같은 함수**를 써야 화면과 CSV 가 갈리지 않는다.
+  const columns = collectColumnsFor(source);
+
+  /**
+   * 등록번호는 **빌더형에만** 있고, 있으면 맨 앞이어야 한다 — 현장에서 스캔한 번호로
+   * 명단을 대조하는 것이 이 CSV 의 주 용도가 된다(§12 현장 운영). 연동형 CSV 는 열이
+   * 하나도 바뀌지 않는다.
+   */
+  const builder = isBuilderSource(source);
+
   const headers = [
     "시간 (KST)",
-    ...source.fieldMappings.map((f) => f.label || f.key),
+    ...(builder ? ["등록번호"] : []),
+    ...columns.map((f) => f.label || f.key),
     "UTM 소스 (last)", "UTM 매체 (last)", "UTM 캠페인 (last)", "UTM 키워드 (last)", "UTM 콘텐츠 (last)",
     "First UTM 소스", "First UTM 매체", "First UTM 캠페인", "First UTM 키워드", "First UTM 콘텐츠",
     "First Referrer", "First Seen (KST)",
@@ -46,7 +58,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const data = (r.data ?? {}) as Record<string, unknown>;
     return [
       formatKstDateTime(r.createdAt),
-      ...source.fieldMappings.map((f) => data[f.key] ?? ""),
+      ...(builder ? [r.registrationNo ?? ""] : []),
+      ...columns.map((f) => data[f.key] ?? ""),
       r.utmSource ?? "",
       r.utmMedium ?? "",
       r.utmCampaign ?? "",

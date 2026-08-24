@@ -47,7 +47,7 @@ export async function POST(request: Request) {
   if (!project) return NextResponse.json({ error: "프로젝트를 찾을 수 없어요" }, { status: 400 });
 
   if (activeWebinarId) {
-    const webinar = await prisma.webinar.findFirst({ where: { id: activeWebinarId, workspaceId }, select: { id: true } });
+    const webinar = await prisma.webinar.findFirst({ where: { id: activeWebinarId, workspaceId, projectId }, select: { id: true } });
     if (!webinar) return NextResponse.json({ error: "노출할 웨비나를 찾을 수 없어요" }, { status: 400 });
   }
 

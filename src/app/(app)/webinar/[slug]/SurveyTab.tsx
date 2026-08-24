@@ -547,6 +547,8 @@ function SurveyEditor({
   };
 
   const copyLink = async () => {
+    // 이번 승인 범위 밖인 설문 공유 링크는 현재 host 동작을 유지한다.
+    // eslint-disable-next-line no-restricted-syntax
     const url = `${window.location.origin}/webinar/${slug}/survey/${survey.id}`;
     try {
       await navigator.clipboard.writeText(url);

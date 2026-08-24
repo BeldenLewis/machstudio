@@ -2,8 +2,9 @@
 //
 //     node scripts/ensure-partial-unique-indexes.mjs --apply
 //
-// 이 스키마에는 표현할 수 없는 "조건부 유니크 제약"이 9개 있다(팝업·투표·설문·Tally·공지의
-// '웨비나당 활성 1개', Q&A 송출, 채팅 고정, 등록자 이메일·전화 중복 방지).
+// 이 스키마에는 표현할 수 없는 "조건부 유니크 제약"이 10개 있다(팝업·투표·설문·Tally·공지의
+// '웨비나당 활성 1개', Q&A 송출, 채팅 고정, 등록자 이메일·전화 중복 방지,
+// 사전등록 수집 소스당 이메일 중복 방지).
 // @@unique 에는 WHERE 를 붙일 수 없어 SQL 로 만들었고, db push 는 그것들을 스키마에 없는
 // 잔재로 보고 **지운다**. 지워져도 에러는 안 나고, 라이브 중 동시 조작에서만 사고가 난다.
 // 점검만: node scripts/ensure-partial-unique-indexes.mjs
@@ -54,6 +55,10 @@ model Workspace {
   /// null = 아직 설정 안 함(기존 웨비나 값은 그대로 살아 있다 — 이 컬럼은 순수 추가다).
   privacyBodyTemplate   String?
   marketingBodyTemplate String?
+  /// 법률 문구 생성기(legal-templates)의 조직 정보 — 회사명·주소·개인정보 담당 연락처.
+  /// 위 두 필드와 같은 이유로 워크스페이스 자산이다. { default: OrgProfile, byCountry?: {...} }
+  /// 모양(WorkspaceLegalProfile, src/lib/legal-templates/types.ts). null = 아직 설정 안 함.
+  legalProfile          Json?
 
   members              WorkspaceMember[]
   projects             Project[]
@@ -73,6 +78,9 @@ model Workspace {
   webinarEmbedSites    WebinarEmbedSite[]
   adPerformanceImports AdPerformanceImportBatch[]
   adPerformanceRecords AdPerformanceRecord[]
+  competitions         Competition[]
+  expoSites            ExpoSite[]
+  expoTemplates        ExpoTemplate[]
 }
 
 model WorkspaceMember {
@@ -152,6 +160,8 @@ model Project {
   webinarEmbedSites    WebinarEmbedSite[]
   adPerformanceImports AdPerformanceImportBatch[]
   adPerformanceRecords AdPerformanceRecord[]
+  competitions         Competition[]
+  expoSites            ExpoSite[]
 }
 
 model AdPerformanceImportBatch {
@@ -243,31 +253,49 @@ model UTMTemplate {
 }
 
 model CollectSource {
-  id               String    @id @default(cuid())
-  projectId        String
-  workspaceId      String
-  name             String
-  description      String?
-  apiKey           String    @unique @default(cuid())
-  siteUrl          String?
-  successTrigger   String    @default("정상적으로 접수되었습니다")
-  redirectUrl      String?
-  isActive         Boolean   @default(true)
-  discoveredFields Json?
-  webhookUrl       String?
-  notifyOnSubmit   Boolean   @default(false)
-  allowedOrigins   String[]  @default([])
-  formPagePatterns String[]  @default([])
-  dedupKeyFields   String[]  @default([])
-  deletedAt        DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                 String    @id @default(cuid())
+  projectId          String
+  workspaceId        String
+  name               String
+  description        String?
+  apiKey             String    @unique @default(cuid())
+  siteUrl            String?
+  successTrigger     String    @default("정상적으로 접수되었습니다")
+  redirectUrl        String?
+  isActive           Boolean   @default(true)
+  discoveredFields   Json?
+  webhookUrl         String?
+  notifyOnSubmit     Boolean   @default(false)
+  allowedOrigins     String[]  @default([])
+  formPagePatterns   String[]  @default([])
+  dedupKeyFields     String[]  @default([])
+  /// 연동형(capture)이 필드 하나를 감지할 때 묶음으로 보는 CSS 선택자. 기본값은 아임웹 폼
+  /// 빌더가 항상 넣는 ".form-group" — 그 밖의 사이트(직접 만든 신청서 등)는 이 값을
+  /// 그 사이트에 맞는 선택자(예: 표 형태면 "table tr")로 바꿔야 필드가 잡힌다.
+  fieldGroupSelector String    @default(".form-group")
+  /// 수집 방식 — "capture"(외부 폼에 스크립트를 붙여 가로챔, 기존) | "builder"(여기서 폼을 만들어 렌더).
+  /// formConfig 가 비었는지로 유추하지 않는다 — 빌더형인데 아직 문항을 안 채운 상태와 구분이 안 된다.
+  /// 기본값이 capture 라 기존 소스는 전부 그대로 동작한다(백필 불필요).
+  mode               String    @default("capture")
+  /// 미리보기 링크 /p/{token}. 소스 id 를 그대로 노출하지 않는 이유는 **재발급으로 링크를 끊기 위해서**다
+  /// (Project.analyticsShareToken 과 같은 패턴).
+  previewToken       String?   @unique
+  /// 문항·개요·안내·검증·동의·완료·등록확인. 스키마와 정규화는 src/lib/collect-form-config.ts.
+  formConfig         Json?
+  /// 발신·제목·본문·QR 첨부 설정.
+  emailConfig        Json?
+  /// 개최일·게이트·배지 등 현장 운영 설정.
+  venueConfig        Json?
+  deletedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   workspace     Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   fieldMappings FieldMapping[]
   records       CollectRecord[]
   activityLogs  ActivityLog[]
+  expoSites     ExpoSite[]
 }
 
 model FieldMapping {
@@ -280,6 +308,21 @@ model FieldMapping {
   isRequired Boolean  @default(false)
   sortOrder  Int      @default(0)
   createdAt  DateTime @default(now())
+
+  /// 이 필드를 DOM 에서 어떻게 찾을 것인가 — "id" | "name". null 이면 **위치 인덱스**로 찾는다.
+  ///
+  /// 왜 필요한가: 수집 스크립트는 필드를 `.form-group` 의 순서로 찾는다. 그건 아임웹이 만드는
+  /// 마크업이라 자사 전시(THE MOST·STK)는 문제가 없지만, **대행전시는 플랫폼이 제각각**이라
+  /// 그 클래스가 아예 없다(에듀테크 = div.field). 그렇다고 런타임에 셀렉터 후보를 늘리면
+  /// 잘못 골랐을 때 조용히 틀린 칸에 저장된다 — 0건보다 나쁘다.
+  /// 그래서 **명시적으로 지목**한다. null 인 기존 매핑은 오늘과 같은 식이 평가된다.
+  matchBy    String?
+  /// matchBy 가 가리키는 값 — 요소의 id 또는 input 의 name.
+  matchValue String?
+
+  /// 수집 데이터 표(목록)에서 이 필드의 열을 숨긴다. 값은 계속 수집·보관되고 레코드 상세·
+  /// CSV 내보내기에는 그대로 나온다 — 폼에서 안 쓰는 항목으로 표만 지저분해지는 걸 막는 용도.
+  hidden Boolean @default(false)
 
   source CollectSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 
@@ -313,12 +356,32 @@ model CollectRecord {
   referrer         String?
   userAgent        String?
   ip               String?
+  /// 13자리 무작위 등록번호. 순차로 하면 등록 규모가 노출되고 남의 번호를 추측할 수 있다.
+  registrationNo   String?   @unique
+  /// 소문자·trim 한 이메일 — 중복 판정과 등록 확인 조회의 키.
+  /// 유니크는 (sourceId, emailNormalized) **부분 인덱스**라 raw SQL 로만 만든다
+  /// (Prisma 가 부분 인덱스를 표현하지 못한다 — WebinarRegistration 과 같은 사정).
+  emailNormalized  String?
+  /// E.164 한 형태(+12025550147). 표기가 제각각이면 등록 확인 조회가 안 맞는다.
+  phoneE164        String?
+  locale           String?
+  /// "online" | "onsite" — 설계 문서의 source 컬럼. CollectRecord.source 는 이미 CollectSource
+  /// 관계 이름이라 충돌해서 이름을 바꿨다(DB 컬럼도 entryChannel).
+  entryChannel     String?
+  emailStatus      String?
+  emailSentAt      DateTime?
+  emailError       String?
   createdAt        DateTime  @default(now())
 
   source    CollectSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
   project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  /// 등록 확인이 전화번호로도 조회한다 — 없으면 5만 건 풀스캔.
+  @@index([sourceId, phoneE164])
+  // (sourceId, emailNormalized) 유니크는 **부분 인덱스**(WHERE emailNormalized IS NOT NULL)라
+  // 여기 선언할 수 없다 — supabase/migrations/20260815_collect_builder.sql 에 raw SQL 로 있다.
+  // Prisma 는 부분 인덱스를 표현하지 못한다(WebinarRegistration 과 같은 사정).
   @@index([sourceId, createdAt(sort: Desc)])
   @@index([projectId, createdAt])
   @@index([projectId, utmSource])
@@ -503,11 +566,11 @@ model ShortLink {
 }
 
 model Webinar {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   workspaceId      String
   projectId        String
   name             String
-  slug             String   @unique
+  slug             String    @unique
   description      String?
   liveStartAt      DateTime
   liveEndAt        DateTime
@@ -522,12 +585,12 @@ model Webinar {
   broadcastEndedAt DateTime?
   components       Json? // 임베드 컴포넌트 설정 { heroButton, banner, formWidget, allowLiveRegistration, entryOpenBeforeMinutes, endedMode }
   // 채팅 모더레이션 — 전용 컬럼(components 블롭이 설정탭 저장으로 덮어써지는 것 방지). 천천히모드 초·금지어·차단 등록자.
-  chatSlowSec      Int      @default(0)
-  chatBannedWords  String[] @default([])
-  chatBannedRegIds String[] @default([])
-  chatHideLinks    Boolean  @default(true) // 링크 자동 숨김(공개 POST에서 링크 제거) — 운영자 토글
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  chatSlowSec      Int       @default(0)
+  chatBannedWords  String[]  @default([])
+  chatBannedRegIds String[]  @default([])
+  chatHideLinks    Boolean   @default(true) // 링크 자동 숨김(공개 POST에서 링크 제거) — 운영자 토글
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   workspace          Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project            Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -584,35 +647,35 @@ model WebinarSession {
 }
 
 model WebinarRegistration {
-  id             String    @id @default(cuid())
-  webinarId      String
-  name           String
-  phone          String?
-  email          String?
-  company        String?
-  department     String?
-  jobTitle       String?
-  industry       String?
-  agreeMarketing Boolean   @default(false)
-  agreePrivacy   Boolean   @default(true)
-  memo           String?
-  enteredAt      DateTime?
-  leftAt         DateTime?
-  lastPingAt     DateTime?
-  presencePingAt DateTime?
+  id               String    @id @default(cuid())
+  webinarId        String
+  name             String
+  phone            String?
+  email            String?
+  company          String?
+  department       String?
+  jobTitle         String?
+  industry         String?
+  agreeMarketing   Boolean   @default(false)
+  agreePrivacy     Boolean   @default(true)
+  memo             String?
+  enteredAt        DateTime?
+  leftAt           DateTime?
+  lastPingAt       DateTime?
+  presencePingAt   DateTime?
   // 접속 시간 — heartbeat 간격을 누적한다(끊긴 구간은 제외). 화면 표시·정렬·평균의 단일 소스.
   // stayMinutes 는 leave 시점의 "입장~퇴장" 스팬이라 자리비움을 포함하는 레거시 값 — 폴백 전용.
-  connectedSeconds Int     @default(0)
+  connectedSeconds Int       @default(0)
   // 그중 탭이 실제로 보였던 시간. 접속-포커스 차이가 "틀어놓고 듣기" 구간이다.
-  focusSeconds     Int     @default(0)
-  stayMinutes    Int       @default(0)
-  isActive       Boolean   @default(false)
-  submittedAt    DateTime  @default(now())
+  focusSeconds     Int       @default(0)
+  stayMinutes      Int       @default(0)
+  isActive         Boolean   @default(false)
+  submittedAt      DateTime  @default(now())
 
   // 입소문 추적 — 이 등록자의 추천 코드(공유 링크 `?ref=`)와, 누구의 추천으로 들어왔는지.
   // registrationId 를 링크에 넣으면 사칭이 가능해 별도 코드를 쓴다(webinar-share.ts 주석 참고).
-  shareCode      String?   @unique
-  referredById   String?
+  shareCode    String? @unique
+  referredById String?
 
   // UTM 어트리뷰션 (CollectRecord와 동일 구성 — attribution-core 공용화 대비)
   utmSource        String?
@@ -947,23 +1010,23 @@ model WebinarTallyPush {
 // questions 는 JSON: [{ id, type: 'rating'|'single'|'multiple'|'text'|'nps', title, required, options[] }]
 // isActive = 라이브 푸시 활성(웨비나당 1개 — 부분 유니크 인덱스는 db execute 로 적용, P2002→409 처리)
 model WebinarSurvey {
-  id          String    @id @default(cuid())
-  webinarId   String
-  title       String
-  description String?
-  questions   Json      @default("[]")
-  isOpen      Boolean   @default(true) // 응답 수집 여부 — 운영자 수동 온·오프(마스터 게이트)
-  opensAt     DateTime? // 시작 예약 — 이 시각 전에는 isOpen 이 켜져 있어도 받지 않는다. 비우면 즉시
-  closesAt    DateTime? // 마감 예약 — 이 시각이 지나면 isOpen 과 무관하게 응답 마감. 비우면 무기한
+  id              String    @id @default(cuid())
+  webinarId       String
+  title           String
+  description     String?
+  questions       Json      @default("[]")
+  isOpen          Boolean   @default(true) // 응답 수집 여부 — 운영자 수동 온·오프(마스터 게이트)
+  opensAt         DateTime? // 시작 예약 — 이 시각 전에는 isOpen 이 켜져 있어도 받지 않는다. 비우면 즉시
+  closesAt        DateTime? // 마감 예약 — 이 시각이 지나면 isOpen 과 무관하게 응답 마감. 비우면 무기한
   doneTitle       String? // 제출 완료 화면 제목 (없으면 노출면별 기본 문구)
   doneDescription String? // 제출 완료 화면 설명
   ctaLabel        String? // 종료 화면 카드의 버튼 문구 (없으면 기본: "설문 참여하기")
-  showOnEnded Boolean   @default(false) // 종료 화면 만족도 설문 카드에 연결
-  isActive    Boolean   @default(false) // 라이브 푸시 중
-  pushedAt    DateTime? // 마지막 발행 시각 — 시청자 재노출 키(편집으로 바뀌는 updatedAt 과 분리)
-  sentBy      String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  showOnEnded     Boolean   @default(false) // 종료 화면 만족도 설문 카드에 연결
+  isActive        Boolean   @default(false) // 라이브 푸시 중
+  pushedAt        DateTime? // 마지막 발행 시각 — 시청자 재노출 키(편집으로 바뀌는 updatedAt 과 분리)
+  sentBy          String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   webinar   Webinar                 @relation(fields: [webinarId], references: [id], onDelete: Cascade)
   responses WebinarSurveyResponse[]
@@ -986,4 +1049,303 @@ model WebinarSurveyResponse {
   @@unique([surveyId, registrationId])
   @@index([webinarId])
   @@index([surveyId, submittedAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// 대회·투표 — docs/superpowers/specs/2026-08-13-competition-voting-system-design.md
+// 최상위 단위 구조는 Webinar 를 본떴다(workspace+project, slug @unique, theme/config Json,
+// 수동 override). 검증된 구조라 새로 발명하지 않는다.
+// ─────────────────────────────────────────────────────────────
+
+model Competition {
+  id          String  @id @default(cuid())
+  workspaceId String
+  projectId   String
+  name        String
+  slug        String  @unique
+  description String?
+
+  // 단계 — 날짜로 자동 판정하되 수동 override 가 이긴다(resolveWebinarStatus 와 같은 규칙).
+  // 현장에서 "지금 접수 닫아" 같은 조작이 반드시 필요하다.
+  phaseOverride  String? // "recruiting"|"prelim"|"judging"|"final"|"announced"|"closed"|null(자동)
+  recruitOpenAt  DateTime?
+  recruitCloseAt DateTime?
+
+  theme         Json // accentColor·textColor·surfaceColor·borderRadius·logoUrl
+  config        Json // 공고 페이지 블록 + 신청 폼 + 동의 + 완료 처리 (competition-config.ts)
+  scoringConfig Json? // 대중:심사 비율·진출 n팀·동점 규칙
+  showConfig    Json? // 발표 연출 (C5)
+
+  // 한 신청자가 낼 수 있는 참가작 수. 기본 1(1팀 1작품) — 필요해지면 올린다.
+  maxEntriesPerApplicant Int @default(1)
+
+  previewToken String? @unique // 미리보기 링크 /cp/{token}
+  showToken    String? @unique // 발표 화면 /show/{token}
+
+  // 결과 발표 페이지를 공개한 시각. null 이면 결과 임베드가 "준비 중"만 보여준다.
+  // 개별 수상의 revealedAt 과 다르다 — 이건 "결과 페이지 자체를 열었는가".
+  resultPublishedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rounds    CompetitionRound[]
+  entries   CompetitionEntry[]
+  judges    CompetitionJudge[]
+  awards    CompetitionAward[]
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([workspaceId])
+}
+
+/// 예선·본선. 라운드를 행으로 두는 이유: 두 라운드의 규칙이 다르다(상한·비율·순서·식별 방식).
+/// 대회에 필드를 늘리면 prelimXxx/finalXxx 가 두 벌씩 생기고 3라운드가 오면 또 늘어난다.
+model CompetitionRound {
+  id            String @id @default(cuid())
+  competitionId String
+  kind          String // "prelim" | "final"
+  name          String
+  sortOrder     Int    @default(0)
+
+  // 투표 운영
+  voteEnabled      Boolean   @default(false)
+  voteOpenAt       DateTime?
+  voteCloseAt      DateTime?
+  maxVotesPerVoter Int       @default(1)
+  allowVoteUndo    Boolean   @default(false)
+  // "ip"|"device"|"both"|"registration" — 현장에서 ip 단독은 쓰지 않는다(공유 와이파이가 한 명으로 묶인다).
+  voterIdentity    String    @default("device")
+  ipVoteLimit      Int? // device 모드의 IP 보조 상한. 정상 공유망을 막지 않을 만큼 넉넉히.
+  showLiveTally    Boolean   @default(false)
+
+  // 참가작 표시 순서. random 은 방문자마다 섞되 그 사람에게는 고정된다(voterKey 파생 시드).
+  entryOrder String @default("random") // "random"|"manual"|"submitted"
+
+  // 이전 라운드 점수 이월 — 기본 끔(리셋). 나중에 켤 수 있게 구조만 열어 둔다.
+  carryOverEnabled Boolean @default(false)
+  carryOverPercent Int     @default(0)
+
+  // 심사
+  judgeCriteria Json? // [{ key, label, maxScore }]
+  publicWeight  Int   @default(50)
+  judgeWeight   Int   @default(50)
+  advanceCount  Int?
+
+  competition Competition             @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  votes       CompetitionVote[]
+  judgeScores CompetitionJudgeScore[]
+
+  @@unique([competitionId, kind])
+  @@index([competitionId])
+}
+
+model CompetitionEntry {
+  id            String  @id @default(cuid())
+  competitionId String
+  entryNo       String // 현장에서 "3번 팀"으로 부른다. cuid 는 사람이 못 읽는다.
+  title         String
+  teamName      String?
+  summary       String? @db.Text
+
+  data  Json // 신청 폼 응답 전체 (CollectRecord.data 와 같은 계약)
+  media Json // [{ kind:"image"|"youtube", url?|videoId?, sortOrder }]
+
+  // 검색·연락용으로 승격한 신청자 정보 (원본은 data 에도 남는다)
+  contactName  String?
+  contactEmail String?
+  contactPhone String?
+
+  /// 동의 기록 — WebinarRegistration.agreePrivacy/agreeMarketing 과 같은 이유로 컬럼을 둔다.
+  /// 예전에는 체크박스 상태를 검증만 하고 어디에도 저장하지 않았다(마케팅 수신 동의 여부가
+  /// 통째로 유실됐다) — 법률 문구 생성기로 제3자 제공 동의를 추가하며 함께 메운다.
+  agreePrivacy    Boolean @default(true)
+  agreeMarketing  Boolean @default(false)
+  agreeThirdParty Boolean @default(false)
+
+  status      String  @default("submitted") // submitted|approved|rejected
+  isPublished Boolean @default(false) // 투표 노출 토글
+  sortOrder   Int     @default(0)
+  advanced    Boolean @default(false) // 본선 진출
+  // 본선 진행 순서. 예선 신청 순서와 무관하게 운영자가 다시 정한다(sortOrder 를 덮어쓰면
+  // 공고·예선 기록까지 뒤바뀐다). null 이면 참가번호 순으로 떨어진다.
+  finalOrder  Int?
+
+  submittedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  competition Competition             @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  votes       CompetitionVote[]
+  judgeScores CompetitionJudgeScore[]
+  awards      CompetitionAward[]
+
+  @@unique([competitionId, entryNo])
+  @@index([competitionId, isPublished, sortOrder])
+  @@index([competitionId, submittedAt])
+  @@index([competitionId, advanced, finalOrder])
+}
+
+/// 대중 투표. 상한의 최종 방어선은 레이트리미터가 아니라 아래 @@unique 다 —
+/// ratelimit.ts 는 Redis 가 없으면 메모리 폴백이라 서버리스에서 인스턴스마다 상한이 새어 나간다.
+model CompetitionVote {
+  id        String   @id @default(cuid())
+  roundId   String
+  entryId   String
+  voterKey  String // 해시. 원본 IP·전화번호를 저장하지 않는다.
+  ipHash    String? // IP 보조 상한용 별도 해시
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  round CompetitionRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  entry CompetitionEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, entryId, voterKey])
+  @@index([roundId, voterKey])
+  @@index([roundId, entryId])
+  @@index([roundId, ipHash])
+}
+
+model CompetitionJudge {
+  id            String    @id @default(cuid())
+  competitionId String
+  name          String
+  email         String?
+  affiliation   String?
+  accessToken   String    @unique // 심사위원마다 다른 링크
+  passwordHash  String? // 링크만으로는 열리지 않는다. hashSharePassword 재사용.
+  weight        Int       @default(1)
+  invitedAt     DateTime?
+  lastSeenAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  competition Competition             @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  scores      CompetitionJudgeScore[]
+
+  @@index([competitionId])
+}
+
+model CompetitionJudgeScore {
+  id      String @id @default(cuid())
+  roundId String
+  entryId String
+  judgeId String
+
+  scores Json // { creativity: 27, ... }
+  total  Float // 저장 시 계산 — 순위 쿼리마다 Json 을 파싱하지 않는다.
+
+  comment   String?  @db.Text
+  submitted Boolean  @default(false) // 제출 전엔 임시저장
+  updatedAt DateTime @updatedAt
+
+  round CompetitionRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  entry CompetitionEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  judge CompetitionJudge @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, entryId, judgeId])
+  @@index([roundId, entryId])
+  @@index([judgeId])
+}
+
+model CompetitionAward {
+  id            String    @id @default(cuid())
+  competitionId String
+  entryId       String?
+  name          String
+  rank          Int
+  description   String?
+  revealedAt    DateTime?
+
+  competition Competition       @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  entry       CompetitionEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
+
+  @@index([competitionId, rank])
+}
+
+/// 전시(프로젝트) 하나의 공식 홈페이지. 아임웹 사이트를 대체하는 게 아니라, 페이지 단위로
+/// 옮겨 붙일 수 있게 만든 우리 쪽 원본이다(설계 §2).
+model ExpoSite {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  projectId       String
+  name            String
+  /// { accent, lightBg, darkBg } — 6자리 hex 만 통과. 나머지 색은 전부 파생(설계 §7).
+  theme           Json
+  /// 대표 사전등록 소스 — register-form 섹션의 기본 참조.
+  /// SetNull: 소스가 지워져도 사이트는 살아 있어야 한다.
+  collectSourceId String?
+  defaultLocale   String    @default("ko")
+  /// /hp/{token} draft 미리보기 — 재발급으로 회수한다(CollectSource.previewToken 과 같은 패턴).
+  previewToken    String?   @unique
+  /// 아임웹 사이트 주소 — 안내·바로가기 표시용이고 검증에는 쓰지 않는다.
+  siteUrl         String?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  collectSource CollectSource? @relation(fields: [collectSourceId], references: [id], onDelete: SetNull)
+  pages         ExpoPage[]
+
+  @@index([projectId])
+  @@index([workspaceId])
+}
+
+model ExpoPage {
+  id        String  @id @default(cuid())
+  siteId    String
+  /// 트리 — UI 는 깊이 2까지(W1 은 평면).
+  parentId  String?
+  /// 어드민 표시·미리보기용. **임베드 URL 에는 쓰지 않는다** — 운영자가 바꾸는 값이라
+  /// 파트너 사이트에 박힌 주소가 끊긴다(설계 D10).
+  slug      String
+  title     String
+  /// 홈 1개 — 삭제·최상단 고정.
+  isHome    Boolean @default(false)
+  sortOrder Int     @default(0)
+
+  /// 편집 상태 { sections: ExpoSectionInstance[] } — 자동저장 대상. 정규화는 src/lib/expo/config.ts.
+  draft          Json
+  /// 편집 경로 전용 CAS. seen/live/publish/reorder 가 updatedAt 을 바꿔도 자동저장 충돌을 만들지 않는다.
+  draftRevision  Int       @default(0)
+  /// 발행 스냅샷 — 공개 로더가 읽는 **유일한** 원본. null = 미발행.
+  /// 발행은 서버가 재정규화한 draft 의 사본이다(설계 D1) — 편집 중인 것이 공개로 새지 않는다.
+  published      Json?
+  publishedAt    DateTime?
+  /// 페이지 임베드 노출 스위치. null 이면 발행본 내용 없이 연결 확인만 하는 boot 를 준다(D2).
+  liveAt         DateTime?
+  /// 이 페이지에 대응하는 아임웹 페이지 URL — 이행 현황 표시·내부 링크 해석용.
+  imwebUrl       String?
+  /// 런타임이 의도한 host 를 확보하면 갱신 — "코드가 실제로 붙어 있다" 배지(D9).
+  lastSeenAt     DateTime?
+  lastSeenOrigin String?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  site     ExpoSite   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  parent   ExpoPage?  @relation("ExpoPageTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children ExpoPage[] @relation("ExpoPageTree")
+
+  @@unique([siteId, slug])
+  @@index([siteId, sortOrder])
+}
+
+/// 완성된 디자인을 다음 전시가 골라 쓰는 틀. 워크스페이스 소속인 이유가 곧 존재 이유다 —
+/// 다음 전시는 다음 프로젝트다.
+model ExpoTemplate {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  /// { version, contentMode:"design"|"full", theme, pages:[...] }
+  /// 섹션 sid·DB id·sourceRef·미리보기 토큰은 저장하지 않는다 — 인스턴스화 때 새로 발급한다.
+  snapshot    Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt(sort: Desc)])
 }

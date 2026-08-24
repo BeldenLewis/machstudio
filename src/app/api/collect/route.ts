@@ -13,10 +13,25 @@ function normalizeOrigin(s: string): string {
   }
 }
 
+/**
+ * **`*`를 실제 요청 Origin 을 그대로 돌려주는 값으로 바꾼다.**
+ *
+ * `navigator.sendBeacon()`은 옵션으로 끌 수 없이 항상 credentials(쿠키) 포함 모드로 요청을
+ * 보낸다 — 브라우저는 credentials 포함 요청에 `Access-Control-Allow-Origin: *` 를 절대
+ * 허용하지 않는다(스펙 위반으로 보고 그 자리에서 막는다). 이 소스는 쿠키를 안 쓰고 apiKey 로만
+ * 인증하므로 credentials 를 실제로 필요로 하지도, 안전을 이걸로 담보하지도 않는다 — 그래서
+ * Origin 을 그대로 반사해도 `*` 와 노출 수준이 같다(둘 다 "요청한 쪽은 다 통과"). 이 반사가
+ * 없으면 sendBeacon 기반 전송(대행전시 pagehide 폴백의 유일한 경로)이 브라우저 단에서
+ * 조용히 막힌다 — 스크립트에도, 서버 로그에도 안 남는다(에듀테크 실측).
+ */
+function reflectOrigin(origin: string | null): string {
+  return origin || "*";
+}
+
 function corsHeaders(origin: string | null, allowed: string[]): Record<string, string> {
   // 빈 allowed = 모두 허용 (이전 동작 호환). 명시된 경우 매칭되는 경우에만 허용.
   const allowAll = allowed.length === 0;
-  let allowOrigin = "*";
+  let allowOrigin = reflectOrigin(origin);
   if (!allowAll) {
     const o = origin ? normalizeOrigin(origin) : "";
     allowOrigin = o && allowed.includes(o) ? o : "null";
@@ -25,19 +40,25 @@ function corsHeaders(origin: string | null, allowed: string[]): Record<string, s
     "Access-Control-Allow-Origin": allowOrigin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, x-api-key",
+    "Access-Control-Allow-Credentials": "true",
     "Vary": "Origin",
   };
 }
 
-// CORS preflight 시점에는 apiKey 를 모를 수 있으므로 보수적으로 열어둠 (실제 차단은 POST 시점)
-const PREFLIGHT_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, x-api-key",
-};
+// CORS preflight 시점에는 apiKey 를 모를 수 있어 allowedOrigins 매칭은 못 하지만, Origin 은
+// 요청 헤더로 이미 와 있으니 그대로 반사한다(위 reflectOrigin 참고 — `*` 는 credentials 요청과 상극).
+function preflightHeaders(origin: string | null): Record<string, string> {
+  return {
+    "Access-Control-Allow-Origin": reflectOrigin(origin),
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, x-api-key",
+    "Access-Control-Allow-Credentials": "true",
+  };
+}
 
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: PREFLIGHT_HEADERS });
+export async function OPTIONS(request: Request) {
+  const origin = request.headers.get("origin");
+  return new NextResponse(null, { status: 204, headers: preflightHeaders(origin) });
 }
 
 export async function POST(request: Request) {
@@ -46,14 +67,14 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "잘못된 요청" }, { status: 400, headers: PREFLIGHT_HEADERS });
+    return NextResponse.json({ error: "잘못된 요청" }, { status: 400, headers: preflightHeaders(origin) });
   }
 
   const url = new URL(request.url);
   const apiKey =
     request.headers.get("x-api-key") ?? url.searchParams.get("k") ?? (body.apiKey as string);
   if (!apiKey) {
-    return NextResponse.json({ error: "API 키 필요" }, { status: 401, headers: PREFLIGHT_HEADERS });
+    return NextResponse.json({ error: "API 키 필요" }, { status: 401, headers: preflightHeaders(origin) });
   }
 
   // ── 1. API 키 검증 + 소스 로드 ─────────────────
@@ -62,7 +83,22 @@ export async function POST(request: Request) {
     include: { fieldMappings: { orderBy: { sortOrder: "asc" } } },
   });
   if (!source || !source.isActive) {
-    return NextResponse.json({ error: "유효하지 않은 API 키" }, { status: 401, headers: PREFLIGHT_HEADERS });
+    return NextResponse.json({ error: "유효하지 않은 API 키" }, { status: 401, headers: preflightHeaders(origin) });
+  }
+  /**
+   * 빌더형 소스는 **이 경로로 받지 않는다.**
+   *
+   * 여기는 외부 폼의 제출을 가로채는 연동형 입구라 data 를 그대로 받는다. 빌더형이 이걸
+   * 통과하면 formConfig 검증·접수 창·동의가 전부 건너뛰어지고 임의 키가 그대로 저장된다
+   * (validateSubmission 의 unknown_key 가 막으려는 바로 그 오염이다). 게다가 그렇게 들어온
+   * 레코드 한 건이 "레코드가 있으면 방식 전환 불가" 규칙을 영구히 발동시킨다.
+   * 빌더형 제출은 자기 라우트가 생기면 그쪽에서 검증과 함께 받는다.
+   */
+  if (source.mode === "builder") {
+    return NextResponse.json(
+      { error: "이 수집 소스는 빌더형이에요 — 이 엔드포인트로는 받지 않습니다" },
+      { status: 409, headers: preflightHeaders(origin) },
+    );
   }
 
   const headers = corsHeaders(origin, source.allowedOrigins ?? []);

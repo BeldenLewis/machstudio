@@ -7,11 +7,20 @@
  * GTM 스타일 short loader (`/s/{id}`)와 inline copy 양쪽에서 동일한 본문을 사용한다.
  */
 import { ATTRIBUTION_CORE_JS } from "./attribution-core";
+import { safeRedirectTarget } from "./collect-redirect";
 
 export type CollectFieldMapping = {
   index: number;
   key: string;
   label: string;
+  /**
+   * 이 필드를 DOM 에서 찾는 방법 — `"id"` | `"name"`. 없으면 **위치 인덱스**(오늘의 방식).
+   *
+   * 아임웹은 `.form-group` 을 만들어 주므로 자사 전시는 위치로 충분했다. 대행전시는
+   * 플랫폼이 제각각이라 그 클래스가 없다 — 그런 소스만 앵커로 지목한다.
+   */
+  matchBy?: "id" | "name" | null;
+  matchValue?: string | null;
 };
 
 export type CollectScriptSource = {
@@ -22,6 +31,12 @@ export type CollectScriptSource = {
   // 폼 감지가 활성화되는 페이지 경로 패턴 (glob, `*`는 어떤 문자열에도 매칭).
   // 빈 배열이면 모든 페이지에서 활성화 (기존 동작 유지).
   formPagePatterns?: string[];
+  /**
+   * 필드 하나를 묶어서 보는 CSS 선택자. 기본 ".form-group" 은 아임웹 폼 빌더 전용 관례라
+   * 직접 만든 신청서(표 형태 등)에는 안 먹는다 — 그런 사이트는 운영자가 "필드 자동 감지"
+   * 스니퍼로 찾은 선택자를 여기 넣는다(collect-sources/[id]/page.tsx).
+   */
+  fieldGroupSelector?: string;
 };
 
 export type BuildCollectScriptsInput = {
@@ -43,10 +58,15 @@ export function buildCollectScripts({
   const collectUrl = `${baseUrl}/api/collect`;
 
   const fieldMap = fieldMappings
-    .map(
-      (f) =>
-        `    { index: ${f.index}, key: ${JSON.stringify(f.key)}, label: ${JSON.stringify(f.label)} }`,
-    )
+    .map((f) => {
+      // 앵커가 없는 매핑(= 기존 아임웹 소스 전부)은 mb/mv 키 자체가 실리지 않는다.
+      // 그래야 생성물이 오늘과 같은 모양이고, 런타임도 같은 분기를 탄다.
+      const anchor =
+        f.matchBy && f.matchValue
+          ? `, mb: ${JSON.stringify(f.matchBy)}, mv: ${JSON.stringify(f.matchValue)}`
+          : "";
+      return `    { index: ${f.index}, key: ${JSON.stringify(f.key)}, label: ${JSON.stringify(f.label)}${anchor} }`;
+    })
     .join(",\n");
 
   // ── 공통 UTM/어트리뷰션 라이브러리 본문 ─────────────────────────
@@ -73,13 +93,28 @@ ${utmCore}
   };
 })();`;
 
+  /**
+   * 완료 후 이동 주소를 **스크립트를 굽기 전에 한 번 거른다**(collect-redirect).
+   *
+   * 이 값은 인증된 운영자가 넣지만 방문자 브라우저의 location 에 그대로 들어간다.
+   * 연동형 저장 경로에는 스킴 검사가 없어서, javascript: 스킴이면 파트너 오리진에서
+   * 임의 JS 가 돌고 프로토콜 상대 주소면 오픈 리다이렉트가 된다.
+   * 상대경로(슬래시로 시작)는 살아 있는 소스에 실제로 저장돼 있으므로 통과시킨다 —
+   * 절대 URL 만 허용하면 그 소스들의 이동이 조용히 끊긴다.
+   */
+  const redirectUrl = safeRedirectTarget(source.redirectUrl ?? "") ?? "";
+
   const script = `(function() {
   var COLLECT_URL = ${JSON.stringify(collectUrl)};
   var API_KEY = ${JSON.stringify(source.apiKey)};
   var SUCCESS_TRIGGER = ${JSON.stringify(source.successTrigger)};
-  var REDIRECT_URL = ${JSON.stringify(source.redirectUrl ?? "")};
+  // 이동 주소는 아래 script 를 만들기 전에 safeRedirectTarget 으로 이미 걸렀다.
+  var REDIRECT_URL = ${JSON.stringify(redirectUrl)};
   // 폼 감지가 활성화될 페이지 경로 패턴 (glob). 빈 배열 = 모든 페이지.
   var FORM_PAGE_PATTERNS = ${JSON.stringify(source.formPagePatterns ?? [])};
+  // 필드 하나를 묶어서 보는 선택자 — 기본은 아임웹 관례(.form-group), 그 외 사이트는
+  // 운영자가 "필드 자동 감지" 스니퍼로 찾은 값으로 바꿔 둔다.
+  var GROUP_SELECTOR = ${JSON.stringify(source.fieldGroupSelector || ".form-group")};
 
   var FIELD_MAP = [
 ${fieldMap}
@@ -129,10 +164,30 @@ ${utmCore}
     return { last: last, first: first, journey: journey };
   }
 
+  // "필드 자동 감지" 스니퍼(collect/[id]/page.tsx)는 GROUP_SELECTOR 로 찾은 요소 중
+  // input/select/textarea 가 있는 것만 골라서 순서를 매긴다(섹션 제목·안내문 등도
+  // 같은 클래스를 쓰는 사이트가 있어서다 — 예: 마이스허브). 여기서 거르지 않고 그대로
+  // querySelectorAll 순서를 쓰면, 입력이 없는 요소가 하나라도 앞에 끼는 순간 스니퍼가
+  // 찍은 index 와 실제 DOM 위치가 어긋나 그 뒤 모든 필드가 엉뚱한 값을 모은다 — 스니퍼와
+  // 반드시 같은 필터를 써야 index 가 서로 맞는다.
+  function getGroups() {
+    var all = document.querySelectorAll(GROUP_SELECTOR);
+    return Array.prototype.filter.call(all, function(g) {
+      return g.querySelector("input, select, textarea");
+    });
+  }
+
   function getFieldMeta() {
-    var groups = document.querySelectorAll(".form-group");
+    var groups = getGroups();
     return Array.from(groups).map(function(group, i) {
-      var labelEl = group.querySelector("label");
+      // 체크박스·라디오 "옵션"의 label(입력을 바로 감싸는 것)과 필드 "제목"을 구분해야 한다 —
+      // 일부 플랫폼(예: 마이스허브)은 옵션 텍스트가 label>input 구조라, 구분 없이 label 을
+      // 그냥 집으면 "관람 예정 일자" 대신 "9월 17일(목)" 같은 옵션 텍스트가 잡힌다. 입력을
+      // 감싸는 컨테이너(.input-area 등)가 아닌 형제 요소를 먼저 본다 — 그런 래퍼가 없는
+      // 사이트(아임웹 등)는 label 자신이 그 자리에서 바로 걸려 기존 동작과 같다.
+      // th — 표 형태 신청서(<tr><th>라벨</th><td><input></td></tr>)는 label 태그가 없다.
+      var titleEl = group.querySelector(":scope > *:not(.input-area)");
+      var labelEl = (titleEl && titleEl.textContent.trim()) ? titleEl : group.querySelector("label, th");
       var input = group.querySelector("input, select, textarea");
       var labelText = (labelEl ? labelEl.textContent.trim() : "") ||
         (input ? (input.placeholder || input.getAttribute("name") || "") : "");
@@ -146,13 +201,45 @@ ${utmCore}
     });
   }
 
+  // 앵커로 지목된 요소에서 입력들을 꺼낸다. 앵커가 없으면 null 을 돌려 위치 경로로 보낸다.
+  //
+  // 이 함수는 **앵커가 있는 매핑에서만 호출된다**(아래 collectData 참고). 아임웹 소스는
+  // mb 가 없으므로 여기 진입 자체를 안 한다 — 회귀가 "테스트로 막혀서" 가 아니라
+  // "같은 식이 평가돼서" 없다.
+  function anchoredEls(field) {
+    if (field.mb === "id") {
+      var el = document.getElementById(field.mv);
+      if (!el) return null;
+      var inner = el.querySelectorAll("input, select, textarea");
+      if (inner && inner.length) return inner;
+      // 앵커가 입력 그 자체인 경우(라벨 없이 input 에 id 만 있는 폼).
+      var tag = (el.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "select" || tag === "textarea") return [el];
+      return null;
+    }
+    if (field.mb === "name") {
+      // querySelector 에 값을 끼워 넣지 않는다 — name 에 따옴표·대괄호가 들어오면 셀렉터가 깨진다.
+      var all = document.getElementsByName(field.mv);
+      return all && all.length ? all : null;
+    }
+    return null;
+  }
+
   function collectData() {
-    var groups = document.querySelectorAll(".form-group");
+    var groups = getGroups();
     var data = {};
+    var anchored = 0, resolved = 0;
     FIELD_MAP.forEach(function(field) {
-      var group = groups[field.index];
-      if (!group) return;
-      var els = group.querySelectorAll("input, select, textarea");
+      var els;
+      if (field.mb) {
+        anchored++;
+        els = anchoredEls(field);
+        if (els) resolved++;
+      } else {
+        var group = groups[field.index];
+        if (!group) return;
+        els = group.querySelectorAll("input, select, textarea");
+      }
       if (!els || els.length === 0) return;
 
       var checked = [];
@@ -167,6 +254,19 @@ ${utmCore}
             var txt = label ? (label.textContent || "").trim() : "";
             checked.push(txt || el.value || "");
           }
+        } else if (field.mb && el.tagName === "SELECT") {
+          /**
+           * **앵커 소스만** select 는 선택된 option 의 화면 글자를 쓴다(에듀테크 실측).
+           *
+           * el.value 는 <option value="in14">Elementary School</option> 처럼 내부 코드다 —
+           * 체크박스·라디오는 이미 위에서 label 텍스트를 쓰는데 select 만 코드를 그대로
+           * 내보내고 있었다("소속분류"에 "in14" 같은 값이 쌓이던 원인). 앵커 없는 기존
+           * 소스(아임웹 등)는 이 분기 자체에 안 들어온다 — el.value 그대로 쓰는 아래 분기와
+           * 문자 그대로 같은 소스가 이월된다.
+           */
+          var opt = el.options && el.selectedIndex >= 0 ? el.options[el.selectedIndex] : null;
+          var sv = (opt ? (opt.textContent || opt.value || "") : (el.value || "")).trim();
+          if (sv) textValues.push(sv);
         } else {
           var v = (el.value || "").trim();
           if (v) textValues.push(v);
@@ -184,6 +284,13 @@ ${utmCore}
         data[field.key] = textValues.join(allNumeric ? "" : " ");
       }
     });
+    /**
+     * **앵커 소스 정족수.** 지목한 요소의 절반도 못 찾았다면 이 페이지는 우리 폼이 아니다
+     * (에듀테크는 같은 URL 에 동의 화면과 등록 폼이 순서대로 나온다 — 동의 화면에서
+     *  한두 개가 우연히 걸려 1필드짜리 레코드가 쌓이는 것을 막는다).
+     * 앵커가 없는 기존 소스는 anchored 가 0이라 이 줄이 아무 일도 하지 않는다.
+     */
+    if (anchored > 0 && resolved * 2 < anchored) return {};
     return data;
   }
 
@@ -221,6 +328,8 @@ ${utmCore}
 
   // ── 폼 감지 — 패턴에 매칭된 페이지에서만 활성화. UTM 캡처는 위에서 이미 모든 페이지에 대해 실행됨.
   if (isFormPage()) {
+    // 이 소스가 앵커 방식인가 — 생성 시점에 정해지므로 한 번만 본다.
+    var HAS_ANCHORS = FIELD_MAP.some(function(f) { return !!f.mb; });
     var triggered = false;
     var pendingData = null;
     var pendingAt = 0;
@@ -273,7 +382,19 @@ ${utmCore}
     var fire = function() {
       if (triggered) return;
       triggered = true;
-      doSend(pendingData || collectData());
+      var payload = pendingData || collectData();
+      /**
+       * **앵커 소스는 빈 payload 를 보내지 않는다.**
+       * 성공 문구가 폼이 아닌 페이지에서 잡히면 collectData 가 {} 를 내는데, {} 는 truthy 라
+       * 그대로 빈 레코드가 저장된다(기존 소스에서 실제로 그렇게 쌓인 게 있다).
+       * 기존 소스의 산출을 지금 바꾸지는 않는다 — 새로 붙는 앵커 소스에 그 버그를 물려주지 않을 뿐이다.
+       */
+      if (HAS_ANCHORS) {
+        var any = false;
+        for (var k in payload) { if (payload[k] && String(payload[k]).trim() !== "") { any = true; break; } }
+        if (!any) { triggered = false; return; }
+      }
+      doSend(payload);
       // 재무장 — 같은 페이지에서 추가 제출 가능하도록 3초 후 리셋
       setTimeout(function() { triggered = false; pendingData = null; }, 3000);
       if (REDIRECT_URL) {
@@ -288,11 +409,65 @@ ${utmCore}
         fire();
       }
     });
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true });
+    /**
+     * **앵커 소스만** body 존재를 확인하고 없으면 기다린다(에듀테크 실측).
+     *
+     * 이 스크립트는 <head>에 async로 설치된다 — 캐시가 워밍업되면 <body>가 파싱되기
+     * 전에 실행될 수 있다. document.body 가 null 인 채로 observe() 를 부르면 그 자리에서
+     * 던져서, 같은 함수 안에서 이 줄 뒤에 오는 alert 가로채기·pagehide 폴백(바로 아래)까지
+     * 전부 등록이 안 된다 — 대행 사이트는 그 폴백이 유일한 전송 경로라 조용히 0건이 된다.
+     * 앵커 없는 기존 소스(아임웹 등)는 이 레이스를 실제로 겪은 적이 없으므로(레코드
+     * 52,000건이 그 증거다) 오늘과 문자 그대로 같은 줄을 그대로 둔다 — 새 분기를 안 타게 해서.
+     */
+    if (HAS_ANCHORS && !document.body) {
+      document.addEventListener("DOMContentLoaded", function() {
+        observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true });
+      });
+    } else {
+      observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true });
+    }
+
+    // 일부 사이트는 성공 메시지를 페이지 텍스트가 아니라 네이티브 alert() 팝업으로 띄운다
+    // (마이스허브 등) — alert() 은 DOM 밖에 뜨는 별도 레이어라 위 MutationObserver 로는
+    // 절대 못 잡는다. alert 자체를 가로채서, 뜬 메시지가 성공 트리거 문구를 포함할 때만
+    // 전송한다 — "폼 제출을 곧바로 전송으로 본다"가 아니라, 검증 실패 알림(예: "이메일을
+    // 입력해주세요")도 흔히 같은 alert() 을 쓰기 때문에 문구 매칭은 그대로 유지해야 오탐이
+    // 안 생긴다.
+    var originalAlert = window.alert;
+    if (typeof originalAlert === "function") {
+      window.alert = function(message) {
+        try {
+          if (!triggered && SUCCESS_TRIGGER && String(message == null ? "" : message).indexOf(SUCCESS_TRIGGER) !== -1) {
+            fire();
+          }
+        } catch (e) {}
+        return originalAlert.apply(window, arguments);
+      };
+    }
 
     // 페이지 이탈 fallback — 제출 데이터는 캡처됐는데 아직 전송 안 됐고,
     // 캡처된지 60초 이내면 (= 방금 제출하고 thank-you로 넘어가는 중) sendBeacon으로 전송.
     function flushOnLeave() {
+      /**
+       * **앵커 소스는 이탈 시점에 직접 읽는다.**
+       *
+       * 캡처는 "제출처럼 보이는 클릭" 에 의존한다 — 버튼 텍스트를 정규식으로 맞춰 보는 방식이다.
+       * 아임웹은 submit 타입 버튼이라 텍스트와 무관하게 잡히지만, 대행 사이트는 a 태그에
+       * javascript: 핸들러를 거는 곳이 있고 **영문 화면에서는 그 글자가 "OK" 라
+       * 정규식에 안 걸린다**(에듀테크 실측).
+       * 게다가 그런 폼은 form.submit() 을 직접 부르므로 submit 이벤트도 안 뜬다 — 두 경로가
+       * 동시에 비는 구간이 생긴다.
+       *
+       * pagehide 시점에는 DOM 이 아직 그대로라 지금 읽으면 된다. 정족수 가드가 폼이 아닌
+       * 페이지를 걸러 주므로 이 시점 수집이 쓰레기를 만들지 않는다.
+       * 기존(앵커 없는) 소스는 아래의 pendingData 없으면 반환하는 줄이 그대로 적용된다.
+       */
+      if (!pendingData && HAS_ANCHORS) {
+        var late = collectData();
+        for (var lk in late) {
+          if (late[lk] && String(late[lk]).trim() !== "") { pendingData = late; pendingAt = Date.now(); break; }
+        }
+      }
       if (!pendingData) return;
       if (Date.now() - pendingAt > 60000) return; // 오래된 캡처는 무시
       var fp = fingerprint(pendingData);

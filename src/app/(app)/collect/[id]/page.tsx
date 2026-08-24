@@ -11,12 +11,15 @@ import {
   ChevronLeft, ChevronRight, Search, Filter, Activity, Shield,
   RefreshCcw, Bell, Webhook, KeyRound, Eraser, AlertTriangle, ShieldAlert,
   MoreHorizontal, Link2, Wrench, HardDriveDownload, Columns3, MapPin, X, Layers,
+  Eye, EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/contexts/workspace";
 import ActiveToggle from "@/app/(app)/collect/_components/ActiveToggle";
+import FormBuilderTab from "./FormBuilderTab";
+import { tabsFor, type Tab } from "./tabs";
 import dynamic from "next/dynamic";
 const ImportModal = dynamic(() => import("./ImportModal"), { ssr: false });
 const CleanupModal = dynamic(() => import("./CleanupModal"), { ssr: false });
@@ -46,6 +49,8 @@ interface FieldMapping {
   type: string;
   isRequired: boolean;
   sortOrder: number;
+  /** 수집 데이터 표(목록)에서 이 열을 숨긴다 — 값은 계속 수집되고 상세·CSV엔 그대로 나온다. */
+  hidden: boolean;
 }
 
 interface DiscoveredField {
@@ -56,6 +61,10 @@ interface DiscoveredField {
 
 interface CollectSource {
   id: string;
+  /** "capture"(외부 폼에 스크립트) | "builder"(여기서 폼을 만든다) — 화면이 이걸로 갈린다. */
+  mode: string;
+  previewToken: string | null;
+  formConfig: unknown;
   name: string;
   description: string | null;
   apiKey: string;
@@ -70,6 +79,7 @@ interface CollectSource {
   allowedOrigins: string[];
   formPagePatterns: string[];
   dedupKeyFields: string[];
+  fieldGroupSelector: string;
   fieldMappings: FieldMapping[];
   discoveredFields: DiscoveredField[] | null;
   _count: { records: number };
@@ -78,6 +88,8 @@ interface CollectSource {
 interface CollectRecord {
   id: string;
   data: Record<string, string>;
+  /** 빌더형에만 있다 — 현장 입장의 열쇠이므로 목록에서 대조할 수 있어야 한다(§9.1·§12). */
+  registrationNo?: string | null;
   utmSource: string | null;
   utmMedium: string | null;
   utmCampaign: string | null;
@@ -94,18 +106,6 @@ interface ActivityLogEntry {
   createdAt: string;
   user: { id: string; name: string | null; email: string } | null;
 }
-
-const TABS = [
-  { id: "records", label: "수집 데이터", icon: Table2 },
-  { id: "fields", label: "필드", icon: Settings2 },
-  { id: "script", label: "스크립트", icon: Code2 },
-  { id: "install", label: "설치", icon: Wrench },
-  { id: "settings", label: "설정", icon: Shield },
-  { id: "data-mgmt", label: "데이터 관리", icon: HardDriveDownload },
-  { id: "activity", label: "활동", icon: Activity },
-] as const;
-
-type Tab = typeof TABS[number]["id"];
 
 function CopyButton({ text, className }: { text: string; className?: string }) {
   const [copied, setCopied] = useState(false);
@@ -222,6 +222,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   const [isSavingFields, setIsSavingFields] = useState(false);
   const [successTrigger, setSuccessTrigger] = useState("");
   const [redirectUrl, setRedirectUrl] = useState("");
+  const [fieldGroupSelector, setFieldGroupSelector] = useState(".form-group");
 
   const [script, setScript] = useState<string | null>(null);
   const [utmScript, setUtmScript] = useState<string | null>(null);
@@ -230,6 +231,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   // console sniffer paste
   const [pasteJson, setPasteJson] = useState("");
   const [pasteError, setPasteError] = useState("");
+  const [snifferPlatform, setSnifferPlatform] = useState<"iweb" | "mice">("iweb");
 
   const fetchSource = useCallback(async () => {
     setIsLoading(true);
@@ -241,6 +243,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       setFields(data.source.fieldMappings ?? []);
       setSuccessTrigger(data.source.successTrigger);
       setRedirectUrl(data.source.redirectUrl ?? "");
+      setFieldGroupSelector(data.source.fieldGroupSelector || ".form-group");
       setSettingsWebhookUrl(data.source.webhookUrl ?? "");
       setSettingsNotifyOnSubmit(!!data.source.notifyOnSubmit);
       setSettingsAllowedOrigins((data.source.allowedOrigins ?? []).join("\n"));
@@ -456,6 +459,8 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => { selectAllMatchingRef.current = selectAllMatching; }, [selectAllMatching]);
 
   useEffect(() => { fetchSource(); }, [fetchSource]);
+  // 52,000건 capture 설치 경로와 localhost 경고는 현재 host를 함께 보여야 해 이번 범위에서 보존한다.
+  // eslint-disable-next-line no-restricted-syntax
   useEffect(() => { setBrowserOrigin(window.location.origin); }, []);
 
   // 프로젝트 컨텍스트 ↔ URL 의 소스 동기화
@@ -684,11 +689,30 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
     const res = await fetch(`/api/collect-sources/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ successTrigger, redirectUrl: redirectUrl || null }),
+      body: JSON.stringify({ successTrigger, redirectUrl: redirectUrl || null, fieldGroupSelector: fieldGroupSelector.trim() || ".form-group" }),
     });
     if (!res.ok) { toast.error("저장 실패"); return; }
     toast.success("설정이 저장됐어요");
-    setSource((s) => s ? { ...s, successTrigger, redirectUrl: redirectUrl || null } : s);
+    setSource((s) => s ? { ...s, successTrigger, redirectUrl: redirectUrl || null, fieldGroupSelector: fieldGroupSelector.trim() || ".form-group" } : s);
+  };
+
+  /**
+   * 스니퍼 결과를 붙여넣는 순간 선택자를 **바로 서버에 저장한다.**
+   *
+   * 예전엔 "필드 적용"(화면 상태만 바꿈)과 "선택자 저장"(서버에 반영)이 완전히 분리돼
+   * 있어서, 필드는 매핑해 놓고 선택자 저장만 잊는 사고가 실제로 났다 — 그러면 실제 사이트에서
+   * 스크립트가 옛 선택자(기본 .form-group)로 아무것도 못 찾아 매핑을 다 해도 데이터가
+   * 하나도 안 들어온다. `setFieldGroupSelector` 직후 같은 값을 바로 인자로 넘겨 저장한다 —
+   * React state 갱신은 비동기라 그 자리에서 `fieldGroupSelector` 를 읽으면 갱신 전 값이 잡힌다.
+   */
+  const saveFieldGroupSelector = async (selector: string) => {
+    const res = await fetch(`/api/collect-sources/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fieldGroupSelector: selector }),
+    });
+    if (!res.ok) { toast.error("선택자 저장 실패 — 아래 '선택자 저장' 버튼으로 다시 시도해주세요"); return; }
+    setSource((s) => s ? { ...s, fieldGroupSelector: selector } : s);
   };
 
   const addFormPagePattern = () => {
@@ -786,19 +810,22 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       type: f.type || "text",
       isRequired: false,
       sortOrder: i,
+      hidden: false,
     }));
     setFields(applied);
     toast.success("감지된 필드가 적용됐어요. 저장 버튼을 눌러 확정하세요");
     setTab("fields");
   };
 
-  // 콘솔 스니퍼 JSON 붙여넣기로 필드 적용
+  // 콘솔 스니퍼 JSON 붙여넣기로 필드 적용 — { selector, fields } 새 형식과, 옛 스니퍼가
+  // 찍던 배열 하나짜리 형식을 둘 다 받는다(캐시된 옛 스니퍼로 붙여넣는 사람이 있을 수 있다).
   const applyPastedJson = () => {
     setPasteError("");
     try {
       const parsed = JSON.parse(pasteJson);
-      if (!Array.isArray(parsed)) throw new Error("배열 형식이 아니에요");
-      const applied: FieldMapping[] = parsed.map((f: { index?: number; key?: string; label?: string; type?: string }, i: number) => ({
+      const list: unknown = Array.isArray(parsed) ? parsed : parsed?.fields;
+      if (!Array.isArray(list)) throw new Error("형식이 올바르지 않아요");
+      const applied: FieldMapping[] = list.map((f: { index?: number; key?: string; label?: string; type?: string }, i: number) => ({
         id: `pasted-${i}`,
         index: typeof f.index === "number" ? f.index : i,
         key: f.key || toKey(f.label ?? "", i),
@@ -806,10 +833,24 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
         type: f.type || "text",
         isRequired: false,
         sortOrder: i,
+        hidden: false,
       }));
       setFields(applied);
+      // 새 형식이면 감지에 실제로 쓰인 선택자도 같이 받아 온다 — 운영자가 CSS를 몰라도 된다.
+      // 선택자는 여기서 바로 서버에 저장한다(아래 saveFieldGroupSelector 주석 참고) —
+      // 필드 매핑은 라벨·키를 더 고칠 수 있어 "저장" 버튼을 따로 눌러야 하지만, 선택자는
+      // 고칠 이유가 없는 값이라 미룰수록 "매핑은 했는데 선택자를 깜빡했다"는 사고만 커진다.
+      const detectedSelector = !Array.isArray(parsed) && typeof parsed?.selector === "string" ? parsed.selector : "";
+      if (detectedSelector) {
+        setFieldGroupSelector(detectedSelector);
+        void saveFieldGroupSelector(detectedSelector);
+      }
       setPasteJson("");
-      toast.success(`${applied.length}개 필드가 적용됐어요. 저장 버튼을 눌러 확정하세요`);
+      toast.success(
+        detectedSelector
+          ? `${applied.length}개 필드가 적용되고 선택자(${detectedSelector})도 저장됐어요 — 필드는 '필드 매핑 저장'으로 확정하세요`
+          : `${applied.length}개 필드가 적용됐어요. 저장 버튼을 눌러 확정하세요`,
+      );
       setTab("fields");
     } catch (e) {
       setPasteError(e instanceof Error ? e.message : "JSON 형식이 올바르지 않아요");
@@ -817,7 +858,10 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   };
 
   const addField = () => {
-    const newIndex = fields.length;
+    // fields.length 가 아니라 "지금 있는 index 중 제일 큰 값 + 1" 을 쓴다 — 중간 항목을
+    // 지운 뒤라면(아래 removeField) 배열 길이가 실제 DOM 위치보다 작아서, length 를 그대로
+    // 쓰면 이미 쓰고 있는 index 와 겹친다.
+    const newIndex = fields.length > 0 ? Math.max(...fields.map((f) => f.index)) + 1 : 0;
     setFields((f) => [...f, {
       id: `new-${Date.now()}`,
       index: newIndex,
@@ -825,37 +869,91 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       label: "",
       type: "text",
       isRequired: false,
-      sortOrder: newIndex,
+      sortOrder: f.length,
+      hidden: false,
     }]);
   };
 
+  /**
+   * index 는 화면 배열 순서가 아니라 **실제 사이트에서 필드 하나가 몇 번째인지**를 가리키는
+   * 값이다(연동형 스크립트가 `groups[field.index]` 로 그 자리를 찾는다). 그래서 항목 하나를
+   * 지운다고 나머지의 index 까지 당겨 버리면, 지운 자리 뒤의 모든 필드가 실제 DOM 과 하나씩
+   * 어긋난다 — "숨김 필드라 안 보이는 항목이니 지워도 되겠지" 하고 지운 순간 그 뒤의 필드가
+   * 전부 잘못된 값을 모으게 된다. sortOrder(화면에 보이는 순서)만 다시 매기고 index 는
+   * 그대로 둔다.
+   */
   const removeField = (idx: number) => {
-    setFields((f) => f.filter((_, i) => i !== idx).map((fld, i) => ({ ...fld, index: i, sortOrder: i })));
+    setFields((f) => f.filter((_, i) => i !== idx).map((fld, i) => ({ ...fld, sortOrder: i })));
   };
 
   const updateField = (idx: number, patch: Partial<FieldMapping>) => {
     setFields((f) => f.map((fld, i) => i === idx ? { ...fld, ...patch } : fld));
   };
 
-  // 콘솔 스니퍼 스크립트
-  const snifferScript = `(function() {
-  var groups = document.querySelectorAll(".form-group");
-  var fields = Array.from(groups).map(function(g, i) {
+  /**
+   * 콘솔 스니퍼는 **플랫폼별로 완전히 분리한다.** 예전에 ".form-group"·"table tr"·"dl > div"
+   * 를 한 번에 다 시도해서 "매칭 개수가 제일 많은 쪽"을 고르게 했더니, 아임웹 페이지에 폼과
+   * 무관한 다른 표(예: 뉴스레터 구독란)가 있으면 그 표의 행 수가 실제 .form-group 개수를
+   * 이겨서 **아임웹조차 오감지**했다 — "아임웹도 안 되고 마이스허브도 안 된다"던 피드백의
+   * 원인이다. 운영자가 지금 보고 있는 사이트가 뭔지 이미 알고 있으니, 그 앎을 그대로
+   * 탭으로 받는다 — 서로 경쟁하지 않으니 한쪽 사이트의 잡음이 다른 쪽 감지를 흔들 수 없다.
+   */
+  const SNIFFER_PLATFORMS = {
+    iweb: {
+      label: "아임웹",
+      sel: ".form-group",
+      // 필드 제목이 그룹 안의 <label> 이다(체크박스·라디오 옵션 자체의 라벨과 안 겹친다 —
+      // 아임웹은 옵션 텍스트를 label 이 아니라 별도 span 으로 둔다).
+      getTitle: `var label = g.querySelector("label"); return label ? label.textContent.trim() : "";`,
+    },
+    mice: {
+      label: "마이스허브",
+      // 실측(edtechkorea.or.kr) 확인: 필드 하나 = div.field.rowN.fr_{모듈ID}, 그 안에
+      // input 을 감싼 div.input-area 와 **형제로** 제목 요소가 있다("field row1 fr_mod3813_in1"
+      // > "input-area f_checkbox" 형제). 체크박스·라디오 옵션 텍스트는 label 이 input 을
+      // 바로 감싸고 있어(§iweb 과 반대), input-area 안쪽을 먼저 보면 옵션 텍스트를 제목으로
+      // 오인한다 — 그래서 input-area 가 아닌 형제를 **먼저** 본다.
+      sel: ".field",
+      getTitle: `
+    var sib = g.querySelector(":scope > *:not(.input-area)");
+    if (sib && sib.textContent.trim()) return sib.textContent.trim();
     var label = g.querySelector("label");
+    return label ? label.textContent.trim() : "";`,
+    },
+  } as const;
+  type SnifferPlatform = keyof typeof SNIFFER_PLATFORMS;
+
+  function buildSnifferScript(platform: SnifferPlatform): string {
+    const { sel, getTitle } = SNIFFER_PLATFORMS[platform];
+    return `(function() {
+  var SEL = ${JSON.stringify(sel)};
+  function getTitle(g) {${getTitle}
+  }
+  var groups = Array.prototype.filter.call(document.querySelectorAll(SEL), function(g) {
+    return g.querySelector("input, select, textarea");
+  });
+  var fields = groups.map(function(g, i) {
     var input = g.querySelector("input, select, textarea");
-    var labelText = (label ? label.textContent.trim() : "") ||
-      (input ? (input.placeholder || input.getAttribute("name") || "") : "");
+    var labelText = getTitle(g) || (input ? (input.placeholder || input.getAttribute("name") || "") : "");
     var type = "text";
     if (input) {
       if (input.tagName === "SELECT") type = "select";
       else if (input.type === "checkbox") type = "checkbox";
+      else if (input.type === "radio") type = "radio";
     }
     return { index: i, key: "field_" + i, label: labelText, type: type };
   });
-  try { copy(JSON.stringify(fields, null, 2)); } catch(e) {}
-  console.log(JSON.stringify(fields, null, 2));
-  return fields;
+  var result = { selector: SEL, fields: fields };
+  try { copy(JSON.stringify(result, null, 2)); } catch(e) {}
+  console.log((fields.length === 0
+    ? "0개 감지됨 — 이 방식은 이 사이트에 안 맞아요. 신청서 필드를 우클릭 → 검사로 감싸는 태그를 확인해서 '직접 입력'에 넣어주세요."
+    : fields.length + "개 필드 감지됨") + " (선택자: " + SEL + ")");
+  console.log(JSON.stringify(result, null, 2));
+  return result;
 })();`;
+  }
+
+  const snifferScript = buildSnifferScript(snifferPlatform);
 
   if (isLoading) {
     return (
@@ -887,7 +985,13 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
               <Database className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-semibold">{source.name}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-semibold">{source.name}</h1>
+                {/* 방식은 되돌릴 수 없는 성질이라(레코드가 쌓이면 전환 불가) 이름 옆에 상시 노출한다. */}
+                <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">
+                  {source.mode === "builder" ? "빌더형" : "연동형"}
+                </span>
+              </div>
               <div className="flex items-center gap-3 mt-0.5">
                 {source.description && <p className="text-sm text-muted-foreground">{source.description}</p>}
                 {source.siteUrl && (
@@ -906,7 +1010,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
 
       {/* 탭 */}
       <div className="flex gap-1 border-b border-border overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {TABS.map(({ id: tabId, label, icon: Icon }) => {
+        {tabsFor(source.mode).map(({ id: tabId, label, icon: Icon }) => {
           const isDanger = tabId === "data-mgmt";
           const activeColor = isDanger ? "border-red-500 text-red-500" : "border-violet-500 text-violet-500";
           const idleColor = isDanger ? "border-transparent text-red-500/70 hover:text-red-500" : "border-transparent text-muted-foreground hover:text-foreground";
@@ -1197,7 +1301,11 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <Table2 className="w-8 h-8 text-muted-foreground/20 mb-3" />
                   <p className="text-sm text-muted-foreground">아직 수집된 데이터가 없어요</p>
-                  <p className="text-xs text-muted-foreground/60 mt-1">스크립트를 설치하면 폼 제출 시 자동으로 수집돼요</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">
+                    {source.mode === "builder"
+                      ? "등록 폼 탭에서 폼을 만들고 코드를 붙이면 여기 쌓여요"
+                      : "스크립트를 설치하면 폼 제출 시 자동으로 수집돼요"}
+                  </p>
                 </div>
               ) : records.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -1224,14 +1332,31 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                             시간 {sortIcon("createdAt")}
                           </button>
                         </th>
-                        {source.fieldMappings.map((f) => {
+                        {/* 등록번호는 빌더형에만 있고 시간 바로 뒤다 — 현장에서 스캔한 번호로 찾는다. */}
+                        {source.mode === "builder" && (
+                          <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">
+                            등록번호
+                          </th>
+                        )}
+                        {source.fieldMappings.filter((f) => !f.hidden).map((f) => {
                           const colWidth = f.type === "email" ? "max-w-[240px]"
-                            : (f.type === "select" || f.type === "checkbox") ? "max-w-[80px]"
+                            : (f.type === "select" || f.type === "checkbox") ? "max-w-[140px]"
                             : "max-w-[200px]";
+                          /*
+                            머리글도 잘라야 한다. max-w 만 주고 넘침 처리를 안 하면
+                            whitespace-nowrap 인 긴 문항 제목이 칸을 넘어 **옆 열 위에 겹쳐 그려진다**
+                            — 본문 td 에는 truncate 가 있어 데이터만 멀쩡하고 머리글만 뭉개졌다.
+                            잘린 제목은 마우스를 올리면 전체가 보이게 title 을 단다.
+                          */
                           return (
-                          <th key={f.id} className={`text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap ${colWidth}`}>
-                            <button onClick={() => cycleSort("field", f.key)} className="flex items-center gap-1 hover:text-foreground transition-colors">
-                              {f.label} {sortIcon("field", f.key)}
+                          <th key={f.id} className={`text-left px-4 py-2.5 text-xs font-medium text-muted-foreground ${colWidth}`}>
+                            <button
+                              onClick={() => cycleSort("field", f.key)}
+                              title={f.label}
+                              className="flex w-full items-center gap-1 hover:text-foreground transition-colors"
+                            >
+                              <span className="truncate">{f.label}</span>
+                              <span className="shrink-0">{sortIcon("field", f.key)}</span>
                             </button>
                           </th>
                           );
@@ -1269,7 +1394,12 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                             />
                           </td>
                           <td className={`px-4 py-3 text-xs text-muted-foreground whitespace-nowrap sticky left-10 z-[1] shadow-[1px_0_0_0_hsl(var(--border))] ${selectedIds.has(record.id) ? "bg-violet-500/5" : "bg-background group-hover:bg-secondary/30"}`}>{timeStr(record.createdAt)}</td>
-                          {source.fieldMappings.map((f) => {
+                          {source.mode === "builder" && (
+                            <td className="px-4 py-3 font-mono text-xs tabular-nums text-muted-foreground whitespace-nowrap">
+                              {record.registrationNo ?? "-"}
+                            </td>
+                          )}
+                          {source.fieldMappings.filter((f) => !f.hidden).map((f) => {
                             const colWidth = f.type === "email" ? "max-w-[240px]"
                               : (f.type === "select" || f.type === "checkbox") ? "max-w-[80px]"
                               : "max-w-[200px]";
@@ -1344,7 +1474,16 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
             </div>
           )}
 
-          {/* 필드 설정 탭 */}
+          {/* 등록 폼 탭 — 빌더형 전용(tabsFor 가 연동형에는 안 준다) */}
+          {tab === "form" && (
+            <FormBuilderTab
+              sourceId={source.id}
+              initialConfig={source.formConfig}
+              previewToken={source.previewToken}
+              workspaceId={workspace?.id}
+            />
+          )}
+
           {tab === "fields" && (
             <div className="space-y-5">
               {/* A: 자동 감지된 필드 */}
@@ -1372,7 +1511,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                       </div>
                     ))}
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-2">실제 폼 제출 시 스크립트가 감지한 필드예요. "한 번에 적용" 후 라벨과 키를 수정하세요.</p>
+                  <p className="text-[11px] text-muted-foreground mt-2">실제 폼 제출 시 스크립트가 감지한 필드예요. &ldquo;한 번에 적용&rdquo; 후 라벨과 키를 수정하세요.</p>
                 </div>
               )}
 
@@ -1381,14 +1520,16 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <h3 className="text-sm font-medium">필드 매핑</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">인덱스는 아임웹 form-group 순서(0부터)예요</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      인덱스는 아래 &ldquo;필드 묶음 선택자&rdquo;로 찾은 순서(0부터)예요 · 눈 아이콘으로 수집 데이터 표에 보일지 정해요(값은 계속 수집돼요)
+                    </p>
                   </div>
                 </div>
 
                 <Reorder.Group axis="y" values={fields} onReorder={setFields} className="space-y-2">
                   {fields.map((field, idx) => (
                     <Reorder.Item key={field.id} value={field}>
-                      <div className="flex items-center gap-2 p-3 rounded-xl border border-border bg-background">
+                      <div className={`flex items-center gap-2 p-3 rounded-xl border border-border bg-background transition-opacity ${field.hidden ? "opacity-50" : ""}`}>
                         <GripVertical className="w-4 h-4 text-muted-foreground/40 cursor-grab shrink-0" />
                         <div className="w-10 shrink-0">
                           <input type="number" min={0} value={field.index}
@@ -1407,7 +1548,13 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                           <option value="text">텍스트</option>
                           <option value="select">선택</option>
                           <option value="checkbox">체크박스</option>
+                          <option value="radio">라디오</option>
                         </select>
+                        <button onClick={() => updateField(idx, { hidden: !field.hidden })}
+                          title={field.hidden ? "수집 데이터 표에서 숨김 — 클릭해서 보이기" : "수집 데이터 표에 보임 — 클릭해서 숨기기"}
+                          className={`p-1 rounded-lg transition-colors shrink-0 ${field.hidden ? "text-muted-foreground hover:text-foreground hover:bg-secondary" : "text-violet-500 hover:bg-violet-500/10"}`}>
+                          {field.hidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
                         <button onClick={() => removeField(idx)}
                           className="p-1 rounded-lg hover:bg-red-500/10 hover:text-red-500 transition-colors text-muted-foreground shrink-0">
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1655,10 +1802,30 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                   <Sparkles className="w-4 h-4 text-amber-500" />
                   <span className="text-sm font-medium">필드 자동 감지 (설치 전 사용)</span>
                 </div>
+
+                {/* 플랫폼마다 스니퍼를 완전히 따로 둔다 — 한 스크립트가 여러 방식을 동시에 시도해
+                    "매칭 개수가 제일 많은 쪽"을 고르면, 폼과 무관한 다른 표가 페이지 어딘가에
+                    있을 때 그쪽이 이겨서 오감지한다(아임웹에서 실제로 그랬다). 지금 보고 있는
+                    사이트가 뭔지는 운영자가 이미 아니까, 그 앎을 탭으로 그대로 받는다. */}
+                <div className="flex items-center gap-1.5 mb-3">
+                  {(Object.keys(SNIFFER_PLATFORMS) as Array<keyof typeof SNIFFER_PLATFORMS>).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setSnifferPlatform(p)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                        snifferPlatform === p ? "bg-amber-500 text-white" : "bg-secondary text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {SNIFFER_PLATFORMS[p].label}
+                    </button>
+                  ))}
+                </div>
+
                 <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside mb-3">
-                  <li>아임웹 등록 폼 페이지를 열고 브라우저 콘솔(F12)을 엽니다</li>
-                  <li>아래 스크립트를 복사해서 콘솔에 붙여넣고 Enter</li>
-                  <li>출력된 JSON을 아래에 붙여넣기 → 필드 자동 입력</li>
+                  <li>등록 폼 페이지를 열고 브라우저 콘솔(F12)을 엽니다</li>
+                  <li>위에서 이 사이트를 만든 플랫폼을 고르고, 아래 스크립트를 콘솔에 붙여넣고 Enter</li>
+                  <li>출력된 JSON을 아래에 붙여넣기 → 필드와 감지 방식이 자동 입력</li>
                 </ol>
                 <div className="relative mb-3">
                   <div className="absolute top-2 right-2">
@@ -1687,6 +1854,29 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition-colors disabled:opacity-40"
                   >
                     <Check className="w-3.5 h-3.5" />필드 적용
+                  </button>
+                </div>
+
+                {/* 감지 선택자 — 스니퍼가 자동으로 채워 주지만, 0개가 나온 사이트는 직접 확인해서 넣는다. */}
+                <div className="mt-4 pt-4 border-t border-border space-y-1.5">
+                  <span className="text-xs font-medium">필드 묶음 선택자</span>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    실제로 폼에 설치되는 스크립트가 필드 하나를 찾을 때 쓰는 CSS 선택자예요. 위 스니퍼가 감지에
+                    성공하면 자동으로 채워져요. 0개가 나왔다면 신청서 필드 하나를 우클릭 → 검사로 감싸는 태그를
+                    확인해서 직접 입력하세요(예: 표 형태면 <code className="font-mono">table tr</code>).
+                  </p>
+                  <input
+                    type="text"
+                    value={fieldGroupSelector}
+                    onChange={(e) => setFieldGroupSelector(e.target.value)}
+                    placeholder=".form-group"
+                    className="w-full px-3 py-2 rounded-xl border border-border bg-background text-xs font-mono focus:outline-none focus:border-violet-400"
+                  />
+                  <button
+                    onClick={() => void handleSaveSettings()}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-500 text-white text-xs font-medium hover:bg-violet-600 transition-colors"
+                  >
+                    <Check className="w-3.5 h-3.5" />선택자 저장
                   </button>
                 </div>
               </div>
@@ -2212,6 +2402,7 @@ function activityLabel(action: string): { label: string; color: string } {
     case "source.updated":         return { label: "소스 설정 변경",     color: "bg-blue-500" };
     case "source.deleted":         return { label: "소스 삭제",         color: "bg-red-500" };
     case "source.key_regenerated": return { label: "API 키 재발급",      color: "bg-amber-500" };
+    case "source.preview_token_regenerated": return { label: "미리보기 링크 재발급", color: "bg-amber-500" };
     case "record.created":         return { label: "레코드 생성",        color: "bg-emerald-500" };
     case "record.updated":         return { label: "레코드 편집",        color: "bg-blue-500" };
     case "record.deleted":         return { label: "레코드 삭제",        color: "bg-red-500" };

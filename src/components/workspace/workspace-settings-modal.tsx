@@ -7,6 +7,7 @@ import { FileText, X, Edit2, Check, Plus, Trash2, Crown, ShieldCheck, User as Us
 import { toast } from "sonner";
 import { useWorkspace } from "@/contexts/workspace";
 import { Select } from "@/components/ui/select";
+import { LEGAL_COUNTRIES } from "@/lib/legal-templates";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -246,6 +247,38 @@ export function WorkspaceSettingsModal({ open, onClose }: Props) {
       await refreshWorkspaces();
       toast.success("약관 템플릿을 저장했어요 — 전문을 비워 둔 웨비나가 이 값을 씁니다");
     } finally { setIsSavingTpl(false); }
+  };
+
+  /**
+   * 법률 문구 생성기의 조직 정보 — 회사명·주소·담당 이메일은 행사마다 다시 입력할 값이
+   * 아니라 조직 자산이다(약관 템플릿과 같은 이유). 나라별로 법인이 다를 수 있어 US/KR
+   * override 를 따로 둔다.
+   */
+  const emptyOrg = { legalName: "", address: "", privacyContactEmail: "", dpoContactEmail: "", hostingRegion: "" };
+  const [legalDefault, setLegalDefault] = useState(emptyOrg);
+  const [legalByCountry, setLegalByCountry] = useState<Record<string, typeof emptyOrg>>({});
+  const [showCountryOverride, setShowCountryOverride] = useState(false);
+  const [isSavingLegal, setIsSavingLegal] = useState(false);
+  useEffect(() => {
+    const profile = workspace?.legalProfile as { default?: typeof emptyOrg; byCountry?: Record<string, typeof emptyOrg> } | null | undefined;
+    setLegalDefault({ ...emptyOrg, ...profile?.default });
+    setLegalByCountry(profile?.byCountry ?? {});
+    setShowCountryOverride(!!profile?.byCountry && Object.keys(profile.byCountry).length > 0);
+  }, [workspace?.legalProfile]);
+
+  const handleSaveLegalProfile = async () => {
+    if (!workspace?.id) return;
+    setIsSavingLegal(true);
+    try {
+      const res = await fetch(`/api/workspace/${workspace.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ legalProfile: { default: legalDefault, byCountry: legalByCountry } }),
+      });
+      if (!res.ok) { toast.error("조직 정보를 저장하지 못했어요"); return; }
+      await refreshWorkspaces();
+      toast.success("조직 정보를 저장했어요 — 모든 행사의 법률 문구 생성기가 이 값을 씁니다");
+    } finally { setIsSavingLegal(false); }
   };
 
   const handleInvite = async () => {
@@ -702,6 +735,116 @@ export function WorkspaceSettingsModal({ open, onClose }: Props) {
 
                   {activeTab === "consent" && (
                     <motion.div key="consent" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="space-y-5">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">조직 정보 (법률 문구 생성기)</p>
+                        <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                          사전등록·대회 신청 폼에서 <b className="font-semibold text-foreground">개인정보처리방침을 자동 생성</b>할 때 쓰는
+                          회사 정보예요. 여기 한 번만 입력해 두면 모든 행사가 재사용해요.
+                        </p>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="space-y-1.5">
+                          <span className="text-[11px] font-medium text-muted-foreground">회사(법인)명</span>
+                          <input
+                            value={legalDefault.legalName}
+                            onChange={(e) => setLegalDefault((v) => ({ ...v, legalName: e.target.value }))}
+                            placeholder="Exporum Inc."
+                            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm transition-colors focus:border-violet-400 focus:outline-none"
+                          />
+                        </label>
+                        <label className="space-y-1.5">
+                          <span className="text-[11px] font-medium text-muted-foreground">개인정보 담당 이메일</span>
+                          <input
+                            value={legalDefault.privacyContactEmail}
+                            onChange={(e) => setLegalDefault((v) => ({ ...v, privacyContactEmail: e.target.value }))}
+                            placeholder="privacy@example.com"
+                            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm transition-colors focus:border-violet-400 focus:outline-none"
+                          />
+                        </label>
+                        <label className="space-y-1.5 sm:col-span-2">
+                          <span className="text-[11px] font-medium text-muted-foreground">사업장 주소</span>
+                          <input
+                            value={legalDefault.address}
+                            onChange={(e) => setLegalDefault((v) => ({ ...v, address: e.target.value }))}
+                            placeholder="서울특별시 ..."
+                            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm transition-colors focus:border-violet-400 focus:outline-none"
+                          />
+                        </label>
+                        <label className="space-y-1.5 sm:col-span-2">
+                          <span className="text-[11px] font-medium text-muted-foreground">개인정보보호책임자 연락처 (선택)</span>
+                          <input
+                            value={legalDefault.dpoContactEmail}
+                            onChange={(e) => setLegalDefault((v) => ({ ...v, dpoContactEmail: e.target.value }))}
+                            placeholder="비우면 위 담당 이메일로 대신해요"
+                            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm transition-colors focus:border-violet-400 focus:outline-none"
+                          />
+                        </label>
+                        <label className="space-y-1.5 sm:col-span-2">
+                          <span className="text-[11px] font-medium text-muted-foreground">서버(인프라) 소재지</span>
+                          <input
+                            value={legalDefault.hostingRegion}
+                            onChange={(e) => setLegalDefault((v) => ({ ...v, hostingRegion: e.target.value }))}
+                            placeholder="예: 대한민국, 미국"
+                            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm transition-colors focus:border-violet-400 focus:outline-none"
+                          />
+                          <span className="block text-[11px] leading-relaxed text-muted-foreground">
+                            개인정보처리방침의 국외이전 고지에 쓰여요 — 실제로 등록 시스템을 운영하는 서버의 물리적 소재지(Vercel·Supabase 등)를
+                            한 번만 입력해 두면 모든 문서가 재사용해요. 정확한 리전은 개발팀에 확인하세요.
+                          </span>
+                        </label>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowCountryOverride((v) => !v)}
+                        className="text-[11px] font-medium text-violet-500 hover:underline"
+                      >
+                        {showCountryOverride ? "나라별 다른 정보 숨기기" : "나라별로 다른 회사 정보 쓰기 (예: 미국 법인·한국 법인)"}
+                      </button>
+
+                      {showCountryOverride && (
+                        <div className="space-y-3 rounded-xl bg-secondary/30 p-3">
+                          {LEGAL_COUNTRIES.map(({ value, label }) => {
+                            const ov = legalByCountry[value] ?? emptyOrg;
+                            const setOv = (next: Partial<typeof emptyOrg>) =>
+                              setLegalByCountry((prev) => ({ ...prev, [value]: { ...emptyOrg, ...prev[value], ...next } }));
+                            return (
+                              <div key={value} className="space-y-1.5">
+                                <span className="text-[11px] font-semibold text-foreground">{label}</span>
+                                <div className="grid gap-1.5 sm:grid-cols-2">
+                                  <input
+                                    value={ov.legalName}
+                                    onChange={(e) => setOv({ legalName: e.target.value })}
+                                    placeholder="이 나라 전용 법인명 (비우면 기본값)"
+                                    className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs outline-none focus:border-violet-400"
+                                  />
+                                  <input
+                                    value={ov.address}
+                                    onChange={(e) => setOv({ address: e.target.value })}
+                                    placeholder="이 나라 전용 주소 (비우면 기본값)"
+                                    className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs outline-none focus:border-violet-400"
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleSaveLegalProfile}
+                          disabled={isSavingLegal}
+                          className="rounded-xl bg-violet-500 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-violet-600 disabled:opacity-50"
+                        >
+                          {isSavingLegal ? "저장 중…" : "저장"}
+                        </button>
+                      </div>
+
+                      <div className="h-px bg-border" />
+
                       <div>
                         <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">약관 전문 템플릿</p>
                         <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">

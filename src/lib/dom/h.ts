@@ -1,10 +1,15 @@
 /**
- * 랜딩 DOM 빌더 — createElement / textContent 만 사용한다.
+ * 안전 DOM 빌더 — createElement / textContent 만 사용한다.
  *
- * 왜 문자열 HTML 을 안 쓰는가: 랜딩은 외부 사이트(아임웹 등) 문서 안에 직접 마운트된다.
+ * **호스트 문서에 직접 마운트되는 것들이 공유한다** — 랜딩(src/lib/landing)과
+ * 등록 폼 런타임(src/lib/collect-form). 원래 랜딩 안에 있었는데, 폼이 두 번째
+ * 소비자가 되면서 옮겼다. 두 벌로 갈라지면 한쪽만 안전해진다.
+ *
+ * 왜 문자열 HTML 을 안 쓰는가: 이것들은 외부 사이트(아임웹 등) 문서 안에 직접 마운트된다.
  * 서버에서 이스케이프한 HTML 을 innerHTML 로 넣는 방식이면 렌더 함수 한 곳에서 esc() 를
  * 빠뜨리는 순간 파트너 도메인 전체가 XSS 에 노출된다. 이 파일과 view* 파일에서
- * innerHTML/outerHTML/insertAdjacentHTML 을 절대 쓰지 않는다(landing-safety 테스트가 강제).
+ * innerHTML/outerHTML/insertAdjacentHTML 을 절대 쓰지 않는다
+ * (src/lib/__tests__/embed-runtime.test.ts 가 강제 — 예전 주석은 없는 테스트를 가리키고 있었다).
  */
 
 import { safeHttpUrl } from "@/lib/webinar-config";
