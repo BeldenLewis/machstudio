@@ -151,12 +151,17 @@ function str(v: unknown): string {
  * 그대로 놓이기 때문 — 오버레이가 그 흐름 안에 있으면 부모의 overflow/position 에 잘린다.
  * `.msf` 리셋을 다시 받아야 해서 클래스에 msf 를 같이 건다(css.ts 주석 참고).
  */
-function openTermsPopup(title: string, body: string, onAgree: () => void): void {
+function openTermsPopup(
+  title: string,
+  body: string,
+  onAgree: () => void,
+  themeStyle: Record<string, string | null>,
+): void {
   const closeBtn = h("button", { type: "button", class: "msf-terms-close" }, COPY.close);
   const agreeBtn = h("button", { type: "button", class: "msf-terms-agree" }, COPY.agree);
   const overlay = h(
     "div",
-    { class: "msf msf-overlay" },
+    { class: "msf msf-overlay", style: themeStyle },
     h(
       "div",
       { class: "msf-terms" },
@@ -285,14 +290,15 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
    * 그래서 같은 페이지에 다른 색의 폼이 두 개 붙어도 서로 안 섞인다.
    */
   const theme = config.theme;
+  const themeStyle = {
+    "--msf-accent": theme.accentColor || null,
+    "--msf-accent-fg": theme.accentColor ? onAccentColor(theme.accentColor) : null,
+    "--msf-fg": theme.textColor || null,
+    "--msf-bg": theme.surfaceColor || null,
+  };
   const root = h("div", {
     class: "msf",
-    style: {
-      "--msf-accent": theme.accentColor || null,
-      "--msf-accent-fg": theme.accentColor ? onAccentColor(theme.accentColor) : null,
-      "--msf-fg": theme.textColor || null,
-      "--msf-bg": theme.surfaceColor || null,
-    },
+    style: themeStyle,
   });
   const stack = h("div", { class: "msf-stack" });
   root.appendChild(stack);
@@ -703,7 +709,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
           clearIssue(issueKey);
           err.textContent = "";
           updateSubmitState();
-        });
+        }, themeStyle);
       });
       // Details 를 라벨 아래 별도 줄이 아니라 같은 줄 오른쪽에 둔다 — 혼자 아래에
       // 떨어져 있으면 라벨과 상관없는 항목처럼 보인다.

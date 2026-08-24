@@ -208,6 +208,18 @@ describe("동의 항목", () => {
     expect(document.querySelector(".msf-overlay")).toBeNull();
   });
 
+  it("전문 팝업도 폼의 키컬러를 이어받는다", () => {
+    mount({
+      config: normalizeCollectForm({
+        theme: { accentColor: "#FF8500" },
+        consent: { privacy: { enabled: true, label: { en: "Privacy" }, body: { en: "Policy" } } },
+      }),
+    });
+    host.querySelector<HTMLButtonElement>(".msf-more")!.click();
+    const overlay = document.querySelector<HTMLElement>(".msf-overlay")!;
+    expect(overlay.style.getPropertyValue("--msf-accent")).toBe("#FF8500");
+  });
+
   it("팝업 닫기를 누르면 동의하지 않은 채로 닫힌다", () => {
     mount({
       config: normalizeCollectForm({
