@@ -16,6 +16,7 @@ import { ensureFormStyles } from "./css";
 import {
   DEFAULT_LOCALE,
   REGISTRATION_STATUSES,
+  canonicalBranchValue,
   localize,
   noticeValueKey,
   resolveRegistrationStatus,
@@ -68,6 +69,8 @@ const COPY = {
   previewDone: "Sample number — nothing was saved.",
   more: "Details",
   less: "Hide",
+  close: "Close",
+  agree: "I agree",
   period: "Period",
   venue: "Venue",
   openingHours: "Opening Hours",
@@ -139,6 +142,34 @@ function track(preview: boolean, event: string, params?: Record<string, unknown>
 
 function str(v: unknown): string {
   return typeof v === "string" ? v : v == null ? "" : String(v);
+}
+
+/**
+ * 동의 전문 팝업 — 대회 폼(competition-entry.ts bindConsentPopups)·웨비나 로더(openTerms)와
+ * 같은 패턴으로 맞춘다. 이 폼만 인라인 드롭다운이면 같은 방문자가 폼마다 다른 상호작용을
+ * 겪는다. `document.body` 에 새 루트로 붙는 이유는 이 폼 자체가 호스트 문서 흐름 안에
+ * 그대로 놓이기 때문 — 오버레이가 그 흐름 안에 있으면 부모의 overflow/position 에 잘린다.
+ * `.msf` 리셋을 다시 받아야 해서 클래스에 msf 를 같이 건다(css.ts 주석 참고).
+ */
+function openTermsPopup(title: string, body: string, onAgree: () => void): void {
+  const closeBtn = h("button", { type: "button", class: "msf-terms-close" }, COPY.close);
+  const agreeBtn = h("button", { type: "button", class: "msf-terms-agree" }, COPY.agree);
+  const overlay = h(
+    "div",
+    { class: "msf msf-overlay" },
+    h(
+      "div",
+      { class: "msf-terms" },
+      h("div", { class: "msf-terms-head" }, title),
+      h("div", { class: "msf-terms-body" }, body),
+      h("div", { class: "msf-terms-actions" }, closeBtn, agreeBtn),
+    ),
+  );
+  const close = () => overlay.remove();
+  closeBtn.addEventListener("click", close);
+  agreeBtn.addEventListener("click", () => { onAgree(); close(); });
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  document.body.appendChild(overlay);
 }
 
 export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHandle {
@@ -380,7 +411,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
         clearIssue(f.key);
         markStarted();
         if (config.branch.enabled && config.branch.fieldKey === f.key) {
-          track(preview, "ms_visitor_type_selected", { visitor_type: sel.value });
+          track(preview, "ms_visitor_type_selected", { visitor_type: canonicalBranchValue(config, sel.value) });
           // 분기 기준이 바뀌면 항목 목록 자체가 달라진다 — 이 영역만 다시 그리고 포커스를 되돌린다.
           renderFields();
           const again = fieldsHost.querySelector<HTMLSelectElement>(`#${cssId(inputId)}`);
@@ -664,19 +695,19 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
 
     const body = t(item.body);
     if (body) {
-      let open = false;
-      const detail = h("div", { class: "msf-notice-body" }, body);
-      detail.style.display = "none";
       const btn = h("button", { type: "button", class: "msf-more" }, COPY.more);
       btn.addEventListener("click", () => {
-        open = !open;
-        detail.style.display = open ? "" : "none";
-        btn.textContent = open ? COPY.less : COPY.more;
+        openTermsPopup(labelText, body, () => {
+          cb.checked = true;
+          onChange(true);
+          clearIssue(issueKey);
+          err.textContent = "";
+          updateSubmitState();
+        });
       });
       // Details 를 라벨 아래 별도 줄이 아니라 같은 줄 오른쪽에 둔다 — 혼자 아래에
-      // 떨어져 있으면 라벨과 상관없는 항목처럼 보인다(전문 자체는 그 아래 한 줄 전체를 쓴다).
+      // 떨어져 있으면 라벨과 상관없는 항목처럼 보인다.
       wrap.appendChild(h("div", { class: "msf-consent-row" }, label, btn));
-      wrap.appendChild(detail);
     } else {
       wrap.appendChild(label);
     }
@@ -740,7 +771,11 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     if (submitting || duplicate) return;
     hideBanner();
 
-    const visitorType = config.branch.enabled ? str(values[config.branch.fieldKey]) : undefined;
+    // canonicalBranchValue 로 로케일 라벨을 group.value 로 접는다 — 분석 이벤트가 언어별로
+    // 갈라지지 않게(collect-form-config.ts 주석). generate_lead 도 이 값을 그대로 쓴다.
+    const visitorType = config.branch.enabled
+      ? canonicalBranchValue(config, str(values[config.branch.fieldKey]))
+      : undefined;
     track(preview, "ms_form_submit", visitorType ? { visitor_type: visitorType } : undefined);
 
     // 접수 창을 **누를 때 다시 본다.** 폼을 열어 둔 채로 마감 시각이 지나갈 수 있다.

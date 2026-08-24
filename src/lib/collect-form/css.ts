@@ -221,14 +221,18 @@ export const COLLECT_FORM_CSS = `
   box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--msf-accent) 28%, transparent);
 }
 
-/* 본인 확인 줄 — 가려진 연락처(collect-lookup 의 maskEmail/maskPhone). */
+/* 본인 확인 줄 — 가려진 연락처(collect-lookup 의 maskEmail/maskPhone).
+   inline-grid인 이유: 열을 auto 1fr로 두면 라벨-값이 카드 폭 끝까지 벌어진다(dd가
+   text-align:right로 오른쪽 끝에 붙어서). auto auto로 두 열 다 내용 크기에 맞추고
+   inline-grid로 두면, 부모 .msf-found의 text-align:center가 이 블록 자체를 카드
+   가운데로 보내면서 라벨·값은 서로 가깝게 붙는다. */
 .msf-idcheck{
-  display:grid;grid-template-columns:auto 1fr;gap:6px 16px;
-  margin:14px 0 0;padding:12px 14px;border-radius:var(--msf-radius);
+  display:inline-grid;grid-template-columns:auto auto;gap:6px 12px;
+  margin:14px auto 0;padding:12px 18px;border-radius:var(--msf-radius);
   background:var(--msf-bg);text-align:left;font-size:13px;
 }
 .msf-idcheck dt{color:var(--msf-muted)}
-.msf-idcheck dd{margin:0;text-align:right;font-weight:700;word-break:break-all}
+.msf-idcheck dd{margin:0;font-weight:700;word-break:break-all}
 
 /* QR 저장 — 캡처가 안 되는 기기(일부 사내폰·키오스크)가 있어 파일로도 준다. */
 .msf-save{
@@ -261,6 +265,31 @@ export const COLLECT_FORM_CSS = `
 @media (prefers-reduced-motion:reduce){
   .msf *{transition:none !important;animation:none !important}
 }
+
+/* ── 동의 전문 팝업 ────────────────────────── */
+/* document.body 에 새 루트로 붙는다(대회 폼 mc-overlay 와 같은 패턴, mount.ts openTermsPopup
+   주석 참고) — .msf 리셋을 다시 받아야 해서 클래스에 msf 를 같이 건다. 뒤에 오는 규칙이라
+   특이도가 같아도 .msf 의 display:block/max-width:640px 를 순서로 이긴다. */
+.msf-overlay{
+  position:fixed;inset:0;z-index:2147483000;max-width:none;margin:0;
+  display:flex;align-items:center;justify-content:center;padding:16px;
+  background:rgba(0,0,0,.55);
+}
+.msf-terms{
+  width:100%;max-width:480px;max-height:calc(100dvh - 32px);
+  display:flex;flex-direction:column;overflow:hidden;
+  background:var(--msf-bg);border-radius:var(--msf-radius);
+  box-shadow:0 24px 64px rgba(0,0,0,.32);
+}
+.msf-terms-head{font-size:15px;font-weight:700;padding:16px 18px;border-bottom:1px solid var(--msf-line)}
+.msf-terms-body{padding:18px;overflow-y:auto;font-size:13px;line-height:1.7;color:var(--msf-muted);white-space:pre-wrap}
+.msf-terms-actions{display:flex;gap:8px;padding:14px 18px;border-top:1px solid var(--msf-line)}
+.msf-terms-actions button{
+  flex:1;font:inherit;font-size:14px;font-weight:700;cursor:pointer;
+  padding:11px !important;border-radius:calc(var(--msf-radius) - 2px) !important;border:0 !important;
+}
+.msf-terms-close{background:var(--msf-soft) !important;color:var(--msf-fg) !important}
+.msf-terms-agree{background:var(--msf-accent) !important;color:var(--msf-accent-fg) !important}
 `;
 
 /** 문서든 ShadowRoot 든 **한 벌만** 넣는다. */

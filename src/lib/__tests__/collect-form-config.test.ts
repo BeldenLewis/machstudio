@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   EMPTY_FORM_CONFIG,
+  canonicalBranchValue,
   localize,
   normalizeCollectForm,
   resolveRegistrationStatus,
@@ -187,6 +188,17 @@ describe("리뷰가 잡은 결함 — 회귀 방지", () => {
     expect(validateSubmission(c, { type: "바이어" }, { ...deps, consent: {} }).map((i) => i.code)).toContain("required");
     // 채워 넣은 답이 unknown_key 로 거부되지 않는다
     expect(validateSubmission(c, { type: "바이어", budget: "1억" }, { ...deps, consent: {} })).toEqual([]);
+  });
+
+  it("canonicalBranchValue 는 어느 로케일 라벨을 골라도 같은 canonical 값을 낸다 — 분석 이벤트가 언어별로 안 갈라진다", () => {
+    const c = cfg({
+      fields: [{ key: "type", type: "select", options: [{ en: "Buyer", ko: "바이어" }] }],
+      branch: { enabled: true, fieldKey: "type", groups: [{ value: "Buyer", fields: [] }] },
+    });
+    expect(canonicalBranchValue(c, "바이어")).toBe("Buyer");
+    expect(canonicalBranchValue(c, "Buyer")).toBe("Buyer");
+    // 매칭되는 그룹이 없으면 원본을 그대로 돌려준다 — 이벤트가 최소한 뭔가는 싣게.
+    expect(canonicalBranchValue(c, "Press")).toBe("Press");
   });
 
   it("분기 항목이 공통 항목과 key 가 겹치면 하나만 남는다", () => {

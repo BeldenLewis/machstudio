@@ -93,9 +93,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   }
 
-  let body: { email?: unknown; phone?: unknown };
+  let body: { email?: unknown; phone?: unknown; phoneCountry?: unknown };
   try {
-    body = (await request.json()) as { email?: unknown; phone?: unknown };
+    body = (await request.json()) as { email?: unknown; phone?: unknown; phoneCountry?: unknown };
   } catch {
     return NextResponse.json({ error: "잘못된 요청" }, { status: 400, headers: PREFLIGHT_HEADERS });
   }

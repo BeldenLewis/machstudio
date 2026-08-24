@@ -39,6 +39,7 @@ afterEach(() => {
   handle = null;
   host.remove();
   document.getElementById("msf-css")?.remove();
+  document.querySelectorAll(".msf-overlay").forEach((el) => el.remove());
   delete (window as { dataLayer?: unknown[] }).dataLayer;
   vi.restoreAllMocks();
 });
@@ -181,6 +182,43 @@ describe("동의 항목", () => {
     expect(row).not.toBeNull();
     expect(row?.querySelector(".msf-check")).not.toBeNull();
     expect(row?.querySelector(".msf-more")).not.toBeNull();
+  });
+
+  /** 대회 폼·웨비나 로더와 같은 팝업 UX 로 통일한다 — 인라인 드롭다운이면 폼마다 동작이 다르다. */
+  it("전문 보기(Details) 를 누르면 인라인 확장이 아니라 팝업이 뜬다", () => {
+    mount({
+      config: normalizeCollectForm({
+        consent: { privacy: { enabled: true, label: { en: "Privacy" }, body: { en: "전문 내용" } } },
+      }),
+    });
+    expect(document.querySelector(".msf-overlay")).toBeNull();
+
+    host.querySelector<HTMLButtonElement>(".msf-more")!.click();
+
+    const overlay = document.querySelector(".msf-overlay");
+    expect(overlay).not.toBeNull();
+    expect(overlay?.textContent).toContain("전문 내용");
+    // 팝업은 host 바깥, document.body 에 새 루트로 붙는다 — 폼 자체의 overflow/position 에 안 잘리게.
+    expect(host.contains(overlay)).toBe(false);
+
+    const checkbox = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(checkbox.checked).toBe(false);
+    overlay!.querySelector<HTMLButtonElement>(".msf-terms-agree")!.click();
+    expect(checkbox.checked).toBe(true);
+    expect(document.querySelector(".msf-overlay")).toBeNull();
+  });
+
+  it("팝업 닫기를 누르면 동의하지 않은 채로 닫힌다", () => {
+    mount({
+      config: normalizeCollectForm({
+        consent: { privacy: { enabled: true, label: { en: "Privacy" }, body: { en: "전문 내용" } } },
+      }),
+    });
+    host.querySelector<HTMLButtonElement>(".msf-more")!.click();
+    document.querySelector<HTMLButtonElement>(".msf-terms-close")!.click();
+
+    expect(document.querySelector(".msf-overlay")).toBeNull();
+    expect(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false);
   });
 });
 
@@ -570,5 +608,40 @@ describe("제출", () => {
     const dl = ((window as { dataLayer?: Array<Record<string, unknown>> }).dataLayer ?? []);
     const lead = dl.find((e) => e.event === "generate_lead")!;
     expect(lead.ms_consent).toBe("denied");
+  });
+
+  /**
+   * §18 이벤트 계약 — visitor_type 은 로케일 화면 라벨이 아니라 canonical group.value 여야 한다.
+   * 아니면 같은 세그먼트가 언어별로 다른 값("바이어" vs "Buyer")으로 갈라져 GTM 트리거가
+   * 언어마다 따로 깨진다.
+   */
+  it("한국어 라벨로 골라도 visitor_type 은 canonical 값(Buyer)으로 나간다", async () => {
+    const bilingual = normalizeCollectForm({
+      fields: [
+        { id: "f1", key: "email", label: { en: "Email" }, type: "email", required: true, enabled: true },
+        {
+          id: "f2", key: "type", label: { en: "Visitor type" }, type: "select", enabled: true,
+          options: [{ en: "General", ko: "일반" }, { en: "Buyer", ko: "바이어" }],
+        },
+      ],
+      branch: { enabled: true, fieldKey: "type", groups: [{ value: "Buyer", fields: [] }] },
+      consent: { privacy: { enabled: true, label: { en: "Privacy" } } },
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ registrationNo: "1234567890128", rid: "r1" }), { status: 201 }),
+    );
+    mount({ config: bilingual, preview: false, locale: "ko" });
+    fill('input[type="email"]', "a@b.com");
+    const sel = host.querySelector<HTMLSelectElement>("select[data-msf-key]")!;
+    sel.value = "바이어";
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    tickPrivacy();
+    submitBtn().click();
+    await flush();
+
+    const dl = ((window as { dataLayer?: Array<Record<string, unknown>> }).dataLayer ?? []);
+    expect(dl.find((e) => e.event === "ms_visitor_type_selected")?.visitor_type).toBe("Buyer");
+    expect(dl.find((e) => e.event === "ms_form_submit")?.visitor_type).toBe("Buyer");
+    expect(dl.find((e) => e.event === "generate_lead")?.visitor_type).toBe("Buyer");
   });
 });
