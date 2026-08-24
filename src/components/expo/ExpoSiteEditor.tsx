@@ -134,7 +134,20 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
   const [site, setSite] = useState<SiteInfo | null>(null);
   const [pages, setPages] = useState<PageSummary[] | null>(null);
   const [sources, setSources] = useState<SourceOption[]>([]);
-  const [preview, setPreview] = useState<PreviewInfo | null>(null);
+  /**
+   * 페이지별 미리보기 정보. **하나만 들고 있으면 안 된다** — 페이지를 바꾼 뒤에 앞 페이지의
+   * 저장이 늦게 끝나면(fetch 는 언마운트 뒤에도 살아서 resolve 한다) 그 보고가 지금 페이지의
+   * 정보를 덮어써 미리보기가 다시 "준비하는 중" 으로 돌아간다.
+   * 칸을 나눠 두면 늦게 온 보고는 제 칸만 갱신하고 지나간다.
+   *
+   * 이 성질은 **테스트로 못 덮었다** — 지금 하니스로는 페이지 전환을 몰 수 없다
+   * (useSearchParams 목이 router.replace 를 되받지 않는다). 키가 다르면 서로 못 덮는다는
+   * 것이 자료구조에서 바로 나오는 성질이라 그대로 둔다. 전환을 몰 수 있게 되면 검사를 붙일 것.
+   */
+  const [previewByPage, setPreviewByPage] = useState<Record<string, PreviewInfo>>({});
+  const reportPreview = useCallback((next: PreviewInfo) => {
+    setPreviewByPage((prev) => ({ ...prev, [next.pageId]: next }));
+  }, []);
   /** 아직 적용하지 않은 색. null 이면 바꾼 것이 없다. */
   const [stagedTheme, setStagedTheme] = useState<ExpoTheme | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -271,7 +284,7 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
             linkTargets={linkTargets}
             locale={site.defaultLocale || "ko"}
             onSaved={reload}
-            onPreviewInfo={setPreview}
+            onPreviewInfo={reportPreview}
           />
         ) : (
           <div className={`${R.panel} ${FINISH.s1} bg-card p-5 text-sm text-muted-foreground`}>
@@ -283,7 +296,7 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
           previewToken={site.previewToken}
           pageId={selected?.id ?? null}
           release={release}
-          info={preview}
+          info={selected ? previewByPage[selected.id] ?? null : null}
           theme={stagedTheme}
         />
       </div>
