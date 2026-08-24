@@ -79,6 +79,15 @@ afterEach(() => {
 });
 
 describe("대기 안내 CTA 편집", () => {
+  it("아젠다 안내는 현재 원본 정보 메뉴를 가리킨다", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ surveys: [] }) }));
+    const editor = renderWaitingEditor();
+    await act(async () => { await Promise.resolve(); });
+
+    expect(editor.textContent).toContain("만들기 → 원본 정보에 등록한 시간표가 타임라인으로 표시돼요");
+    expect(editor.textContent).not.toContain("세션 탭");
+  });
+
   it("중첩 설정을 자동 저장하고 안전하지 않은 URL은 해당 입력 아래에 알린다", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ surveys: [] }) });
     vi.stubGlobal("fetch", fetchMock);
@@ -126,9 +135,10 @@ describe("대기 안내 CTA 편집", () => {
   });
 
   /** 스킴만 없는 값은 **경고 대신 살려서** 통과시킨다(입력 시점 정규화). */
-  it("스킴 없이 적은 주소는 blur 에 https:// 가 붙는다", () => {
+  it("스킴 없이 적은 주소는 blur 에 https:// 가 붙는다", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ surveys: [] }) }));
     const editor = renderWaitingEditor();
+    await act(async () => { await Promise.resolve(); });
     const toggle = editor.querySelector<HTMLButtonElement>('[role="switch"][aria-label="안내 영역 표시"]');
     act(() => {
       toggle?.click();

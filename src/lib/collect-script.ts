@@ -396,7 +396,23 @@ ${utmCore}
         fire();
       }
     });
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true });
+    /**
+     * **앵커 소스만** body 존재를 확인하고 없으면 기다린다(에듀테크 실측).
+     *
+     * 이 스크립트는 <head>에 async로 설치된다 — 캐시가 워밍업되면 <body>가 파싱되기
+     * 전에 실행될 수 있다. document.body 가 null 인 채로 observe() 를 부르면 그 자리에서
+     * 던져서, 같은 함수 안에서 이 줄 뒤에 오는 alert 가로채기·pagehide 폴백(바로 아래)까지
+     * 전부 등록이 안 된다 — 대행 사이트는 그 폴백이 유일한 전송 경로라 조용히 0건이 된다.
+     * 앵커 없는 기존 소스(아임웹 등)는 이 레이스를 실제로 겪은 적이 없으므로(레코드
+     * 52,000건이 그 증거다) 오늘과 문자 그대로 같은 줄을 그대로 둔다 — 새 분기를 안 타게 해서.
+     */
+    if (HAS_ANCHORS && !document.body) {
+      document.addEventListener("DOMContentLoaded", function() {
+        observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true });
+      });
+    } else {
+      observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true });
+    }
 
     // 일부 사이트는 성공 메시지를 페이지 텍스트가 아니라 네이티브 alert() 팝업으로 띄운다
     // (마이스허브 등) — alert() 은 DOM 밖에 뜨는 별도 레이어라 위 MutationObserver 로는

@@ -4,6 +4,13 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+# 새 면을 만들 때
+
+새 제품·방식·탭을 추가할 때 같은 종류의 기존 면을 먼저 열어 확인한다:
+① 밖으로 나가는 주소(스니펫·공유 링크)는 `getPublicAppOrigin()` — `window.location.origin` 금지
+② 상세 화면이 형제 자원을 조회·변경할 땐 사이드바 컨텍스트가 아니라 **URL 자원의 소속**을 쓰고 서버도 검증
+③ 복사해 온 안내 문구·빈 상태가 새 면에서 참인지, 새 컬럼이 검색·CSV·상세에 등록됐는지
+
 <!-- BEGIN:product-design-rules -->
 # Product UI Principles
 
