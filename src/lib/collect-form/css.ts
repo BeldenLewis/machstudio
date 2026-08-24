@@ -233,8 +233,10 @@ export const COLLECT_FORM_CSS = `
   display:inline-flex !important;align-items:center;justify-content:center;min-width:112px;
   margin:0 0 10px !important;padding:8px 18px !important;border-radius:999px;
   font-size:14px;font-weight:900;line-height:1;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--msf-accent);background:color-mix(in srgb, var(--msf-accent) 12%, #fff);
-  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--msf-accent) 28%, transparent);
+  color:var(--msf-badge-fg,var(--msf-accent-fg)) !important;
+  background:var(--msf-badge-bg,var(--msf-accent)) !important;
+  -webkit-text-fill-color:var(--msf-badge-fg,var(--msf-accent-fg)) !important;
+  box-shadow:0 4px 12px color-mix(in srgb, var(--msf-badge-bg,var(--msf-accent)) 24%, transparent);
 }
 
 /* 본인 확인 줄 — 가려진 연락처(collect-lookup 의 maskEmail/maskPhone).

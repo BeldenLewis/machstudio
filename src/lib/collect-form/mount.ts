@@ -33,6 +33,7 @@ import { COUNTRY_DIALS, flagEmoji, isKnownCountry } from "@/lib/collect-country"
 import { resolveRedirect } from "@/lib/collect-redirect";
 // 로더가 심어 둔 first-touch UTM 을 그대로 쓴다 — 파트너 사이트를 먼저 거친 방문자의 정본이다.
 import { buildUtmEnvelope } from "@/lib/attribution-client";
+import { visitorBadgeCssVars } from "@/lib/collect-badge";
 
 
 /**
@@ -1078,7 +1079,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
       stack.appendChild(
         h("div", { class: "msf-done" },
           h("div", { class: "msf-done-title" }, COPY.doneTitle),
-          identity.visitorType ? h("div", { class: "msf-badge" }, identity.visitorType) : null,
+          identity.visitorType ? h("div", { class: "msf-badge", style: visitorBadgeCssVars(identity.visitorType) }, identity.visitorType) : null,
           identity.name ? h("div", { class: "msf-found-name" }, identity.name) : null,
           /**
            * QR 을 여기서 보여 준다 — 이메일 연동 전에는 등록자가 QR 을 받는 **첫 경로**다

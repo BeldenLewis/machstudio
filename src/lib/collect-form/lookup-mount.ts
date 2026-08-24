@@ -13,6 +13,7 @@ import { ensureFormStyles } from "./css";
 import { onAccentColor } from "@/lib/competition-render";
 import { COUNTRY_DIALS, flagEmoji, isKnownCountry } from "@/lib/collect-country";
 import type { CollectFormConfig } from "@/lib/collect-form-config";
+import { visitorBadgeCssVars } from "@/lib/collect-badge";
 
 
 const COPY = {
@@ -193,7 +194,10 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
       general 인가 buyer 인가" 를 확인하려고 화면을 들여다봐야 했다. 입장 동선이 유형마다
       다르므로 이건 이름보다 먼저 눈에 들어와야 한다.
     */
-    if (view.visitorType) card.appendChild(h("div", { class: "msf-badge" }, view.visitorType));
+    if (view.visitorType) card.appendChild(h("div", {
+      class: "msf-badge",
+      style: visitorBadgeCssVars(view.visitorType),
+    }, view.visitorType));
     if (view.name) card.appendChild(h("div", { class: "msf-found-name" }, view.name));
 
     /*
