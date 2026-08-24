@@ -147,8 +147,9 @@ function buildLandingEmbedSnippet(origin: string, slug: string, name: string, bg
 <script async src="${origin}/w/l/${slug}"></script>`;
 }
 
-export default function DeployTab({ webinarId, slug, webinarName, components, onSilentUpdate }: {
+export default function DeployTab({ webinarId, projectId, slug, webinarName, components, onSilentUpdate }: {
   webinarId: string;
+  projectId: string;
   slug: string;
   webinarName: string;
   components: Record<string, unknown> | null;
@@ -196,7 +197,7 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
     if (res.ok) onSilentUpdate();
     return res.ok;
   });
-  const { workspace, currentProject } = useWorkspace();
+  const { workspace } = useWorkspace();
   const [sites, setSites] = useState<EmbedSite[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -237,10 +238,10 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
   }, [webinarId]);
 
   const fetchSites = useCallback(async () => {
-    if (!workspace || !currentProject) return;
+    if (!workspace || !projectId) return;
     if (!hasLoadedRef.current) setIsLoading(true);
     try {
-      const res = await fetch(`/api/webinar-embed-sites?workspaceId=${workspace.id}&projectId=${currentProject.id}`);
+      const res = await fetch(`/api/webinar-embed-sites?workspaceId=${workspace.id}&projectId=${projectId}`);
       const data = await res.json().catch(() => null);
       if (res.ok && data?.sites) {
         setSites(data.sites);
@@ -249,21 +250,22 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
     } finally {
       setIsLoading(false);
     }
-  }, [workspace, currentProject]);
+  }, [workspace, projectId]);
 
   useEffect(() => { void fetchSites(); }, [fetchSites]);
 
   // 연결 배지 갱신 — 10초 폴링 + 탭 숨김 가드
   useEffect(() => {
+    if (!projectId) return;
     const id = setInterval(() => {
       if (document.hidden) return;
       void fetchSites();
     }, 30_000);
     return () => clearInterval(id);
-  }, [fetchSites]);
+  }, [fetchSites, projectId]);
 
   const createSite = async () => {
-    if (!workspace || !currentProject || !newName.trim() || creating) return;
+    if (!workspace || !projectId || !newName.trim() || creating) return;
     setCreating(true);
     try {
       const res = await fetch("/api/webinar-embed-sites", {
@@ -271,7 +273,7 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workspaceId: workspace.id,
-          projectId: currentProject.id,
+          projectId,
           name: newName.trim(),
           siteUrl: newSiteUrl.trim(),
           activeWebinarId: webinarId,
@@ -318,6 +320,19 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
     }
   };
 
+  if (!projectId) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8">
+        <div className="max-w-3xl rounded-2xl border border-border bg-card p-5 sm:p-6">
+          <h2 className="text-sm font-semibold">프로젝트 정보를 확인할 수 없어요</h2>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            이 URL의 웨비나가 속한 프로젝트를 확인한 뒤 사이트 연결과 설치 코드를 안전하게 관리할 수 있어요. 목록으로 돌아가 다시 열어주세요.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="flex h-48 items-center justify-center">
@@ -326,7 +341,7 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
     );
   }
 
-  const landingUrl = `${origin}/webinar/${slug}/landing`;
+  const landingUrl = origin ? `${origin}/webinar/${slug}/landing` : null;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -336,34 +351,42 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
         <h2 className="flex items-center gap-2 text-sm font-semibold">
           <Megaphone className="h-4 w-4 text-violet-500" /> 랜딩 페이지 임베드
         </h2>
-        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-          아임웹 HTML 위젯에 아래 코드를 붙이면 헤더 아래에 상세페이지가 그대로 들어가요. 높이는 자동으로 맞춰지고,
-          만들기 → 랜딩 페이지에서 수정하면 재부착 없이 즉시 반영돼요.
-        </p>
-        <div className="mt-4 space-y-3">
-          <div>
-            <p className="mb-1 text-xs font-medium text-muted-foreground">직접 링크</p>
-            <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 truncate rounded-xl border border-border bg-secondary/40 px-3 py-2.5 text-[11.5px]">{landingUrl}</code>
-              <CopyButton text={landingUrl} />
-              <a
-                href={landingUrl}
-                target="_blank"
-                rel="noopener"
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs transition-colors hover:bg-secondary"
-              >
-                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" /> 열기
-              </a>
+        {landingUrl ? (
+          <>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              아임웹 HTML 위젯에 아래 코드를 붙이면 헤더 아래에 상세페이지가 그대로 들어가요. 높이는 자동으로 맞춰지고,
+              만들기 → 랜딩 페이지에서 수정하면 재부착 없이 즉시 반영돼요.
+            </p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <p className="mb-1 text-xs font-medium text-muted-foreground">직접 링크</p>
+                <div className="flex items-center gap-2">
+                  <code className="min-w-0 flex-1 truncate rounded-xl border border-border bg-secondary/40 px-3 py-2.5 text-[11.5px]">{landingUrl}</code>
+                  <CopyButton text={landingUrl} />
+                  <a
+                    href={landingUrl}
+                    target="_blank"
+                    rel="noopener"
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs transition-colors hover:bg-secondary"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" /> 열기
+                  </a>
+                </div>
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-medium text-muted-foreground">임베드 코드 (아임웹 HTML 위젯)</p>
+                <CodeBlock code={buildLandingEmbedSnippet(origin, slug, webinarName, landingBg ?? FALLBACK_LANDING_BG)} />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                비공개 상태면 방문자에게 “아직 공개되지 않은 페이지” 안내만 보여요 — 만들기 → 랜딩 페이지에서 공개로 켜세요.
+              </p>
             </div>
-          </div>
-          <div>
-            <p className="mb-1 text-xs font-medium text-muted-foreground">임베드 코드 (아임웹 HTML 위젯)</p>
-            <CodeBlock code={buildLandingEmbedSnippet(origin, slug, webinarName, landingBg ?? FALLBACK_LANDING_BG)} />
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            비공개 상태면 방문자에게 “아직 공개되지 않은 페이지” 안내만 보여요 — 만들기 → 랜딩 페이지에서 공개로 켜세요.
+          </>
+        ) : (
+          <p role="alert" className="mt-3 rounded-xl bg-secondary/60 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+            공개 배포 주소가 설정되지 않아 랜딩 링크와 설치 코드를 복사할 수 없어요. NEXT_PUBLIC_CANONICAL_APP_URL을 설정하세요.
           </p>
-        </div>
+        )}
       </section>
 
       {/* 하단 배너 문구 — 배너는 임베드 전용이라 배포 탭에서 함께 다룬다(표시 범위 설정도 여기 있음) */}
@@ -494,7 +517,7 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
         <div className="mt-4 space-y-4">
           {sites.map((site) => {
             const isThisWebinar = site.activeWebinar?.id === webinarId;
-            const snippet = `<script async src="${origin}/w/${site.id}"></script>`;
+            const snippet = origin ? `<script async src="${origin}/w/${site.id}"></script>` : null;
             return (
               <div key={site.id} className={`rounded-xl border p-4 transition-colors ${isThisWebinar ? "border-violet-500/40 bg-violet-500/[0.04]" : "border-border bg-background"}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -536,7 +559,13 @@ export default function DeployTab({ webinarId, slug, webinarName, components, on
 
                 <div className="mt-3 space-y-2">
                   <p className="text-[11px] font-medium text-muted-foreground">부착 스니펫 (아임웹 환경설정 → 코드 삽입, 1회)</p>
-                  <CodeBlock code={snippet} />
+                  {snippet ? (
+                    <CodeBlock code={snippet} />
+                  ) : (
+                    <p role="alert" className="rounded-lg bg-secondary/60 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                      공개 배포 주소가 설정되지 않아 이 사이트의 설치 코드를 복사할 수 없어요. NEXT_PUBLIC_CANONICAL_APP_URL을 설정하세요.
+                    </p>
+                  )}
                 </div>
 
                 <div className="mt-3 space-y-1.5">

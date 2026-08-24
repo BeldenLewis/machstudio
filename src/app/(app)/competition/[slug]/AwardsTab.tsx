@@ -373,6 +373,8 @@ function ShowCard({
   const [config, setConfig] = useState<ShowConfig>(() => normalizeShowConfig(competition.showConfig));
   const [copied, setCopied] = useState(false);
 
+  // 이번 승인 범위 밖인 결과 발표 공유 링크는 현재 host 동작을 유지한다.
+  // eslint-disable-next-line no-restricted-syntax
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const showUrl = competition.showToken ? `${origin}/show/${competition.showToken}` : "";
 

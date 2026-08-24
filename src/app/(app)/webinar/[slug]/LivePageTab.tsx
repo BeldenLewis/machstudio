@@ -552,7 +552,7 @@ export default function LivePageTab({ webinar, slug, state, onStateChange, onSil
         <>
           <Blk title="화면 구성" tag="read" goes={goesFor("waiting", "entry")} hint="대기 화면에 보여줄 요소예요. 데이터가 없으면 켜져 있어도 자동으로 숨겨져요.">
             <div className="space-y-2.5">
-              <Toggle label="세션 순서(아젠다)" checked={screens.waiting.agenda} onChange={(v) => setW("agenda", v)} desc="세션 탭에 등록한 시간표가 타임라인으로 표시돼요" />
+              <Toggle label="세션 순서(아젠다)" checked={screens.waiting.agenda} onChange={(v) => setW("agenda", v)} desc="만들기 → 원본 정보에 등록한 시간표가 타임라인으로 표시돼요" />
               <Toggle label="함께 기다리는 인원 밴드" checked={screens.waiting.social} onChange={(v) => setW("social", v)} desc="현재 대기 중인 사람이 2명 이상일 때만 표시돼요" />
               <Toggle label="캘린더에 추가" checked={screens.waiting.calendar} onChange={(v) => setW("calendar", v)} desc="웨비나 일정으로 만들어 담아요 · 모바일에서만 보여요" />
               <Toggle label="초대 공유" checked={screens.waiting.share} onChange={(v) => setW("share", v)} />

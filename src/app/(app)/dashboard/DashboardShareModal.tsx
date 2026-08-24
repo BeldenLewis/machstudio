@@ -27,6 +27,8 @@ export function DashboardShareModal({ open, onClose, projectId, projectName }: P
   const [passwordInput, setPasswordInput] = useState("");
 
   const shareUrl = state?.shareToken
+    // 이번 승인 범위 밖인 대시보드 공유 링크는 현재 열어 둔 host 동작을 유지한다.
+    // eslint-disable-next-line no-restricted-syntax
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/share/dashboard/${state.shareToken}`
     : "";
 
