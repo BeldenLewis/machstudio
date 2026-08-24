@@ -144,7 +144,7 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
             본인이 이메일이나 전화를 직접 넣어 통과한 뒤라 가려서 보여 주지만, 여기는 그 관문이 없다.
           */}
           {view.visitorType && (
-            <p className="mt-4 inline-block rounded-full bg-neutral-900/5 px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.08em] text-neutral-700 ring-1 ring-neutral-900/10">
+            <p className="mt-4 inline-flex min-w-28 items-center justify-center rounded-full bg-orange-500 px-5 py-2 text-sm font-black uppercase tracking-[0.1em] text-white shadow-sm">
               {view.visitorType}
             </p>
           )}
@@ -161,6 +161,23 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
               className="block h-[200px] w-[200px]"
             />
           </div>
+
+          {(view.maskedPhone || view.maskedEmail) && (
+            <dl className="mx-auto mt-4 grid w-full max-w-[280px] grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 rounded-xl bg-neutral-100 px-4 py-3 text-left text-xs">
+              {view.maskedPhone && (
+                <>
+                  <dt className="font-medium text-neutral-500">Phone</dt>
+                  <dd className="min-w-0 break-all text-right font-bold text-neutral-800">{view.maskedPhone}</dd>
+                </>
+              )}
+              {view.maskedEmail && (
+                <>
+                  <dt className="font-medium text-neutral-500">E-mail</dt>
+                  <dd className="min-w-0 break-all text-right font-bold text-neutral-800">{view.maskedEmail}</dd>
+                </>
+              )}
+            </dl>
+          )}
 
           <p className="mt-4 font-mono text-lg font-bold tracking-[0.14em] text-neutral-900">
             {view.registrationNo}

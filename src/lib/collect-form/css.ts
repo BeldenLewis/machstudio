@@ -188,7 +188,8 @@ export const COLLECT_FORM_CSS = `
  * 사라진 QR 은 현장에서 줄을 만든다.
  */
 .msf-qr{
-  display:inline-block;margin:14px auto 0;
+  display:block !important;width:220px !important;min-width:220px !important;
+  margin:14px auto 0 !important;
   background:#ffffff !important;padding:10px !important;border-radius:12px !important;
 }
 /**
@@ -208,15 +209,19 @@ export const COLLECT_FORM_CSS = `
 
 /* ── 등록 확인(Find My QR) ──────────────────── */
 .msf-lookup{display:flex;flex-direction:column;gap:14px}
-.msf-found{text-align:center;background:var(--msf-soft);border-radius:var(--msf-radius);padding:22px 20px}
+.msf-found{
+  display:flex !important;flex-direction:column !important;align-items:center !important;
+  width:100% !important;text-align:center;background:var(--msf-soft);border-radius:var(--msf-radius);padding:22px 20px
+}
 .msf-found-name{font-size:18px;font-weight:800}
 .msf-found-type{font-size:12px;color:var(--msf-muted);margin-top:2px}
 
 /* 참관객 유형 배지 — 유형마다 입장 동선이 다르다. 이름보다 먼저 눈에 들어와야 한다.
    키컬러를 그대로 칠하지 않고 옅게 깐다: QR 카드가 주인공이라 배지가 그걸 이기면 안 된다. */
 .msf-badge{
-  display:inline-block;margin-bottom:10px;padding:6px 16px;border-radius:999px;
-  font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  display:inline-flex !important;align-items:center;justify-content:center;min-width:112px;
+  margin:0 0 10px !important;padding:8px 18px !important;border-radius:999px;
+  font-size:14px;font-weight:900;line-height:1;letter-spacing:.1em;text-transform:uppercase;
   color:var(--msf-accent);background:color-mix(in srgb, var(--msf-accent) 12%, #fff);
   box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--msf-accent) 28%, transparent);
 }
@@ -227,12 +232,13 @@ export const COLLECT_FORM_CSS = `
    inline-grid로 두면, 부모 .msf-found의 text-align:center가 이 블록 자체를 카드
    가운데로 보내면서 라벨·값은 서로 가깝게 붙는다. */
 .msf-idcheck{
-  display:inline-grid;grid-template-columns:auto auto;gap:6px 12px;
-  margin:14px auto 0;padding:12px 18px;border-radius:var(--msf-radius);
+  display:grid !important;grid-template-columns:auto minmax(0,1fr);gap:6px 16px;
+  width:min(100%,360px) !important;min-width:0 !important;
+  margin:14px auto 0 !important;padding:12px 14px !important;border-radius:var(--msf-radius);
   background:var(--msf-bg);text-align:left;font-size:13px;
 }
-.msf-idcheck dt{color:var(--msf-muted)}
-.msf-idcheck dd{margin:0;font-weight:700;word-break:break-all}
+.msf-idcheck dt{display:block !important;color:var(--msf-muted)}
+.msf-idcheck dd{display:block !important;min-width:0;margin:0 !important;text-align:right;font-weight:700;word-break:break-all}
 
 /* QR 저장 — 캡처가 안 되는 기기(일부 사내폰·키오스크)가 있어 파일로도 준다. */
 .msf-save{

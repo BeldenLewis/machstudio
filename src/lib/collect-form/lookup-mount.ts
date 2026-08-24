@@ -222,16 +222,6 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
       ["Phone", view.maskedPhone],
       ["E-mail", view.maskedEmail],
     ].filter(([, value]) => !!value) as [string, string][];
-    if (rows.length > 0) {
-      card.appendChild(
-        h("dl", { class: "msf-idcheck" },
-          ...rows.flatMap(([label, value]) => [
-            h("dt", null, label),
-            h("dd", null, value),
-          ]),
-        ),
-      );
-    }
 
     if (view.showQr) {
       /**
@@ -247,6 +237,16 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
           }),
         ),
       );
+      if (rows.length > 0) {
+        card.appendChild(
+          h("dl", { class: "msf-idcheck" },
+            ...rows.flatMap(([label, value]) => [
+              h("dt", null, label),
+              h("dd", null, value),
+            ]),
+          ),
+        );
+      }
       card.appendChild(h("div", { class: "msf-regno" }, view.registrationNo));
       card.appendChild(h("div", { class: "msf-regno-label" }, COPY.regNoLabel));
 

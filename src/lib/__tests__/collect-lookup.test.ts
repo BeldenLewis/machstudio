@@ -181,8 +181,9 @@ describe("티켓 화면", () => {
 
   it("조회 화면과 같은 최소 노출 규칙을 쓴다", () => {
     const view = buildTicketView(orConfig, record)!;
-    expect(Object.keys(view).sort()).toEqual(["name", "registrationNo", "visitorType"]);
+    expect(Object.keys(view).sort()).toEqual(["maskedEmail", "maskedPhone", "name", "registrationNo", "visitorType"]);
     expect(JSON.stringify(view)).not.toContain("Acme");
+    expect(view.maskedEmail).not.toContain("jane@example.com");
   });
 
   it("등록번호가 없으면 화면을 만들지 않는다", () => {

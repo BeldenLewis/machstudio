@@ -76,6 +76,9 @@ export interface TicketView {
   name: string;
   /** 참관객 유형 — 분기 기준 항목의 값. 분기가 없으면 빈 문자열. */
   visitorType: string;
+  /** 티켓을 주운 사람이 원문을 알 수 없도록 가린 본인 확인용 연락처. */
+  maskedEmail: string;
+  maskedPhone: string;
 }
 
 /** 조회 화면에 내보내는 것 — **이게 전부다**(§10.2 "표시 정보는 최소화"). */
@@ -211,5 +214,16 @@ export function buildTicketView(
 
   const visitorType = config.branch.enabled ? str(data[config.branch.fieldKey]) : "";
 
-  return { registrationNo: record.registrationNo, name, visitorType };
+  const pick = (type: string) => {
+    const field = config.fields.find((f) => f.type === type);
+    return field ? str(data[field.key]) : "";
+  };
+
+  return {
+    registrationNo: record.registrationNo,
+    name,
+    visitorType,
+    maskedEmail: maskEmail(pick("email")),
+    maskedPhone: maskPhone(pick("tel")),
+  };
 }
