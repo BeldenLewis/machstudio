@@ -255,6 +255,35 @@ describe("대행전시 경로 — 앵커로 지목해 읽는다", () => {
     });
   });
 
+  /**
+   * select 는 el.value 가 아니라 선택된 option 의 화면 글자를 써야 한다(실물 확인:
+   * edtechkorea.or.kr 의 "소속분류" <select><option value="in14">Elementary School</option>
+   * — 라이브 레코드에 "in14" 같은 내부 코드가 쌓이던 버그).
+   * 라디오·체크박스는 이미 label 텍스트를 쓴다 — select 만 다른 경로였다.
+   */
+  it("select 는 코드가 아니라 선택된 글자를 읽는다", async () => {
+    const withSelect = `<form>
+      <div class="field">
+        <label class="field-label"><span>소속분류</span></label>
+        <div class="input-area f_select">
+          <select name="mod3809_in1">
+            <option value="">==Choose==</option>
+            <option value="in14">Elementary School</option>
+            <option value="in15" selected>Middle School</option>
+          </select>
+        </div>
+      </div>
+      <button id="go">확인</button>
+    </form>`;
+    const h = mount(
+      withSelect,
+      buildScript([{ index: 0, key: "org_type", label: "소속분류", matchBy: "name", matchValue: "mod3809_in1" }], ["/fairVst2.do"]),
+      "https://edtechkorea.or.kr/fairVst2.do",
+    );
+    await h.submitAndLeave();
+    expect(h.sent[0]?.data).toEqual({ org_type: "Middle School" });
+  });
+
   it("id 앵커는 감싼 요소 안의 입력을 찾는다", async () => {
     const h = mount(
       edtechForm,

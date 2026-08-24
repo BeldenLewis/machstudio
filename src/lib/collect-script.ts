@@ -254,6 +254,19 @@ ${utmCore}
             var txt = label ? (label.textContent || "").trim() : "";
             checked.push(txt || el.value || "");
           }
+        } else if (field.mb && el.tagName === "SELECT") {
+          /**
+           * **앵커 소스만** select 는 선택된 option 의 화면 글자를 쓴다(에듀테크 실측).
+           *
+           * el.value 는 <option value="in14">Elementary School</option> 처럼 내부 코드다 —
+           * 체크박스·라디오는 이미 위에서 label 텍스트를 쓰는데 select 만 코드를 그대로
+           * 내보내고 있었다("소속분류"에 "in14" 같은 값이 쌓이던 원인). 앵커 없는 기존
+           * 소스(아임웹 등)는 이 분기 자체에 안 들어온다 — el.value 그대로 쓰는 아래 분기와
+           * 문자 그대로 같은 소스가 이월된다.
+           */
+          var opt = el.options && el.selectedIndex >= 0 ? el.options[el.selectedIndex] : null;
+          var sv = (opt ? (opt.textContent || opt.value || "") : (el.value || "")).trim();
+          if (sv) textValues.push(sv);
         } else {
           var v = (el.value || "").trim();
           if (v) textValues.push(v);
