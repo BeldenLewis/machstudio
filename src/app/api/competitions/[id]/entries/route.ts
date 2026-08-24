@@ -126,6 +126,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       continue;
     }
 
+    // 클라이언트는 <input type="number"> 로 막지만, API 를 직접 두드리면 그 제약이 없다 —
+    // 반복 그룹의 "인원수 항목과 연동"이 이 값을 그대로 Number() 로 읽으므로 여기서도 확인한다.
+    if (field.type === "number" && !/^\d+$/.test(value)) {
+      return NextResponse.json({ error: t.numberInvalid(field.label) }, { status: 400, headers: CORS_HEADERS });
+    }
+
     data[field.key] = value;
   }
 

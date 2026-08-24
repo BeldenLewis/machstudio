@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { motion, Reorder } from "framer-motion";
 import {
-  AlignLeft, GripVertical, ImageIcon, ListChecks, ListPlus, Mail, Phone, Plus, SquareCheck, Trash2, Users, Video,
+  AlignLeft, GripVertical, Hash, ImageIcon, ListChecks, ListPlus, Mail, Phone, Plus, SquareCheck, Trash2, Users, Video,
 } from "lucide-react";
 import { toast } from "sonner";
 import { NOTICE_LANGUAGES, type NoticeLanguage } from "@/lib/notice/config";
@@ -33,6 +33,7 @@ const TYPE_META: Record<CompetitionFieldType, { label: string; icon: typeof Alig
   text: { label: "텍스트", icon: AlignLeft },
   email: { label: "이메일", icon: Mail },
   tel: { label: "전화번호", icon: Phone },
+  number: { label: "숫자", icon: Hash },
   select: { label: "드롭다운", icon: ListChecks },
   multiple: { label: "복수 선택", icon: ListPlus },
   checkbox: { label: "체크박스", icon: SquareCheck },
@@ -41,7 +42,7 @@ const TYPE_META: Record<CompetitionFieldType, { label: string; icon: typeof Alig
   repeater: { label: "반복 그룹(팀원 등)", icon: Users },
 };
 
-const TYPE_ORDER: CompetitionFieldType[] = ["text", "email", "tel", "select", "multiple", "checkbox", "image", "youtube", "repeater"];
+const TYPE_ORDER: CompetitionFieldType[] = ["text", "email", "tel", "number", "select", "multiple", "checkbox", "image", "youtube", "repeater"];
 const CHOICE_TYPES: CompetitionFieldType[] = ["select", "multiple"];
 
 /**
@@ -290,6 +291,11 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                     제출 시 링크에서 영상 ID만 저장해요. 비공개 영상은 재생되지 않아 신청자에게 안내가 나갑니다.
                   </p>
                 )}
+                {field.type === "number" && (
+                  <p className="mt-2 pl-9 text-[11px] text-muted-foreground">
+                    신청자는 정수만 입력할 수 있어요. 반복 그룹의 &ldquo;인원수 항목과 연동&rdquo;에서 고를 수 있어요.
+                  </p>
+                )}
 
                 {field.type === "repeater" && (
                   <div className="mt-2 space-y-2 pl-9">
@@ -304,26 +310,34 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                       };
                       return (
                         <div key={i} className="flex items-center gap-1.5">
-                          <input
-                            value={sub.label}
-                            onChange={(e) => updateSub({ label: e.target.value })}
-                            placeholder="서브필드 이름 (예: 이름)"
-                            className={`${FIELD_CLS} h-8 flex-1`}
-                          />
-                          <input
-                            value={sub.key}
-                            onChange={(e) => updateSub({ key: e.target.value })}
-                            placeholder="key"
-                            className={`${FIELD_CLS} h-8 w-24 font-mono text-xs`}
-                          />
-                          <select
-                            value={sub.type}
-                            onChange={(e) => updateSub({ type: e.target.value as CompetitionRepeaterSubField["type"] })}
-                            className={`${FIELD_CLS} h-8 w-24`}
-                          >
-                            <option value="text">텍스트</option>
-                            <option value="email">이메일</option>
-                          </select>
+                          {/* FIELD_CLS 는 w-full 을 이미 갖고 있어 뒤에 붙인 폭 클래스는 무시된다
+                              (primitives.tsx 의 FIELD_CLS 주석 참고) — 폭은 래퍼가 갖는다. */}
+                          <div className="min-w-0 flex-1">
+                            <input
+                              value={sub.label}
+                              onChange={(e) => updateSub({ label: e.target.value })}
+                              placeholder="서브필드 이름 (예: 이름)"
+                              className={`${FIELD_CLS} h-8`}
+                            />
+                          </div>
+                          <div className="w-24 shrink-0">
+                            <input
+                              value={sub.key}
+                              onChange={(e) => updateSub({ key: e.target.value })}
+                              placeholder="key"
+                              className={`${FIELD_CLS} h-8 font-mono text-xs`}
+                            />
+                          </div>
+                          <div className="w-24 shrink-0">
+                            <select
+                              value={sub.type}
+                              onChange={(e) => updateSub({ type: e.target.value as CompetitionRepeaterSubField["type"] })}
+                              className={`${FIELD_CLS} h-8`}
+                            >
+                              <option value="text">텍스트</option>
+                              <option value="email">이메일</option>
+                            </select>
+                          </div>
                           <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
                             <input type="checkbox" checked={sub.required} onChange={(e) => updateSub({ required: e.target.checked })} />
                             필수
@@ -371,8 +385,11 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                         className={`${FIELD_CLS} h-8 w-auto`}
                       >
                         <option value="">사용 안 함 (수동으로 +/- )</option>
+                        {/* 숫자 항목만 고를 수 있게 한다 — 텍스트 항목을 골라 두면 신청자가
+                            아무거나 적었을 때 연동이 조용히 안 먹는다. 이미 저장된 값이
+                            숫자 항목이 아니어도(옛 설정) 목록에서 사라지지 않게 같이 넣어 둔다. */}
                         {form.fields
-                          .filter((f) => f.id !== field.id && f.type !== "repeater")
+                          .filter((f) => f.id !== field.id && (f.type === "number" || f.key === field.countFromKey))
                           .map((f) => <option key={f.id} value={f.key}>{f.label || f.key}</option>)}
                       </select>
                       {field.countFromKey && (
@@ -386,6 +403,9 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                           />
                           <span>명 제외 (예: 리더 1명)</span>
                         </>
+                      )}
+                      {!form.fields.some((f) => f.type === "number") && (
+                        <span className="text-muted-foreground/70">먼저 항목 형식을 &ldquo;숫자&rdquo;로 만들어야 골라 쓸 수 있어요.</span>
                       )}
                     </div>
                     {field.countFromKey && (

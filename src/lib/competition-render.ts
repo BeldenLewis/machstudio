@@ -362,6 +362,13 @@ export function renderFormFieldsHtml(config: CompetitionConfig): string {
           <select class="mc-tel-cc" data-mc-cc="${escapeHtml(field.key)}" aria-label="${escapeHtml(field.label)} — country">${options}</select>
           <input type="tel" inputmode="tel" ${common} class="mc-input" placeholder="${escapeHtml(field.placeholder)}"></div></div>`;
       }
+      if (field.type === "number") {
+        // 반복 그룹의 "인원수 항목과 연동"이 이 값을 그대로 Number() 로 읽는다 — 자유
+        // 텍스트로 두면 신청자가 아무거나 적어 연동이 조용히 안 먹는다.
+        return `<div class="mc-field">${label}<input type="number" inputmode="numeric" min="0" step="1" ${common} class="mc-input" placeholder="${escapeHtml(
+          field.placeholder,
+        )}"></div>`;
+      }
       const inputType = field.type === "email" ? "email" : "text";
       return `<div class="mc-field">${label}<input type="${inputType}" ${common} class="mc-input" placeholder="${escapeHtml(
         field.placeholder,

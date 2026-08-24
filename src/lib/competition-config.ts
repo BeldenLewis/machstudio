@@ -13,8 +13,8 @@ import type { WebinarRegistrationField } from "./webinar-config";
 import { isLegalCountry, type Country, type OrgProfile, type ThirdParty } from "@/lib/legal-templates/types";
 import { resolveOrgTokens } from "@/lib/legal-templates/tokens";
 
-/** 대회 신청 폼에만 있는 추가 타입 — 사진 업로드와 YouTube 링크, 반복 항목(팀원 등). */
-export type CompetitionExtraFieldType = "image" | "youtube" | "repeater";
+/** 대회 신청 폼에만 있는 추가 타입 — 사진 업로드와 YouTube 링크, 반복 항목(팀원 등), 정수 입력. */
+export type CompetitionExtraFieldType = "image" | "youtube" | "repeater" | "number";
 export type CompetitionFieldType = WebinarRegistrationField["type"] | CompetitionExtraFieldType;
 
 /** repeater 한 행을 이루는 항목 — 팀원의 "이름", "이메일" 같은 것. */
