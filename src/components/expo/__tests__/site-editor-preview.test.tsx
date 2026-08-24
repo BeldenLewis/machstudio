@@ -277,23 +277,6 @@ describe("사이트 색", () => {
     return fields[0];
   };
 
-  /** ColorField 의 HEX 텍스트 칸. `type="color"` 는 8자리 값을 아예 못 받는다. */
-  const hexText = () => {
-    const el = [...host.querySelectorAll<HTMLInputElement>("input")]
-      .find((i) => i.type === "text" && /^#/.test(i.value));
-    if (!el) throw new Error("HEX 칸이 없다");
-    return el;
-  };
-
-  const typeHex = async (value: string) => {
-    const el = hexText();
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-    await act(async () => {
-      setter.call(el, value);
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-  };
-
   const setColor = async (value: string) => {
     const el = hexInput();
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
@@ -312,10 +295,34 @@ describe("사이트 색", () => {
     expect(sitePatches).toEqual([]);
   });
 
-  it("미리보기에는 바로 반영된다", async () => {
+  it("미리보기에 반영된다", async () => {
+    vi.useFakeTimers();
     await render();
     await setColor("#ff0000");
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
     expect(frameSrc()).toContain("accent=%23ff0000");
+  });
+
+  /**
+   * `<input type="color">` 는 선택기를 끄는 동안 정상 HEX 를 초당 수십 번 쏜다. 그대로
+   * 주소에 실으면 PreviewFrame 이 URL 을 key 로 쓰므로 **iframe 이 매번 다시 뜨고**
+   * /hp 로 그만큼 요청이 나간다.
+   */
+  it("고르는 동안에는 미리보기를 다시 띄우지 않는다", async () => {
+    vi.useFakeTimers();
+    await render();
+    const before = frameSrc();
+
+    for (const hex of ["#ff0000", "#ee0000", "#dd0000", "#cc0000"]) {
+      await setColor(hex);
+      await act(async () => { await vi.advanceTimersByTimeAsync(30); });
+    }
+    // 아직 안 멈췄다 — 주소는 그대로여야 한다.
+    expect(frameSrc()).toBe(before);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    // 멈추고 나서 마지막 색 하나만 반영된다.
+    expect(frameSrc()).toContain("accent=%23cc0000");
   });
 
   it("적용해야 서버로 나간다", async () => {

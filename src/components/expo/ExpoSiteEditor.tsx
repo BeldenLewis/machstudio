@@ -483,8 +483,13 @@ function PageForm({
   useEffect(() => { reportRef.current = onPreviewInfo; }, [onPreviewInfo]);
 
   /**
-   * 발행본 쪽 값은 PATCH 가 바꾸지 않으므로 처음 읽은 것이 계속 맞다. 페이지를 바꾸면
-   * 이 컴포넌트가 통째로 새로 마운트되므로(key=pageId) 낡을 수도 없다.
+   * 발행본 쪽 값. **초안 저장(PATCH)은 이걸 바꾸지 않으므로** 저장이 도는 동안은 맞다.
+   *
+   * 다만 **발행(POST .../publish)은 바꾼다.** 지금은 발행 UI 가 없어서(W1 범위 밖) 이
+   * 화면에서 도달할 수 없지만, 발행 버튼이 붙는 순간 여기가 낡는다 — 발행 직후
+   * 미리보기가 옛 발행본 지문으로 "실행 중" 이라고 적힌 채 자리표를 보여 준다.
+   * 그때는 발행 응답에서도 지문을 받아 함께 올려야 한다(페이지 상세는 pageId 가 바뀔
+   * 때만 다시 읽으므로 저절로 갱신되지 않는다).
    */
   const { publishedCodeDigest, hasPublished, draftRevision, codeDigest } = page;
 
@@ -612,6 +617,20 @@ function PreviewPane({
   const [approvedDigest, setApprovedDigest] = useState("");
 
   /**
+   * 색은 **잠깐 묵혔다가** 주소에 싣는다.
+   *
+   * `<input type="color">` 는 OS 색 선택기를 끄는 동안 `input` 을 계속 쏘고, 그 값은 전부
+   * 정상 HEX 다. 그대로 주소에 실으면 이벤트마다 URL 이 바뀌고, PreviewFrame 이 URL 을
+   * key 로 쓰므로 **iframe 이 매번 파괴·재생성된다** — 화면이 깜빡이는 것은 물론 /hp 로
+   * 초당 수십 번 요청이 나가 레이트리밋에 걸린다.
+   */
+  const [settledTheme, setSettledTheme] = useState<ExpoTheme | null>(theme);
+  useEffect(() => {
+    const timer = setTimeout(() => setSettledTheme(theme), 250);
+    return () => clearTimeout(timer);
+  }, [theme]);
+
+  /**
    * **자기 페이지 것만 믿는다.** 페이지를 바꾸면 `pageId` 는 곧바로 새것이 되지만
    * `info` 는 새 페이지 상세가 도착할 때까지 앞 페이지 것이다. 그대로 쓰면 앞 페이지의
    * 발행 여부와 코드 지문으로 새 페이지를 한 번 부른다.
@@ -638,14 +657,14 @@ function PreviewPane({
      * **색이 될 때만** 싣는다. 타이핑 중인 반쪽짜리 값(`#1f`)까지 실으면 글자 하나마다
      * 주소가 바뀌어 iframe 이 다시 뜬다 — 색을 고르는 동안 미리보기가 계속 깜빡인다.
      */
-    if (theme) {
+    if (settledTheme) {
       for (const key of ["accent", "lightBg", "darkBg"] as const) {
-        const hex = normalizeHexColor(theme[key]);
+        const hex = normalizeHexColor(settledTheme[key]);
         if (hex) query.set(key, hex);
       }
     }
     return `/hp/${encodeURIComponent(previewToken)}?${query.toString()}`;
-  }, [previewToken, pageId, own, wantPublished, codeApproved, digest, theme]);
+  }, [previewToken, pageId, own, wantPublished, codeApproved, digest, settledTheme]);
 
   if (!src) {
     return (

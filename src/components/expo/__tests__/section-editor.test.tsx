@@ -404,3 +404,28 @@ describe("하나만 놓는 구획을 지운 직후", () => {
     expect(kvs.length, "kv 가 둘이면 저장 때 하나가 조용히 버려진다").toBeLessThanOrEqual(1);
   });
 });
+
+/**
+ * 사전등록 폼은 **소스가 붙어야 그려진다.** 렌더러가 소스 없는 구획을 통째로 건너뛴다
+ * (`view-page.ts`). 필수로 걸어 두지 않으면 제목 한 줄만 있어도 편집기는 "멀쩡함" 이고
+ * 공개 화면에는 아무것도 안 나온다 — 어디에도 단서가 없다.
+ */
+describe("사전등록 폼 구획", () => {
+  it("소스를 안 고르면 공개로 안 나간다고 말한다", async () => {
+    const section = newSection("register-form");
+    section.content.heading = { ko: "관람 신청" };
+    await render([section]);
+
+    expect(host.textContent).toContain("공개 화면에 나가지 않아요");
+    expect(host.textContent).toContain("내용 없음");
+  });
+
+  it("소스를 고르면 경고가 사라진다", async () => {
+    const section = newSection("register-form");
+    section.content.heading = { ko: "관람 신청" };
+    section.content.sourceRef = "src-1";
+    await render([section]);
+
+    expect(host.textContent).not.toContain("공개 화면에 나가지 않아요");
+  });
+});

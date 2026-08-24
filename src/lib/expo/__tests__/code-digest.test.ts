@@ -1,4 +1,6 @@
 // @vitest-environment node
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { expoCustomCodeDigest, expoPreviewCodeDigest, previewSections } from "@/lib/expo/code-digest";
 
@@ -90,5 +92,23 @@ describe("지문", () => {
       sections: [code(SID_B, "<b>둘</b>"), code(SID_A, "<b>하나</b>")],
     });
     expect(b).not.toBe(a);
+  });
+});
+
+/**
+ * 이 파일은 **남의 코드를 실행할지 정한다.** 그런데 구분자를 날 제어문자로 적어 두면
+ * git 이 파일 전체를 바이너리로 보고 diff 를 아예 안 보여 준다(실측: numstat 이 `-  -`).
+ * 변경이 눈에 안 보이는 것 자체가 위험이라, 이스케이프로만 적는다.
+ *
+ * 문자는 같으므로 지문 값은 바뀌지 않는다 — 위 검사들이 그걸 지킨다.
+ */
+describe("소스가 텍스트로 남아 있다", () => {
+  it("날 제어문자가 없다", () => {
+    const src = readFileSync(
+      join(resolve(__dirname, "../../../.."), "src/lib/expo/code-digest.ts"),
+      "utf8",
+    );
+    const bad = [...src].filter((c) => c.codePointAt(0)! < 32 && c !== "\n" && c !== "\t");
+    expect(bad.map((c) => "U+" + c.codePointAt(0)!.toString(16).padStart(4, "0"))).toEqual([]);
   });
 });

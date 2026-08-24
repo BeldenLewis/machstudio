@@ -116,8 +116,9 @@ export function SectionsEditor({
     <section aria-labelledby="expo-sections-heading">
       <div className="flex items-baseline justify-between gap-2">
         <h2 id="expo-sections-heading" className="text-sm font-semibold">구획</h2>
+        {/* 유예로 사라진 것은 빼고 센다 — 안 그러면 5초 동안 화면의 카드 수와 어긋난다. */}
         <span className="text-[11px] text-muted-foreground">
-          {sections.length}/{EXPO_LIMITS.sectionsPerPage}
+          {sections.length - pendingRemove.size}/{EXPO_LIMITS.sectionsPerPage}
         </span>
       </div>
 
