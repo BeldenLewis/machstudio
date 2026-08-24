@@ -73,6 +73,13 @@ interface PageDetail {
  * 저장 번호가 바뀔 때마다 미리보기를 다시 불러야 하는데, 그 번호를 아는 건 폼 쪽이다.
  */
 interface PreviewInfo {
+  /**
+   * 이 정보가 **어느 페이지 것인가.** 없으면 페이지를 바꾼 직후, 새 페이지의 상세가
+   * 도착하기 전까지 미리보기가 **새 주소 + 앞 페이지의 값**으로 한 번 뜬다:
+   * 발행본이 없는 페이지에 `published=1` 이 붙고, 승인한 적 없는 페이지에 앞 페이지의
+   * 코드 지문이 실려 나간다(서버는 거절하지만, 화면에는 "코드가 바뀌었어요" 가 뜬다).
+   */
+  pageId: string;
   revision: number;
   codeDigest: string;
   publishedCodeDigest: string;
@@ -483,8 +490,8 @@ function PageForm({
 
   // 처음 한 번 — 미리보기가 무엇을 볼지 알아야 첫 프레임을 그린다.
   useEffect(() => {
-    reportRef.current({ revision: draftRevision, codeDigest, publishedCodeDigest, hasPublished });
-  }, [draftRevision, codeDigest, publishedCodeDigest, hasPublished]);
+    reportRef.current({ pageId: page.id, revision: draftRevision, codeDigest, publishedCodeDigest, hasPublished });
+  }, [page.id, draftRevision, codeDigest, publishedCodeDigest, hasPublished]);
 
   const save = useCallback(async (
     next: typeof value, revision: number,
@@ -509,6 +516,7 @@ function PageForm({
     const savedRevision = Number(body.page?.draftRevision ?? revision + 1);
     // 미리보기는 **저장된 것**을 읽는다 — 번호가 바뀌었으니 다시 불러야 한다.
     reportRef.current({
+      pageId: page.id,
       revision: savedRevision,
       codeDigest: String(body.page?.codeDigest ?? ""),
       publishedCodeDigest, hasPublished,
@@ -603,12 +611,23 @@ function PreviewPane({
   /** 실행을 허가한 지문. 세션 한 번의 판단이라 저장하지 않는다. */
   const [approvedDigest, setApprovedDigest] = useState("");
 
-  const wantPublished = showPublished && Boolean(info?.hasPublished);
-  const digest = (wantPublished ? info?.publishedCodeDigest : info?.codeDigest) ?? "";
+  /**
+   * **자기 페이지 것만 믿는다.** 페이지를 바꾸면 `pageId` 는 곧바로 새것이 되지만
+   * `info` 는 새 페이지 상세가 도착할 때까지 앞 페이지 것이다. 그대로 쓰면 앞 페이지의
+   * 발행 여부와 코드 지문으로 새 페이지를 한 번 부른다.
+   */
+  const own = info && info.pageId === pageId ? info : null;
+
+  const wantPublished = showPublished && Boolean(own?.hasPublished);
+  const digest = (wantPublished ? own?.publishedCodeDigest : own?.codeDigest) ?? "";
   const codeApproved = digest !== "" && approvedDigest === digest;
 
   const src = useMemo(() => {
-    if (!previewToken || !pageId) return null;
+    /**
+     * `own` 이 있어야 그린다 — 없으면 이 페이지의 상세가 아직 안 왔다는 뜻이다.
+     * 먼저 그려 봐야 발행 여부도 지문도 모르는 채로 한 번 부르고 곧바로 다시 부른다.
+     */
+    if (!previewToken || !pageId || !own) return null;
     const query = new URLSearchParams({ page: pageId });
     if (wantPublished) query.set("published", "1");
     if (codeApproved) {
@@ -626,7 +645,7 @@ function PreviewPane({
       }
     }
     return `/hp/${encodeURIComponent(previewToken)}?${query.toString()}`;
-  }, [previewToken, pageId, wantPublished, codeApproved, digest, theme]);
+  }, [previewToken, pageId, own, wantPublished, codeApproved, digest, theme]);
 
   if (!src) {
     return (
@@ -643,12 +662,12 @@ function PreviewPane({
         title="미리보기"
         src={src}
         /* 저장될 때마다 다시 불러온다 — 안 그러면 고친 내용이 영영 안 보인다. */
-        reloadKey={`${info?.revision ?? 0}:${codeApproved ? "code" : "safe"}`}
+        reloadKey={`${own?.revision ?? 0}:${codeApproved ? "code" : "safe"}`}
         openLabel="새 탭에서 미리보기 열기"
         note={release.publicEmbedEnabled ? undefined : "공개 전"}
         controls={
           /* 발행본이 실제로 있을 때만 고르게 한다 — 없는 것을 고르는 칸은 고장으로 읽힌다. */
-          info?.hasPublished ? (
+          own?.hasPublished ? (
             <Segmented
               label="무엇을 보는가"
               value={showPublished ? "published" : "draft"}

@@ -64,6 +64,8 @@ let nextSave: { draftRevision: number; codeDigest: string };
 let pageBody: Record<string, unknown>;
 let patchCount = 0;
 let liveAt: string | null = null;
+/** 세우면 페이지 상세 응답을 붙잡는다 — "아직 모르는 상태" 를 만들 때 쓴다. */
+let holdPageDetail: ((body: unknown) => void) | null = null;
 /** 사이트 PATCH 로 실제로 나간 본문들. 색은 자동저장이 아니라는 것을 여기서 본다. */
 let sitePatches: unknown[] = [];
 
@@ -74,6 +76,11 @@ function stubFetch() {
       if (init?.method === "PATCH") {
         patchCount += 1;
         return ok({ page: { id: PAGE_ID, ...nextSave } });
+      }
+      if (holdPageDetail) {
+        return new Promise((resolve) => {
+          holdPageDetail = (body) => resolve(ok(body));
+        });
       }
       return ok({ page: pageBody });
     }
@@ -147,6 +154,8 @@ beforeEach(() => {
   patchCount = 0;
   sitePatches = [];
   liveAt = null;
+  holdPageDetail = () => {};
+  holdPageDetail = null;
   permissions = { canEdit: true, canPublish: true, canManageSite: true, canManageTemplates: true };
   nextSave = { draftRevision: 8, codeDigest: "" };
   pageBody = {
@@ -338,5 +347,34 @@ describe("사이트 색", () => {
     permissions = { ...permissions, canPublish: false };
     await render();
     expect(host.querySelector('input[type="color"]')).toBeNull();
+  });
+});
+
+/**
+ * 페이지를 바꾸면 주소는 곧바로 새 페이지가 되지만 **상세는 나중에 온다.**
+ *
+ * 그 사이에 미리보기를 그리면 앞 페이지의 발행 여부와 코드 지문으로 새 페이지를 한 번
+ * 부른다: 발행본이 없는 페이지에 `published=1` 이 붙고, 승인한 적 없는 페이지에 앞 페이지의
+ * 지문이 실린다. 서버는 거절하지만 화면에는 "코드가 바뀌었어요" 가 뜬다 — 사용자가 한
+ * 적도 없는 일에 대한 경고다.
+ */
+describe("페이지 상세를 아직 모를 때", () => {
+  it("미리보기를 그리지 않는다", async () => {
+    // 상세를 붙잡아 두고 마운트한다.
+    holdPageDetail = () => {};
+    await render();
+
+    expect(host.querySelector("iframe")).toBeNull();
+    expect(host.textContent).toContain("미리보기를 준비하는 중이에요");
+  });
+
+  it("상세가 도착하면 그때 그린다", async () => {
+    holdPageDetail = () => {};
+    await render();
+    const release = holdPageDetail!;
+
+    await act(async () => { release({ page: pageBody }); });
+    expect(host.querySelector("iframe")).not.toBeNull();
+    expect(frameSrc()).toContain(`page=${PAGE_ID}`);
   });
 });
