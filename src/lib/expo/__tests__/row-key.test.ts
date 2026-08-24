@@ -145,6 +145,45 @@ describe("새어 나가지 않는다", () => {
   });
 });
 
+describe("이상한 값이 섞여 와도", () => {
+  /**
+   * 배열 전체를 한 번에 판정하면(`every`) 이상한 원소 하나 때문에 **목록 전체가 키 없이**
+   * 남는다. 그러면 모든 행의 키가 undefined 가 되고, `removeByKey` 가 `!== key` 로
+   * 거르므로 **삭제 한 번에 목록이 통째로 비고 그대로 자동저장된다.**
+   */
+  it("객체가 아닌 원소가 섞여도 나머지 행은 키를 받는다", () => {
+    const broken = {
+      ...cardgrid([]),
+      content: { items: [{ title: { ko: "A" } }, "이상한 값", { title: { ko: "B" } }] },
+    };
+    const rows = attachExpoRowKeys([broken])[0].content.items as unknown[];
+    expect(typeof (rows[0] as Record<string, unknown>)[ROW_KEY]).toBe("string");
+    expect(rows[1]).toBe("이상한 값");
+    expect(typeof (rows[2] as Record<string, unknown>)[ROW_KEY]).toBe("string");
+    expect((rows[0] as Record<string, unknown>)[ROW_KEY])
+      .not.toBe((rows[2] as Record<string, unknown>)[ROW_KEY]);
+  });
+
+  it("떼기도 이상한 원소를 그대로 통과시킨다", () => {
+    const broken = {
+      ...cardgrid([]),
+      content: { items: [{ title: { ko: "A" } }, null, 42] },
+    };
+    const stripped = stripExpoRowKeys(attachExpoRowKeys([broken]));
+    expect(findRowKeyLeak(stripped)).toBeNull();
+    expect(stripped[0].content.items).toEqual([{ title: { ko: "A" } }, null, 42]);
+  });
+
+  /** 붙이기와 떼기가 서로 다른 모양을 내놓으면 나중에 헷갈릴 자리가 된다. */
+  it("없던 슬롯 키를 만들지 않는다", () => {
+    const noItems = { ...cardgrid([]), content: { heading: { ko: "제목" } } };
+    const attached = attachExpoRowKeys([noItems])[0];
+    expect(Object.keys(attached.content).sort()).toEqual(["heading"]);
+    const stripped = stripExpoRowKeys([attached])[0];
+    expect(Object.keys(stripped.content).sort()).toEqual(["heading"]);
+  });
+});
+
 describe("중첩 리스트", () => {
   /**
    * W1 카탈로그에는 중첩 리스트가 없다. 그래도 재귀를 써 뒀고, 그 코드가 맞는지는

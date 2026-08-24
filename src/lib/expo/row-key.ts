@@ -34,15 +34,29 @@ export type { WithRowKey };
 
 type Row = Record<string, unknown>;
 
-const isRowArray = (value: unknown): value is Row[] =>
-  Array.isArray(value) && value.every((v) => v !== null && typeof v === "object" && !Array.isArray(v));
+const isRow = (value: unknown): value is Row =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+/**
+ * **행 단위로 판정한다.** 배열 전체를 한 번에 보면(`every`) 이상한 원소 하나 때문에
+ * **그 목록 전체가 키 없이** 남는다. 그러면 모든 행의 키가 `undefined` 가 되고,
+ * `removeByKey` 는 `rowKey(it) !== key` 로 거르므로 삭제 한 번에 **목록이 통째로 비고
+ * 그대로 자동저장된다.**
+ *
+ * 편집기에 들어오는 값은 서버 정규화를 거치므로 실제로는 전부 객체다(`config.ts` 의
+ * `obj(row)`). 이건 그 전제가 깨졌을 때를 위한 것이고, 비용이 한 줄이라 둔다.
+ */
+const asRow = (value: unknown): Row | null => (isRow(value) ? value : null);
 
 /** 리스트 슬롯 한 칸에 키를 붙인다. 재귀 — 행 안에 또 리스트가 있으면 거기도. */
 function attachSlot(def: SlotDef, value: unknown): unknown {
-  if (def.kind !== "list" || !def.itemSlots || !isRowArray(value)) return value;
-  const withKeys = withRowKeys(value);
-  return withKeys.map((row) => {
-    const next: Row = { ...row };
+  if (def.kind !== "list" || !def.itemSlots || !Array.isArray(value)) return value;
+  return value.map((raw) => {
+    const row = asRow(raw);
+    // 객체가 아닌 원소는 그대로 통과시킨다 — 정규화가 어차피 버린다.
+    if (!row) return raw;
+    const [keyed] = withRowKeys([row]);
+    const next: Row = { ...keyed };
     for (const item of def.itemSlots!) {
       if (item.kind === "list") next[item.key] = attachSlot(item, row[item.key]);
     }
@@ -51,8 +65,10 @@ function attachSlot(def: SlotDef, value: unknown): unknown {
 }
 
 function stripSlot(def: SlotDef, value: unknown): unknown {
-  if (def.kind !== "list" || !def.itemSlots || !isRowArray(value)) return value;
-  return value.map((row) => {
+  if (def.kind !== "list" || !def.itemSlots || !Array.isArray(value)) return value;
+  return value.map((raw) => {
+    const row = asRow(raw);
+    if (!row) return raw;
     const next: Row = { ...row };
     delete next[ROW_KEY];
     for (const item of def.itemSlots!) {
@@ -91,6 +107,12 @@ function mapContent(
   const next: Record<string, unknown> = { ...content };
   for (const slot of slots) {
     if (slot.kind !== "list") continue;
+    /**
+     * 없던 키를 만들지 않는다. `JSON.stringify` 는 `undefined` 값을 빼므로 저장 payload
+     * 는 같지만, `Object.keys` 로 도는 코드에는 없던 칸이 생겨 보인다 — 붙이기와 떼기가
+     * 서로 다른 모양을 내놓는 것 자체가 나중에 헷갈릴 자리다.
+     */
+    if (!(slot.key in content)) continue;
     next[slot.key] = slotMapper(slot, content[slot.key]);
   }
   return next;
