@@ -11,13 +11,16 @@ import { guardExpoRoute, readJsonBody, authFailure } from "@/lib/expo/route-guar
 import { requireMembership } from "@/lib/expo/auth";
 import { normalizeExpoTheme, EXPO_DEFAULT_THEME } from "@/lib/expo/config";
 import { homePageDefaults } from "@/lib/expo/model";
+import { deriveExpoPermissions } from "@/lib/expo/permissions";
+import { isExpoPublicEmbedReleaseEnabled } from "@/lib/expo/capability";
 import { randomUUID } from "node:crypto";
 
 export async function GET(request: Request) {
   const guard = await guardExpoRoute(request);
   if (!guard.ok) return guard.response;
 
-  const projectId = new URL(request.url).searchParams.get("projectId");
+  const url = new URL(request.url);
+  const projectId = url.searchParams.get("projectId");
   const sites = await prisma.expoSite.findMany({
     where: {
       deletedAt: null,
@@ -25,17 +28,46 @@ export async function GET(request: Request) {
       ...(projectId ? { projectId } : {}),
     },
     select: {
-      id: true, name: true, projectId: true, siteUrl: true, updatedAt: true,
+      id: true, workspaceId: true, name: true, projectId: true, siteUrl: true, updatedAt: true,
       _count: { select: { pages: { where: { deletedAt: null } } } },
     },
     orderBy: { updatedAt: "desc" },
   });
 
+  /**
+   * "여기에 만들 수 있나" 는 **그 전시의 워크스페이스** 기준이다. 목록이 비어 있으면
+   * 사이트에서 유도할 수 없으므로, 전시를 지정한 경우 그 프로젝트의 소속에서 뽑는다.
+   * 전시를 안 지정했으면(워크스페이스 전체 보기) 만들기 대상이 정해지지 않았으므로 닫는다.
+   */
+  let projectPermissions = deriveExpoPermissions(null);
+  if (projectId) {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { workspaceId: true },
+    });
+    if (project && guard.ctx.memberWorkspaceIds.includes(project.workspaceId)) {
+      projectPermissions = deriveExpoPermissions(guard.ctx.workspaceRole(project.workspaceId));
+    }
+  }
+
+  /**
+   * 화면이 뷰어에게 **눌러도 실패할 버튼**을 보여주지 않게 하는 값들.
+   * 권한 판정 자체는 모든 서비스·라우트가 자기 자리에서 다시 한다 — 숨기기는 인가가 아니다.
+   *
+   * 권한은 **그 사이트의 워크스페이스** 기준이다. 목록에 여러 워크스페이스가 섞일 수
+   * 있으므로 사이트마다 붙인다 — 하나로 뭉치면 남의 워크스페이스 사이트에 편집
+   * 버튼이 켜진다.
+   */
   return NextResponse.json({
     sites: sites.map((s) => ({
       id: s.id, name: s.name, projectId: s.projectId, siteUrl: s.siteUrl,
       updatedAt: s.updatedAt, pageCount: s._count.pages,
+      permissions: deriveExpoPermissions(guard.ctx.workspaceRole(s.workspaceId)),
     })),
+    // 이 전시에 새로 만들 수 있는가 — 목록이 비어 있을 때 쓰는 값이다.
+    permissions: projectPermissions,
+    // 공개 승인은 권한과 별개다 — 권한이 있어도 승인 전에는 아무도 못 켠다.
+    release: { publicEmbedEnabled: isExpoPublicEmbedReleaseEnabled() },
   });
 }
 
