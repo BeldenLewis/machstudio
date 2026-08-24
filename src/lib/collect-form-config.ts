@@ -636,26 +636,34 @@ export interface SubmissionIssue {
   code: "required" | "invalid_email" | "invalid_phone" | "unknown_key" | "too_many" | "not_an_option" | "consent_required";
 }
 
+/**
+ * 분기 기준 항목에서 고른 값으로 그룹을 찾는다.
+ *
+ * 그룹 매칭은 **어느 로케일의 라벨로 골랐든** 같은 그룹을 찾아야 한다.
+ *
+ * group.value 는 평문 한 줄인데 선택지는 로케일 맵이다. 그대로 비교하면 한국어로 고른
+ * 사람의 값("바이어")이 group.value("Buyer")와 안 맞아 **분기 문항이 통째로 사라진다** —
+ * 선택지 검증(not_an_option)은 모든 로케일 라벨을 받아 주므로 제출은 통과하고, 필수 문항이
+ * 검증 없이 지나가거나 채워 넣은 답이 unknown_key 로 거부된다(둘 다 조용히 잘못된다).
+ * 그래서 고른 값이 속한 선택지를 먼저 찾아 그 **모든 번역**을 후보로 놓고 매칭한다.
+ */
+function resolveBranchGroup(
+  config: CollectFormConfig,
+  chosen: string,
+): { value: string; fields: CollectField[] } | undefined {
+  const trigger = config.fields.find((f) => f.key === config.branch.fieldKey);
+  const picked = trigger?.options.find((o) => Object.values(o).includes(chosen));
+  const aliases = new Set<string>(picked ? Object.values(picked) : []);
+  aliases.add(chosen);
+  return config.branch.groups.find((g) => aliases.has(g.value));
+}
+
 /** 분기 그룹까지 펼친 "지금 이 응답에 유효한 항목" 목록. */
 export function visibleFields(config: CollectFormConfig, values: Record<string, unknown>): CollectField[] {
   const base = config.fields.filter((f) => f.enabled);
   if (!config.branch.enabled) return base;
   const chosen = safeStr(values[config.branch.fieldKey] ?? "");
-
-  /**
-   * 그룹 매칭은 **어느 로케일의 라벨로 골랐든** 같은 그룹을 찾아야 한다.
-   *
-   * group.value 는 평문 한 줄인데 선택지는 로케일 맵이다. 그대로 비교하면 한국어로 고른
-   * 사람의 값("바이어")이 group.value("Buyer")와 안 맞아 **분기 문항이 통째로 사라진다** —
-   * 선택지 검증(not_an_option)은 모든 로케일 라벨을 받아 주므로 제출은 통과하고, 필수 문항이
-   * 검증 없이 지나가거나 채워 넣은 답이 unknown_key 로 거부된다(둘 다 조용히 잘못된다).
-   * 그래서 고른 값이 속한 선택지를 먼저 찾아 그 **모든 번역**을 후보로 놓고 매칭한다.
-   */
-  const trigger = config.fields.find((f) => f.key === config.branch.fieldKey);
-  const picked = trigger?.options.find((o) => Object.values(o).includes(chosen));
-  const aliases = new Set<string>(picked ? Object.values(picked) : []);
-  aliases.add(chosen);
-  const group = config.branch.groups.find((g) => aliases.has(g.value));
+  const group = resolveBranchGroup(config, chosen);
   if (!group) return base;
 
   // 기준 항목 **바로 아래**에 끼워 넣는다 — 화면 순서와 검증 순서가 같아야 한다(§4).
@@ -666,6 +674,19 @@ export function visibleFields(config: CollectFormConfig, values: Record<string, 
   const extra = group.fields.filter((f) => f.enabled && !taken.has(f.key));
   if (at < 0) return [...base, ...extra];
   return [...base.slice(0, at + 1), ...extra, ...base.slice(at + 1)];
+}
+
+/**
+ * 분기 선택값을 **로케일 무관 canonical 값**(group.value)으로 정규화한다.
+ *
+ * 분석 이벤트(ms_visitor_type_selected, generate_lead 등)에 로케일 화면 라벨을 그대로 실으면
+ * 같은 세그먼트가 언어별로 다른 값("바이어" vs "Buyer")으로 갈라져, GTM 트리거가 언어마다
+ * 따로 깨진다(설계 §18). 매칭되는 그룹이 없으면(분기 꺼짐·값 없음) 원본을 그대로 돌려준다 —
+ * 이벤트가 최소한 뭔가는 싣게.
+ */
+export function canonicalBranchValue(config: CollectFormConfig, chosen: string): string {
+  if (!config.branch.enabled || !chosen) return chosen;
+  return resolveBranchGroup(config, chosen)?.value ?? chosen;
 }
 
 /**

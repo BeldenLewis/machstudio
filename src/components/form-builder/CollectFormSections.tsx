@@ -14,6 +14,7 @@ import { ColorField, BRAND_PRESETS } from "@/components/ui/ColorField";
 import { FIELD_CLS, FINISH, R, UrlField } from "@/components/ui/primitives";
 import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
 import { isSupportedCountry } from "@/lib/collect-phone";
+import { COUNTRY_DIALS, flagEmoji } from "@/lib/collect-country";
 import {
   DEFAULT_LOCALE,
   localize,
@@ -346,15 +347,26 @@ export function CollectFormSections({
       {/* ── 검증 ─────────────────────────────────────────────────── */}
       <Block title="검증" desc="입력 시점에 강제해요 — 안내 문구가 아니라 규칙입니다.">
         <Row label="연락처 기본 국가" hint="국가번호 없이 입력한 번호를 이 나라 기준으로 읽어요.">
-          <input
-            value={config.validation.defaultCountry}
-            onChange={(e) => patch({ validation: { ...config.validation, defaultCountry: e.target.value.toUpperCase().slice(0, 2) } })}
-            placeholder="US"
-            className={`${FIELD_CLS} font-mono ${countryBad ? "text-red-600 dark:text-red-400" : ""}`}
-          />
+          {/* 예전엔 2글자 코드를 직접 타이핑하게 했었다 — "UK"(존재 안 함, 영국은 GB) 같은
+              오타가 그대로 저장돼 그 폼의 전화가 전부 무효 처리됐다. 실제 방문자 화면의 국가
+              선택(mount.ts)과 같은 목록에서 고르게 하면 애초에 없는 코드를 못 넣는다. */}
+          <select
+            value={countryBad ? "" : config.validation.defaultCountry}
+            onChange={(e) => patch({ validation: { ...config.validation, defaultCountry: e.target.value } })}
+            className={`${FIELD_CLS} ${countryBad ? "text-red-600 dark:text-red-400" : ""}`}
+          >
+            {countryBad && (
+              <option value="" disabled>
+                {config.validation.defaultCountry} — 없는 국가 코드
+              </option>
+            )}
+            {COUNTRY_DIALS.map((c) => (
+              <option key={c.code} value={c.code}>
+                {flagEmoji(c.code)} {c.name} (+{c.dial})
+              </option>
+            ))}
+          </select>
         </Row>
-        {/* "UK" 는 존재하지 않는 코드다(영국은 GB) — 이걸 넣으면 그 폼의 전화가 전부 무효가
-            되는데 화면엔 이유가 안 뜬다. 그래서 저장 전에 여기서 잡는다. */}
         {countryBad && (
           <p className="flex items-start gap-1.5 text-[11px] text-red-600 dark:text-red-400">
             <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />

@@ -571,4 +571,39 @@ describe("제출", () => {
     const lead = dl.find((e) => e.event === "generate_lead")!;
     expect(lead.ms_consent).toBe("denied");
   });
+
+  /**
+   * §18 이벤트 계약 — visitor_type 은 로케일 화면 라벨이 아니라 canonical group.value 여야 한다.
+   * 아니면 같은 세그먼트가 언어별로 다른 값("바이어" vs "Buyer")으로 갈라져 GTM 트리거가
+   * 언어마다 따로 깨진다.
+   */
+  it("한국어 라벨로 골라도 visitor_type 은 canonical 값(Buyer)으로 나간다", async () => {
+    const bilingual = normalizeCollectForm({
+      fields: [
+        { id: "f1", key: "email", label: { en: "Email" }, type: "email", required: true, enabled: true },
+        {
+          id: "f2", key: "type", label: { en: "Visitor type" }, type: "select", enabled: true,
+          options: [{ en: "General", ko: "일반" }, { en: "Buyer", ko: "바이어" }],
+        },
+      ],
+      branch: { enabled: true, fieldKey: "type", groups: [{ value: "Buyer", fields: [] }] },
+      consent: { privacy: { enabled: true, label: { en: "Privacy" } } },
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ registrationNo: "1234567890128", rid: "r1" }), { status: 201 }),
+    );
+    mount({ config: bilingual, preview: false, locale: "ko" });
+    fill('input[type="email"]', "a@b.com");
+    const sel = host.querySelector<HTMLSelectElement>("select[data-msf-key]")!;
+    sel.value = "바이어";
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    tickPrivacy();
+    submitBtn().click();
+    await flush();
+
+    const dl = ((window as { dataLayer?: Array<Record<string, unknown>> }).dataLayer ?? []);
+    expect(dl.find((e) => e.event === "ms_visitor_type_selected")?.visitor_type).toBe("Buyer");
+    expect(dl.find((e) => e.event === "ms_form_submit")?.visitor_type).toBe("Buyer");
+    expect(dl.find((e) => e.event === "generate_lead")?.visitor_type).toBe("Buyer");
+  });
 });

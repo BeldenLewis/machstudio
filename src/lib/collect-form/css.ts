@@ -213,14 +213,18 @@ export const COLLECT_FORM_CSS = `
   box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--msf-accent) 28%, transparent);
 }
 
-/* 본인 확인 줄 — 가려진 연락처(collect-lookup 의 maskEmail/maskPhone). */
+/* 본인 확인 줄 — 가려진 연락처(collect-lookup 의 maskEmail/maskPhone).
+   inline-grid인 이유: 열을 auto 1fr로 두면 라벨-값이 카드 폭 끝까지 벌어진다(dd가
+   text-align:right로 오른쪽 끝에 붙어서). auto auto로 두 열 다 내용 크기에 맞추고
+   inline-grid로 두면, 부모 .msf-found의 text-align:center가 이 블록 자체를 카드
+   가운데로 보내면서 라벨·값은 서로 가깝게 붙는다. */
 .msf-idcheck{
-  display:grid;grid-template-columns:auto 1fr;gap:6px 16px;
-  margin:14px 0 0;padding:12px 14px;border-radius:var(--msf-radius);
+  display:inline-grid;grid-template-columns:auto auto;gap:6px 12px;
+  margin:14px auto 0;padding:12px 18px;border-radius:var(--msf-radius);
   background:var(--msf-bg);text-align:left;font-size:13px;
 }
 .msf-idcheck dt{color:var(--msf-muted)}
-.msf-idcheck dd{margin:0;text-align:right;font-weight:700;word-break:break-all}
+.msf-idcheck dd{margin:0;font-weight:700;word-break:break-all}
 
 /* QR 저장 — 캡처가 안 되는 기기(일부 사내폰·키오스크)가 있어 파일로도 준다. */
 .msf-save{

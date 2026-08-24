@@ -16,6 +16,7 @@ import { COLLECT_FORM_CSS } from "./css";
 import {
   DEFAULT_LOCALE,
   REGISTRATION_STATUSES,
+  canonicalBranchValue,
   localize,
   noticeValueKey,
   resolveRegistrationStatus,
@@ -382,7 +383,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
         clearIssue(f.key);
         markStarted();
         if (config.branch.enabled && config.branch.fieldKey === f.key) {
-          track(preview, "ms_visitor_type_selected", { visitor_type: sel.value });
+          track(preview, "ms_visitor_type_selected", { visitor_type: canonicalBranchValue(config, sel.value) });
           // 분기 기준이 바뀌면 항목 목록 자체가 달라진다 — 이 영역만 다시 그리고 포커스를 되돌린다.
           renderFields();
           const again = fieldsHost.querySelector<HTMLSelectElement>(`#${cssId(inputId)}`);
@@ -742,7 +743,11 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     if (submitting || duplicate) return;
     hideBanner();
 
-    const visitorType = config.branch.enabled ? str(values[config.branch.fieldKey]) : undefined;
+    // canonicalBranchValue 로 로케일 라벨을 group.value 로 접는다 — 분석 이벤트가 언어별로
+    // 갈라지지 않게(collect-form-config.ts 주석). generate_lead 도 이 값을 그대로 쓴다.
+    const visitorType = config.branch.enabled
+      ? canonicalBranchValue(config, str(values[config.branch.fieldKey]))
+      : undefined;
     track(preview, "ms_form_submit", visitorType ? { visitor_type: visitorType } : undefined);
 
     // 접수 창을 **누를 때 다시 본다.** 폼을 열어 둔 채로 마감 시각이 지나갈 수 있다.
