@@ -62,12 +62,28 @@ export function useRegPopover() {
   return { open, setOpen, ref };
 }
 
-export function RegTypeMenu({ current, onPick }: { current: BuilderFieldType; onPick: (t: BuilderFieldType) => void }) {
+/**
+ * **제네릭이다** — 웨비나·사전등록은 REG_TYPE_ORDER/REG_TYPE_META(기본값)를 그대로 쓰고,
+ * 대회 신청 폼처럼 형식이 더 있는(이미지·반복 그룹 등) 빌더는 자기 order/meta 를 넘긴다.
+ * 타입마다 메뉴를 따로 그리면 아이콘 팝오버와 네이티브 select 가 화면마다 섞여서, 같은
+ * 서비스 안에서 "항목 형식 고르기"가 매번 다르게 생기게 된다 — 선택 UI 는 여기 하나로 모은다.
+ */
+export function RegTypeMenu<T extends string = BuilderFieldType>({
+  current,
+  onPick,
+  order = REG_TYPE_ORDER as unknown as T[],
+  meta: metaMap = REG_TYPE_META as unknown as Record<T, { label: string; desc: string; icon: ElementType }>,
+}: {
+  current: T;
+  onPick: (t: T) => void;
+  order?: T[];
+  meta?: Record<T, { label: string; desc: string; icon: ElementType }>;
+}) {
   return (
     <div className={`absolute left-0 top-full z-30 mt-1.5 w-56 bg-popover p-1.5 ${R.surface} ${FINISH.overlay}`}>
       <p className="px-2 pb-1 pt-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">항목 형식</p>
-      {REG_TYPE_ORDER.map((t) => {
-        const meta = REG_TYPE_META[t];
+      {order.map((t) => {
+        const meta = metaMap[t];
         const Icon = meta.icon;
         const active = current === t;
         return (
