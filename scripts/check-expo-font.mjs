@@ -31,9 +31,16 @@ const LICENSE = join(DIR, "OFL.txt");
 
 /**
  * 고정 해시. **반입한 그 파일**의 SHA-256 이다.
- * null 이면 아직 반입 전이라는 뜻이고, 이 검사는 실패한다 — 그게 의도다.
+ * 출처: github.com/orioncactus/pretendard 태그 v1.3.9 의
+ *   packages/pretendard/dist/web/variable/woff2/PretendardVariable.woff2
+ *
+ * 크기가 2.0MB 인 것은 알고 넣은 선택이다. 한글 전 글자를 담은 가변 폰트라 그렇고,
+ * 대신 ① 경로에 버전이 박혀 1년 불변 캐시가 걸리고 ② `display:swap` 이라 글자가 먼저
+ * 나온다. 유니코드 구간별 동적 서브셋은 `@font-face` 와 `unicode-range` 를 요구하는데,
+ * 우리 시트는 `@font-face` 를 한 줄도 둘 수 없어서(Shadow 경계) 쓸 수 없다.
  */
-const PINNED = null;
+const PINNED = "9599f12fd42fc0bce1cd50b47a0c022e108d7aa64dd0d1bb0ed44f3282d900b4";
+const PINNED_BYTES = 2057688;
 
 /** 코드에 있으면 안 되는 것 — 외부 폰트 출처. */
 const FORBIDDEN = [
@@ -63,6 +70,8 @@ if (!existsSync(FONT)) {
         `    scripts/check-expo-font.mjs 의 PINNED 를 다음 값으로 바꾸세요:\n` +
         `    "${sha}"   (${bytes.length} bytes)`,
     );
+  } else if (bytes.length !== PINNED_BYTES) {
+    problems.push(`서체 크기가 다릅니다. 기대: ${PINNED_BYTES} bytes, 실제: ${bytes.length} bytes`);
   } else if (sha !== PINNED) {
     problems.push(
       `서체 파일이 고정값과 다릅니다.\n` +
