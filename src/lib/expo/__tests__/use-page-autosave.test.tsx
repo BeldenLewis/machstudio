@@ -310,6 +310,69 @@ describe("flush — 페이지 전환 전에 부른다", () => {
     expect(calls).toHaveLength(1);
   });
 
+  /**
+   * **이 케이스가 빠져 있었다.** 기존 flush 테스트 셋은 전부 유휴 상태에서 시작해서,
+   * 진행 중일 때 flush 가 즉시 반환하는 것을 아무도 못 잡았다.
+   *
+   * 그게 왜 사고인가: 호출부는 페이지를 넘기기 전에 flush 를 부르고 결과를 보고 넘어간다.
+   * 즉시 "saved" 를 받으면 페이지를 넘기고, 그 뒤 완료된 저장은 페이지가 바뀐 것을 보고
+   * 후속 저장을 버린다 — **전환 직전에 친 글자가 사라진다.**
+   */
+  it("진행 중이면 그 저장이 끝날 때까지 기다린다", async () => {
+    const { calls, gates, save } = deferredRecorder();
+    await render({ save, initialRevision: 0, debounceMs: 5 });
+
+    await act(async () => { harness.setValue({ title: "첫" }); });
+    await settle();
+    expect(calls).toHaveLength(1);
+
+    // 저장이 도는 동안 한 글자 더 친다 — 이게 지켜져야 하는 편집이다.
+    await act(async () => { harness.setValue({ title: "첫둘" }); });
+
+    let settled = false;
+    let result: string | undefined;
+    await act(async () => {
+      const pending = harness.api.flush().then((r) => { settled = true; result = r; });
+      await Promise.resolve();
+      // 아직 서버가 응답하지 않았다 — flush 가 여기서 끝나면 안 된다.
+      expect(settled).toBe(false);
+
+      gates[0]({ kind: "saved", revision: 1 });
+      await new Promise((r) => setTimeout(r, 0));
+      // 후속 저장이 나갔고, flush 는 그것까지 기다린다.
+      expect(calls).toHaveLength(2);
+      expect(settled).toBe(false);
+
+      gates[1]({ kind: "saved", revision: 2 });
+      await pending;
+    });
+
+    expect(settled).toBe(true);
+    expect(result).toBe("saved");
+    // 진행 중에 친 글자가 실제로 서버에 갔다.
+    expect(calls[1].value).toEqual({ title: "첫둘" });
+    expect(harness.api.dirty).toBe(false);
+  });
+
+  /** 진행 중 flush 가 요청을 하나 더 겹쳐 보내면 뒤엣것이 옛 번호로 나가 409 가 된다. */
+  it("진행 중 flush 가 요청을 겹쳐 보내지 않는다", async () => {
+    const { calls, gates, save } = deferredRecorder();
+    await render({ save, initialRevision: 0, debounceMs: 5 });
+    await act(async () => { harness.setValue({ title: "첫" }); });
+    await settle();
+
+    await act(async () => {
+      void harness.api.flush();
+      void harness.api.flush();
+      await Promise.resolve();
+    });
+    expect(calls).toHaveLength(1);
+
+    await act(async () => { gates[0]({ kind: "saved", revision: 1 }); });
+    await settle();
+    expect(calls).toHaveLength(1);
+  });
+
   /** 실패·충돌이면 화면이 그 자리에 머물러야 한다 — 넘어가면 변경이 사라진다. */
   it("실패와 충돌을 구분해 알려 준다", async () => {
     const failed = recorder([{ kind: "failed" }]);

@@ -122,6 +122,15 @@ export function usePageAutosave<T>(options: UsePageAutosaveOptions<T>): PageAuto
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** 진행 중 저장이 끝난 뒤 **한 번만** 더 보내기 위한 표시. */
   const followUpRef = useRef(false);
+  /**
+   * 지금 도는 저장의 약속.
+   *
+   * `flush()` 는 페이지를 넘기기 **전에** 불린다. 그러니 "보냈다" 가 아니라 **"끝났다"**
+   * 를 돌려줘야 한다 — 진행 중인데 즉시 반환하면 호출부가 저장이 끝난 줄 알고 페이지를
+   * 넘기고, 그 사이 완료된 저장은 페이지가 바뀐 것을 보고 후속 저장을 버린다.
+   * **전환 직전에 친 글자가 사라진다.**
+   */
+  const runningRef = useRef<Promise<FlushResult> | null>(null);
 
   useEffect(() => { valueRef.current = value; }, [value]);
   useEffect(() => { saveRef.current = save; }, [save]);
@@ -141,15 +150,7 @@ export function usePageAutosave<T>(options: UsePageAutosaveOptions<T>): PageAuto
     followUpRef.current = false;
   }, [anchor.pageId]);
 
-  const run = useCallback(async (): Promise<FlushResult> => {
-    if (!enabledRef.current) return "disabled";
-    if (haltedRef.current) return "conflict";
-    if (savingRef.current) {
-      // 진행 중이면 아래 루프가 끝난 뒤 한 번 더 — 여기서 요청을 겹쳐 보내지 않는다.
-      followUpRef.current = true;
-      return "saved";
-    }
-
+  const execute = useCallback(async (): Promise<FlushResult> => {
     /**
      * 재귀가 아니라 루프다.
      *
@@ -228,6 +229,26 @@ export function usePageAutosave<T>(options: UsePageAutosaveOptions<T>): PageAuto
       savingRef.current = false;
     }
   }, []);
+
+  const run = useCallback((): Promise<FlushResult> => {
+    if (!enabledRef.current) return Promise.resolve<FlushResult>("disabled");
+    if (haltedRef.current) return Promise.resolve<FlushResult>("conflict");
+    if (savingRef.current) {
+      /**
+       * 진행 중이면 요청을 겹쳐 보내지 않는다 — 표시만 세우고 **그 저장을 기다린다.**
+       * 진행 중인 루프가 이 표시를 보고 최신 값으로 한 바퀴 더 돌므로, 이 약속이
+       * 풀릴 때는 방금 친 글자까지 저장이 끝나 있다.
+       */
+      followUpRef.current = true;
+      return runningRef.current ?? Promise.resolve<FlushResult>("saved");
+    }
+
+    const pending = execute();
+    runningRef.current = pending;
+    const clear = () => { if (runningRef.current === pending) runningRef.current = null; };
+    pending.then(clear, clear);
+    return pending;
+  }, [execute]);
 
   // 디바운스 — 값이 바뀔 때마다.
   useEffect(() => {
