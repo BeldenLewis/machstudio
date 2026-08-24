@@ -314,6 +314,10 @@ model FieldMapping {
   /// matchBy 가 가리키는 값 — 요소의 id 또는 input 의 name.
   matchValue String?
 
+  /// 수집 데이터 표(목록)에서 이 필드의 열을 숨긴다. 값은 계속 수집·보관되고 레코드 상세·
+  /// CSV 내보내기에는 그대로 나온다 — 폼에서 안 쓰는 항목으로 표만 지저분해지는 걸 막는 용도.
+  hidden Boolean @default(false)
+
   source CollectSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 
   @@unique([sourceId, index])

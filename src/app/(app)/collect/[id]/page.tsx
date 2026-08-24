@@ -11,6 +11,7 @@ import {
   ChevronLeft, ChevronRight, Search, Filter, Activity, Shield,
   RefreshCcw, Bell, Webhook, KeyRound, Eraser, AlertTriangle, ShieldAlert,
   MoreHorizontal, Link2, Wrench, HardDriveDownload, Columns3, MapPin, X, Layers,
+  Eye, EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -48,6 +49,8 @@ interface FieldMapping {
   type: string;
   isRequired: boolean;
   sortOrder: number;
+  /** 수집 데이터 표(목록)에서 이 열을 숨긴다 — 값은 계속 수집되고 상세·CSV엔 그대로 나온다. */
+  hidden: boolean;
 }
 
 interface DiscoveredField {
@@ -807,6 +810,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       type: f.type || "text",
       isRequired: false,
       sortOrder: i,
+      hidden: false,
     }));
     setFields(applied);
     toast.success("감지된 필드가 적용됐어요. 저장 버튼을 눌러 확정하세요");
@@ -829,6 +833,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
         type: f.type || "text",
         isRequired: false,
         sortOrder: i,
+        hidden: false,
       }));
       setFields(applied);
       // 새 형식이면 감지에 실제로 쓰인 선택자도 같이 받아 온다 — 운영자가 CSS를 몰라도 된다.
@@ -865,6 +870,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       type: "text",
       isRequired: false,
       sortOrder: f.length,
+      hidden: false,
     }]);
   };
 
@@ -1332,7 +1338,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                             등록번호
                           </th>
                         )}
-                        {source.fieldMappings.map((f) => {
+                        {source.fieldMappings.filter((f) => !f.hidden).map((f) => {
                           const colWidth = f.type === "email" ? "max-w-[240px]"
                             : (f.type === "select" || f.type === "checkbox") ? "max-w-[140px]"
                             : "max-w-[200px]";
@@ -1393,7 +1399,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                               {record.registrationNo ?? "-"}
                             </td>
                           )}
-                          {source.fieldMappings.map((f) => {
+                          {source.fieldMappings.filter((f) => !f.hidden).map((f) => {
                             const colWidth = f.type === "email" ? "max-w-[240px]"
                               : (f.type === "select" || f.type === "checkbox") ? "max-w-[80px]"
                               : "max-w-[200px]";
@@ -1514,14 +1520,16 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <h3 className="text-sm font-medium">필드 매핑</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">인덱스는 아래 &ldquo;필드 묶음 선택자&rdquo;로 찾은 순서(0부터)예요</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      인덱스는 아래 &ldquo;필드 묶음 선택자&rdquo;로 찾은 순서(0부터)예요 · 눈 아이콘으로 수집 데이터 표에 보일지 정해요(값은 계속 수집돼요)
+                    </p>
                   </div>
                 </div>
 
                 <Reorder.Group axis="y" values={fields} onReorder={setFields} className="space-y-2">
                   {fields.map((field, idx) => (
                     <Reorder.Item key={field.id} value={field}>
-                      <div className="flex items-center gap-2 p-3 rounded-xl border border-border bg-background">
+                      <div className={`flex items-center gap-2 p-3 rounded-xl border border-border bg-background transition-opacity ${field.hidden ? "opacity-50" : ""}`}>
                         <GripVertical className="w-4 h-4 text-muted-foreground/40 cursor-grab shrink-0" />
                         <div className="w-10 shrink-0">
                           <input type="number" min={0} value={field.index}
@@ -1542,6 +1550,11 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                           <option value="checkbox">체크박스</option>
                           <option value="radio">라디오</option>
                         </select>
+                        <button onClick={() => updateField(idx, { hidden: !field.hidden })}
+                          title={field.hidden ? "수집 데이터 표에서 숨김 — 클릭해서 보이기" : "수집 데이터 표에 보임 — 클릭해서 숨기기"}
+                          className={`p-1 rounded-lg transition-colors shrink-0 ${field.hidden ? "text-muted-foreground hover:text-foreground hover:bg-secondary" : "text-violet-500 hover:bg-violet-500/10"}`}>
+                          {field.hidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
                         <button onClick={() => removeField(idx)}
                           className="p-1 rounded-lg hover:bg-red-500/10 hover:text-red-500 transition-colors text-muted-foreground shrink-0">
                           <Trash2 className="w-3.5 h-3.5" />
