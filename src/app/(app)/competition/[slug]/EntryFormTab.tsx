@@ -3,12 +3,13 @@
 import { useMemo, useState } from "react";
 import { motion, Reorder } from "framer-motion";
 import {
-  AlignLeft, GripVertical, ImageIcon, ListChecks, ListPlus, Mail, Phone, Plus, SquareCheck, Trash2, Users, Video,
+  AlignLeft, ChevronDown, GripVertical, Hash, ImageIcon, ListChecks, ListPlus, Mail, Phone, Plus, SquareCheck, Trash2, Users, Video,
 } from "lucide-react";
 import { toast } from "sonner";
-import { NOTICE_LANGUAGES } from "@/lib/notice/config";
+import { NOTICE_LANGUAGES, type NoticeLanguage } from "@/lib/notice/config";
 import { FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 import { Switch } from "@/components/ui/switch";
+import { RegTypeMenu, useRegPopover } from "@/components/form-builder/field-types";
 import type { CompetitionFieldType, CompetitionFormField, CompetitionRepeaterSubField } from "@/lib/competition-config";
 import { CompetitionLegalGenerator } from "./CompetitionLegalGenerator";
 import { ConsentBodyField, useWorkspaceLegalProfile } from "@/components/legal/legal-generator-shared";
@@ -29,26 +30,46 @@ interface Props {
   workspaceId?: string;
 }
 
-const TYPE_META: Record<CompetitionFieldType, { label: string; icon: typeof AlignLeft }> = {
-  text: { label: "텍스트", icon: AlignLeft },
-  email: { label: "이메일", icon: Mail },
-  tel: { label: "전화번호", icon: Phone },
-  select: { label: "드롭다운", icon: ListChecks },
-  multiple: { label: "복수 선택", icon: ListPlus },
-  checkbox: { label: "체크박스", icon: SquareCheck },
-  image: { label: "이미지", icon: ImageIcon },
-  youtube: { label: "YouTube", icon: Video },
-  repeater: { label: "반복 그룹(팀원 등)", icon: Users },
+/**
+ * **RegTypeMenu 의 meta 로 그대로 넘긴다** — 사전등록(CollectFieldCard)이 쓰는 것과 같은
+ * 아이콘 팝오버로 항목 형식을 고른다. 예전엔 여기만 평범한 <select> 였는데, 같은 서비스
+ * 안에서 "항목 형식 고르기"가 화면마다 다르게 생기면 헷갈린다 — desc 는 그 팝오버가 쓴다.
+ */
+const TYPE_META: Record<CompetitionFieldType, { label: string; desc: string; icon: typeof AlignLeft }> = {
+  text: { label: "텍스트", desc: "한 줄 입력", icon: AlignLeft },
+  email: { label: "이메일", desc: "이메일 주소", icon: Mail },
+  tel: { label: "전화번호", desc: "국가 코드 + 숫자만", icon: Phone },
+  number: { label: "숫자", desc: "정수만", icon: Hash },
+  select: { label: "드롭다운", desc: "하나만 선택", icon: ListChecks },
+  multiple: { label: "복수 선택", desc: "여러 개 선택", icon: ListPlus },
+  checkbox: { label: "체크박스", desc: "동의·확인", icon: SquareCheck },
+  image: { label: "이미지", desc: "사진 업로드", icon: ImageIcon },
+  youtube: { label: "YouTube", desc: "영상 링크", icon: Video },
+  repeater: { label: "반복 그룹(팀원 등)", desc: "행을 늘려가며 입력", icon: Users },
 };
 
-const TYPE_ORDER: CompetitionFieldType[] = ["text", "email", "tel", "select", "multiple", "checkbox", "image", "youtube", "repeater"];
+const TYPE_ORDER: CompetitionFieldType[] = ["text", "email", "tel", "number", "select", "multiple", "checkbox", "image", "youtube", "repeater"];
 const CHOICE_TYPES: CompetitionFieldType[] = ["select", "multiple"];
 
-/** 반복 그룹으로 막 바꿨을 때 아무 서브필드도 없으면 아무것도 못 받는 빈 항목이 된다. */
-const DEFAULT_REPEATER_SUB_FIELDS: CompetitionRepeaterSubField[] = [
-  { key: "name", label: "이름", type: "text", required: true },
-  { key: "email", label: "이메일", type: "email", required: true },
-];
+/**
+ * 반복 그룹으로 막 바꿨을 때 아무 서브필드도 없으면 아무것도 못 받는 빈 항목이 된다 —
+ * 이름·이메일 기본값을 미리 채운다. **대회 언어를 따라간다** — 영문 대회에서 이 기본값이
+ * 한글로 굳어 있으면(예전엔 그랬다) 나머지 항목은 다 영어인데 이 서브필드만 한글로 남아
+ * 미리보기에서 티가 난다.
+ */
+const REPEATER_DEFAULT_LABELS: Record<NoticeLanguage, { name: string; email: string }> = {
+  ko: { name: "이름", email: "이메일" },
+  en: { name: "Name", email: "Email" },
+  fr: { name: "Nom", email: "E-mail" },
+  ja: { name: "氏名", email: "メール" },
+};
+function defaultRepeaterSubFields(language: NoticeLanguage): CompetitionRepeaterSubField[] {
+  const t = REPEATER_DEFAULT_LABELS[language] ?? REPEATER_DEFAULT_LABELS.ko;
+  return [
+    { key: "name", label: t.name, type: "text", required: true },
+    { key: "email", label: t.email, type: "email", required: true },
+  ];
+}
 
 export default function EntryFormTab({ competition, patch, workspaceId }: Props) {
   const [form, setForm] = useState(competition.config.form);
@@ -154,200 +175,20 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
         </div>
 
         <Reorder.Group axis="y" values={form.fields} onReorder={(fields) => update({ fields })} className="mt-4 space-y-2">
-          {form.fields.map((field, index) => {
-            const Icon = TYPE_META[field.type]?.icon ?? AlignLeft;
-            return (
-              <Reorder.Item key={field.id} value={field} className={`bg-secondary/20 p-3 ${R.surface} ${FINISH.s2}`}>
-                <div className="flex flex-wrap items-center gap-2">
-                  <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground/40" aria-hidden="true" />
-                  {/* 드래그는 마우스·터치 전용이라, 키보드로도 옮길 수 있게 화살표를 같이 둔다. */}
-                  <div className="flex flex-col">
-                    <button onClick={() => move(index, -1)} disabled={index === 0} className="text-muted-foreground disabled:opacity-30" aria-label="위로">▴</button>
-                    <button onClick={() => move(index, 1)} disabled={index === form.fields.length - 1} className="text-muted-foreground disabled:opacity-30" aria-label="아래로">▾</button>
-                  </div>
-                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-violet-500/10 text-violet-500">
-                    <Icon className="h-3.5 w-3.5" />
-                  </span>
-                  <input
-                    value={field.label}
-                    onChange={(e) => updateField(field.id, { label: e.target.value })}
-                    placeholder="항목 이름"
-                    className={`${FIELD_CLS} h-8 w-40`}
-                  />
-                  <input
-                    value={field.key}
-                    onChange={(e) => updateField(field.id, { key: e.target.value })}
-                    placeholder="key"
-                    disabled={field.system}
-                    className={`${FIELD_CLS} h-8 w-28 font-mono text-xs disabled:opacity-60`}
-                    title={field.system ? "기본 항목의 키는 바꿀 수 없어요" : "저장 데이터의 키"}
-                  />
-                  <select
-                    value={field.type}
-                    onChange={(e) => {
-                      const type = e.target.value as CompetitionFieldType;
-                      // 반복 그룹으로 막 바꿨는데 서브필드가 하나도 없으면 아무것도 못
-                      // 받는 빈 항목이 된다 — 이름·이메일 기본값을 미리 채워 둔다.
-                      const subFields = type === "repeater" && (field.subFields?.length ?? 0) === 0
-                        ? DEFAULT_REPEATER_SUB_FIELDS
-                        : field.subFields;
-                      updateField(field.id, { type, subFields, minItems: field.minItems ?? 1, maxItems: field.maxItems ?? 10 });
-                    }}
-                    disabled={field.system}
-                    className={`${FIELD_CLS} h-8 w-28 disabled:opacity-60`}
-                  >
-                    {TYPE_ORDER.map((t) => (
-                      <option key={t} value={t}>{TYPE_META[t].label}</option>
-                    ))}
-                  </select>
-                  <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={field.required}
-                      onChange={(e) => updateField(field.id, { required: e.target.checked })}
-                    />
-                    필수
-                  </label>
-                  <Switch checked={field.enabled} onChange={(v) => updateField(field.id, { enabled: v })} label="항목 사용" />
-                  {!field.system && (
-                    <button
-                      onClick={() => update({ fields: form.fields.filter((f) => f.id !== field.id) })}
-                      className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500"
-                      aria-label="항목 삭제"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                {CHOICE_TYPES.includes(field.type) && (
-                  <div className="mt-2 space-y-1.5 pl-9">
-                    {field.options.map((option, i) => (
-                      <div key={i} className="flex items-center gap-1.5">
-                        <input
-                          value={option}
-                          onChange={(e) => {
-                            const options = [...field.options];
-                            options[i] = e.target.value;
-                            updateField(field.id, { options });
-                          }}
-                          className={`${FIELD_CLS} h-8`}
-                        />
-                        <button
-                          onClick={() => updateField(field.id, { options: field.options.filter((_, idx) => idx !== i) })}
-                          className="rounded p-1 text-muted-foreground hover:text-red-500"
-                          aria-label="선택지 삭제"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      onClick={() => updateField(field.id, { options: [...field.options, ""] })}
-                      className={`flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground ${R.control}`}
-                    >
-                      <ListPlus className="h-3 w-3" /> 선택지 추가
-                    </button>
-                  </div>
-                )}
-
-                {field.type === "image" && (
-                  <div className="mt-2 flex items-center gap-2 pl-9 text-[11px] text-muted-foreground">
-                    <span>최대 장수</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={10}
-                      value={field.maxFiles ?? 3}
-                      onChange={(e) => updateField(field.id, { maxFiles: Math.max(1, Number(e.target.value) || 1) })}
-                      className={`${FIELD_CLS} h-8 w-16`}
-                    />
-                    <span>· 장당 4MB 이하 (요청 본문 상한 때문에 1장씩 올라가요)</span>
-                  </div>
-                )}
-                {field.type === "youtube" && (
-                  <p className="mt-2 pl-9 text-[11px] text-muted-foreground">
-                    제출 시 링크에서 영상 ID만 저장해요. 비공개 영상은 재생되지 않아 신청자에게 안내가 나갑니다.
-                  </p>
-                )}
-
-                {field.type === "repeater" && (
-                  <div className="mt-2 space-y-2 pl-9">
-                    <p className="text-[11px] text-muted-foreground">
-                      신청자가 &ldquo;{field.label || "항목"} 추가&rdquo; 버튼으로 행을 늘려가며 채우는 항목이에요.
-                      한 행에 들어갈 서브필드를 정하세요 (예: 이름, 이메일).
-                    </p>
-                    {(field.subFields ?? []).map((sub, i) => {
-                      const updateSub = (patch: Partial<CompetitionRepeaterSubField>) => {
-                        const subFields = (field.subFields ?? []).map((s, idx) => (idx === i ? { ...s, ...patch } : s));
-                        updateField(field.id, { subFields });
-                      };
-                      return (
-                        <div key={i} className="flex items-center gap-1.5">
-                          <input
-                            value={sub.label}
-                            onChange={(e) => updateSub({ label: e.target.value })}
-                            placeholder="서브필드 이름 (예: 이름)"
-                            className={`${FIELD_CLS} h-8 flex-1`}
-                          />
-                          <input
-                            value={sub.key}
-                            onChange={(e) => updateSub({ key: e.target.value })}
-                            placeholder="key"
-                            className={`${FIELD_CLS} h-8 w-24 font-mono text-xs`}
-                          />
-                          <select
-                            value={sub.type}
-                            onChange={(e) => updateSub({ type: e.target.value as CompetitionRepeaterSubField["type"] })}
-                            className={`${FIELD_CLS} h-8 w-24`}
-                          >
-                            <option value="text">텍스트</option>
-                            <option value="email">이메일</option>
-                          </select>
-                          <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                            <input type="checkbox" checked={sub.required} onChange={(e) => updateSub({ required: e.target.checked })} />
-                            필수
-                          </label>
-                          <button
-                            onClick={() => updateField(field.id, { subFields: (field.subFields ?? []).filter((_, idx) => idx !== i) })}
-                            className="rounded p-1 text-muted-foreground hover:text-red-500"
-                            aria-label="서브필드 삭제"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                    <button
-                      onClick={() => updateField(field.id, {
-                        subFields: [...(field.subFields ?? []), { key: `field_${(field.subFields?.length ?? 0) + 1}`, label: "", type: "text", required: false }],
-                      })}
-                      className={`flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground ${R.control}`}
-                    >
-                      <ListPlus className="h-3 w-3" /> 서브필드 추가
-                    </button>
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                      <span>최소</span>
-                      <input
-                        type="number" min={0} max={field.maxItems ?? 10}
-                        value={field.minItems ?? 1}
-                        onChange={(e) => updateField(field.id, { minItems: Math.max(0, Number(e.target.value) || 0) })}
-                        className={`${FIELD_CLS} h-8 w-16`}
-                      />
-                      <span>~ 최대</span>
-                      <input
-                        type="number" min={field.minItems ?? 1} max={20}
-                        value={field.maxItems ?? 10}
-                        onChange={(e) => updateField(field.id, { maxItems: Math.max(1, Number(e.target.value) || 1) })}
-                        className={`${FIELD_CLS} h-8 w-16`}
-                      />
-                      <span>명</span>
-                    </div>
-                  </div>
-                )}
-              </Reorder.Item>
-            );
-          })}
+          {form.fields.map((field, index) => (
+            <Reorder.Item key={field.id} value={field} className={`bg-secondary/20 p-3 ${R.surface} ${FINISH.s2}`}>
+              <CompetitionFieldRow
+                field={field}
+                index={index}
+                fieldsCount={form.fields.length}
+                allFields={form.fields}
+                language={language}
+                onMove={(direction) => move(index, direction)}
+                onUpdate={(patch) => updateField(field.id, patch)}
+                onRemove={() => update({ fields: form.fields.filter((f) => f.id !== field.id) })}
+              />
+            </Reorder.Item>
+          ))}
         </Reorder.Group>
 
         <button
@@ -442,5 +283,292 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
         <FormPreview config={{ ...competition.config, form, language, legal }} theme={competition.theme} />
       </div>
     </div>
+  );
+}
+
+/**
+ * 신청 항목 한 줄 — Reorder.Item 의 자식으로만 쓴다.
+ *
+ * 부모의 map 콜백 안에 그대로 두면 useRegPopover(항목 형식 팝오버가 쓰는 훅) 을 행마다
+ * 부를 수가 없다(훅은 컴포넌트 몸체에서만 부른다) — 그래서 행 하나를 컴포넌트로 뗐다.
+ * 사전등록 카드(CollectFieldCard)와 같은 이유로 같은 모양이 됐다.
+ */
+function CompetitionFieldRow({
+  field,
+  index,
+  fieldsCount,
+  allFields,
+  language,
+  onMove,
+  onUpdate,
+  onRemove,
+}: {
+  field: CompetitionFormField;
+  index: number;
+  fieldsCount: number;
+  allFields: CompetitionFormField[];
+  language: NoticeLanguage;
+  onMove: (direction: -1 | 1) => void;
+  onUpdate: (patch: Partial<CompetitionFormField>) => void;
+  onRemove: () => void;
+}) {
+  const Icon = TYPE_META[field.type]?.icon ?? AlignLeft;
+  const { open: typeOpen, setOpen: setTypeOpen, ref: typeRef } = useRegPopover();
+
+  const changeType = (type: CompetitionFieldType) => {
+    setTypeOpen(false);
+    if (type === field.type) return;
+    // 반복 그룹으로 막 바꿨는데 서브필드가 하나도 없으면 아무것도 못
+    // 받는 빈 항목이 된다 — 이름·이메일 기본값을 미리 채워 둔다.
+    const subFields = type === "repeater" && (field.subFields?.length ?? 0) === 0
+      ? defaultRepeaterSubFields(language)
+      : field.subFields;
+    onUpdate({ type, subFields, minItems: field.minItems ?? 1, maxItems: field.maxItems ?? 10 });
+  };
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground/40" aria-hidden="true" />
+        {/* 드래그는 마우스·터치 전용이라, 키보드로도 옮길 수 있게 화살표를 같이 둔다. */}
+        <div className="flex flex-col">
+          <button onClick={() => onMove(-1)} disabled={index === 0} className="text-muted-foreground disabled:opacity-30" aria-label="위로">▴</button>
+          <button onClick={() => onMove(1)} disabled={index === fieldsCount - 1} className="text-muted-foreground disabled:opacity-30" aria-label="아래로">▾</button>
+        </div>
+        <input
+          value={field.label}
+          onChange={(e) => onUpdate({ label: e.target.value })}
+          placeholder="항목 이름"
+          className={`${FIELD_CLS} h-8 w-40`}
+        />
+        <input
+          value={field.key}
+          onChange={(e) => onUpdate({ key: e.target.value })}
+          placeholder="key"
+          disabled={field.system}
+          className={`${FIELD_CLS} h-8 w-28 font-mono text-xs disabled:opacity-60`}
+          title={field.system ? "기본 항목의 키는 바꿀 수 없어요" : "저장 데이터의 키"}
+        />
+        {/* 사전등록 빌더(CollectFieldCard)와 같은 아이콘 팝오버 — 같은 서비스 안에서
+            "항목 형식 고르기"가 화면마다 다르게 생기지 않게 한다. */}
+        <div className="relative shrink-0" ref={typeRef}>
+          <button
+            type="button"
+            onClick={() => setTypeOpen((v) => !v)}
+            disabled={field.system}
+            aria-haspopup="menu"
+            aria-expanded={typeOpen}
+            title={field.system ? "기본 항목의 형식은 바꿀 수 없어요" : undefined}
+            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-background px-2 py-1.5 text-xs font-semibold shadow-sm transition-shadow hover:shadow disabled:opacity-60 disabled:hover:shadow-sm`}
+          >
+            <span className="grid h-5 w-5 place-items-center rounded-lg bg-violet-500/10 text-violet-500"><Icon className="h-3 w-3" /></span>
+            {TYPE_META[field.type].label}
+            <ChevronDown className="h-3 w-3 text-muted-foreground/60" />
+          </button>
+          {typeOpen && !field.system && (
+            <RegTypeMenu current={field.type} onPick={changeType} order={TYPE_ORDER} meta={TYPE_META} />
+          )}
+        </div>
+        <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={field.required}
+            onChange={(e) => onUpdate({ required: e.target.checked })}
+          />
+          필수
+        </label>
+        <Switch checked={field.enabled} onChange={(v) => onUpdate({ enabled: v })} label="항목 사용" />
+        {field.type === "checkbox" && (
+          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground" title="배경·테두리로 감싸 눈에 띄게 해요 — 참가자격 확인처럼 놓치면 안 되는 체크박스에 써요">
+            <Switch checked={field.emphasized ?? false} onChange={(v) => onUpdate({ emphasized: v })} label="강조 표시" />
+            강조
+          </label>
+        )}
+        {!field.system && (
+          <button
+            onClick={onRemove}
+            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500"
+            aria-label="항목 삭제"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      {CHOICE_TYPES.includes(field.type) && (
+        <div className="mt-2 space-y-1.5 pl-9">
+          {field.options.map((option, i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <input
+                value={option}
+                onChange={(e) => {
+                  const options = [...field.options];
+                  options[i] = e.target.value;
+                  onUpdate({ options });
+                }}
+                className={`${FIELD_CLS} h-8`}
+              />
+              <button
+                onClick={() => onUpdate({ options: field.options.filter((_, idx) => idx !== i) })}
+                className="rounded p-1 text-muted-foreground hover:text-red-500"
+                aria-label="선택지 삭제"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={() => onUpdate({ options: [...field.options, ""] })}
+            className={`flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground ${R.control}`}
+          >
+            <ListPlus className="h-3 w-3" /> 선택지 추가
+          </button>
+        </div>
+      )}
+
+      {field.type === "image" && (
+        <div className="mt-2 flex items-center gap-2 pl-9 text-[11px] text-muted-foreground">
+          <span>최대 장수</span>
+          <input
+            type="number"
+            min={1}
+            max={10}
+            value={field.maxFiles ?? 3}
+            onChange={(e) => onUpdate({ maxFiles: Math.max(1, Number(e.target.value) || 1) })}
+            className={`${FIELD_CLS} h-8 w-16`}
+          />
+          <span>· 장당 4MB 이하 (요청 본문 상한 때문에 1장씩 올라가요)</span>
+        </div>
+      )}
+      {field.type === "youtube" && (
+        <p className="mt-2 pl-9 text-[11px] text-muted-foreground">
+          제출 시 링크에서 영상 ID만 저장해요. 비공개 영상은 재생되지 않아 신청자에게 안내가 나갑니다.
+        </p>
+      )}
+      {field.type === "number" && (
+        <p className="mt-2 pl-9 text-[11px] text-muted-foreground">
+          신청자는 정수만 입력할 수 있어요. 반복 그룹의 &ldquo;인원수 항목과 연동&rdquo;에서 고를 수 있어요.
+        </p>
+      )}
+
+      {field.type === "repeater" && (
+        <div className="mt-2 space-y-2 pl-9">
+          <p className="text-[11px] text-muted-foreground">
+            신청자가 &ldquo;{field.label || "항목"} 추가&rdquo; 버튼으로 행을 늘려가며 채우는 항목이에요.
+            한 행에 들어갈 서브필드를 정하세요 (예: 이름, 이메일).
+          </p>
+          {(field.subFields ?? []).map((sub, i) => {
+            const updateSub = (patch: Partial<CompetitionRepeaterSubField>) => {
+              const subFields = (field.subFields ?? []).map((s, idx) => (idx === i ? { ...s, ...patch } : s));
+              onUpdate({ subFields });
+            };
+            return (
+              <div key={i} className="flex items-center gap-1.5">
+                {/* FIELD_CLS 는 w-full 을 이미 갖고 있어 뒤에 붙인 폭 클래스는 무시된다
+                    (primitives.tsx 의 FIELD_CLS 주석 참고) — 폭은 래퍼가 갖는다. */}
+                <div className="min-w-0 flex-1">
+                  <input
+                    value={sub.label}
+                    onChange={(e) => updateSub({ label: e.target.value })}
+                    placeholder="서브필드 이름 (예: 이름)"
+                    className={`${FIELD_CLS} h-8`}
+                  />
+                </div>
+                <div className="w-24 shrink-0">
+                  <input
+                    value={sub.key}
+                    onChange={(e) => updateSub({ key: e.target.value })}
+                    placeholder="key"
+                    className={`${FIELD_CLS} h-8 font-mono text-xs`}
+                  />
+                </div>
+                <div className="w-24 shrink-0">
+                  <select
+                    value={sub.type}
+                    onChange={(e) => updateSub({ type: e.target.value as CompetitionRepeaterSubField["type"] })}
+                    className={`${FIELD_CLS} h-8`}
+                  >
+                    <option value="text">텍스트</option>
+                    <option value="email">이메일</option>
+                  </select>
+                </div>
+                <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <input type="checkbox" checked={sub.required} onChange={(e) => updateSub({ required: e.target.checked })} />
+                  필수
+                </label>
+                <button
+                  onClick={() => onUpdate({ subFields: (field.subFields ?? []).filter((_, idx) => idx !== i) })}
+                  className="rounded p-1 text-muted-foreground hover:text-red-500"
+                  aria-label="서브필드 삭제"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+            );
+          })}
+          <button
+            onClick={() => onUpdate({
+              subFields: [...(field.subFields ?? []), { key: `field_${(field.subFields?.length ?? 0) + 1}`, label: "", type: "text", required: false }],
+            })}
+            className={`flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground ${R.control}`}
+          >
+            <ListPlus className="h-3 w-3" /> 서브필드 추가
+          </button>
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <span>최소</span>
+            <input
+              type="number" min={0} max={field.maxItems ?? 10}
+              value={field.minItems ?? 1}
+              onChange={(e) => onUpdate({ minItems: Math.max(0, Number(e.target.value) || 0) })}
+              className={`${FIELD_CLS} h-8 w-16`}
+            />
+            <span>~ 최대</span>
+            <input
+              type="number" min={field.minItems ?? 1} max={20}
+              value={field.maxItems ?? 10}
+              onChange={(e) => onUpdate({ maxItems: Math.max(1, Number(e.target.value) || 1) })}
+              className={`${FIELD_CLS} h-8 w-16`}
+            />
+            <span>명</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            <span>인원수 항목과 연동</span>
+            <select
+              value={field.countFromKey ?? ""}
+              onChange={(e) => onUpdate({ countFromKey: e.target.value || undefined })}
+              className={`${FIELD_CLS} h-8 w-auto`}
+            >
+              <option value="">사용 안 함 (수동으로 +/- )</option>
+              {/* 숫자 항목만 고를 수 있게 한다 — 텍스트 항목을 골라 두면 신청자가
+                  아무거나 적었을 때 연동이 조용히 안 먹는다. 이미 저장된 값이
+                  숫자 항목이 아니어도(옛 설정) 목록에서 사라지지 않게 같이 넣어 둔다. */}
+              {allFields
+                .filter((f) => f.id !== field.id && (f.type === "number" || f.key === field.countFromKey))
+                .map((f) => <option key={f.id} value={f.key}>{f.label || f.key}</option>)}
+            </select>
+            {field.countFromKey && (
+              <>
+                <span>에서</span>
+                <input
+                  type="number" min={0} max={19}
+                  value={field.countExclude ?? 0}
+                  onChange={(e) => onUpdate({ countExclude: Math.max(0, Number(e.target.value) || 0) })}
+                  className={`${FIELD_CLS} h-8 w-14`}
+                />
+                <span>명 제외 (예: 리더 1명)</span>
+              </>
+            )}
+            {!allFields.some((f) => f.type === "number") && (
+              <span className="text-muted-foreground/70">먼저 항목 형식을 &ldquo;숫자&rdquo;로 만들어야 골라 쓸 수 있어요.</span>
+            )}
+          </div>
+          {field.countFromKey && (
+            <p className="text-[11px] text-muted-foreground/70">
+              연동한 항목에 숫자를 입력하면 행 수가 자동으로 맞춰져요(최소·최대 범위 안에서만). 신청자는 그 뒤로도 +/- 로 손으로 고칠 수 있어요.
+            </p>
+          )}
+        </div>
+      )}
+    </>
   );
 }

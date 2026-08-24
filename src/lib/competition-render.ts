@@ -123,6 +123,11 @@ export function buildCompetitionCss(theme: CompetitionTheme): string {
 .mc-hint { margin-top: 5px; font-size: 11.5px; opacity: .62; }
 .mc-check { display:flex; align-items:flex-start; gap:8px; font-size:13px; line-height:1.5; margin-bottom:8px; cursor:pointer; }
 .mc-check input { margin-top: 2px; flex: none; }
+/* 놓치기 쉬운 체크박스(참가자격 확인 등)를 눈에 띄게 — 배경·테두리로 감싸고 굵게. */
+.mc-check-emph { padding: 12px 14px; border-radius: var(--mc-radius);
+  background: color-mix(in srgb, var(--mc-accent) 10%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--mc-accent) 45%, transparent); }
+.mc-check-emph span { font-weight: 700; }
 .mc-consent-link { text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 /* 파일 선택 버튼 — 네이티브 input 은 시각적으로만 숨긴다(display:none 이면 탭 순서에서도
    빠져 키보드로 못 연다). 사전등록 폼의 .msf-chip 과 같은 숨김 기법. */
@@ -312,7 +317,9 @@ export function renderFormFieldsHtml(config: CompetitionConfig): string {
         const rows = Array.from({ length: initialCount }, () => rowHtml).join("");
         return `<div class="mc-field">${label}
           <div class="mc-rep-rows" data-mc-rep-rows data-mc-key="${escapeHtml(field.key)}"
-            data-mc-rep-min="${min}" data-mc-rep-max="${max}" data-mc-rep-label="${escapeHtml(field.label)}">${rows}</div>
+            data-mc-rep-min="${min}" data-mc-rep-max="${max}" data-mc-rep-label="${escapeHtml(field.label)}"
+            data-mc-rep-count-from="${escapeHtml(field.countFromKey ?? "")}"
+            data-mc-rep-count-exclude="${field.countExclude ?? 0}">${rows}</div>
           <template data-mc-rep-template>${rowHtml}</template>
           <button type="button" class="mc-rep-add" data-mc-rep-add data-mc-rep-add-for="${escapeHtml(field.key)}">+ ${escapeHtml(t.addRow)}</button>
         </div>`;
@@ -333,7 +340,8 @@ export function renderFormFieldsHtml(config: CompetitionConfig): string {
           </select></div>`;
       }
       if (field.type === "checkbox") {
-        return `<div class="mc-field"><label class="mc-check"><input type="checkbox" ${common}><span>${escapeHtml(
+        const checkClass = field.emphasized ? "mc-check mc-check-emph" : "mc-check";
+        return `<div class="mc-field"><label class="${checkClass}"><input type="checkbox" ${common}><span>${escapeHtml(
           field.label,
         )}${field.required ? t.required : ""}</span></label></div>`;
       }
@@ -353,6 +361,13 @@ export function renderFormFieldsHtml(config: CompetitionConfig): string {
         return `<div class="mc-field">${label}<div class="mc-tel">
           <select class="mc-tel-cc" data-mc-cc="${escapeHtml(field.key)}" aria-label="${escapeHtml(field.label)} — country">${options}</select>
           <input type="tel" inputmode="tel" ${common} class="mc-input" placeholder="${escapeHtml(field.placeholder)}"></div></div>`;
+      }
+      if (field.type === "number") {
+        // 반복 그룹의 "인원수 항목과 연동"이 이 값을 그대로 Number() 로 읽는다 — 자유
+        // 텍스트로 두면 신청자가 아무거나 적어 연동이 조용히 안 먹는다.
+        return `<div class="mc-field">${label}<input type="number" inputmode="numeric" min="0" step="1" ${common} class="mc-input" placeholder="${escapeHtml(
+          field.placeholder,
+        )}"></div>`;
       }
       const inputType = field.type === "email" ? "email" : "text";
       return `<div class="mc-field">${label}<input type="${inputType}" ${common} class="mc-input" placeholder="${escapeHtml(
