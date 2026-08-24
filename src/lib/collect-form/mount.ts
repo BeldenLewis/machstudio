@@ -44,6 +44,17 @@ import { buildUtmEnvelope } from "@/lib/attribution-client";
  */
 const PREVIEW_REG_NO = "0000000000001";
 
+function maskedEmail(value: string): string {
+  const raw = value.trim();
+  const at = raw.lastIndexOf("@");
+  return at < 1 ? "" : `${raw[0]}•••${raw.slice(at)}`;
+}
+
+function maskedPhone(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  return digits.length < 8 ? "" : `•••••• ${digits.slice(-4)}`;
+}
+
 /** 안내 문구 — 로케일 대응은 §11 이후. 지금은 영어 단일 전시(LA)라 화면 문구도 여기 모은다. */
 const COPY = {
   before: { title: "Registration hasn't opened yet", body: "The form will appear here once registration opens." },
@@ -66,6 +77,8 @@ const COPY = {
   regNoLabel: "Registration number — show this at the venue",
   previewFlag: "Preview — nothing is saved",
   ticketLink: "Open my ticket page →",
+  saveImage: "Save as Image",
+  saveHint: "* If the button doesn't work, please take a screenshot.",
   previewDone: "Sample number — nothing was saved.",
   more: "Details",
   less: "Hide",
@@ -994,6 +1007,38 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     }, COPY.ticketLink);
   }
 
+  function saveTicketLink(regNo: string): HTMLElement | null {
+    if (preview) return null;
+    return h("a", {
+      class: "msf-save",
+      href: `${opts.origin}/api/collect/qr/${encodeURIComponent(regNo)}?download=1`,
+      target: "_blank",
+      rel: "noopener noreferrer",
+    }, COPY.saveImage);
+  }
+
+  function completionIdentity(): { name: string; visitorType: string; maskedEmail: string; maskedPhone: string } {
+    const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
+    const namePattern = /^(first|last|given|family|full)[_-]?names?$|^names?$|^surnames?$|^(first|last|given|family)$/i;
+    const name = config.fields
+      .filter((field) => [field.key, ...Object.values(field.label)]
+        .map((value) => String(value).trim().replace(/\s+/g, "_"))
+        .some((candidate) => namePattern.test(candidate)))
+      .map((field) => text(values[field.key]))
+      .filter(Boolean)
+      .join(" ");
+    const valueFor = (type: string) => {
+      const field = config.fields.find((item) => item.type === type);
+      return field ? text(values[field.key]) : "";
+    };
+    return {
+      name,
+      visitorType: config.branch.enabled ? text(values[config.branch.fieldKey]) : "",
+      maskedEmail: maskedEmail(valueFor("email")),
+      maskedPhone: maskedPhone(valueFor("tel")),
+    };
+  }
+
   // ── 렌더 ────────────────────────────────────────────────────────────
   const consentHost = h("div", { class: "msf-stack" });
   function renderConsent(): void {
@@ -1025,17 +1070,29 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
 
     // 완료 화면 — 이메일 연동 전에는 **여기가 등록자가 번호를 받는 첫 경로**다(설계 §2·§8).
     if (doneRegNo) {
+      const identity = completionIdentity();
+      const identityRows = [
+        ["Phone", identity.maskedPhone],
+        ["E-mail", identity.maskedEmail],
+      ].filter(([, value]) => Boolean(value));
       stack.appendChild(
         h("div", { class: "msf-done" },
           h("div", { class: "msf-done-title" }, COPY.doneTitle),
+          identity.visitorType ? h("div", { class: "msf-badge" }, identity.visitorType) : null,
+          identity.name ? h("div", { class: "msf-found-name" }, identity.name) : null,
           /**
            * QR 을 여기서 보여 준다 — 이메일 연동 전에는 등록자가 QR 을 받는 **첫 경로**다
            * (설계 §2·§8). 서버에서 그리므로 §9.2 규칙(EC Q·여백 4모듈·불투명 흰 배경)이
            * 세 자리(완료·티켓·이메일)에서 같다.
            */
           config.completion.showQr ? qrCard(doneRegNo) : null,
+          identityRows.length > 0 ? h("dl", { class: "msf-idcheck" },
+            ...identityRows.flatMap(([label, value]) => [h("dt", null, label), h("dd", null, value)]),
+          ) : null,
           h("div", { class: "msf-regno" }, doneRegNo),
           h("div", { class: "msf-regno-label" }, preview ? COPY.previewDone : COPY.regNoLabel),
+          config.completion.showQr ? saveTicketLink(doneRegNo) : null,
+          !preview && config.completion.showQr ? h("div", { class: "msf-save-hint" }, COPY.saveHint) : null,
           ticketLink(doneRegNo),
         ),
       );

@@ -170,7 +170,10 @@ export const COLLECT_FORM_CSS = `
 .msf-state-title{font-size:16px;font-weight:700}
 .msf-state-body{font-size:13px;color:var(--msf-muted);margin-top:6px}
 
-.msf-done{text-align:center;background:var(--msf-soft);border-radius:var(--msf-radius);padding:26px 20px}
+.msf-done{
+  display:flex !important;flex-direction:column !important;align-items:center !important;
+  width:100% !important;text-align:center;background:var(--msf-soft);border-radius:var(--msf-radius);padding:26px 20px
+}
 .msf-done-title{font-size:17px;font-weight:700}
 /**
  * 등록번호는 **현장에서 눈으로 읽고 손으로 친다**(설계 §9.1·§12).
@@ -252,6 +255,7 @@ export const COLLECT_FORM_CSS = `
 .msf-save{
   display:block;width:100%;margin-top:16px;padding:14px 18px;border:0;border-radius:var(--msf-radius);
   background:var(--msf-accent);color:var(--msf-accent-fg);font:inherit;font-weight:800;cursor:pointer;
+  text-align:center;text-decoration:none;
 }
 .msf-save:hover{filter:brightness(1.08)}
 .msf-save-hint{margin-top:8px;font-size:11px;color:var(--msf-muted)}
