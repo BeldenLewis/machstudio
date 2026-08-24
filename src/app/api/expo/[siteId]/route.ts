@@ -41,7 +41,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ site
     orderBy: { sortOrder: "asc" },
   });
 
+  /**
+   * 이 전시의 사전등록 소스. 등록 폼 구획이 고를 수 있는 후보다.
+   *
+   * 공용 `/api/collect-sources` 를 쓰지 않는 이유: 그건 `workspaceId` 를 요구하고
+   * 소스마다 `fieldMappings` 를 통째로 실어 준다 — 여기서 필요한 것은 id 와 이름뿐이고,
+   * 소속 판정은 이미 URL 자원(site)으로 끝났다.
+   *
+   * 조건은 공개 로더의 **수용 조건과 같다**(`app/h/[pageId]/loader.ts` 의 소스 확인).
+   * 여기서 더 넓게 주면 운영자는 고를 수 있는데 공개 화면에서는 폼이 안 나온다.
+   */
+  const sources = await prisma.collectSource.findMany({
+    where: { projectId: site!.projectId, deletedAt: null, mode: "builder" },
+    select: { id: true, name: true, isActive: true },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+
   return NextResponse.json({
+    sources,
     site: {
       id: site!.id, name: site!.name, projectId: site!.projectId,
       theme: normalizeExpoTheme(site!.theme),

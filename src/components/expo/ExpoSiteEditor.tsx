@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { AutosaveScope, AggregateAutosaveIndicator, useReportAutosave } from "@/components/ui/autosave-scope";
 import { Field, FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 import { ExpoProjectSync } from "@/components/expo/ExpoProjectSync";
+import { SectionsEditor } from "@/components/expo/SectionEditor";
 import { attachExpoRowKeys, stripExpoRowKeys } from "@/lib/expo/row-key";
 import { usePageAutosave, type ExpoSaveOutcome } from "@/lib/expo/use-page-autosave";
 import { derivePageState } from "@/lib/expo/model";
@@ -17,10 +18,10 @@ import type { ExpoPageState, ExpoSection } from "@/lib/expo/types";
 /**
  * 홈페이지 편집 — **탐색 · 편집 · 미리보기 3열**.
  *
- * ── 지금 단계 ─────────────────────────────────────────────────────────
- * 페이지 목록·페이지 기본값(제목·주소·아임웹 링크)·구획 목록·미리보기까지다.
- * 구획 **내용** 편집(슬롯 필드)은 다음 조각에서 붙는다. 그때까지 구획 줄은 무엇이
- * 들어 있는지 보여 주고, 미리보기가 실제 결과를 그린다.
+ * ── 3열이 하는 일 ─────────────────────────────────────────────────────
+ * 왼쪽은 페이지를 고르고, 가운데는 그 페이지를 고치고, 오른쪽은 결과를 그린다.
+ * 가운데의 모든 값은 자동저장되고, 오른쪽 미리보기는 **서버에 저장된 초안**을 읽으므로
+ * 저장이 한 바퀴 돈 뒤에 따라온다 — 두 개의 진실이 아니라 하나의 진실에 시차가 있는 것이다.
  *
  * ── 왜 서버가 준 권한을 그대로 쓰나 ───────────────────────────────────
  * 버튼을 숨기는 것은 인가가 아니다 — 모든 라우트가 자기 자리에서 다시 판정한다.
@@ -66,14 +67,27 @@ export interface ExpoSiteEditorProps {
   release: ExpoRelease;
 }
 
+/** 사전등록 폼 후보 — 같은 전시의 빌더 폼. 사이트 조회에 같이 실려 온다. */
+interface SourceOption {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
+interface SiteResponse {
+  site: SiteInfo;
+  pages: PageSummary[];
+  sources: SourceOption[];
+}
+
 /** 상태를 만지지 않는 순수 조회 — 상태 변경은 호출부의 `.then` 에서만 한다. */
 async function fetchSite(
   siteId: string,
   signal: AbortSignal,
-): Promise<{ site: SiteInfo; pages: PageSummary[] } | "error"> {
+): Promise<SiteResponse | "error"> {
   const res = await fetch(`/api/expo/${encodeURIComponent(siteId)}`, { signal, cache: "no-store" });
   if (!res.ok) return "error";
-  return (await res.json()) as { site: SiteInfo; pages: PageSummary[] };
+  return (await res.json()) as SiteResponse;
 }
 
 export function ExpoSiteEditor(props: ExpoSiteEditorProps) {
@@ -92,6 +106,7 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
 
   const [site, setSite] = useState<SiteInfo | null>(null);
   const [pages, setPages] = useState<PageSummary[] | null>(null);
+  const [sources, setSources] = useState<SourceOption[]>([]);
   const [loadError, setLoadError] = useState(false);
 
   const requestedPageId = params.get("page");
@@ -111,6 +126,7 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
         setLoadError(false);
         setSite(result.site);
         setPages(result.pages);
+        setSources(result.sources ?? []);
       })
       .catch((error: { name?: string }) => {
         if (error?.name === "AbortError") return;
@@ -125,6 +141,15 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
     const byId = requestedPageId ? pages.find((p) => p.id === requestedPageId) : null;
     return byId ?? pages.find((p) => p.isHome) ?? pages[0];
   }, [pages, requestedPageId]);
+
+  /**
+   * 내부 링크 후보. **지금 편집 중인 페이지도 뺀 적이 없다** — 같은 페이지의 다른 구획으로
+   * 보내는 링크(맨 위로·신청 폼으로)가 실제로 필요하고, 자기 참조는 렌더가 알아서 푼다.
+   */
+  const linkTargets = useMemo(
+    () => (pages ?? []).map((page) => ({ id: page.id, title: page.title })),
+    [pages],
+  );
 
   const selectPage = useCallback((pageId: string) => {
     const next = new URLSearchParams(params.toString());
@@ -189,7 +214,10 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
           <PageEditor
             key={selected.id}
             pageId={selected.id}
+            siteId={siteId}
             canEdit={permissions.canEdit}
+            sources={sources}
+            linkTargets={linkTargets}
             onSaved={reload}
           />
         ) : (
@@ -304,10 +332,17 @@ function PageNavigator({
   );
 }
 
-/** 페이지 하나의 편집 — 기본값과 구획 목록. */
-function PageEditor({
-  pageId, canEdit, onSaved,
-}: { pageId: string; canEdit: boolean; onSaved: () => void }) {
+interface PageEditorProps {
+  pageId: string;
+  siteId: string;
+  canEdit: boolean;
+  sources: SourceOption[];
+  linkTargets: { id: string; title: string }[];
+  onSaved: () => void;
+}
+
+/** 페이지 하나의 편집 — 기본값과 구획. */
+function PageEditor({ pageId, siteId, canEdit, sources, linkTargets, onSaved }: PageEditorProps) {
   const [page, setPage] = useState<PageDetail | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -352,15 +387,24 @@ function PageEditor({
     );
   }
 
-  return <PageForm page={page} canEdit={canEdit} onSaved={onSaved} />;
+  return (
+    <PageForm
+      page={page}
+      siteId={siteId}
+      canEdit={canEdit}
+      sources={sources}
+      linkTargets={linkTargets}
+      onSaved={onSaved}
+    />
+  );
 }
 
 function PageForm({
-  page, canEdit, onSaved,
-}: { page: PageDetail; canEdit: boolean; onSaved: () => void }) {
+  page, siteId, canEdit, sources, linkTargets, onSaved,
+}: Omit<PageEditorProps, "pageId"> & { page: PageDetail }) {
   const [title, setTitle] = useState(page.title);
   const [imwebUrl, setImwebUrl] = useState(page.imwebUrl ?? "");
-  const [sections] = useState<ExpoSection[]>(page.draft.sections);
+  const [sections, setSections] = useState<ExpoSection[]>(page.draft.sections);
 
   /** 자동저장이 보는 값. **행 키가 들어 있다** — 저장 직전에 뗀다. */
   const value = useMemo(
@@ -439,26 +483,14 @@ function PageForm({
         </span>
       </label>
 
-      <section>
-        <h2 className="text-sm font-semibold">구획</h2>
-        {sections.length === 0 ? (
-          <p className="mt-2 text-sm text-muted-foreground">
-            아직 구획이 없어요. 구획 편집은 곧 이 자리에 붙습니다.
-          </p>
-        ) : (
-          <ul className="mt-2 space-y-1">
-            {sections.map((section) => (
-              <li
-                key={section.sid}
-                className={`${R.surface} ${FINISH.s2} flex items-center gap-2 bg-secondary px-3 py-2 text-sm`}
-              >
-                <span className="flex-1 truncate">{section.type}</span>
-                <span className="text-xs text-muted-foreground">{section.variant}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <SectionsEditor
+        sections={sections}
+        onChange={setSections}
+        canEdit={canEdit}
+        siteId={siteId}
+        sources={sources}
+        pages={linkTargets}
+      />
     </div>
   );
 }

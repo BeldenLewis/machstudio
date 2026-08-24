@@ -17,7 +17,7 @@ const prismaMock = {
   expoSite: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
   expoPage: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
   project: { findUnique: vi.fn() },
-  collectSource: { findFirst: vi.fn() },
+  collectSource: { findFirst: vi.fn(), findMany: vi.fn() },
   $transaction: vi.fn(async (ops: unknown[]) => ops),
   $queryRaw: vi.fn(),
 };
@@ -139,6 +139,52 @@ describe("④ 소유권 — 남의 것은 404", () => {
     const res = await POST(write({ projectId: "p9", name: "새 사이트" }));
     expect(res.status).toBe(403);
     expect(prismaMock.expoSite.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("사이트 상세 — 사전등록 소스 후보", () => {
+  /**
+   * 후보는 **URL 이 지목한 사이트의 전시**에서 온다. 사이드바 문맥으로 뽑으면 딥링크로
+   * 남의 전시 사이트를 열었을 때 엉뚱한 전시의 폼이 후보로 뜬다(AGENTS.md ②).
+   *
+   * 그리고 조건이 로더의 수용 조건과 **같아야** 한다 — 편집기가 고를 수 있는데 공개
+   * 로더가 거절하면(`h/[pageId]/loader.ts`) 운영자는 "골랐는데 폼이 안 나온다" 를 겪는다.
+   */
+  it("사이트의 전시에 속한 빌더 폼만 후보로 싣는다", async () => {
+    prismaMock.expoSite.findFirst.mockResolvedValue({
+      id: "s1", workspaceId: "w1", projectId: "p1", name: "사이트",
+      theme: null, collectSourceId: null, defaultLocale: "ko", previewToken: "tok", siteUrl: null,
+    });
+    prismaMock.expoPage.findMany.mockResolvedValue([]);
+    prismaMock.collectSource.findMany.mockResolvedValue([
+      { id: "src-1", name: "관람 신청", isActive: true },
+    ]);
+    const { GET } = await import("@/app/api/expo/[siteId]/route");
+
+    const res = await GET(read(), { params: Promise.resolve({ siteId: "s1" }) });
+    expect(res.status).toBe(200);
+    expect((await res.json()).sources).toEqual([{ id: "src-1", name: "관람 신청", isActive: true }]);
+
+    expect(prismaMock.collectSource.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { projectId: "p1", deletedAt: null, mode: "builder" },
+      }),
+    );
+  });
+
+  /** 이름만 필요하다 — fieldMappings·formConfig 를 실으면 응답이 폼 하나당 수십 KB 가 된다. */
+  it("후보에는 이름과 활성 여부만 싣는다", async () => {
+    prismaMock.expoSite.findFirst.mockResolvedValue({
+      id: "s1", workspaceId: "w1", projectId: "p1", name: "사이트",
+      theme: null, collectSourceId: null, defaultLocale: "ko", previewToken: "tok", siteUrl: null,
+    });
+    prismaMock.expoPage.findMany.mockResolvedValue([]);
+    prismaMock.collectSource.findMany.mockResolvedValue([]);
+    const { GET } = await import("@/app/api/expo/[siteId]/route");
+    await GET(read(), { params: Promise.resolve({ siteId: "s1" }) });
+
+    expect(prismaMock.collectSource.findMany.mock.calls[0][0].select)
+      .toEqual({ id: true, name: true, isActive: true });
   });
 });
 

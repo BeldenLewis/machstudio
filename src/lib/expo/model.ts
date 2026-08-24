@@ -24,7 +24,7 @@ export interface PageStateInput {
  * 이 슬롯에 **볼 만한 값**이 들어 있는가. 이중 게이트의 "내용 있음" 절반이다.
  * 발행 게이트(서버)와 런타임 방어 재검이 같은 함수를 읽어야 두 판정이 안 갈린다.
  */
-function slotHasContent(def: SlotDef, value: unknown): boolean {
+export function slotHasContent(def: SlotDef, value: unknown): boolean {
   if (value === undefined || value === null) return false;
   switch (def.kind) {
     case "text":
