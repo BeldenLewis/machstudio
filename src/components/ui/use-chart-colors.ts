@@ -76,3 +76,33 @@ export function useChartColors(): ChartColors {
 export function seriesColor(colors: ChartColors, index: number): string | undefined {
   return colors.series[index];
 }
+
+function hashLabel(label: string): number {
+  let h = 0;
+  for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+/**
+ * 슬롯을 **순위가 아니라 정체성**으로 배정한다 — dataviz 원칙 "color follows the entity,
+ * never its rank"의 위반(카드마다 1등 채널이 항상 slot-1 색을 먹어, 정작 어느 채널인지는
+ * 색이 말해 주지 않던 문제)을 고친다. 같은 라벨은 해시가 같아 항상 같은 슬롯에서 시작한다.
+ *
+ * `used`는 **호출자가 차트 하나마다 새로 만들어 넘긴다** — 그 차트 안에서 해시가 겹치면
+ * (다른 라벨인데 같은 슬롯) 다음 빈 슬롯으로 넘어가 한 차트 안에서는 항상 서로 다른 색을
+ * 보장한다. 차트 사이에서는(겹침이 없는 한) 같은 채널이 같은 색을 유지해 여러 카드를
+ * 나란히 볼 때(예: 요약 대시보드) 색 자체가 신호가 된다.
+ */
+export function entityColor(colors: ChartColors, label: string, used: Set<number>): string | undefined {
+  const n = colors.series.length;
+  if (n === 0) return undefined;
+  const start = hashLabel(label) % n;
+  for (let offset = 0; offset < n; offset++) {
+    const idx = (start + offset) % n;
+    if (!used.has(idx)) {
+      used.add(idx);
+      return colors.series[idx];
+    }
+  }
+  return undefined;
+}
