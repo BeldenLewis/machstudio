@@ -116,6 +116,23 @@ export const COLLECT_FORM_CSS = `
 .msf-chip input{position:absolute;width:1px;height:1px;opacity:0;margin:0}
 .msf-chip:has(input:focus-visible),.msf-chip.is-focus{outline:2px solid var(--msf-accent);outline-offset:2px}
 
+/* 한 번에 펼쳐 보고 고르는 단일 선택. 손가락 터치를 위해 모든 항목을 44px 이상으로 두고,
+   선택 상태는 색과 안쪽 점을 같이 써서 색상만으로 구분하지 않는다. */
+.msf-radio-group{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.msf-radio-option{
+  display:flex !important;align-items:center;gap:10px;min-width:0;min-height:48px;
+  padding:10px 12px !important;border:1px solid var(--msf-line) !important;border-radius:var(--msf-radius) !important;
+  background:var(--msf-bg);color:var(--msf-fg);font-size:14px;line-height:1.35;cursor:pointer;
+  transition:border-color .15s ease,background .15s ease,box-shadow .15s ease;
+}
+.msf-radio-option:hover{border-color:var(--msf-accent) !important}
+.msf-radio-option[data-on="1"]{border-color:var(--msf-accent) !important;background:color-mix(in srgb,var(--msf-accent) 8%,var(--msf-bg));box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.msf-radio-option input{position:absolute;width:1px;height:1px;opacity:0;margin:0}
+.msf-radio-mark{display:grid !important;place-items:center;flex:0 0 18px;width:18px;height:18px;border:2px solid var(--msf-line);border-radius:999px;background:var(--msf-bg)}
+.msf-radio-option[data-on="1"] .msf-radio-mark{border:5px solid var(--msf-accent)}
+.msf-radio-option:has(input:focus-visible),.msf-radio-option.is-focus{outline:2px solid var(--msf-accent);outline-offset:2px}
+@media (max-width:440px){.msf-radio-group{grid-template-columns:1fr}}
+
 /* 체크박스 한 줄 */
 .msf-check{
   display:flex !important;align-items:center !important;gap:10px !important;

@@ -15,7 +15,7 @@
  * 형식 어휘와 그 선택 UI 지 카드의 겉모습이 아니다 — 그래서 그 둘만 공유한다.
  */
 import { useEffect, useRef, useState, type ElementType } from "react";
-import { AlignLeft, ListChecks, ListPlus, Mail, Phone, SquareCheck } from "lucide-react";
+import { AlignLeft, CircleDot, ListChecks, ListPlus, Mail, Phone, SquareCheck } from "lucide-react";
 import { FINISH, R } from "@/components/ui/primitives";
 import { CHOICE_FIELD_TYPES, type WebinarFieldType } from "@/lib/webinar-config";
 
@@ -26,26 +26,27 @@ import { CHOICE_FIELD_TYPES, type WebinarFieldType } from "@/lib/webinar-config"
  * 넣을 때 한쪽만 고쳐도 컴파일이 통과하고, 그러면 빌더는 새 유형을 보여 주는데 제출 라우트는
  * 계속 거부한다(등록 경로가 조용히 갈린다).
  */
-export type BuilderFieldType = WebinarFieldType;
+export type BuilderFieldType = WebinarFieldType | "radio";
 
 export const REG_TYPE_META: Record<BuilderFieldType, { label: string; desc: string; icon: ElementType }> = {
   text: { label: "텍스트", desc: "한 줄 입력", icon: AlignLeft },
   email: { label: "이메일", desc: "이메일 주소", icon: Mail },
   tel: { label: "전화번호", desc: "숫자만", icon: Phone },
   select: { label: "드롭다운", desc: "하나만 선택", icon: ListChecks },
+  radio: { label: "라디오", desc: "1개 선택 · 바로 표시", icon: CircleDot },
   multiple: { label: "복수 선택", desc: "여러 개 선택", icon: ListPlus },
   checkbox: { label: "체크박스", desc: "동의·확인", icon: SquareCheck },
 };
 
-// 선택형 둘(드롭다운·복수 선택)을 붙여 둔다 — 고를 때 비교하게 되는 짝이다.
-export const REG_TYPE_ORDER: BuilderFieldType[] = ["text", "email", "tel", "select", "multiple", "checkbox"];
+// 선택형 셋(드롭다운·라디오·복수 선택)을 붙여 둔다 — 고를 때 비교하게 되는 묶음이다.
+export const REG_TYPE_ORDER: BuilderFieldType[] = ["text", "email", "tel", "select", "radio", "multiple", "checkbox"];
 
 /**
  * 선택지를 쓰는 유형 — 옵션 편집·기타 허용·최대 개수가 여기 걸린다.
  * webinar-config 의 것을 **그대로 재수출**한다. 따로 적으면 편집기와 제출 라우트가 서로 다른
  * 배열을 보게 되고, 그 어긋남은 타입으로도 테스트로도 안 잡힌다(양쪽이 각자 사본을 고정한다).
  */
-export const CHOICE_TYPES = CHOICE_FIELD_TYPES;
+export const CHOICE_TYPES: readonly BuilderFieldType[] = [...CHOICE_FIELD_TYPES, "radio"];
 
 /** 바깥 클릭·Esc 로 닫히는 팝오버. 형식 메뉴가 쓰는 것과 같은 것을 빌더들이 나눠 쓴다. */
 export function useRegPopover() {

@@ -141,7 +141,7 @@ export default function FormBuilderTab({
                   handle={handle}
                   removeButton={removeButton}
                   isBranchKey={isBranchKey}
-                  onMakeBranch={item.type === "select"
+                  onMakeBranch={item.type === "select" || item.type === "radio"
                     ? (on) => patch({
                         branch: on
                           ? {
