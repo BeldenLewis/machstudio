@@ -5,9 +5,10 @@
  * 이 판정은 **연동형 화면을 그대로 두는가**를 결정하므로(레코드 52,000건이 그 화면으로
  * 운영 중이다) 회귀 테스트가 붙을 수 있는 자리에 있어야 한다.
  */
-import { Activity, Code2, HardDriveDownload, Settings2, Shield, Table2, Wrench, type LucideIcon } from "lucide-react";
+import { Activity, Code2, HardDriveDownload, Info, Settings2, Shield, Table2, Wrench, type LucideIcon } from "lucide-react";
 
 export const TABS = [
+  { id: "info", label: "기본 정보", icon: Info },
   { id: "records", label: "수집 데이터", icon: Table2 },
   { id: "form", label: "등록 폼", icon: Settings2 },
   { id: "fields", label: "필드", icon: Settings2 },
