@@ -28,6 +28,7 @@ export function PreviewFrame({
   reloadKey,
   openLabel = "새 탭에서 열기",
   controls,
+  frameRef: outerRef,
 }: {
   title: string;
   src?: string;
@@ -39,8 +40,18 @@ export function PreviewFrame({
   openLabel?: string;
   /** 제목 줄에 끼워 넣을 선택기 — 한 패널에서 여러 화면을 번갈아 볼 때(예선/본선, 결과/발표). */
   controls?: React.ReactNode;
+  /**
+   * 프레임 요소를 밖으로 내보낸다 — `postMessage` 로 프레임과 이야기해야 하는 호출부용
+   * (홈페이지 편집기의 미리보기 통로). src 가 바뀌면 iframe 이 **새 요소로 다시 만들어지므로**
+   * 콜백 ref 로 매번 갱신한다.
+   */
+  frameRef?: React.RefObject<HTMLIFrameElement | null>;
 }) {
-  const frameRef = useRef<HTMLIFrameElement>(null);
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const setFrame = useCallback((el: HTMLIFrameElement | null) => {
+    frameRef.current = el;
+    if (outerRef) outerRef.current = el;
+  }, [outerRef]);
   const boxRef = useRef<HTMLDivElement>(null);
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [box, setBox] = useState(0);
@@ -142,7 +153,7 @@ export function PreviewFrame({
       <div ref={boxRef} className={`overflow-hidden bg-black ${R.panel} ${FINISH.s1}`}>
         <div style={{ width: box || undefined, height: frameHeight * scale, overflow: "hidden" }}>
           <iframe
-            ref={frameRef}
+            ref={setFrame}
             key={resolvedSrc}
             src={resolvedSrc}
             title={title}

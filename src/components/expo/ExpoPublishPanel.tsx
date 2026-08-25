@@ -59,16 +59,34 @@ export interface ExpoPublishPanelProps {
   readiness: ExpoReadinessView;
   snippets: ExpoSnippetsView;
   canPublish: boolean;
+  /**
+   * 자동저장이 아직 안 끝났거나 어긋났다. **발행은 저장된 초안을 굳히는 일**이라,
+   * 저장 중에 누르면 방금 친 글이 빠진 사본이 밖에 나간다.
+   */
+  saveBlocked?: boolean;
   /** 발행·공개가 끝나면 부른다 — 화면이 서버 상태를 다시 읽는다. */
   onChanged: () => void;
 }
 
 export function ExpoPublishPanel({
-  pageId, pageTitle, hasPublished, liveAt, readiness, snippets, canPublish, onChanged,
+  pageId, pageTitle, hasPublished, liveAt, readiness, snippets, canPublish, saveBlocked, onChanged,
 }: ExpoPublishPanelProps) {
   const confirm = useConfirm();
   const [busy, setBusy] = useState<"publish" | "live" | null>(null);
   const live = Boolean(liveAt);
+
+  /**
+   * **바뀐 게 없으면 누를 것도 없다.**
+   *
+   * 서버가 "발행 뒤에 고친 내용이 있다" 를 판정해 내려보낸다(`readiness.notes` 의
+   * `draft-ahead-of-published`). 이미 발행했고 그 알림이 없으면 초안과 발행본이 같다는 뜻이라
+   * 다시 발행해도 아무 일이 일어나지 않는다 — 그런데 버튼이 눌리면 운영자는 **뭔가 했다고
+   * 믿는다.** 공개 중이면 확인 모달까지 뜨고 아무것도 안 바뀐다.
+   */
+  const stale = readiness.notes.some((n) => n.code === "draft-ahead-of-published");
+  const nothingToPublish = hasPublished && !stale;
+  const publishBlocked =
+    !readiness.canPublish || nothingToPublish || Boolean(saveBlocked) || busy !== null;
 
   const call = useCallback(async (
     kind: "publish" | "live",
@@ -142,7 +160,7 @@ export function ExpoPublishPanel({
           <button
             type="button"
             onClick={() => void publish()}
-            disabled={!readiness.canPublish || busy !== null}
+            disabled={publishBlocked}
             className={`inline-flex min-h-9 w-full items-center justify-center gap-1.5 ${R.control} ${FINISH.control} bg-violet-500 px-3 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50`}
           >
             {busy === "publish" ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
@@ -152,6 +170,16 @@ export function ExpoPublishPanel({
 
         <Reasons issues={readiness.publishIssues} />
         <Reasons issues={readiness.notes} tone="note" />
+        {/* 왜 못 누르는지 말한다 — 회색 버튼만 두면 고장으로 읽힌다. */}
+        {saveBlocked ? (
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            저장이 끝나면 발행할 수 있어요.
+          </p>
+        ) : nothingToPublish ? (
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            발행본과 같아요. 고친 내용이 생기면 다시 발행할 수 있어요.
+          </p>
+        ) : null}
       </div>
 
       {/* ── 공개 스위치 ──────────────────────────────────────────── */}

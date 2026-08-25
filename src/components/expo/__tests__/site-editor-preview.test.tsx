@@ -125,6 +125,7 @@ async function render() {
           siteId="s1" projectId="p1" siteName="사이트"
           permissions={permissions}
           release={{ publicEmbedEnabled: false }}
+          previewOrigin="https://machstudio.example.com"
         />
       </ConfirmProvider>,
     );
@@ -310,34 +311,46 @@ describe("사이트 색", () => {
     expect(sitePatches).toEqual([]);
   });
 
-  it("미리보기에 반영된다", async () => {
-    vi.useFakeTimers();
-    await render();
-    await setColor("#ff0000");
-    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
-    expect(frameSrc()).toContain("accent=%23ff0000");
-  });
-
   /**
-   * `<input type="color">` 는 선택기를 끄는 동안 정상 HEX 를 초당 수십 번 쏜다. 그대로
-   * 주소에 실으면 PreviewFrame 이 URL 을 key 로 쓰므로 **iframe 이 매번 다시 뜨고**
-   * /hp 로 그만큼 요청이 나간다.
+   * 색은 **프레임에 밀어 넣는다** — 주소에 싣지 않는다.
+   *
+   * 전에는 URL 에 실었는데, `<input type="color">` 가 선택기를 끄는 동안 정상 HEX 를 초당
+   * 수십 번 쏘고 PreviewFrame 이 URL 을 key 로 쓰는 탓에 **iframe 이 그만큼 파괴·재생성**됐다.
+   * 프레임 안쪽은 처음부터 `mach-expo-preview-theme` 를 받을 줄 알았다(`preview-bridge.ts`).
    */
-  it("고르는 동안에는 미리보기를 다시 띄우지 않는다", async () => {
-    vi.useFakeTimers();
+  it("미리보기 주소를 바꾸지 않는다 — 프레임을 다시 안 띄운다", async () => {
     await render();
     const before = frameSrc();
 
     for (const hex of ["#ff0000", "#ee0000", "#dd0000", "#cc0000"]) {
       await setColor(hex);
-      await act(async () => { await vi.advanceTimersByTimeAsync(30); });
     }
-    // 아직 안 멈췄다 — 주소는 그대로여야 한다.
     expect(frameSrc()).toBe(before);
+  });
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
-    // 멈추고 나서 마지막 색 하나만 반영된다.
-    expect(frameSrc()).toContain("accent=%23cc0000");
+  it("프레임에 색을 밀어 넣는다", async () => {
+    await render();
+    const frame = host.querySelector("iframe")!;
+    const posted: unknown[] = [];
+    // jsdom 의 contentWindow 는 실제 창이라 postMessage 를 가로채 볼 수 있다.
+    Object.defineProperty(frame, "contentWindow", {
+      value: { postMessage: (msg: unknown) => { posted.push(msg); } },
+      configurable: true,
+    });
+
+    await setColor("#ff0000");
+
+    const theme = posted.find((m) => (m as { type?: string }).type === "mach-expo-preview-theme");
+    expect(theme).toMatchObject({
+      pageId: PAGE_ID,
+      theme: expect.objectContaining({ accent: "#ff0000" }),
+    });
+  });
+
+  /** 통로가 붙으려면 채널이 주소에 실려야 한다 — 없으면 프레임이 통로를 아예 안 만든다. */
+  it("미리보기 주소에 채널을 싣는다", async () => {
+    await render();
+    expect(frameSrc()).toMatch(/channel=[0-9a-f-]{8,}/);
   });
 
   it("적용해야 서버로 나간다", async () => {

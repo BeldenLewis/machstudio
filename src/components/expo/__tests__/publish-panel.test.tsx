@@ -34,6 +34,14 @@ let nextResponse: { ok: boolean; status: number; body: unknown } = { ok: true, s
 const onChanged = vi.fn();
 
 const READY = { canPublish: true, canGoLive: true, publishIssues: [], liveIssues: [], notes: [] };
+/**
+ * 이미 발행했고 **그 뒤에 고친 내용이 있는** 상태. 발행 버튼이 살아 있으려면 이게 있어야
+ * 한다 — 바뀐 게 없으면 다시 발행할 것도 없기 때문이다.
+ */
+const STALE = {
+  ...READY,
+  notes: [{ code: "draft-ahead-of-published" as const, message: "발행 뒤에 고친 내용이 있어요." }],
+};
 const SNIPPETS = {
   ok: true as const,
   page: { code: '<script async src="https://x/h/pg1"></script>\n<div data-mach-expo></div>', src: "https://x/h/pg1" },
@@ -116,7 +124,7 @@ describe("발행", () => {
 
   /** 이미 공개 중이면 발행하는 순간 방문자 화면이 바뀐다 — 그건 확인받을 일이다. */
   it("공개 중이면 확인을 먼저 받는다", async () => {
-    await render({ hasPublished: true, liveAt: "2026-08-01T00:00:00.000Z" });
+    await render({ hasPublished: true, liveAt: "2026-08-01T00:00:00.000Z", readiness: STALE });
     await click(panelButton("다시 발행"));
 
     // 아직 아무것도 안 보냈다.
@@ -130,7 +138,7 @@ describe("발행", () => {
   });
 
   it("확인에서 취소하면 아무것도 보내지 않는다", async () => {
-    await render({ hasPublished: true, liveAt: "2026-08-01T00:00:00.000Z" });
+    await render({ hasPublished: true, liveAt: "2026-08-01T00:00:00.000Z", readiness: STALE });
     await click(panelButton("다시 발행"));
     await click(anyButton("취소"));
     expect(posts).toHaveLength(0);
@@ -264,5 +272,49 @@ describe("권한", () => {
     expect(host.querySelector('button[role="switch"]')).toBeNull();
     // 코드는 그대로 볼 수 있다 — 붙이는 일에 발행 권한이 필요하지는 않다.
     expect(host.querySelector('button[aria-label="페이지 통짜 코드 복사"]')).toBeTruthy();
+  });
+});
+
+/**
+ * **바뀐 게 없으면 누를 것도 없다.**
+ *
+ * 눌리는 버튼은 "뭔가 했다" 는 신호다. 초안과 발행본이 같은데 눌리면 운영자는 발행했다고
+ * 믿고, 공개 중이면 확인 모달까지 뜬 뒤 아무것도 안 바뀐다.
+ */
+describe("발행할 게 없을 때", () => {
+  it("발행본과 같으면 버튼이 잠기고 그렇게 말한다", async () => {
+    await render({ hasPublished: true, readiness: READY });
+    expect(panelButton("다시 발행")?.disabled).toBe(true);
+    expect(host.textContent).toContain("발행본과 같아요");
+  });
+
+  it("고친 내용이 생기면 다시 눌린다", async () => {
+    await render({ hasPublished: true, readiness: STALE });
+    expect(panelButton("다시 발행")?.disabled).toBe(false);
+    expect(host.textContent).not.toContain("발행본과 같아요");
+  });
+
+  /** 한 번도 발행 안 했으면 언제나 누를 수 있다 — 비교할 발행본이 없다. */
+  it("처음 발행은 막지 않는다", async () => {
+    await render({ hasPublished: false, readiness: READY });
+    expect(panelButton("발행하기")?.disabled).toBe(false);
+  });
+});
+
+/**
+ * **발행은 저장된 초안을 굳히는 일**이다. 저장이 끝나기 전에 누르면 방금 친 글이 빠진
+ * 사본이 밖에 나가고, 화면에는 성공으로 보인다.
+ */
+describe("저장이 안 끝났을 때", () => {
+  it("발행을 막고 이유를 말한다", async () => {
+    await render({ hasPublished: false, saveBlocked: true });
+    expect(panelButton("발행하기")?.disabled).toBe(true);
+    expect(host.textContent).toContain("저장이 끝나면");
+  });
+
+  it("눌러도 나가지 않는다", async () => {
+    await render({ hasPublished: false, saveBlocked: true });
+    await click(panelButton("발행하기"));
+    expect(posts).toEqual([]);
   });
 });
