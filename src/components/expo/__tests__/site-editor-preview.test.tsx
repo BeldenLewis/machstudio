@@ -63,6 +63,8 @@ let host: HTMLDivElement;
 let root: Root;
 /** 서버가 다음 PATCH 응답에 실을 값. 테스트가 바꾼다. */
 let nextSave: { draftRevision: number; codeDigest: string };
+/** 세우면 다음 draft PATCH 를 422 로 거절한다 — 서버가 값을 거절한 상황. */
+let rejectNext: { errors: Array<{ path: string; message: string; sid?: string }> } | null = null;
 let pageBody: Record<string, unknown>;
 let patchCount = 0;
 let liveAt: string | null = null;
@@ -87,6 +89,10 @@ function stubFetch() {
           return ok({ page: { id: PAGE_ID, title: body.title } });
         }
         patchCount += 1;
+        if (rejectNext) {
+          const payload = rejectNext;
+          return { ok: false, status: 422, json: async () => payload } as Response;
+        }
         return ok({ page: { id: PAGE_ID, ...nextSave } });
       }
       // 발행·공개는 상세 조회가 아니다 — 같이 세면 "다시 읽었는가" 를 못 본다.
@@ -175,6 +181,7 @@ beforeEach(() => {
   patchCount = 0;
   sitePatches = [];
   listTitle = "홈";
+  rejectNext = null;
   liveAt = null;
   detailCount = 0;
   holdPageDetail = () => {};
@@ -563,6 +570,62 @@ describe("발행한 뒤", () => {
  * 떠났다 돌아오기 전까지** 발행 패널이 옛 이름을 단다 — 그 이름은 공개 스위치를
  * 스크린리더가 읽는 이름이기도 하다("○○ 아임웹에 내보내기").
  */
+/**
+ * **422 는 조용히 사라지면 안 된다.**
+ *
+ * 예전에는 `!res.ok` 를 전부 `failed` 로 뭉갰다. `failed` 는 기준선을 유지해 **다음 변경마다
+ * 다시 시도**되는데, 서버가 값을 거절한 것이므로 같은 값은 영원히 거절이다. 화면에는 이유가
+ * 한 글자도 안 떴다 — 운영자는 저장이 안 되고 있다는 사실조차 몰랐다.
+ * 쓰기 검증을 강하게 만들면서 이 처리를 같이 고치지 않으면 그 상태가 흔해진다.
+ */
+describe("서버가 값을 거절하면", () => {
+  const bannerText = () => host.textContent ?? "";
+
+  it("이유를 화면에 올린다", async () => {
+    vi.useFakeTimers();
+    await render();
+    rejectNext = { errors: [{ path: "sections[0].sid", message: "구획 하나가 신원 없이 왔어요.", sid: "sid-1" }] };
+    await editAndSave("https://example.com/x");
+
+    expect(bannerText()).toContain("저장하지 못했어요");
+    expect(bannerText()).toContain("구획 하나가 신원 없이 왔어요");
+  });
+
+  /** 409(다른 곳에서 먼저 저장)와 갈라야 한다 — 그건 기다리면 풀리고 이건 고쳐야 풀린다. */
+  it("409 배너와 다른 문구를 쓴다", async () => {
+    vi.useFakeTimers();
+    await render();
+    rejectNext = { errors: [{ path: "sections", message: "값이 안 돼요." }] };
+    await editAndSave("https://example.com/x");
+    expect(bannerText()).not.toContain("다른 곳에서 먼저 저장했어요");
+  });
+
+  /** 값을 고치면 안내가 사라지고 다시 시도된다 — 막힌 채로 두지 않는다. */
+  it("값을 고치면 안내가 사라지고 다시 보낸다", async () => {
+    vi.useFakeTimers();
+    await render();
+    rejectNext = { errors: [{ path: "sections", message: "값이 안 돼요." }] };
+    await editAndSave("https://example.com/x");
+    expect(bannerText()).toContain("저장하지 못했어요");
+
+    rejectNext = null;
+    const before = patchCount;
+    await editAndSave("https://example.com/고침");
+
+    expect(patchCount).toBeGreaterThan(before);
+    expect(bannerText()).not.toContain("저장하지 못했어요");
+  });
+
+  /** 이유가 비어 있어도 무언가는 말한다 — 빈 배너가 뜨면 고장으로 읽힌다. */
+  it("서버가 이유를 안 주면 일반 문구라도 낸다", async () => {
+    vi.useFakeTimers();
+    await render();
+    rejectNext = { errors: [] };
+    await editAndSave("https://example.com/x");
+    expect(bannerText()).toContain("저장할 수 없는 값이 있어요");
+  });
+});
+
 describe("페이지 이름", () => {
   /** 스위치의 읽는 이름 — 여기에 페이지 이름이 실린다. */
   const switchName = () =>

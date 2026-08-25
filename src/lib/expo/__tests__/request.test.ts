@@ -127,3 +127,219 @@ describe("템플릿 스냅샷", () => {
     if (!r.ok) expect(r.errors[0].code).toBe("too-large");
   });
 });
+
+/**
+ * **정규화가 조용히 버리는 것을 쓰기가 막는가.**
+ *
+ * 여기 있는 여섯 가지는 전부 예전에 **통과했다** — 검증이 200 을 주고, 정규화가 구획을
+ * 버리거나 값을 자르고, 편집기는 자기 로컬 값을 기준선으로 삼아 "저장됨" 이라고 표시했다.
+ * 운영자는 새로고침해야 알았다. 계획서 264·266행이 못박은 자리다.
+ *
+ * 각 케이스는 **정규화가 실제로 버린다는 것까지** 같이 확인한다 — 그래야 이 검증이
+ * 가상의 위험이 아니라 실제로 갈라지던 지점을 막는다는 것이 남는다.
+ */
+describe("쓰기가 막는다 — 정규화가 조용히 버리던 것들", () => {
+  const codesOf = (r: ReturnType<typeof validatePageDraft>) => (r.ok ? [] : r.errors.map((e) => e.code));
+
+  it("sid 가 없으면 거절한다 — 통과시키면 구획이 통째로 사라진다", () => {
+    const d = draft([{ type: "kv", variant: "column", content: { title: "제목" } }]);
+    expect(codesOf(validatePageDraft(d))).toContain("invalid-sid");
+    // 통과시켰다면 이렇게 됐다:
+    expect(normalizeExpoPage(d).sections).toHaveLength(0);
+  });
+
+  it("sid 가 UUID 가 아니면 거절한다", () => {
+    const d = draft([{ sid: "abc", type: "kv", variant: "column", content: { title: "제목" } }]);
+    expect(codesOf(validatePageDraft(d))).toContain("invalid-sid");
+    expect(normalizeExpoPage(d).sections).toHaveLength(0);
+  });
+
+  it("중복 sid 는 거절한다 — 통과시키면 뒤엣것이 사라진다", () => {
+    const d = draft([
+      { sid: uid(1), type: "kv", variant: "column", content: { title: "첫째" } },
+      { sid: uid(1), type: "textblock", variant: "prose", content: { body: "둘째" } },
+    ]);
+    expect(codesOf(validatePageDraft(d))).toContain("duplicate-sid");
+    expect(normalizeExpoPage(d).sections).toHaveLength(1);
+  });
+
+  it("한 페이지에 하나만 되는 구획이 두 번이면 거절한다", () => {
+    const d = draft([
+      { sid: uid(1), type: "kv", variant: "column", content: { title: "첫째" } },
+      { sid: uid(2), type: "kv", variant: "column", content: { title: "둘째" } },
+    ]);
+    const r = validatePageDraft(d);
+    expect(codesOf(r)).toContain("duplicate-singleton");
+    // 문구는 운영자 말로, 조사까지 맞게 — 편집기의 같은 안내와 같은 문장이어야 한다.
+    if (!r.ok) {
+      const m = r.errors.find((e) => e.code === "duplicate-singleton")!.message;
+      expect(m).toBe("키비주얼은 한 페이지에 하나만 놓을 수 있어요");
+    }
+    expect(normalizeExpoPage(d).sections).toHaveLength(1);
+  });
+
+  it("link.label 이 넘치면 거절한다 — 통과시키면 말없이 잘린다", () => {
+    const long = "가".repeat(EXPO_LIMITS.textChars + 100);
+    const d = draft([{
+      sid: uid(1), type: "kv", variant: "column",
+      content: { title: "제목", cta: { label: long, href: "https://example.com" } },
+    }]);
+    expect(codesOf(validatePageDraft(d))).toContain("too-long");
+    const saved = normalizeExpoPage(d).sections[0].content.cta as { label: string };
+    expect(saved.label.length).toBe(EXPO_LIMITS.textChars);
+  });
+
+  it("media.alt 가 넘치면 거절한다", () => {
+    const long = "가".repeat(EXPO_LIMITS.textChars + 100);
+    const d = draft([{
+      sid: uid(1), type: "kv", variant: "column",
+      content: { title: "제목", media: { kind: "image", url: "https://example.com/a.png", alt: long } },
+    }]);
+    expect(codesOf(validatePageDraft(d))).toContain("too-long");
+  });
+
+  it("sourceRef 가 넘치면 거절한다", () => {
+    const d = draft([{
+      sid: uid(1), type: "register-form", variant: "inline",
+      content: { sourceRef: "x".repeat(100) },
+    }]);
+    expect(codesOf(validatePageDraft(d))).toContain("too-long");
+  });
+
+  /** 어느 카드로 데려갈지 — path 인덱스 역산은 배열이 바뀌면 어긋난다. */
+  it("오류에 어느 구획인지 실어 준다", () => {
+    const r = validatePageDraft(draft([
+      { sid: uid(1), type: "kv", variant: "column", content: { title: "정상" } },
+      { sid: uid(2), type: "cardgrid", variant: "multicolumn",
+        content: { items: [{ title: "가".repeat(EXPO_LIMITS.textChars + 1) }] } },
+    ]));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0].sid).toBe(uid(2));
+  });
+
+  /**
+   * 구획은 40개까지만 검증한다(`sectionsPerPage`). 그래서 구획 하나당 오류 하나로는
+   * 상한 50에 못 닿는다 — 행이 많은 카드 구획으로 만든다. 전체 크기는 512KB 아래로 둔다.
+   */
+  it("오류가 아주 많아도 상한을 넘기지 않고, 잘렸다고 말한다", () => {
+    const rows = Array.from({ length: 100 }, () => ({ title: "가".repeat(EXPO_LIMITS.textChars + 1) }));
+    const r = validatePageDraft(draft([
+      { sid: uid(1), type: "cardgrid", variant: "multicolumn", content: { items: rows } },
+    ]));
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.errors).toHaveLength(51);
+      expect(r.errors[50].message).toContain("50건이 더 있어요");
+    }
+  });
+});
+
+/**
+ * **짝 불변식** — 검증을 통과한 값은 정규화가 손대지 않는다.
+ *
+ * 이게 이 파일에서 가장 오래 갈 검사다. 슬롯 종류를 늘리면서 검증만 안 고치면 여기서
+ * 깨진다 — 지금 고치는 버그가 정확히 그렇게 생겨났다(`media`·`link`·`sourceRef` 가
+ * `validateSlot` 에 없었다).
+ *
+ * 일부러 관대하게 둔 것은 대상이 아니다: 주소 형식(자유 입력 + 900ms 자동저장),
+ * `media.kind`, 필수 값이 빈 행(`keepEmptyRows`), 카탈로그 밖 키(`__rowKey`),
+ * 변형·디자인 열거값(카탈로그에서 값을 지우는 배포가 열려 있던 탭을 422 로 만들면 안 된다).
+ */
+describe("검증을 통과하면 정규화가 손대지 않는다", () => {
+  const CORPUS = [
+    draft([{ sid: uid(1), type: "kv", variant: "column", content: { title: "제목", subtitle: "부제", cta: { label: "신청", href: "https://example.com" } } }]),
+    draft([{ sid: uid(2), type: "textblock", variant: "prose", content: { heading: "머리", body: "본문\n둘째" } }]),
+    draft([{ sid: uid(3), type: "cardgrid", variant: "multicolumn", content: { heading: "프로그램", items: [{ title: "가", description: "나" }, { title: "다" }] } }]),
+    draft([{ sid: uid(4), type: "toolbox", variant: "tiles", content: { items: [{ label: "지도", link: { label: "열기", href: "https://example.com/m" } }] } }]),
+    draft([{ sid: uid(5), type: "custom-code", variant: "boxed", content: { heading: "지도", code: "<div>x</div>" } }]),
+    draft([
+      { sid: uid(6), type: "kv", variant: "column", content: { title: "제목", media: { kind: "image", url: "https://example.com/a.png", alt: "대체" } } },
+      { sid: uid(7), type: "textblock", variant: "statement", content: { body: "문장" } },
+    ]),
+    /**
+     * **경계값** — 상한에 정확히 닿는 값들. 이게 이 코퍼스에서 실제로 무는 부분이다:
+     * 검증은 통과해야 하고 정규화는 한 글자도 자르면 안 된다. 누군가 자르는 자리를
+     * 500 에서 400 으로 바꾸거나, 새 슬롯 종류를 검증에 안 태우면 여기서 깨진다.
+     */
+    draft([{
+      sid: uid(8), type: "kv", variant: "column",
+      content: {
+        title: "가".repeat(EXPO_LIMITS.textChars),
+        cta: { label: "나".repeat(EXPO_LIMITS.textChars), href: "https://example.com" },
+        media: { kind: "image", url: "https://example.com/a.png", alt: "다".repeat(EXPO_LIMITS.textChars) },
+      },
+    }]),
+    draft([{
+      sid: uid(9), type: "register-form", variant: "inline",
+      content: { sourceRef: "x".repeat(64), heading: "라".repeat(EXPO_LIMITS.textChars) },
+    }]),
+  ];
+
+  /** 경계 바로 바깥은 반대로 **거절**돼야 한다 — 통과하면 그 순간 조용히 잘린다. */
+  it("상한을 한 글자 넘기면 거절한다", () => {
+    const over = EXPO_LIMITS.textChars + 1;
+    expect(validatePageDraft(draft([{
+      sid: uid(1), type: "kv", variant: "column",
+      content: { title: "제목", cta: { label: "나".repeat(over), href: "https://example.com" } },
+    }])).ok).toBe(false);
+    expect(validatePageDraft(draft([{
+      sid: uid(1), type: "kv", variant: "column",
+      content: { title: "제목", media: { kind: "image", url: "https://example.com/a.png", alt: "다".repeat(over) } },
+    }])).ok).toBe(false);
+    expect(validatePageDraft(draft([{
+      sid: uid(1), type: "register-form", variant: "inline", content: { sourceRef: "x".repeat(65) },
+    }])).ok).toBe(false);
+  });
+
+  it("sid 를 하나도 버리지 않는다", () => {
+    for (const d of CORPUS) {
+      expect(validatePageDraft(d).ok).toBe(true);
+      const before = new Set(d.sections.map((s) => (s as { sid: string }).sid));
+      const after = new Set(normalizeExpoPage(d).sections.map((s) => s.sid));
+      // 순서는 바뀔 수 있다(키비주얼이 맨 위로) — 집합으로 본다.
+      expect([...after].sort()).toEqual([...before].sort());
+    }
+  });
+
+  /** 텍스트는 저장될 때 `Localized` 맵이 된다 — 값을 꺼내 길이로 본다. */
+  const textOf = (v: unknown): string => {
+    if (typeof v === "string") return v;
+    if (v && typeof v === "object") {
+      const vals = Object.values(v as Record<string, unknown>).filter((x) => typeof x === "string");
+      if (vals.length) return vals.join("");
+    }
+    return "";
+  };
+
+  it("검증이 상한을 거는 값을 한 글자도 자르지 않는다", () => {
+    for (const d of CORPUS) {
+      const norm = normalizeExpoPage(d);
+      d.sections.forEach((raw) => {
+        const src = raw as { sid: string; content: Record<string, unknown> };
+        const out = norm.sections.find((s) => s.sid === src.sid)!;
+        for (const [k, v] of Object.entries(src.content)) {
+          if (typeof v === "string") {
+            expect(`${k}:${textOf(out.content[k])}`).toBe(`${k}:${v}`);
+          }
+          if (k === "cta" || k === "link") {
+            const a = v as { label?: string }, b = out.content[k] as { label?: unknown } | undefined;
+            if (a.label) expect(textOf(b?.label)).toBe(a.label);
+          }
+          if (k === "media") {
+            const a = v as { alt?: string }, b = out.content[k] as { alt?: unknown } | undefined;
+            if (a.alt) expect(textOf(b?.alt)).toBe(a.alt);
+          }
+        }
+      });
+    }
+  });
+
+  it("멱등 — 한 번 정규화한 것을 다시 정규화해도 같다", () => {
+    for (const d of CORPUS) {
+      const once = normalizeExpoPage(d);
+      expect(normalizeExpoPage(once)).toEqual(once);
+      // 저장된 draft 는 항상 이 값이다(prepareDraftWrite) — 그래서 재저장이 막히지 않는다.
+      expect(validatePageDraft(once).ok).toBe(true);
+    }
+  });
+});

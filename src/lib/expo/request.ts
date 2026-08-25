@@ -10,14 +10,34 @@
  * 그래서 여기서는 **어느 칸이 왜 안 되는지**를 구조화해서 돌려준다.
  */
 import { EXPO_LIMITS, sectionDef } from "@/lib/expo/registry";
+import { isSid } from "@/lib/expo/config";
+import { topicParticle } from "@/lib/korean";
 import type { SlotDef } from "@/lib/expo/types";
 
 export interface FieldError {
   /** `sections[2].content.title` 처럼 어느 칸인지 — 편집기가 그 카드로 데려간다. */
   path: string;
-  code: "too-long" | "too-many" | "unknown-type" | "invalid-shape" | "too-large";
+  code:
+    | "too-long" | "too-many" | "unknown-type" | "invalid-shape" | "too-large"
+    /** sid 가 없거나 UUID 가 아니다 — 정규화가 이 구획을 통째로 버린다. */
+    | "invalid-sid"
+    /** 같은 sid 가 두 번 — 정규화가 뒤엣것을 버린다. */
+    | "duplicate-sid"
+    /** 한 페이지에 하나만 되는 구획이 두 번 — 정규화가 뒤엣것을 버린다. */
+    | "duplicate-singleton";
   message: string;
+  /**
+   * 어느 구획인지. 편집기가 `data-expo-sid` 로 카드를 찾아 데려간다 —
+   * `path` 의 인덱스로 역산하면 그 사이 배열이 바뀌었을 때 엉뚱한 카드를 가리킨다.
+   */
+  sid?: string;
 }
+
+/**
+ * 한 번에 낼 오류 개수 상한. 512KB 본문 하나가 수천 줄짜리 422 를 만들지 않게 한다.
+ * 잘렸으면 **잘렸다는 사실을 함께 낸다** — 안 그러면 고쳐서 저장했는데 또 막힌다.
+ */
+const MAX_ERRORS = 50;
 
 export type ValidateResult = { ok: true } | { ok: false; errors: FieldError[] };
 
@@ -57,6 +77,49 @@ function validateSlot(def: SlotDef, value: unknown, path: string, errors: FieldE
     if (b > EXPO_LIMITS.longTextBytes) {
       const kb = Math.round(EXPO_LIMITS.longTextBytes / 1024);
       errors.push({ path, code: "too-long", message: `${def.label} 은 ${kb}KB까지 넣을 수 있어요` });
+    }
+    return;
+  }
+
+  /**
+   * media·link·sourceRef — 정규화가 **말없이 자르던** 세 종류다.
+   *
+   * **길이만 본다. 형식은 보지 않는다.** 주소 칸(`UrlField`)은 자유 입력이고 자동저장이
+   * 900ms 마다 나가므로, `https:/` 까지 친 순간을 거절하면 주소를 다 칠 때까지 **그 페이지
+   * 전체의 저장이 막힌다.** 잘못된 주소는 지금처럼 화면에 인라인으로 알리고 정규화가 버린다
+   * (`primitives.tsx` 의 "지금 값은 저장되지 않아요" 가 이미 그 계약을 말한다).
+   * `media.kind` 도 같은 이유로 안 본다 — 편집기가 항상 `"image"` 를 붙이므로, 다른 값이
+   * 온다면 그건 운영자의 입력이 아니라 버그다.
+   */
+  if (def.kind === "media") {
+    const alt = obj(value).alt;
+    if (typeof alt === "string" && alt.length > EXPO_LIMITS.textChars) {
+      errors.push({
+        path: `${path}.alt`, code: "too-long",
+        message: `${def.label} 설명은 ${EXPO_LIMITS.textChars}자까지 넣을 수 있어요 (지금 ${alt.length}자)`,
+      });
+    }
+    return;
+  }
+
+  if (def.kind === "link") {
+    const l = obj(value);
+    if (typeof l.label === "string" && l.label.length > EXPO_LIMITS.textChars) {
+      errors.push({
+        path: `${path}.label`, code: "too-long",
+        message: `${def.label} 이름은 ${EXPO_LIMITS.textChars}자까지 넣을 수 있어요 (지금 ${l.label.length}자)`,
+      });
+    }
+    // 내부 링크(`page:{id}`)의 상한 — 정규화의 마지막 남은 조용한 자르기다(config.ts).
+    if (typeof l.href === "string" && l.href.startsWith("page:") && l.href.length > 200) {
+      errors.push({ path: `${path}.href`, code: "too-long", message: `${def.label} 주소가 너무 길어요` });
+    }
+    return;
+  }
+
+  if (def.kind === "sourceRef") {
+    if (typeof value === "string" && value.trim().length > 64) {
+      errors.push({ path, code: "too-long", message: `${def.label} 값이 올바르지 않아요` });
     }
     return;
   }
@@ -101,17 +164,62 @@ export function validatePageDraft(raw: unknown): ValidateResult {
     });
   }
 
+  /**
+   * 신원과 다중성 — **정규화가 조용히 버리던 것들**이다.
+   *
+   * `normalizeExpoPage` 는 sid 가 없거나 UUID 가 아니면 그 구획을 버리고, 중복 sid 와
+   * `multi:false` 중복도 뒤엣것을 버린다. 검증이 이걸 안 보면 **200 이 나가고 구획이
+   * 사라진 채로 저장된다** — 편집기는 자기 로컬 값을 기준선으로 삼으므로 "저장됨" 이라고
+   * 표시하고, 운영자는 새로고침해야 안다. 계획서가 "strict write validation rejects
+   * invalid/duplicate IDs" 라고 못박은 자리다.
+   *
+   * 읽기(정규화)는 계속 관대하다 — 이미 저장된 값에 대한 방어는 던지지 않는 쪽이 맞다.
+   */
+  const seenSids = new Set<string>();
+  const usedSingletons = new Set<string>();
+
   sections.slice(0, EXPO_LIMITS.sectionsPerPage).forEach((raw, i) => {
     const s = obj(raw);
+    const at = `sections[${i}]`;
+    const sid = typeof s.sid === "string" ? s.sid : undefined;
+
+    if (!isSid(s.sid)) {
+      errors.push({
+        path: `${at}.sid`, code: "invalid-sid", sid,
+        message: "구획 하나가 신원 없이 왔어요. 새로고침한 뒤 다시 시도해 주세요.",
+      });
+    } else if (seenSids.has(s.sid)) {
+      errors.push({
+        path: `${at}.sid`, code: "duplicate-sid", sid,
+        message: "같은 구획이 두 번 들어 있어요. 새로고침한 뒤 다시 시도해 주세요.",
+      });
+    } else {
+      seenSids.add(s.sid);
+    }
+
     const def = sectionDef(String(s.type ?? ""));
     if (!def) {
-      errors.push({ path: `sections[${i}].type`, code: "unknown-type", message: "알 수 없는 구획이에요" });
+      errors.push({ path: `${at}.type`, code: "unknown-type", sid, message: "알 수 없는 구획이에요" });
       return;
     }
+
+    if (!def.multi) {
+      if (usedSingletons.has(def.type)) {
+        errors.push({
+          path: `${at}.type`, code: "duplicate-singleton", sid,
+          message: `${topicParticle(def.label)} 한 페이지에 하나만 놓을 수 있어요`,
+        });
+      } else {
+        usedSingletons.add(def.type);
+      }
+    }
+
     const content = obj(s.content);
     for (const slot of def.slots) {
-      validateSlot(slot, content[slot.key], `sections[${i}].content.${slot.key}`, errors);
+      validateSlot(slot, content[slot.key], `${at}.content.${slot.key}`, errors);
     }
+    // 슬롯 오류에도 어느 카드인지 실어 준다 — path 인덱스 역산은 배열이 바뀌면 어긋난다.
+    for (const e of errors) if (e.sid === undefined && e.path.startsWith(`${at}.`)) e.sid = sid;
   });
 
   // 전체 크기 — 생성 로더가 부풀지 않게 마지막으로 묶는다.
@@ -122,7 +230,19 @@ export function validatePageDraft(raw: unknown): ValidateResult {
     errors.push({ path: "sections", code: "too-large", message: `페이지 전체가 ${kb}KB를 넘었어요` });
   }
 
-  return errors.length ? { ok: false, errors } : { ok: true };
+  if (!errors.length) return { ok: true };
+  // 상한에 걸리면 **잘렸다는 사실을 함께** 낸다 — 없으면 고치고 저장했는데 또 막힌다.
+  if (errors.length > MAX_ERRORS) {
+    const rest = errors.length - MAX_ERRORS;
+    return {
+      ok: false,
+      errors: [
+        ...errors.slice(0, MAX_ERRORS),
+        { path: "sections", code: "too-many", message: `이 밖에도 ${rest}건이 더 있어요.` },
+      ],
+    };
+  }
+  return { ok: false, errors };
 }
 
 /** 템플릿 스냅샷 쓰기 — 저장과 인스턴스화 양쪽에서 같은 상한을 건다. */

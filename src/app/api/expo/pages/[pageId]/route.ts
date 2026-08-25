@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { guardExpoRoute, readJsonBody, authFailure, fieldErrors } from "@/lib/expo/route-guard";
 import { requireOwnedPage, requireWorkspaceAdmin } from "@/lib/expo/auth";
 import { validatePageDraft } from "@/lib/expo/request";
+import { changedSourceRefs, sourceScopeWhere } from "@/lib/expo/source-scope";
 import { prepareDeletePage, prepareDraftWrite, serviceMessage, serviceStatus } from "@/lib/expo/site-service";
 import { normalizeExpoPage } from "@/lib/expo/config";
 import { expoPreviewCodeDigest } from "@/lib/expo/code-digest";
@@ -134,6 +135,31 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ pa
     // **정규화 전에** 검증한다 — 정규화가 자르고 나면 무엇이 넘쳤는지 알 수 없다.
     const valid = validatePageDraft(body.draft);
     if (!valid.ok) return fieldErrors(valid.errors);
+
+    /**
+     * 사전등록 소스는 DB 를 봐야 판정된다 — 순수 검증이 못 하는 부분이라 여기서 한다.
+     *
+     * **이번에 바뀐 참조만** 본다. 안 바뀌었으면 조회를 아예 하지 않는다(자동저장 핫패스).
+     * 매번 대조하면 소스를 하나 지운 순간, 전혀 다른 구획을 고쳐도 그 페이지가 영구
+     * 저장 불가가 된다 — `SourceRefField` 가 후보에 없는 값을 그대로 실어 보내기 때문이다.
+     */
+    const changed = changedSourceRefs(body.draft, page!.draft);
+    if (changed.length > 0) {
+      const rows = await prisma.collectSource.findMany({
+        where: sourceScopeWhere(owned.value.site.projectId, changed.map((c) => c.value)),
+        select: { id: true },
+      });
+      const usable = new Set(rows.map((r) => r.id));
+      const bad = changed.filter((c) => !usable.has(c.value));
+      if (bad.length > 0) {
+        return fieldErrors(bad.map((c) => ({
+          path: "sections.content.sourceRef",
+          code: "invalid-shape" as const,
+          sid: c.sid,
+          message: "그 사전등록 폼은 이 전시에서 쓸 수 없어요. 목록에서 다시 골라 주세요.",
+        })));
+      }
+    }
 
     const expected = Number(body.draftRevision);
     if (!Number.isFinite(expected)) {

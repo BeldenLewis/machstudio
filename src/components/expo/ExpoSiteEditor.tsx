@@ -365,6 +365,7 @@ function EditorBody({ siteId, siteName, permissions, release, previewOrigin }: E
             linkTargets={linkTargets}
             locale={site.defaultLocale || "ko"}
             focusedSid={focusedSid}
+            onFocusSection={focusSection}
             onSaved={reload}
             onPageStatus={reportStatus}
             publishNonce={publishNonce}
@@ -463,12 +464,14 @@ interface PageEditorProps {
   publishNonce: number;
   /** 미리보기에서 누른 구획 — 편집 열이 그 카드로 데려간다. */
   focusedSid: string | null;
+  /** 거절 안내에서 그 구획으로 데려갈 때 쓴다. 미리보기 클릭과 같은 통로다. */
+  onFocusSection: (sid: string) => void;
 }
 
 /** 페이지 하나의 편집 — 기본값과 구획. */
 function PageEditor({
   pageId, siteId, canEdit, sources, linkTargets, locale, onSaved, onPageStatus, publishNonce,
-  focusedSid,
+  focusedSid, onFocusSection,
 }: PageEditorProps) {
   const [page, setPage] = useState<PageDetail | null>(null);
   const [failed, setFailed] = useState(false);
@@ -559,6 +562,7 @@ function PageEditor({
       linkTargets={linkTargets}
       locale={locale}
       focusedSid={focusedSid}
+      onFocusSection={onFocusSection}
       onSaved={onSaved}
       onPageStatus={onPageStatus}
     />
@@ -567,7 +571,7 @@ function PageEditor({
 
 function PageForm({
   page, siteId, canEdit, sources, linkTargets, locale, onSaved, onPageStatus,
-  focusedSid,
+  focusedSid, onFocusSection,
 }: Omit<PageEditorProps, "pageId" | "publishNonce"> & { page: PageDetail }) {
   /**
    * 이름은 **왼쪽 트리가 소유한다.** 여기에도 두면 같은 값을 두 곳이 저장하게 되고,
@@ -618,6 +622,23 @@ function PageForm({
     if (res.status === 409) {
       const body = await res.json().catch(() => ({}));
       return { kind: "conflict", revision: Number(body.draftRevision ?? revision) };
+    }
+    /**
+     * **422 는 재시도해도 되는 실패가 아니다.** 같은 값을 다시 보내면 또 거절이다.
+     * `failed` 로 뭉개면 기준선이 유지된 채 타이핑할 때마다 조용히 다시 시도되고,
+     * 화면에는 이유가 한 글자도 안 뜬다 — 운영자는 저장이 안 된다는 것조차 모른다.
+     */
+    if (res.status === 422) {
+      const body = await res.json().catch(() => ({}));
+      const raw = Array.isArray(body.errors) ? body.errors : [];
+      return {
+        kind: "rejected",
+        errors: raw.map((e: { path?: unknown; message?: unknown; sid?: unknown }) => ({
+          path: typeof e.path === "string" ? e.path : "sections",
+          message: typeof e.message === "string" ? e.message : "저장할 수 없는 값이에요.",
+          sid: typeof e.sid === "string" ? e.sid : undefined,
+        })),
+      };
     }
     if (!res.ok) return { kind: "failed" };
     const body = await res.json().catch(() => ({}));
@@ -672,6 +693,35 @@ function PageForm({
             자동저장을 멈췄어요. 지금 화면의 내용은 그대로 있습니다 — 새로고침하면 서버 내용으로
             바뀌고, 이 화면의 글은 사라져요.
           </p>
+        </div>
+      ) : null}
+
+      {/**
+        * **저장이 거절됐다.** 409(다른 곳에서 먼저 저장)와 갈라 놓는다 — 그건 기다리면
+        * 풀리지만 이건 값을 고쳐야 풀린다. 값이 바뀌면 이 안내가 저절로 사라지고
+        * 다시 시도된다. 구획을 짚어 주면 그 카드로 데려간다.
+        */}
+      {autosave.rejected ? (
+        <div className={`${R.surface} ${FINISH.s2Danger} bg-secondary p-3 text-sm`}>
+          <p className="font-medium">저장하지 못했어요. 아래를 고치면 다시 저장돼요.</p>
+          <ul className="mt-1.5 space-y-1 text-muted-foreground">
+            {autosave.rejected.map((issue, i) => (
+              <li key={`${issue.path}-${i}`} className="flex items-start gap-1.5">
+                <span aria-hidden className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current" />
+                {issue.sid ? (
+                  <button
+                    type="button"
+                    onClick={() => onFocusSection(issue.sid!)}
+                    className="text-left underline-offset-2 hover:underline"
+                  >
+                    {issue.message}
+                  </button>
+                ) : (
+                  <span>{issue.message}</span>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 
