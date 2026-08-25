@@ -41,14 +41,22 @@ export interface RealtimeReportData {
     rangeCount: number;
     previousRangeCount: number;
     rangeChange: number | null;
-    /** 이번해 1/1 ~ 현재 누적 (연중 목표 진행률 계산용, 전체기간 누적인 cumulativeCount와 다름) */
-    thisYearCumulativeCount: number;
-    /** 작년 1/1~12/31 전체 등록 수 — 올해 목표치로 사용 */
-    lastYearTotalCount: number;
-    goalProgressPercent: number | null;
-    /** 지금 조회 중인 구간의 작년 동기간 등록 수 */
-    lastYearRangeCount: number;
-    lastYearRangeChange: number | null;
+    /** 현재 집계 대상. 요약은 활성 행사, 상세은 URL의 소스다. */
+    currentSource: { id: string; name: string; eventYear: number | null } | null;
+    /** 같은 행사명과 정확히 직전 연도로 확인된 소스가 있을 때만 내려온다. */
+    previousYear: {
+      sourceId: string;
+      sourceName: string;
+      eventYear: number | null;
+      totalCount: number;
+      /** 현재 행사와 같은 D-day 시점의 전년 누적. 행사일이 양쪽에 있어야 계산한다. */
+      paceCount: number | null;
+      paceChange: number | null;
+      /** 조회 구간을 행사 시작일 기준으로 평행 이동한 전년 구간. */
+      rangeCount: number | null;
+      rangeChange: number | null;
+      dDay: number | null;
+    } | null;
   };
   /**
    * 이 리포트가 센 기간. 요약 대시보드는 **주간 보고에 캡처해 붙이는 화면**이라,
