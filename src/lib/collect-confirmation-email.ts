@@ -1,8 +1,6 @@
 import { visitorBadgePalette } from "@/lib/collect-badge";
 import { localize, type CollectFormConfig } from "@/lib/collect-form-config";
 import { buildTicketView } from "@/lib/collect-lookup";
-import { qrPngBuffer } from "@/lib/collect-qr";
-import sharp from "sharp";
 
 const escapeHtml = (value: string) => value
   .replace(/&/g, "&amp;")
@@ -12,14 +10,6 @@ const escapeHtml = (value: string) => value
   .replace(/'/g, "&#39;");
 
 const lines = (value: string) => escapeHtml(value).replace(/\r?\n/g, "<br>");
-
-function readableForeground(background: string) {
-  const match = /^#([0-9a-f]{6})$/i.exec(background);
-  if (!match) return "#ffffff";
-  const rgb = [0, 2, 4].map((offset) => Number.parseInt(match[1].slice(offset, offset + 2), 16));
-  const luminance = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
-  return luminance > 0.62 ? "#161616" : "#ffffff";
-}
 
 function eventRows(config: CollectFormConfig, locale: string) {
   if (!config.confirmationEmail.includeEventInfo) return [];
@@ -40,50 +30,6 @@ function eventRows(config: CollectFormConfig, locale: string) {
     if (label && value) rows.push([label, value]);
   }
   return rows;
-}
-
-const escapeXml = (value: string) => escapeHtml(value).replace(/\r?\n/g, " ");
-
-/**
- * 이메일에서 보이는 회색 티켓 카드 전체를 한 장의 PNG로 만든다.
- * 외부 이미지 URL 없이 CID 첨부로 표시·저장할 수 있게 서버에서 렌더링한다.
- */
-export async function renderCollectTicketPng({
-  config,
-  registrationNo,
-  data,
-}: {
-  config: CollectFormConfig;
-  registrationNo: string;
-  data: unknown;
-}): Promise<Buffer> {
-  const ticket = buildTicketView(config, { registrationNo, data });
-  const accent = config.theme.accentColor || "#F28C18";
-  const badge = ticket?.visitorType ? visitorBadgePalette(ticket.visitorType) : null;
-  const qr = (await qrPngBuffer(registrationNo, 420)).toString("base64");
-  const name = ticket?.name || "Registered guest";
-  const badgeText = ticket?.visitorType || "REGISTERED";
-  const phone = ticket?.maskedPhone || "—";
-  const email = ticket?.maskedEmail || "—";
-  const spacedRegistrationNo = registrationNo.split("").join(" ");
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="720" height="900" viewBox="0 0 720 900">
-    <rect width="720" height="900" rx="28" fill="#f4f5f7"/>
-    <rect x="250" y="54" width="220" height="54" rx="27" fill="${badge?.background || accent}"/>
-    <text x="360" y="88" text-anchor="middle" fill="${badge?.foreground || readableForeground(accent)}" font-family="Arial, sans-serif" font-size="22" font-weight="700" letter-spacing="2">${escapeXml(badgeText.toUpperCase())}</text>
-    <text x="360" y="158" text-anchor="middle" fill="#171717" font-family="Arial, sans-serif" font-size="30" font-weight="700">${escapeXml(name.slice(0, 34))}</text>
-    <rect x="145" y="196" width="430" height="430" rx="24" fill="#ffffff"/>
-    <image x="170" y="221" width="380" height="380" href="data:image/png;base64,${qr}"/>
-    <rect x="100" y="662" width="520" height="104" rx="20" fill="#ffffff"/>
-    <text x="132" y="704" fill="#555555" font-family="Arial, sans-serif" font-size="19" font-weight="700">Phone</text>
-    <text x="588" y="704" text-anchor="end" fill="#222222" font-family="Arial, sans-serif" font-size="19" font-weight="700">${escapeXml(phone)}</text>
-    <text x="132" y="742" fill="#555555" font-family="Arial, sans-serif" font-size="19" font-weight="700">E-mail</text>
-    <text x="588" y="742" text-anchor="end" fill="#222222" font-family="Arial, sans-serif" font-size="19" font-weight="700">${escapeXml(email.slice(0, 34))}</text>
-    <text x="360" y="820" text-anchor="middle" fill="#171717" font-family="Arial, sans-serif" font-size="23" font-weight="700" letter-spacing="1">${escapeXml(spacedRegistrationNo)}</text>
-    <text x="360" y="854" text-anchor="middle" fill="#777777" font-family="Arial, sans-serif" font-size="16">Show this at the venue</text>
-  </svg>`;
-
-  return sharp(Buffer.from(svg)).png({ compressionLevel: 9 }).toBuffer();
 }
 
 export function buildCollectConfirmationEmail({
@@ -107,7 +53,7 @@ export function buildCollectConfirmationEmail({
   const body = localize(email.body, locale)
     || "Your pre-registration is complete. Please show this QR code at the venue.";
   const accent = config.theme.accentColor || "#F28C18";
-  const ticketContentId = "registration-ticket";
+  const qrContentId = "registration-qr";
   const details = eventRows(config, locale);
   const emailNotices = config.notices.filter((notice) => notice.enabled && notice.placement === "email");
 
@@ -117,6 +63,13 @@ export function buildCollectConfirmationEmail({
         <td style="width:118px;padding:10px 0;border-bottom:1px solid #e8e8e8;color:#777;font-size:13px;vertical-align:top;">${escapeHtml(label)}</td>
         <td style="padding:10px 0;border-bottom:1px solid #e8e8e8;color:#222;font-size:13px;font-weight:600;line-height:1.55;">${lines(value)}</td>
       </tr>`).join("")}</table>`
+    : "";
+
+  const contactHtml = ticket && (ticket.maskedPhone || ticket.maskedEmail)
+    ? `<div style="margin:18px auto 0;max-width:320px;padding:12px 16px;border-radius:12px;background:#ffffff;text-align:left;font-size:12px;line-height:1.8;color:#555;">
+        ${ticket.maskedPhone ? `<div><strong style="display:inline-block;width:58px;color:#333;">Phone</strong>${escapeHtml(ticket.maskedPhone)}</div>` : ""}
+        ${ticket.maskedEmail ? `<div><strong style="display:inline-block;width:58px;color:#333;">E-mail</strong>${escapeHtml(ticket.maskedEmail)}</div>` : ""}
+      </div>`
     : "";
 
   const noticesHtml = emailNotices.map((notice) => {
@@ -140,13 +93,19 @@ export function buildCollectConfirmationEmail({
           ${detailHtml}
         </td></tr>
         <tr><td style="padding:6px 24px 30px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
-          ${email.showQr ? `<img src="cid:${ticketContentId}" width="100%" alt="Registration ticket${ticket?.name ? ` for ${escapeHtml(ticket.name)}` : ""}${ticket?.visitorType ? ` (${escapeHtml(ticket.visitorType)})` : ""} with QR code" style="display:block;width:100%;max-width:552px;height:auto;margin:0 auto;border-radius:16px;" />` : ""}
-          ${email.showQr ? `<div style="margin-top:16px;padding:13px 16px;border-radius:12px;background:${accent};color:${readableForeground(accent)};font-size:13px;font-weight:800;text-align:center;">Save the attached ticket image to your phone before arriving.</div>` : ""}
+          <div style="padding:26px 18px;border-radius:16px;background:#f4f5f7;text-align:center;">
+            ${ticket?.visitorType ? `<span style="display:inline-block;padding:7px 14px;border-radius:999px;background:${visitorBadgePalette(ticket.visitorType).background};color:${visitorBadgePalette(ticket.visitorType).foreground};font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;">${escapeHtml(ticket.visitorType)}</span>` : ""}
+            ${ticket?.name ? `<div style="margin-top:12px;font-size:18px;font-weight:800;color:#171717;">${escapeHtml(ticket.name)}</div>` : ""}
+            ${email.showQr ? `<img src="cid:${qrContentId}" width="220" height="220" alt="Registration QR code" style="display:block;width:220px;height:220px;margin:18px auto 12px;border-radius:14px;background:#fff;" />` : ""}
+            ${contactHtml}
+            <div style="margin-top:18px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:17px;font-weight:800;letter-spacing:.18em;color:#171717;">${escapeHtml(registrationNo)}</div>
+            <div style="margin-top:6px;color:#777;font-size:11px;">Show this at the venue</div>
+          </div>
           ${noticesHtml}
         </td></tr>
       </table>
     </td></tr></table>
   </body></html>`;
 
-  return { subject, html, ticketContentId };
+  return { subject, html, qrContentId };
 }
