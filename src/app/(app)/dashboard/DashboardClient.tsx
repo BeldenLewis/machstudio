@@ -7,7 +7,6 @@ import { useWorkspace } from "@/contexts/workspace";
 import { kstDateString } from "@/lib/datetime";
 import DateRangePicker, { DateRange } from "@/components/DateRangePicker";
 import RealtimeReport, { type RealtimeReportData } from "./RealtimeReport";
-import ProjectSummaryCard from "./ProjectSummaryCard";
 import { DashboardShareModal } from "./DashboardShareModal";
 
 const AUTO_REFRESH_MS = 180_000; // 3분 (egress 절감 — 과거 30초였음)
@@ -49,7 +48,6 @@ export default function DashboardClient() {
   const [reportLoading, setReportLoading] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [shareOpen, setShareOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"full" | "summary">("full");
 
   const filterCount = useMemo(() => getFilterCount(filters), [filters]);
   const hasActiveFilter = filterCount > 0;
@@ -316,39 +314,7 @@ export default function DashboardClient() {
       )}
       </AnimatePresence>
 
-      <div className="relative inline-grid grid-cols-2 rounded-xl border border-border bg-secondary/30 p-1 text-sm">
-        {(["full", "summary"] as const).map((mode) => {
-          const active = viewMode === mode;
-          return (
-            <button
-              key={mode}
-              onClick={() => setViewMode(mode)}
-              className={`relative z-10 rounded-lg px-4 py-1.5 font-medium transition-colors ${
-                active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {active && (
-                <motion.span
-                  layoutId="dashboard-view-pill"
-                  transition={spring}
-                  className="absolute inset-0 -z-10 rounded-lg bg-background shadow-sm"
-                />
-              )}
-              {mode === "full" ? "전체 보기" : "요약 보기"}
-            </button>
-          );
-        })}
-      </div>
-
-      {viewMode === "full" ? (
-        <RealtimeReport data={reportData} loading={reportLoading} rangeLabel={range.label} />
-      ) : reportData ? (
-        <ProjectSummaryCard data={reportData} />
-      ) : (
-        <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
-          {reportLoading ? "요약을 불러오는 중..." : "표시할 데이터가 없습니다"}
-        </div>
-      )}
+      <RealtimeReport data={reportData} loading={reportLoading} rangeLabel={range.label} />
 
       {currentProject && (
         <DashboardShareModal

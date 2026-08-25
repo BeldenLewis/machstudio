@@ -21,6 +21,12 @@ export type CollectFieldMapping = {
    */
   matchBy?: "id" | "name" | null;
   matchValue?: string | null;
+  /**
+   * 이 필드가 비어있으면 제출 자체를 저장하지 않는다(운영자가 '필드' 탭에서 켠다).
+   * 하나라도 켜져 있으면 **켜진 필드 전부**가 채워져야 하고, 아무도 안 켜져 있으면
+   * §정족수(매핑된 필드의 과반)로 대체된다 — 필수를 안 정한 기존 소스의 동작을 안 바꾼다.
+   */
+  required?: boolean;
 };
 
 export type CollectScriptSource = {
@@ -65,7 +71,8 @@ export function buildCollectScripts({
         f.matchBy && f.matchValue
           ? `, mb: ${JSON.stringify(f.matchBy)}, mv: ${JSON.stringify(f.matchValue)}`
           : "";
-      return `    { index: ${f.index}, key: ${JSON.stringify(f.key)}, label: ${JSON.stringify(f.label)}${anchor} }`;
+      const req = f.required ? ", req: true" : "";
+      return `    { index: ${f.index}, key: ${JSON.stringify(f.key)}, label: ${JSON.stringify(f.label)}${anchor}${req} }`;
     })
     .join(",\n");
 
@@ -291,6 +298,37 @@ ${utmCore}
      * 앵커가 없는 기존 소스는 anchored 가 0이라 이 줄이 아무 일도 하지 않는다.
      */
     if (anchored > 0 && resolved * 2 < anchored) return {};
+    /**
+     * **값 정족수(모든 소스 공통).** 지도상 anchored 정족수는 "요소를 찾았는가"만 본다 —
+     * 위치 인덱스 소스는 이 신호 자체가 없고, 앵커 소스도 폼이 아닌 페이지에서 요소만
+     * 우연히 몇 개 걸리고 값은 안 채워진 경우를 못 잡는다. 무관한 버튼 클릭 하나로
+     * capture() 가 그 순간의 DOM 을 캡처하면(§) 실제 신청서는 아직 한 글자도 안 썼는데
+     * "요소는 있으니" 레코드가 만들어진다 — 실제로 이렇게 쌓인 게 있다(에듀테크 실측:
+     * 진짜 등록 2,297건에 반해 이런 반쪽 레코드가 섞여 총합이 부풀었다).
+     * 매핑된 필드의 **과반수가 실제 값**을 가져야만 진짜 제출로 본다. select 의 미선택
+     * placeholder("==선택==" 등)도 빈 값이 아닌 문자열이라 이 계산에 몇 개는 끼어들 수
+     * 있지만, 실제 신청서는 필드 수가 많아(수십 개) 그 정도로는 과반을 못 넘는다.
+     *
+     * **운영자가 '필드' 탭에서 필수를 지정했으면 과반 대신 그 필드 전부**를 본다 — "성명이
+     * 비어있는데 저장되는 게 말이 안 된다" 는 요건은 어림값(과반)이 아니라 정확한 필수
+     * 목록으로 풀어야 한다. 하나도 안 켜져 있으면(req 가 하나도 없으면) 과반 검사로 대체.
+     */
+    var requiredFields = FIELD_MAP.filter(function(f) { return f.req; });
+    if (requiredFields.length > 0) {
+      var allRequiredFilled = requiredFields.every(function(field) {
+        return data[field.key] && String(data[field.key]).trim() !== "";
+      });
+      if (!allRequiredFilled) return {};
+    } else {
+      var mapped = FIELD_MAP.length;
+      if (mapped > 0) {
+        var filled = 0;
+        FIELD_MAP.forEach(function(field) {
+          if (data[field.key] && String(data[field.key]).trim() !== "") filled++;
+        });
+        if (filled * 2 < mapped) return {};
+      }
+    }
     return data;
   }
 
@@ -384,16 +422,15 @@ ${utmCore}
       triggered = true;
       var payload = pendingData || collectData();
       /**
-       * **앵커 소스는 빈 payload 를 보내지 않는다.**
+       * **빈 payload 는 보내지 않는다(모든 소스 공통).**
        * 성공 문구가 폼이 아닌 페이지에서 잡히면 collectData 가 {} 를 내는데, {} 는 truthy 라
-       * 그대로 빈 레코드가 저장된다(기존 소스에서 실제로 그렇게 쌓인 게 있다).
-       * 기존 소스의 산출을 지금 바꾸지는 않는다 — 새로 붙는 앵커 소스에 그 버그를 물려주지 않을 뿐이다.
+       * 그대로 빈 레코드가 저장된다 — 실제로 그렇게 쌓인 게 있었다. collectData 자체에
+       * 값 정족수 가드가 생겼지만(위 §), pendingData 는 그 가드 이전 시점(capture() 호출
+       * 당시)의 캡처값이라 여기서 한 번 더 본다.
        */
-      if (HAS_ANCHORS) {
-        var any = false;
-        for (var k in payload) { if (payload[k] && String(payload[k]).trim() !== "") { any = true; break; } }
-        if (!any) { triggered = false; return; }
-      }
+      var any = false;
+      for (var k in payload) { if (payload[k] && String(payload[k]).trim() !== "") { any = true; break; } }
+      if (!any) { triggered = false; return; }
       doSend(payload);
       // 재무장 — 같은 페이지에서 추가 제출 가능하도록 3초 후 리셋
       setTimeout(function() { triggered = false; pendingData = null; }, 3000);

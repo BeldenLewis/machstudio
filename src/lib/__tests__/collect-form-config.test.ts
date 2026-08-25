@@ -141,6 +141,32 @@ describe("normalizeCollectForm — 어떤 쓰레기가 와도 던지지 않는�
     expect(cfg({ lookup: { fields: ["email", "카톡"] } }).lookup.fields).toEqual(["email"]);
   });
 
+  it("자동 확인 메일은 기본 꺼짐이고 명시적으로 켠 설정만 보존한다", () => {
+    expect(cfg({}).confirmationEmail).toEqual(EMPTY_FORM_CONFIG.confirmationEmail);
+    const c = cfg({
+      confirmationEmail: {
+        enabled: true,
+        subject: "Registration confirmed",
+        heading: "You're registered",
+        body: "Line one\nLine two",
+        buttonLabel: "Open ticket",
+        replyTo: "help@example.com",
+        showQr: false,
+        includeEventInfo: false,
+      },
+    });
+    expect(c.confirmationEmail).toMatchObject({
+      enabled: true,
+      subject: { en: "Registration confirmed" },
+      heading: { en: "You're registered" },
+      body: { en: "Line one\nLine two" },
+      buttonLabel: { en: "Open ticket" },
+      replyTo: "help@example.com",
+      showQr: false,
+      includeEventInfo: false,
+    });
+  });
+
   it("국가 코드는 2글자만 — 아니면 기본값 US", () => {
     expect(cfg({ validation: { defaultCountry: "kr" } }).validation.defaultCountry).toBe("KR");
     expect(cfg({ validation: { defaultCountry: "Korea" } }).validation.defaultCountry).toBe("US");

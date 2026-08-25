@@ -8,10 +8,12 @@ import Sparkline from "./Sparkline";
 
 interface ProjectSummaryCardProps {
   data: RealtimeReportData;
+  /** 기본은 data.project.name — 소스 단위로 좁혀 쓸 때(수집 소스 상세) 소스명으로 덮어써 구분한다. */
+  title?: string;
 }
 
-/** 프로젝트 상세 대시보드의 "요약" 탭과 전체 요약 대시보드가 함께 쓰는 압축 카드. */
-export default function ProjectSummaryCard({ data }: ProjectSummaryCardProps) {
+/** 요약 대시보드와 수집 소스 상세의 "수집 데이터" 탭이 함께 쓰는 압축 카드. */
+export default function ProjectSummaryCard({ data, title }: ProjectSummaryCardProps) {
   const trend = data.cumulativeTrend.slice(-14).map((point) => point.count);
 
   const funnelStages = data.funnel
@@ -38,7 +40,7 @@ export default function ProjectSummaryCard({ data }: ProjectSummaryCardProps) {
         숫자만 있고 근거가 없는 그림이 된다. 제목 옆에 조회 구간과 비교 구간을 함께 적는다.
       */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h3 className="text-base font-semibold">{data.project.name}</h3>
+        <h3 className="text-base font-semibold">{title ?? data.project.name}</h3>
         <p className="text-[11px] tabular-nums text-muted-foreground">
           {formatRange(data.range.from, data.range.to)}
           <span className="mx-1.5 opacity-50">·</span>

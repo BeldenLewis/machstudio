@@ -14,6 +14,7 @@ import { onAccentColor } from "@/lib/competition-render";
 import { COUNTRY_DIALS, flagEmoji, isKnownCountry } from "@/lib/collect-country";
 import type { CollectFormConfig } from "@/lib/collect-form-config";
 import { visitorBadgeCssVars } from "@/lib/collect-badge";
+import { downloadTicketImage } from "./ticket-image";
 
 
 const COPY = {
@@ -237,11 +238,19 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
       card.appendChild(h("div", { class: "msf-regno-label" }, COPY.regNoLabel));
 
       if (!preview) {
-        const save = h("a", {
+        const save = h("button", {
+          type: "button",
           class: "msf-save",
-          href: `${opts.origin}/api/collect/qr/${encodeURIComponent(view.registrationNo)}?download=1`,
-          target: "_blank",
-          rel: "noopener noreferrer",
+          onclick: () => { void downloadTicketImage({
+            eventName: config.legal.eventName,
+            registrationNo: view.registrationNo,
+            qrUrl: `${opts.origin}/api/collect/qr/${encodeURIComponent(view.registrationNo)}`,
+            name: view.name,
+            visitorType: view.visitorType,
+            maskedEmail: view.maskedEmail,
+            maskedPhone: view.maskedPhone,
+            accentColor: config.theme.accentColor,
+          }).catch(() => window.alert("We couldn't save the ticket image. Please take a screenshot instead.")); },
         }, COPY.saveImage);
         card.appendChild(save);
         card.appendChild(h("div", { class: "msf-save-hint" }, COPY.saveHint));

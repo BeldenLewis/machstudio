@@ -34,6 +34,7 @@ import { resolveRedirect } from "@/lib/collect-redirect";
 // 로더가 심어 둔 first-touch UTM 을 그대로 쓴다 — 파트너 사이트를 먼저 거친 방문자의 정본이다.
 import { buildUtmEnvelope } from "@/lib/attribution-client";
 import { visitorBadgeCssVars } from "@/lib/collect-badge";
+import { downloadTicketImage } from "./ticket-image";
 
 
 /**
@@ -1008,13 +1009,18 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     }, COPY.ticketLink);
   }
 
-  function saveTicketLink(regNo: string): HTMLElement | null {
+  function saveTicketLink(regNo: string, identity: ReturnType<typeof completionIdentity>): HTMLElement | null {
     if (preview) return null;
-    return h("a", {
+    return h("button", {
+      type: "button",
       class: "msf-save",
-      href: `${opts.origin}/api/collect/qr/${encodeURIComponent(regNo)}?download=1`,
-      target: "_blank",
-      rel: "noopener noreferrer",
+      onclick: () => { void downloadTicketImage({
+        eventName: config.legal.eventName,
+        registrationNo: regNo,
+        qrUrl: `${opts.origin}/api/collect/qr/${encodeURIComponent(regNo)}`,
+        ...identity,
+        accentColor: config.theme.accentColor,
+      }).catch(() => window.alert("We couldn't save the ticket image. Please take a screenshot instead.")); },
     }, COPY.saveImage);
   }
 
@@ -1092,7 +1098,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
           ) : null,
           h("div", { class: "msf-regno" }, doneRegNo),
           h("div", { class: "msf-regno-label" }, preview ? COPY.previewDone : COPY.regNoLabel),
-          config.completion.showQr ? saveTicketLink(doneRegNo) : null,
+          config.completion.showQr ? saveTicketLink(doneRegNo, identity) : null,
           !preview && config.completion.showQr ? h("div", { class: "msf-save-hint" }, COPY.saveHint) : null,
           ticketLink(doneRegNo),
         ),
