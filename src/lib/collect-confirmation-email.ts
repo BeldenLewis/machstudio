@@ -46,14 +46,12 @@ export function buildCollectConfirmationEmail({
   locale,
   registrationNo,
   data,
-  publicOrigin,
 }: {
   config: CollectFormConfig;
   sourceName: string;
   locale: string;
   registrationNo: string;
   data: unknown;
-  publicOrigin: string;
 }) {
   const email = config.confirmationEmail;
   const eventName = config.legal.eventName || sourceName;
@@ -62,12 +60,8 @@ export function buildCollectConfirmationEmail({
   const heading = localize(email.heading, locale) || "You're registered";
   const body = localize(email.body, locale)
     || "Your pre-registration is complete. Please show this QR code at the venue.";
-  const buttonLabel = localize(email.buttonLabel, locale) || "Open my ticket";
   const accent = config.theme.accentColor || "#F28C18";
-  const accentText = readableForeground(accent);
-  const origin = publicOrigin.replace(/\/$/, "");
-  const ticketUrl = origin ? `${origin}/t/${encodeURIComponent(registrationNo)}` : "";
-  const qrUrl = origin ? `${origin}/api/collect/qr/${encodeURIComponent(registrationNo)}` : "";
+  const qrContentId = "registration-qr";
   const badge = ticket?.visitorType ? visitorBadgePalette(ticket.visitorType) : null;
   const details = eventRows(config, locale);
   const emailNotices = config.notices.filter((notice) => notice.enabled && notice.placement === "email");
@@ -111,17 +105,17 @@ export function buildCollectConfirmationEmail({
           <div style="padding:26px 18px;border-radius:16px;background:#f4f5f7;text-align:center;">
             ${badge ? `<span style="display:inline-block;padding:7px 14px;border-radius:999px;background:${badge.background};color:${badge.foreground};font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;">${escapeHtml(ticket!.visitorType)}</span>` : ""}
             ${ticket?.name ? `<div style="margin-top:12px;font-size:18px;font-weight:800;color:#171717;">${escapeHtml(ticket.name)}</div>` : ""}
-            ${email.showQr && qrUrl ? `<img src="${escapeHtml(qrUrl)}" width="220" height="220" alt="Registration QR code" style="display:block;width:220px;height:220px;margin:18px auto 12px;border-radius:14px;background:#fff;" />` : ""}
+            ${email.showQr ? `<img src="cid:${qrContentId}" width="220" height="220" alt="Registration QR code" style="display:block;width:220px;height:220px;margin:18px auto 12px;border-radius:14px;background:#fff;" />` : ""}
             ${contactHtml}
             <div style="margin-top:18px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:17px;font-weight:800;letter-spacing:.18em;color:#171717;">${escapeHtml(registrationNo)}</div>
             <div style="margin-top:6px;color:#777;font-size:11px;">Show this at the venue</div>
           </div>
-          ${ticketUrl ? `<a href="${escapeHtml(ticketUrl)}" style="display:block;margin-top:18px;padding:14px 18px;border-radius:12px;background:${accent};color:${accentText};font-size:14px;font-weight:800;text-align:center;text-decoration:none;">${escapeHtml(buttonLabel)}</a>` : ""}
+          ${email.showQr ? `<div style="margin-top:16px;padding:13px 16px;border-radius:12px;background:${accent};color:${readableForeground(accent)};font-size:13px;font-weight:800;text-align:center;">Save the attached QR image to your phone before arriving.</div>` : ""}
           ${noticesHtml}
         </td></tr>
       </table>
     </td></tr></table>
   </body></html>`;
 
-  return { subject, html, ticketUrl, qrUrl };
+  return { subject, html, qrContentId };
 }

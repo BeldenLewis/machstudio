@@ -28,21 +28,23 @@ describe("buildCollectConfirmationEmail", () => {
         phone: "+12025550147",
         visitor_type: "Buyer",
       },
-      publicOrigin: "https://app.example.com",
     });
 
     expect(result.subject).toBe("Your ticket");
-    expect(result.ticketUrl).toBe("https://app.example.com/t/1234567890123");
-    expect(result.qrUrl).toBe("https://app.example.com/api/collect/qr/1234567890123");
+    expect(result.qrContentId).toBe("registration-qr");
     expect(result.html).toContain("Alex Kim");
     expect(result.html).toContain("Buyer");
     expect(result.html).toContain("Magic Box, LA");
     expect(result.html).toContain("Line one<br>Line two");
     expect(result.html).toContain("a•••@example.com");
     expect(result.html).not.toContain("alex@example.com");
+    expect(result.html).toContain('src="cid:registration-qr"');
+    expect(result.html).toContain("Save the attached QR image");
+    expect(result.html).not.toContain("href=");
+    expect(result.html).not.toContain("app.example.com");
   });
 
-  it("사용자 문구를 HTML로 실행하지 않고 공개 주소가 없으면 QR·버튼을 생략한다", () => {
+  it("사용자 문구를 HTML로 실행하지 않고 외부 링크를 삽입하지 않는다", () => {
     const config = normalizeCollectForm({
       confirmationEmail: { enabled: true, heading: "<script>alert(1)</script>", showQr: true },
     });
@@ -52,11 +54,9 @@ describe("buildCollectConfirmationEmail", () => {
       locale: "en",
       registrationNo: "1234567890123",
       data: {},
-      publicOrigin: "",
     });
     expect(result.html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
     expect(result.html).not.toContain("<script>");
-    expect(result.ticketUrl).toBe("");
-    expect(result.qrUrl).toBe("");
+    expect(result.html).not.toContain("href=");
   });
 });

@@ -34,6 +34,11 @@ describe("sendEmail", () => {
       html: "<p>Done</p>",
       replyTo: "help@k-expo.org",
       idempotencyKey: "collect-confirmation/record_1",
+      attachments: [{
+        content: "cG5n",
+        filename: "ticket.png",
+        contentId: "registration-qr",
+      }],
     })).resolves.toEqual({ sent: true });
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -42,6 +47,7 @@ describe("sendEmail", () => {
       from: "Korea Expo LA <notifications@en.usa.k-expo.org>",
       to: ["guest@example.com"],
       reply_to: "help@k-expo.org",
+      attachments: [{ content: "cG5n", filename: "ticket.png", content_id: "registration-qr" }],
     });
   });
 });

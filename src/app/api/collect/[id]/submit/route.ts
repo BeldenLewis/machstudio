@@ -20,7 +20,7 @@ import { submissionInputFromBody, prepareBuilderSubmission } from "@/lib/collect
 import { generateRegistrationNo } from "@/lib/collect-registration-no";
 import { buildCollectConfirmationEmail } from "@/lib/collect-confirmation-email";
 import { sendEmail } from "@/lib/email";
-import { getPublicAppOrigin } from "@/lib/app-url";
+import { qrPngBuffer } from "@/lib/collect-qr";
 
 function normalizeOrigin(s: string): string {
   try {
@@ -249,8 +249,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             locale: p.locale,
             registrationNo,
             data: p.data,
-            publicOrigin: getPublicAppOrigin(),
           });
+          const attachments = config.confirmationEmail.showQr
+            ? [{
+                content: (await qrPngBuffer(registrationNo)).toString("base64"),
+                filename: `Korea-Expo-registration-${registrationNo}.png`,
+                contentId: message.qrContentId,
+              }]
+            : undefined;
           const replyTo = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.confirmationEmail.replyTo)
             ? config.confirmationEmail.replyTo
             : undefined;
@@ -260,6 +266,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             html: message.html,
             replyTo,
             idempotencyKey: `collect-confirmation/${committedRecordId}`,
+            attachments,
           });
           await prisma.collectRecord.update({
             where: { id: committedRecordId },

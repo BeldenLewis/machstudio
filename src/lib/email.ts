@@ -9,6 +9,11 @@ interface SendArgs {
   from?: string;
   replyTo?: string;
   idempotencyKey?: string;
+  attachments?: Array<{
+    content: string;
+    filename: string;
+    contentId?: string;
+  }>;
 }
 
 export type SendResult = { sent: boolean; skipped?: boolean; error?: string };
@@ -17,7 +22,7 @@ export function emailConfigured(): boolean {
   return !!process.env.RESEND_API_KEY;
 }
 
-export async function sendEmail({ to, subject, html, from, replyTo, idempotencyKey }: SendArgs): Promise<SendResult> {
+export async function sendEmail({ to, subject, html, from, replyTo, idempotencyKey, attachments }: SendArgs): Promise<SendResult> {
   const key = process.env.RESEND_API_KEY;
   if (!key) return { sent: false, skipped: true };
 
@@ -30,7 +35,20 @@ export async function sendEmail({ to, subject, html, from, replyTo, idempotencyK
         "Content-Type": "application/json",
         ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
       },
-      body: JSON.stringify({ from: sender, to: [to], subject, html, ...(replyTo ? { reply_to: replyTo } : {}) }),
+      body: JSON.stringify({
+        from: sender,
+        to: [to],
+        subject,
+        html,
+        ...(replyTo ? { reply_to: replyTo } : {}),
+        ...(attachments?.length ? {
+          attachments: attachments.map((attachment) => ({
+            content: attachment.content,
+            filename: attachment.filename,
+            ...(attachment.contentId ? { content_id: attachment.contentId } : {}),
+          })),
+        } : {}),
+      }),
     });
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
