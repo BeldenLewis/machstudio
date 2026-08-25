@@ -35,6 +35,8 @@ import { resolveRedirect } from "@/lib/collect-redirect";
 import { buildUtmEnvelope } from "@/lib/attribution-client";
 import { visitorBadgeCssVars } from "@/lib/collect-badge";
 import { downloadTicketImage } from "./ticket-image";
+import type { FormOverlayOpener, FormOverlaySlot } from "@/lib/collect-form/target-registry";
+import { deepActiveElement } from "@/lib/dom/focus";
 
 
 /**
@@ -129,6 +131,12 @@ export interface MountCollectFormOptions {
    * Shadow 안까지 닿지 않아 폼이 스타일 없이 그려진다. 안 주면 문서(지금까지와 같다).
    */
   styleRoot?: Document | ShadowRoot;
+  /**
+   * 전문 팝업을 놓을 자리를 빌려 준다. 안 주면 `document.body` — 지금까지의 동작이다.
+   * Shadow 안에서 도는 경우(홈페이지 구획) 이걸 안 받으면 팝업이 **스타일을 하나도
+   * 못 받은 채** 파트너 문서 맨 아래에 그려진다.
+   */
+  overlay?: FormOverlayOpener;
 }
 
 export interface CollectFormHandle {
@@ -171,7 +179,8 @@ function openTermsPopup(
   body: string,
   onAgree: () => void,
   themeStyle: Record<string, string | null>,
-): void {
+  open?: FormOverlayOpener,
+): () => void {
   const closeBtn = h("button", { type: "button", class: "msf-terms-close" }, COPY.close);
   const agreeBtn = h("button", { type: "button", class: "msf-terms-agree" }, COPY.agree);
   const overlay = h(
@@ -185,17 +194,66 @@ function openTermsPopup(
       h("div", { class: "msf-terms-actions" }, closeBtn, agreeBtn),
     ),
   );
-  const close = () => overlay.remove();
+
+  /** 열기 전에 잡아 둔다 — 닫을 때 여기로 포커스를 돌려준다. */
+  const opener = deepActiveElement(document) as HTMLElement | null;
+  let slot: FormOverlaySlot | null = null;
+  let closed = false;
+
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") { e.preventDefault(); close(); }
+  };
+
+  function close(): void {
+    if (closed) return;                 // 멱등 — 이중 해제가 무해한 no-op
+    closed = true;
+    document.removeEventListener("keydown", onKey, true);
+    overlay.remove();
+    const s = slot; slot = null;        // 먼저 비우고 반납한다(재진입 순서)
+    s?.release();
+    if (opener && opener.isConnected) {
+      try { opener.focus({ preventScroll: true }); } catch { /* 호스트를 깨뜨리지 않는다 */ }
+    }
+  }
+
   closeBtn.addEventListener("click", close);
   agreeBtn.addEventListener("click", () => { onAgree(); close(); });
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
-  document.body.appendChild(overlay);
+
+  slot = open ? open(() => { slot = null; close(); }) : null;
+
+  if (slot) {
+    /**
+     * **빌린 자리** — 레이어가 이미 화면을 덮고 있다(`.msx-portal` 은 fixed·inset:0·
+     * 스크림·가운데 정렬). 여기서 또 깔면 스크림이 두 겹이 되고 패딩이 겹친다.
+     * 그래서 **레이어 쪽을 중화**하고 `.msf-overlay` 자신의 fixed·스크림·max-height 는
+     * 한 글자도 안 건드린다 — 그래야 두 경로의 모양이 같다.
+     */
+    slot.layer.setAttribute("data-msx-bare", "1");
+    slot.layer.style.background = "none";
+    slot.layer.style.padding = "0";
+    slot.layer.style.display = "block";
+    ensureFormStyles(slot.root);        // ★ Shadow 안에서도 스타일이 닿는다
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+    slot.layer.appendChild(overlay);
+  } else {
+    // ── 문서 경로(단독 /f · 아임웹 직접 임베드): 지금까지와 똑같다 ──
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+    document.body.appendChild(overlay);
+  }
+
+  document.addEventListener("keydown", onKey, true);
+  return close;
 }
 
 export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHandle {
   ensureFormStyles(opts.styleRoot);
 
   const { config, mount } = opts;
+  /**
+   * 지금 열려 있는 전문 팝업을 닫는 함수. **인스턴스 스코프다** — 한 페이지에 폼이
+   * 둘일 수 있다(인라인 구획 + CTA 모달). 모듈에 두면 서로의 팝업 참조를 덮어쓴다.
+   */
+  let closeTerms: (() => void) | null = null;
   const preview = opts.preview === true;
   const lang = opts.locale || config.defaultLocale || DEFAULT_LOCALE;
   const t = (v: Localized | undefined) => localize(v, lang);
@@ -718,13 +776,14 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     if (body) {
       const btn = h("button", { type: "button", class: "msf-more" }, COPY.more);
       btn.addEventListener("click", () => {
-        openTermsPopup(labelText, body, () => {
+        closeTerms?.();                       // 두 번 열지 않는다
+        closeTerms = openTermsPopup(labelText, body, () => {
           cb.checked = true;
           onChange(true);
           clearIssue(issueKey);
           err.textContent = "";
           updateSubmitState();
-        }, themeStyle);
+        }, themeStyle, opts.overlay);
       });
       // Details 를 라벨 아래 별도 줄이 아니라 같은 줄 오른쪽에 둔다 — 혼자 아래에
       // 떨어져 있으면 라벨과 상관없는 항목처럼 보인다.
@@ -1206,6 +1265,9 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
   return {
     destroy() {
       destroyed = true;
+      // 열려 있던 전문 팝업도 닫는다 — 빌린 자리를 반납해야 포털 호스트가 정리된다.
+      // (문서 경로에서도 마찬가지다: 예전에는 폼이 사라져도 팝업이 body 에 남았다.)
+      closeTerms?.();
       if (dupTimer) clearTimeout(dupTimer);
       if (boundaryTimer) clearTimeout(boundaryTimer);
       // 이동 예약을 안 끄면 빌더 옆칸을 다시 마운트한 뒤에도 1초 뒤 화면이 넘어간다.

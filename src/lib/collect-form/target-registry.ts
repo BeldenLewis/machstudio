@@ -30,6 +30,27 @@ export function isPreviewMode(mode: FormMountMode): boolean {
   return mode !== "live";
 }
 
+/**
+ * 화면 위에 **떠야 하는 것**(동의 전문 팝업)을 놓을 빌린 자리.
+ *
+ * 예약한 쪽이 준다 — 폼은 이 자리가 어디서 왔는지 모른다. 엑스포는
+ * `acquireExpoPortal()` 의 임대를 그대로 넘기고(구조가 이미 이 모양이다), 단독 `/f` 와
+ * 아임웹 직접 임베드는 아무것도 안 넘겨 지금처럼 `document.body` 로 간다.
+ */
+export interface FormOverlaySlot {
+  /** 이미 화면을 덮게 배치된 레이어. 여기에 붙인다. */
+  readonly layer: HTMLElement;
+  /** 그 자리에 스타일이 닿는 루트. */
+  readonly root: Document | ShadowRoot;
+  release(): void;
+}
+
+/**
+ * 자리를 하나 빌린다. 못 빌리면 null — 폼은 문서 경로로 떨어진다.
+ * `onLost` 는 자리가 사라졌을 때(파트너가 body 를 갈아엎었다) 폼이 자기 정리를 하도록.
+ */
+export type FormOverlayOpener = (onLost: () => void) => FormOverlaySlot | null;
+
 export interface FormTargetRecord {
   /** 폼 DOM 이 들어갈 자리. Shadow 안일 수 있다. */
   container: HTMLElement;
@@ -38,6 +59,12 @@ export interface FormTargetRecord {
   mode: FormMountMode;
   /** 예약한 쪽이 정리되면 끊는다 — 폼이 죽은 자리에 붙지 않게. */
   disposeSignal?: AbortSignal;
+  /**
+   * 전문 팝업을 놓을 자리. **영원히 선택 필드**이고 레지스트리 키를 올리지 않는다 —
+   * 두 런타임은 따로 배포·따로 캐시되므로 구/신 혼재가 정상 상태다. 옛 폼 런타임은
+   * 이 필드를 모른 채 `document.body` 로 떨어진다(=오늘 동작).
+   */
+  overlay?: FormOverlayOpener;
 }
 
 type Registry = Record<string, FormTargetRecord>;

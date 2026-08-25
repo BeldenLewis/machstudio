@@ -18,8 +18,9 @@
  */
 import {
   formTargetKey, registerFormTarget, unregisterFormTarget,
-  type FormMountMode,
+  type FormMountMode, type FormOverlayOpener,
 } from "@/lib/collect-form/target-registry";
+import { acquireExpoPortal } from "@/lib/expo/overlay";
 
 export interface ExpoFormBridgeOptions {
   /** 어느 사전등록 소스인가. */
@@ -36,6 +37,13 @@ export interface ExpoFormBridgeOptions {
   origin: string;
   /** 같은 소스를 한 페이지에 두 번 놓을 수 있다(섹션 두 개, 폼 + 모달). */
   instanceKey: string;
+  /**
+   * 전문 팝업이 쓸 테마 변수. 있으면 다리가 **포털 자리를 만들어 준다** —
+   * 없으면 팝업이 `document.body` 로 나가 Shadow 밖에서 스타일 없이 그려진다.
+   */
+  themeVars?: Record<string, string>;
+  /** 이 폼이 속한 구획. 포털 임대가 누구 것인지 표시한다. */
+  sid?: string;
   /** 테스트에서 문서를 갈아 끼운다. */
   doc?: Document;
 }
@@ -74,12 +82,32 @@ export function attachExpoForm(options: ExpoFormBridgeOptions): ExpoFormBridgeHa
   });
 
   const controller = new AbortController();
+
+  /**
+   * 전문 팝업이 놓일 자리를 **여기서** 준다.
+   *
+   * 왜 여기인가: `registerFormTarget` 을 부르는 곳은 저장소 전체에서 이 한 곳뿐이다.
+   * 호출부(인라인 구획·CTA 모달)마다 넘기게 하면 세 번째 소비처가 생길 때 조용히 빠진다.
+   *
+   * 왜 필요한가: 이 경로의 `styleRoot` 는 ShadowRoot 라 `ensureFormStyles` 가 그 안에만
+   * 스타일을 넣는다. 팝업이 `document.body` 로 나가면 **CSS 를 하나도 못 받아** 파트너
+   * 페이지 맨 아래에 서식 없는 약관 텍스트가 그려진다(W1 기준 3 위반이기도 하다).
+   *
+   * 포털은 body 직계에 붙되 **자기 ShadowRoot 를 갖는다** — 잘림은 벗어나고 격리는 지킨다.
+   */
+  const themeVars = options.themeVars;
+  const sid = options.sid;
+  const overlay: FormOverlayOpener | undefined = themeVars && sid
+    ? (onLost) => acquireExpoPortal({ themeVars, sid, onLost, doc })
+    : undefined;
+
   // ① 예약이 먼저다.
   registerFormTarget(key, {
     container: options.container,
     styleRoot: options.styleRoot,
     mode: options.mode,
     disposeSignal: controller.signal,
+    overlay,
   });
 
   // ② 그 다음 스크립트.

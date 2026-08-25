@@ -98,6 +98,9 @@ export function formSourceFiles(root) {
     join(root, "src/lib/legal-templates/types.ts"),
     // 색 계산 공용 계약 — 중복 세 벌을 여기로 모았다(W1 Task 20).
     join(root, "src/lib/color.ts"),
+    // 전문 팝업이 닫힐 때 포커스를 돌려준다. **`dom/focus` 만** 들어온다 —
+    // `@/lib/expo/*` 를 값으로 가져오면 expo 4개 + scroll-lock 이 딸려 와 약 +12KB 다.
+    join(root, "src/lib/dom/focus.ts"),
   ]).sort();
 }
 
