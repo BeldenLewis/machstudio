@@ -26,6 +26,7 @@ import {
 } from "./view-sections";
 import { normalizeNoticePageConfig } from "./config";
 import type { NoticeCompetition } from "./types";
+import { paperFor } from "@/lib/color";
 
 const STYLE_ID = "mc-notice-styles";
 const FONT_ID = "mc-notice-font";
@@ -79,20 +80,6 @@ function ensureFont(doc: Document): void {
   doc.head.appendChild(link);
 }
 
-/**
- * 배경 위에서 읽히는 글자색.
- *
- * 랜딩 mount.ts 의 paperFor 와 같은 계산이다(그 파일은 이 함수를 export 하지 않는다).
- * 상수로 두지 않는 이유: 편집 UI 가 "글자색은 배경에서 자동으로 따라옵니다"라고 안내하는데,
- * 운영자가 다크 모드 배경에 흰색을 고르면 상수 --paper 로는 대비 1.06:1 백지가 된다.
- */
-function paperFor(bg: string): string {
-  const hex = bg.replace("#", "");
-  const channels = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
-  const linear = channels.map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
-  const luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
-  return luminance > 0.45 ? "#101828" : "#f6f8ff";
-}
 
 /**
  * 마감까지 남은 시간.

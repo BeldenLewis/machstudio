@@ -15,6 +15,7 @@ import { buildSessionNumbering, cleanSessionText, isPauseSession, isRealSession,
 import SurveyForm, { SURVEY_FORM_CSS, clearSurveyDraft } from "./SurveyForm";
 import { formatSurveyOpensAt, type SurveyAnswers, type SurveyQuestion } from "@/lib/webinar-survey";
 import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
+import { onAccentColor } from "@/lib/color";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -129,27 +130,13 @@ const DEFAULT_NOTICE =
 
 // 공유 STK 스타일 — 대기/입장확인/시청 세 상태가 같은 디자인 토큰을 쓰도록 export.
 // (토큰 + 히어로/배지 + 전체폭 아젠다만. 시청 화면 전용 레이아웃은 WATCH_CSS 로 분리)
-// accent 위에 얹을 글자색 — 밝은 accent(노랑 등)엔 흰 글자가 안 읽힌다. 명도로 흰색/진한색 선택.
-export function onAccentColor(accent: string): string {
-  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(accent.trim());
-  if (!m) return "#ffffff"; // hex 가 아니면(rgb·named) 기존 동작 유지
-  let hex = m[1];
-  if (hex.length === 3) hex = hex.split("").map((c) => c + c).join("");
-  const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
-  /**
-   * 키컬러 위 글자는 **흰색이 기본**이다(브랜드 결정). 진한 글자는 흰 글자가 형태조차 안 보이는
-   * 아주 밝은 키컬러(노랑·연회색)에서만 쓰는 안전장치다.
-   *
-   * 임계값이 0.6 이었을 때 주황(#ff8500)이 0.605 로 **간신히 넘어** 검은 글자를 받았다 —
-   * 오픈채팅·등록·입장 버튼이 전부 그랬다. 0.78 로 올려 주황·중간 초록·시안이 흰 글자를 받는다.
-   *
-   * 이 값은 대비비가 아니라 YIQ 체감밝기다. 흰 글자의 실제 대비는 주황에서 2.44:1 로 AA(4.5:1)에
-   * 못 미친다 — 흰색을 쓰기로 한 브랜드 판단을 따르되, 대비를 올리려면 글자색이 아니라
-   * **버튼 배경을 키컬러의 66% 쯤으로 낮추는** 쪽이 맞다(그때 흰 글자가 4.58:1 이 된다).
-   */
-  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return lum >= 0.78 ? "#1a1a1f" : "#ffffff";
-}
+/**
+ * accent 위에 얹을 글자색.
+ *
+ * 계산은 `@/lib/color` 한 곳에 있다 — 같은 계산이 저장소에 네 벌까지 늘어나던 것을 모았다.
+ * **이름은 여기 그대로 둔다**: `live/page.tsx` 와 `BrandSection.tsx` 가 이 파일에서 가져간다.
+ */
+export { onAccentColor } from "@/lib/color";
 
 export function buildStkCss(accent: string, text: string, surface: string) {
   return `

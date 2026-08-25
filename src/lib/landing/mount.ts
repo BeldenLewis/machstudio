@@ -21,6 +21,7 @@ import { attachAccordion, attachReveal, attachAccentZone, attachTocSpy, attachTo
 import { acquireLayer, createTocLayer, releaseLayer, lockScroll, unlockScroll, trapFocus } from "./overlay";
 import type { LandingSession, LandingWebinar } from "./types";
 import { IMAGE_PRESETS, transformedImageUrl } from "@/lib/webinar-image";
+import { paperFor } from "@/lib/color";
 
 const STYLE_ID = "lnd-css";
 const FONT_ID = "lnd-font";
@@ -88,23 +89,6 @@ function ensureFont(): void {
 }
 
 
-/**
- * 배경 위에서 읽히는 글자색. 상대휘도로 고르고, 배경 색조를 아주 조금 섞어 톤을 맞춘다.
- *
- * 왜 CSS 상수가 아니라 여기서 계산하나: 편집 UI 는 "글자·카드·선 색은 배경에서 자동으로
- * 따라옵니다" 라고 안내하는데, --paper 를 모드별 상수로 두면 그 말이 거짓이 된다.
- * 정규화(normalizeLandingPageConfig)는 6자리 hex 형식만 보므로 운영자가 "다크 모드 배경"
- * 에 #ffffff 를 고르는 것을 막지 못한다 — 그때 상수 --paper 면 대비 1.06:1 로 백지가 된다.
- * 입력을 소스에서 정규화한다는 규칙(AGENTS.md)에 맞춰 주입 시점에 정한다.
- */
-function paperFor(bg: string): string {
-  const hex = bg.replace("#", "");
-  const c = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
-  const lin = c.map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
-  const lum = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
-  // 밝은 배경이면 잉크, 어두우면 종이색. 순백/순검 대신 배경 계열로 살짝 눕힌다.
-  return lum > 0.45 ? "#101828" : "#f6f8ff";
-}
 
 export function mountLanding(opts: MountLandingOptions): LandingHandle {
   const { mount, webinar, embedded, isPreview } = opts;
