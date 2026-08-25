@@ -2,7 +2,10 @@
 import { build } from "esbuild";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { expoSourceFiles, formSourceFiles, landingSourceFiles } from "../../../scripts/runtime-hash.mjs";
+import {
+  competitionResultSourceFiles, competitionSourceFiles, competitionVoteSourceFiles,
+  expoSourceFiles, formSourceFiles, landingSourceFiles,
+} from "../../../scripts/runtime-hash.mjs";
 
 /**
  * 소스 목록이 **실제 번들 입력과 같은지**.
@@ -51,5 +54,26 @@ describe("소스 목록 ↔ 실제 번들 입력", () => {
   it("홈페이지 런타임", async () => {
     const actual = await bundleInputs("src/embed/expo-entry.ts");
     expect(expoSourceFiles(ROOT)).toEqual(actual);
+  }, 30_000);
+
+  /**
+   * 대회 3종은 이 대조를 받은 적이 없었고, 받자마자 셋 다 어긋났다(2026-08-25):
+   *   competition 11개 적힘 / 실제 20개 · vote 5개 / 6개 · result 3개 / 6개
+   * 게다가 번들에 들어가지도 않는 파일을 해시하고 있었다. 즉 `competition-strings.ts`
+   * (방문자에게 보이는 문구)를 고쳐도 stale 검사가 초록이었다.
+   */
+  it("대회 신청 런타임", async () => {
+    const actual = await bundleInputs("src/embed/competition-entry.ts");
+    expect(competitionSourceFiles(ROOT)).toEqual(actual);
+  }, 30_000);
+
+  it("대회 투표 런타임", async () => {
+    const actual = await bundleInputs("src/embed/competition-vote-entry.ts");
+    expect(competitionVoteSourceFiles(ROOT)).toEqual(actual);
+  }, 30_000);
+
+  it("대회 결과 런타임", async () => {
+    const actual = await bundleInputs("src/embed/competition-result-entry.ts");
+    expect(competitionResultSourceFiles(ROOT)).toEqual(actual);
   }, 30_000);
 });
