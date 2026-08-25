@@ -210,6 +210,40 @@ describe("쓰기 출처 가드 — 인증보다 먼저", () => {
     }
   });
 
+  /**
+   * **본문 없는 쓰기를 막으면 안 된다.**
+   *
+   * `fetch(url, { method: "DELETE" })` 에는 브라우저가 content-type 을 붙이지 않는다.
+   * 이걸 JSON 만 허용으로 두었더니 트리의 페이지 삭제가 항상 415 였다 — 라우트 테스트가
+   * 헤더를 손으로 붙여 보내서 아무도 못 봤다.
+   *
+   * 안전한 이유: `<form>` 은 content-type 을 **생략할 수 없고**(위 세 형식 중 하나를 반드시
+   * 붙인다), 본문 없는 교차 출처 DELETE 는 CORS 프리플라이트를 타는데 우리는 응답하지 않는다.
+   * 즉 위조 가능한 요청은 전부 형식을 달고 온다 — 위 케이스에서 걸린다.
+   */
+  it("본문 없는 쓰기(형식 헤더 없음)는 통과한다", () => {
+    expect(guardWriteOrigin(req({ "sec-fetch-site": "same-origin" })).ok).toBe(true);
+  });
+
+  /** 본문이 없어도 교차 출처면 여전히 막는다 — 완화한 것은 형식 검사뿐이다. */
+  it("본문이 없어도 다른 사이트면 막는다", () => {
+    expect(guardWriteOrigin(req({ "sec-fetch-site": "cross-site" })).ok).toBe(false);
+    expect(guardWriteOrigin(
+      req({ origin: "https://남의사이트.test" }), ["https://machstudio.vercel.app"],
+    ).ok).toBe(false);
+  });
+
+  /**
+   * 실제 브라우저 Request 로 확인한다 — 위 `req()` 는 우리가 만든 가짜라
+   * "브라우저가 헤더를 정말 안 붙이는가" 를 증명하지 못한다.
+   */
+  it("실제 Request 객체: 본문 없는 DELETE 는 형식 헤더가 없다", () => {
+    const real = new Request("https://machstudio.vercel.app/api/expo/pages/p1", { method: "DELETE" });
+    expect(real.headers.get("content-type")).toBeNull();
+    // sec-fetch-site 는 브라우저가 붙이는 값이라 여기서는 없다 — 그 경로도 통과해야 한다.
+    expect(guardWriteOrigin(real).ok).toBe(true);
+  });
+
   it("Sec-Fetch-Site 가 없으면 Origin 으로 본다", () => {
     expect(guardWriteOrigin(
       req({ origin: "https://남의사이트.test", "content-type": "application/json" }),

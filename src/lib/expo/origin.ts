@@ -55,9 +55,26 @@ export function guardWriteOrigin(
     }
   }
 
-  // 본문 형식 — 폼 전송 형식은 프리플라이트 없이 교차 출처로 날아온다.
-  const contentType = (request.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
-  if (!JSON_TYPES.includes(contentType)) return { ok: false, failure: "bad-media-type" };
+  /**
+   * ③ 본문 형식 — 폼 전송 형식은 프리플라이트 없이 교차 출처로 날아온다.
+   *
+   * **헤더가 아예 없으면 본문이 없는 쓰기다** — 지우기처럼 URL 만으로 뜻이 완성되는 요청이다.
+   * 이걸 막으면 안 된다. 이유:
+   *  · `<form>` 은 content-type 을 **생략할 수 없다.** urlencoded·multipart·text/plain 셋 중
+   *    하나를 반드시 붙인다(위 셋이 프리플라이트 없이 날아가는 그 형식들이고, 아래에서 걸린다).
+   *  · 본문 없는 교차 출처 `fetch` 는 DELETE 가 CORS 안전 목록에 없어 **프리플라이트를 탄다.**
+   *    우리는 그 프리플라이트에 응답하지 않는다.
+   * 즉 "형식 없음 + 본문 없음" 은 위조할 수 없다. 위조 가능한 것은 전부 형식을 달고 온다.
+   *
+   * 이걸 JSON 만 허용으로 두었더니 트리의 페이지 삭제가 **항상 415** 였다 —
+   * 본문 없는 `fetch(url, { method: "DELETE" })` 에는 브라우저가 content-type 을 안 붙인다.
+   * 라우트 테스트가 헤더를 손으로 붙여 보내서 아무도 못 봤다.
+   */
+  const rawType = request.headers.get("content-type");
+  if (rawType !== null) {
+    const contentType = rawType.split(";")[0].trim().toLowerCase();
+    if (!JSON_TYPES.includes(contentType)) return { ok: false, failure: "bad-media-type" };
+  }
 
   return { ok: true };
 }

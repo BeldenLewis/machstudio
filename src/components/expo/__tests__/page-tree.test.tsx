@@ -2,6 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { guardWriteOrigin } from "@/lib/expo/origin";
 
 /**
  * 페이지 트리 — **만들고, 고르고, 순서를 바꾸고, 지운다.**
@@ -60,7 +61,7 @@ const PAGES: Row[] = [
 
 let host: HTMLDivElement;
 let root: Root;
-let calls: Array<{ url: string; method: string; body: unknown }> = [];
+let calls: Array<{ url: string; method: string; body: unknown; init?: RequestInit }> = [];
 let nextOk = true;
 const onSelect = vi.fn();
 const onAdd = vi.fn();
@@ -69,7 +70,8 @@ const onPendingChange = vi.fn();
 
 function stubFetch() {
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
-    calls.push({ url, method: init?.method ?? "GET", body: init?.body ? JSON.parse(init.body) : null });
+    // `init` 을 통째로 담는다 — 헤더를 버리면 서버가 415 로 거절할 요청을 초록으로 본다(실제로 그랬다).
+    calls.push({ url, method: init?.method ?? "GET", body: init?.body ? JSON.parse(init.body) : null, init });
     return { ok: nextOk, status: nextOk ? 200 : 422, json: async () => ({ error: "안 됐어요" }) } as Response;
   }));
 }
@@ -182,6 +184,48 @@ describe("삭제", () => {
     const deletes = calls.filter((c) => c.method === "DELETE");
     expect(deletes).toHaveLength(1);
     expect(deletes[0].url).toBe("/api/expo/pages/about");
+  });
+
+  /**
+   * **트리가 보내는 요청을 서버가 실제로 받아 주는가.**
+   *
+   * 이 검사가 없어서 삭제가 통째로 죽어 있었다. 본문 없는 `fetch(url,{method:"DELETE"})` 에는
+   * 브라우저가 content-type 을 안 붙이는데, Expo 쓰기 게이트는 `application/json` 만 받았다 →
+   * **항상 415**. 라우트 테스트는 헤더를 손으로 붙여 보내고, 이 파일의 fetch 목은 헤더를
+   * 아예 안 봤다. 양쪽이 서로 다른 요청을 상상하면 그 사이가 빈다.
+   *
+   * 그래서 목이 받은 `init` 을 그대로 실제 Request 로 만들어 **실제 게이트**에 넣는다.
+   */
+  it("트리가 보내는 삭제 요청을 서버 쓰기 게이트가 받아 준다", async () => {
+    await render();
+    await click(deleteButton("전시 소개"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+
+    const del = calls.find((c) => c.method === "DELETE");
+    expect(del).toBeTruthy();
+
+    const real = new Request(`https://machstudio.vercel.app${del!.url}`, {
+      ...(del!.init as RequestInit),
+      // 브라우저가 붙이는 값 — 목에는 없지만 실제 요청에는 있다.
+      headers: { ...(del!.init?.headers as Record<string, string> ?? {}), "sec-fetch-site": "same-origin" },
+    });
+    const guard = guardWriteOrigin(real, ["https://machstudio.vercel.app"]);
+    expect(guard.failure ?? "통과").toBe("통과");
+  });
+
+  /** 이름 바꾸기·순서도 같은 게이트를 지난다 — 이쪽은 JSON 본문이 있다. */
+  it("이름 바꾸기 요청도 쓰기 게이트를 지난다", async () => {
+    await render();
+    await type(nameInput("전시 소개")!, "새 이름");
+    await act(async () => { await vi.advanceTimersByTimeAsync(900); });
+
+    const patch = calls.find((c) => c.method === "PATCH");
+    expect(patch).toBeTruthy();
+    const real = new Request(`https://machstudio.vercel.app${patch!.url}`, {
+      ...(patch!.init as RequestInit),
+      headers: { ...(patch!.init?.headers as Record<string, string> ?? {}), "sec-fetch-site": "same-origin" },
+    });
+    expect(guardWriteOrigin(real, ["https://machstudio.vercel.app"]).failure ?? "통과").toBe("통과");
   });
 
   /**
