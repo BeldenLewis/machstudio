@@ -15,6 +15,9 @@
 
 import { useEffect, useState } from "react";
 
+/** 도넛 차트가 브랜드로 근사해 아는 채널 6개 — globals.css 의 --brand-* 와 짝이다. */
+export type BrandKey = "naver" | "kakao" | "google" | "instagram" | "youtube" | "facebook";
+
 /** 의미가 고정된 시리즈 + 축·격자. 폴백은 라이트 값 — SSR 첫 페인트에서 쓰인다. */
 export interface ChartColors {
   viewers: string;
@@ -27,7 +30,18 @@ export interface ChartColors {
    * 남는 항목을 접어야 한다(dataviz 원칙). 검증 근거는 globals.css 의 --series-* 주석.
    */
   series: readonly string[];
+  /** 알려진 마케팅 채널의 브랜드 근사 색. 검증 근거는 globals.css 의 --brand-* 주석. */
+  brands: Record<BrandKey, string>;
 }
+
+const FALLBACK_BRANDS: Record<BrandKey, string> = {
+  naver: "#0a9e6e",
+  kakao: "#9c4a15",
+  google: "#2a6fdb",
+  instagram: "#a3216b",
+  youtube: "#e0522a",
+  facebook: "#5b4fc7",
+};
 
 const FALLBACK: ChartColors = {
   viewers: "#26578b",
@@ -36,6 +50,7 @@ const FALLBACK: ChartColors = {
   grid: "rgba(120,120,140,0.15)",
   axis: "#737373",
   series: ["#0058a8", "#007a34", "#d4679f", "#af6700", "#008369"],
+  brands: FALLBACK_BRANDS,
 };
 
 export function useChartColors(): ChartColors {
@@ -52,6 +67,9 @@ export function useChartColors(): ChartColors {
         grid: g("--border", FALLBACK.grid),
         axis: g("--muted-foreground", FALLBACK.axis),
         series: FALLBACK.series.map((fb, i) => g(`--series-${i + 1}`, fb)),
+        brands: Object.fromEntries(
+          (Object.keys(FALLBACK_BRANDS) as BrandKey[]).map((key) => [key, g(`--brand-${key}`, FALLBACK_BRANDS[key])]),
+        ) as Record<BrandKey, string>,
       });
     };
     read();
@@ -105,4 +123,64 @@ export function entityColor(colors: ChartColors, label: string, used: Set<number
     }
   }
   return undefined;
+}
+
+const HEX_COLOR_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+/** recharts 의 fill/style 에 그대로 들어가는 문자열이라 형식을 여기서 강제한다. */
+function isValidHexColor(value: unknown): value is string {
+  return typeof value === "string" && HEX_COLOR_RE.test(value.trim());
+}
+
+/**
+ * 정규화된(trim + 소문자) 채널 라벨 → 브랜드 키. 한/영 표기를 둘 다 받는다 —
+ * UTM 값은 마케터가 직접 입력하는 자유 텍스트라 "네이버"와 "naver"가 섞여 들어온다.
+ */
+const CHANNEL_TO_BRAND_KEY: Record<string, BrandKey> = {
+  naver: "naver",
+  "네이버": "naver",
+  kakao: "kakao",
+  kakaotalk: "kakao",
+  "카카오": "kakao",
+  "카카오톡": "kakao",
+  google: "google",
+  "구글": "google",
+  instagram: "instagram",
+  ig: "instagram",
+  "인스타": "instagram",
+  "인스타그램": "instagram",
+  youtube: "youtube",
+  "유튜브": "youtube",
+  facebook: "facebook",
+  meta: "facebook",
+  "페이스북": "facebook",
+  "메타": "facebook",
+};
+
+/**
+ * 도넛 슬라이스 하나의 최종 색 — 세 단계로 우선순위를 매긴다:
+ *  1) 워크스페이스가 이 채널에 직접 지정한 색(overrides) — 사용자가 "IG는 분홍"처럼
+ *     명시적으로 고른 값이라 항상 이긴다.
+ *  2) 알려진 채널의 브랜드 근사 색(FALLBACK_BRANDS/--brand-*) — 지정한 적 없어도
+ *     "네이버=초록"처럼 보자마자 알아볼 수 있게.
+ *  3) 그 외엔 entityColor 의 해시 폴백 — 미지 채널도 카드마다 같은 색을 유지한다.
+ *
+ * override/brand 색은 categorical 5슬롯(`used`)과 다른 색공간이라 슬롯을 점유하지
+ * 않는다 — 우연히 같은 hex 가 나올 순 있어도 이 함수가 슬롯 고갈을 일으키진 않는다.
+ */
+export function resolveChannelColor(
+  colors: ChartColors,
+  label: string,
+  overrides: Record<string, string> | null | undefined,
+  used: Set<number>,
+): string | undefined {
+  const normalized = label.trim().toLowerCase();
+
+  const override = overrides?.[normalized];
+  if (isValidHexColor(override)) return override.trim();
+
+  const brandKey = CHANNEL_TO_BRAND_KEY[normalized];
+  if (brandKey) return colors.brands[brandKey];
+
+  return entityColor(colors, label, used);
 }

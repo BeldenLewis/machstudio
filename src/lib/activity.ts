@@ -102,6 +102,7 @@ export type ActivityAction =
   | "workspace.renamed"
   | "workspace.consent_template_updated"
   | "workspace.legal_profile_updated"
+  | "workspace.channel_colors_updated"
   | "workspace.deleted"
   | "invitation.redeemed"
   | "invitation.accepted"

@@ -29,6 +29,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       marketingBodyTemplate: membership.workspace.marketingBodyTemplate,
       // 법률 문구 생성기의 조직 정보(회사명·주소·담당 이메일) — WorkspaceLegalProfile 모양.
       legalProfile: membership.workspace.legalProfile,
+      // 유입경로 도넛 차트 채널별 사용자 지정 색 — { "네이버": "#hex", ... }.
+      channelColors: membership.workspace.channelColors,
     },
     projects: membership.workspace.projects,
   });
@@ -41,7 +43,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const { id } = await params;
   const body = await request.json();
-  const { name, privacyBodyTemplate, marketingBodyTemplate, legalProfile } = body ?? {};
+  const { name, privacyBodyTemplate, marketingBodyTemplate, legalProfile, channelColors } = body ?? {};
 
   /**
    * 이름과 약관 템플릿은 **따로 저장된다** — 템플릿만 바꾸는 호출에 이름을 요구하면
@@ -51,7 +53,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const wantsName = name !== undefined;
   const wantsTemplates = privacyBodyTemplate !== undefined || marketingBodyTemplate !== undefined;
   const wantsLegalProfile = legalProfile !== undefined;
-  if (!wantsName && !wantsTemplates && !wantsLegalProfile) {
+  const wantsChannelColors = channelColors !== undefined;
+  if (!wantsName && !wantsTemplates && !wantsLegalProfile && !wantsChannelColors) {
     return NextResponse.json({ error: "바꿀 값이 없어요" }, { status: 400 });
   }
   if (wantsName && !name?.trim()) {
@@ -62,6 +65,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // 객체가 아니면 "설정 안 함". Json 컬럼을 비우는 건 그냥 null 이 아니라 Prisma.DbNull 이다.
   const asLegalProfile = (v: unknown): Prisma.InputJsonValue | typeof Prisma.DbNull =>
     v && typeof v === "object" ? (v as Prisma.InputJsonValue) : Prisma.DbNull;
+  // hex 아닌 값은 조용히 버린다 — 이 값이 그대로 도넛 차트의 inline style 로 들어가므로
+  // 형식을 여기서 강제해야 저장 단계에서 잘못된 값이 걸러진다. 키는 도넛 라벨과 같은
+  // 기준(trim + 소문자)으로 정규화해야 조회 시 그대로 매칭된다.
+  const HEX_COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+  const asChannelColors = (v: unknown): Prisma.InputJsonValue | typeof Prisma.DbNull => {
+    if (!v || typeof v !== "object" || Array.isArray(v)) return Prisma.DbNull;
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(v as Record<string, unknown>)) {
+      const label = key.trim().toLowerCase();
+      if (!label || typeof value !== "string" || !HEX_COLOR.test(value.trim())) continue;
+      out[label] = value.trim();
+    }
+    return Object.keys(out).length > 0 ? out : Prisma.DbNull;
+  };
 
   const membership = await prisma.workspaceMember.findUnique({
     where: { userId_workspaceId: { userId: user.id, workspaceId: id } },
@@ -79,6 +96,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(privacyBodyTemplate !== undefined && { privacyBodyTemplate: asTemplate(privacyBodyTemplate) }),
       ...(marketingBodyTemplate !== undefined && { marketingBodyTemplate: asTemplate(marketingBodyTemplate) }),
       ...(wantsLegalProfile && { legalProfile: asLegalProfile(legalProfile) }),
+      ...(wantsChannelColors && { channelColors: asChannelColors(channelColors) }),
     },
   });
 
@@ -107,6 +125,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       workspaceId: id,
       userId: user.id,
       action: "workspace.legal_profile_updated",
+      meta: {},
+    });
+  }
+  if (wantsChannelColors) {
+    await logActivity({
+      workspaceId: id,
+      userId: user.id,
+      action: "workspace.channel_colors_updated",
       meta: {},
     });
   }
