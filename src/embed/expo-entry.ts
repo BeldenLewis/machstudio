@@ -117,7 +117,49 @@ function render(instance: Instance, script: HTMLScriptElement | null): void {
 
   // `mountExpoShell` 이 같은 컨테이너의 재진입을 스스로 처리한다 — 여기서 먼저 지우지 않는다.
   instance.handle = mountExpo({ container, payload: instance.payload });
-  if (!instance.handle) warn("마운트하지 못했습니다: " + instanceKey(instance.payload));
+  if (!instance.handle) {
+    warn("마운트하지 못했습니다: " + instanceKey(instance.payload));
+    return;
+  }
+  reportIfInvisible(instance, container);
+}
+
+/**
+ * 붙었는데 **자리가 없는** 경우를 알린다.
+ *
+ * ── 왜 이것만 따로 보나 ───────────────────────────────────────────────
+ * 적대적 CSS 실측(`/dev/expo-hostile-harness`)에서, 아임웹 테마가 할 법한 공격은 전부
+ * Shadow 격리와 호스트 리셋이 막았다 — 전역 리셋·스크롤 리빌(opacity:0)·전역 transition·
+ * transform/filter·타이포 상속·body flex·쌓임/클리핑·빈 div 숨김·CSS 변수 충돌까지.
+ *
+ * **딱 하나 못 막는 것이 남는다: 붙여넣은 자리 자체가 숨겨진 경우.** 우리는 그 안에 있으므로
+ * 구조적으로 못 이긴다(`[data-mach-expo]{display:none}`, 접힌 아코디언, 숨은 탭, 템플릿 블록).
+ * 그때 화면에는 아무 일도 안 일어나고 **어디에도 단서가 없다** — "붙였는데 안 나와요" 의
+ * 가장 흔한 정체다. 막을 수 없으면 최소한 **진단할 수 있게** 한다.
+ *
+ * 한 번만, 레이아웃이 끝난 뒤에 잰다. 나중에 보이게 되는 자리(탭·아코디언)를 거짓으로
+ * 고발하지 않으려고 지연을 둔다 — 그래도 남아 있으면 그건 진짜 안 보이는 것이다.
+ */
+function reportIfInvisible(instance: Instance, container: HTMLElement): void {
+  const key = instanceKey(instance.payload);
+  try {
+    window.setTimeout(() => {
+      /**
+       * 그 사이 정리됐으면 아무 말도 하지 않는다. **레지스트리로 판정한다** —
+       * `destroy` 는 항목을 지우기만 하고 붙잡아 둔 instance 의 handle 은 비우지 않으므로,
+       * 그걸 보면 이미 사라진 것에 대해 경고하게 된다.
+       */
+      if (registry()[key] !== instance || !container.isConnected) return;
+      const box = container.getBoundingClientRect();
+      if (box.width > 0 && box.height > 0) return;
+      warn(
+        "붙었지만 자리가 보이지 않습니다 — 이 코드를 붙인 자리가 숨겨져 있거나" +
+        "(display:none·접힌 영역·숨은 탭) 높이가 0입니다: " + key,
+      );
+    }, 1200);
+  } catch {
+    /* setTimeout 이 막힌 환경에서도 렌더는 이미 끝났다 */
+  }
 }
 
 export function boot(payload: ExpoBootConfig, bootScript?: HTMLScriptElement | null): void {
