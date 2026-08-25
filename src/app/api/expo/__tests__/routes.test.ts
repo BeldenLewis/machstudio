@@ -402,6 +402,82 @@ describe("사이트 색 저장", () => {
   });
 });
 
+/**
+ * 페이지 상세가 **"왜 아직 안 나가는가" 와 "붙일 코드"** 를 함께 준다.
+ *
+ * 화면이 따로 판단하면 버튼은 눌리는데 아무 일도 안 일어나는 상태가 생긴다
+ * (`readiness.ts` 머리말). 그리고 코드의 주소는 **파트너 사이트 HTML 에 박혀 회수할 수
+ * 없으므로**, 못 만들 상황이면 만들지 않고 이유를 준다(`origin.ts`).
+ */
+describe("페이지 상세 — 내보내기 정보", () => {
+  const page = {
+    id: "pg1", siteId: "s1", slug: "home", title: "홈", isHome: true, sortOrder: 0,
+    draftRevision: 3, publishedAt: null, liveAt: null, imwebUrl: null, updatedAt: new Date(),
+    site: { id: "s1", workspaceId: "w1", projectId: "p1" },
+    draft: { sections: [] }, published: null,
+  };
+
+  const get = async (over: Record<string, unknown> = {}) => {
+    prismaMock.expoPage.findFirst.mockResolvedValue({ ...page, ...over });
+    const { GET } = await import("@/app/api/expo/pages/[pageId]/route");
+    const res = await GET(read(), { params: Promise.resolve({ pageId: "pg1" }) });
+    return { res, body: await res.json() };
+  };
+
+  it("발행할 수 없으면 사유를 함께 준다", async () => {
+    const { body } = await get();
+    expect(body.page.readiness.canPublish).toBe(false);
+    expect(body.page.readiness.publishIssues[0].code).toBe("no-sections");
+  });
+
+  it("발행 전에는 공개도 못 켠다고 말한다", async () => {
+    const { body } = await get();
+    expect(body.page.readiness.canGoLive).toBe(false);
+    expect(body.page.readiness.liveIssues[0].code).toBe("not-published");
+  });
+
+  /**
+   * 주소가 설정 안 됐으면 **코드를 만들지 않는다.** 빈 문자열이나 상대경로를 주면
+   * 붙인 사람은 붙였다고 믿고 전시 기간에 조용히 빈 자리가 된다.
+   */
+  it("공개 주소가 없으면 코드 대신 이유를 준다", async () => {
+    vi.stubEnv("EXPO_CANONICAL_PUBLIC_ORIGIN", "");
+    const { body } = await get();
+    expect(body.page.snippets.ok).toBe(false);
+    expect(body.page.snippets.message).toContain("공개 주소");
+    expect(JSON.stringify(body.page.snippets)).not.toContain("/h/");
+  });
+
+  it("주소가 있으면 절대주소로 코드를 만든다", async () => {
+    vi.stubEnv("EXPO_CANONICAL_PUBLIC_ORIGIN", "https://machstudio.example.com");
+    vi.stubEnv("NEXT_PUBLIC_CANONICAL_APP_URL", "https://machstudio.example.com");
+    const { body } = await get();
+    expect(body.page.snippets.ok).toBe(true);
+    expect(body.page.snippets.page.src).toBe("https://machstudio.example.com/h/pg1");
+  });
+
+  /** 따로 내보내기를 켠 구획만 목록에 오른다 — 그게 운영자의 의도다. */
+  it("따로 내보내기를 켠 구획의 코드만 싣는다", async () => {
+    vi.stubEnv("EXPO_CANONICAL_PUBLIC_ORIGIN", "https://machstudio.example.com");
+    vi.stubEnv("NEXT_PUBLIC_CANONICAL_APP_URL", "https://machstudio.example.com");
+    const sid = "11111111-1111-4111-8111-111111111111";
+    const other = "22222222-2222-4222-8222-222222222222";
+    const { body } = await get({
+      draft: { sections: [
+        { sid, type: "kv", variant: "column", enabled: true, embedEnabled: true,
+          design: {}, content: { title: { ko: "제목" } } },
+        { sid: other, type: "textblock", variant: "prose", enabled: true, embedEnabled: false,
+          design: {}, content: { body: { ko: "본문" } } },
+      ] },
+    });
+
+    expect(body.page.snippets.sections).toHaveLength(1);
+    expect(body.page.snippets.sections[0].sid).toBe(sid);
+    // 아직 발행 전이라 붙여도 안 나온다 — 그 사유가 함께 온다.
+    expect(body.page.snippets.sections[0].issues[0].code).toBe("not-published");
+  });
+});
+
 describe("발행·공개", () => {
   const base = { id: "pg1", siteId: "s1", site: { id: "s1", workspaceId: "w1", projectId: "p1" } };
 

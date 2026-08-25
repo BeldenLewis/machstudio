@@ -13,6 +13,11 @@ import { normalizeHexColor } from "@/lib/color";
 import { EXPO_DEFAULT_THEME, normalizeExpoTheme } from "@/lib/expo/config";
 import { ExpoProjectSync } from "@/components/expo/ExpoProjectSync";
 import { SectionsEditor } from "@/components/expo/SectionEditor";
+import {
+  ExpoPublishPanel,
+  type ExpoReadinessView,
+  type ExpoSnippetsView,
+} from "@/components/expo/ExpoPublishPanel";
 import { attachExpoRowKeys, stripExpoRowKeys } from "@/lib/expo/row-key";
 import { usePageAutosave, type ExpoSaveOutcome } from "@/lib/expo/use-page-autosave";
 import { derivePageState } from "@/lib/expo/model";
@@ -66,13 +71,16 @@ interface PageDetail {
   /** 붙여넣은 코드의 지문 — 미리보기에서 실행 허가를 요청할 때 그대로 되돌려 보낸다. */
   codeDigest: string;
   publishedCodeDigest: string;
+  /** "왜 아직 안 나가는가" — 판정은 서버가 한다(`readiness.ts`). */
+  readiness: ExpoReadinessView;
+  snippets: ExpoSnippetsView;
 }
 
 /**
- * 미리보기가 알아야 하는 것. 편집기 가운데 칸에서 **위로 올려** 오른쪽 칸으로 흐른다 —
- * 저장 번호가 바뀔 때마다 미리보기를 다시 불러야 하는데, 그 번호를 아는 건 폼 쪽이다.
+ * **오른쪽 칸이 알아야 하는 것.** 가운데 칸(폼)에서 위로 올려 흐른다 — 저장 번호도
+ * 발행 상태도 페이지 상세에서 오고, 그걸 들고 있는 건 폼 쪽이기 때문이다.
  */
-interface PreviewInfo {
+interface PageStatus {
   /**
    * 이 정보가 **어느 페이지 것인가.** 없으면 페이지를 바꾼 직후, 새 페이지의 상세가
    * 도착하기 전까지 미리보기가 **새 주소 + 앞 페이지의 값**으로 한 번 뜬다:
@@ -80,10 +88,14 @@ interface PreviewInfo {
    * 코드 지문이 실려 나간다(서버는 거절하지만, 화면에는 "코드가 바뀌었어요" 가 뜬다).
    */
   pageId: string;
+  title: string;
   revision: number;
   codeDigest: string;
   publishedCodeDigest: string;
   hasPublished: boolean;
+  liveAt: string | null;
+  readiness: ExpoReadinessView;
+  snippets: ExpoSnippetsView;
 }
 
 export interface ExpoSiteEditorProps {
@@ -144,9 +156,11 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
    * (useSearchParams 목이 router.replace 를 되받지 않는다). 키가 다르면 서로 못 덮는다는
    * 것이 자료구조에서 바로 나오는 성질이라 그대로 둔다. 전환을 몰 수 있게 되면 검사를 붙일 것.
    */
-  const [previewByPage, setPreviewByPage] = useState<Record<string, PreviewInfo>>({});
-  const reportPreview = useCallback((next: PreviewInfo) => {
-    setPreviewByPage((prev) => ({ ...prev, [next.pageId]: next }));
+  const [statusByPage, setStatusByPage] = useState<Record<string, PageStatus>>({});
+  /** 발행·공개가 끝났다는 신호. 가운데 칸이 이 번호를 보고 발행 쪽 값만 다시 읽는다. */
+  const [publishNonce, setPublishNonce] = useState(0);
+  const reportStatus = useCallback((next: PageStatus) => {
+    setStatusByPage((prev) => ({ ...prev, [next.pageId]: next }));
   }, []);
   /** 아직 적용하지 않은 색. null 이면 바꾼 것이 없다. */
   const [stagedTheme, setStagedTheme] = useState<ExpoTheme | null>(null);
@@ -243,6 +257,8 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
     );
   }
 
+  const status = selected ? statusByPage[selected.id] ?? null : null;
+
   return (
     <Shell siteName={site.name} siteUrl={site.siteUrl}>
       <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(200px,240px)_minmax(0,1fr)_minmax(280px,380px)]">
@@ -284,7 +300,8 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
             linkTargets={linkTargets}
             locale={site.defaultLocale || "ko"}
             onSaved={reload}
-            onPreviewInfo={reportPreview}
+            onPageStatus={reportStatus}
+            publishNonce={publishNonce}
           />
         ) : (
           <div className={`${R.panel} ${FINISH.s1} bg-card p-5 text-sm text-muted-foreground`}>
@@ -292,13 +309,28 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
           </div>
         )}
 
-        <PreviewPane
-          previewToken={site.previewToken}
-          pageId={selected?.id ?? null}
-          release={release}
-          info={selected ? previewByPage[selected.id] ?? null : null}
-          theme={stagedTheme}
-        />
+        {/* 오른쪽 칸 — 보고(미리보기) 나서 내보낸다(발행). 두 개가 붙어 있어야 흐름이 이어진다. */}
+        <div className="space-y-3">
+          <PreviewPane
+            previewToken={site.previewToken}
+            pageId={selected?.id ?? null}
+            release={release}
+            info={status}
+            theme={stagedTheme}
+          />
+          {status ? (
+            <ExpoPublishPanel
+              pageId={status.pageId}
+              pageTitle={status.title}
+              hasPublished={status.hasPublished}
+              liveAt={status.liveAt}
+              readiness={status.readiness}
+              snippets={status.snippets}
+              canPublish={permissions.canPublish}
+              onChanged={() => setPublishNonce((n) => n + 1)}
+            />
+          ) : null}
+        </div>
       </div>
     </Shell>
   );
@@ -409,12 +441,17 @@ interface PageEditorProps {
   /** 사이트의 defaultLocale — 공개 로더가 이 값으로 글을 읽는다. */
   locale: string;
   onSaved: () => void;
-  onPreviewInfo: (info: PreviewInfo) => void;
+  onPageStatus: (info: PageStatus) => void;
+  /**
+   * 발행·공개가 끝나면 부모가 올리는 번호. 발행 패널이 **오른쪽 칸**에 있어서 한 바퀴
+   * 돌아온다 — 함수를 상태에 담는 대신 번호를 내려보낸다(사이트 다시 읽기와 같은 방식).
+   */
+  publishNonce: number;
 }
 
 /** 페이지 하나의 편집 — 기본값과 구획. */
 function PageEditor({
-  pageId, siteId, canEdit, sources, linkTargets, locale, onSaved, onPreviewInfo,
+  pageId, siteId, canEdit, sources, linkTargets, locale, onSaved, onPageStatus, publishNonce,
 }: PageEditorProps) {
   const [page, setPage] = useState<PageDetail | null>(null);
   const [failed, setFailed] = useState(false);
@@ -444,6 +481,42 @@ function PageEditor({
     return () => controller.abort();
   }, [pageId]);
 
+  /**
+   * 발행·공개 뒤에 **발행 쪽 값만** 다시 읽는다.
+   *
+   * `draft` 는 손대지 않는다 — 편집 중인 내용을 서버 사본으로 덮으면 방금 친 글이
+   * 사라지고, 행 키를 다시 붙이면 타이핑하던 행이 리마운트된다. 발행은 draftRevision 을
+   * 건드리지 않으므로(발행 라우트 주석) 그 번호도 그대로 둔다.
+   */
+  const refreshPublishState = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/expo/pages/${encodeURIComponent(pageId)}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as { page: PageDetail };
+      setPage((prev) => (prev && prev.id === data.page.id ? {
+        ...prev,
+        hasPublished: data.page.hasPublished,
+        liveAt: data.page.liveAt,
+        publishedCodeDigest: data.page.publishedCodeDigest,
+        readiness: data.page.readiness,
+        snippets: data.page.snippets,
+      } : prev));
+    } catch {
+      /* 실패해도 화면을 깨뜨리지 않는다 — 다음 저장이나 새로고침에 따라온다. */
+    }
+  }, [pageId]);
+
+  /**
+   * 번호가 오르면(=발행·공개가 끝나면) 다시 읽는다. **첫 마운트는 건너뛴다** —
+   * 바로 위 효과가 방금 전부 읽어 왔으므로 같은 요청을 두 번 보내게 된다.
+   */
+  const seenNonce = useRef(publishNonce);
+  useEffect(() => {
+    if (seenNonce.current === publishNonce) return;
+    seenNonce.current = publishNonce;
+    void refreshPublishState();
+  }, [publishNonce, refreshPublishState]);
+
   if (failed) {
     return (
       <div className={`${R.panel} ${FINISH.s1} bg-card p-5 text-sm`}>
@@ -469,14 +542,14 @@ function PageEditor({
       linkTargets={linkTargets}
       locale={locale}
       onSaved={onSaved}
-      onPreviewInfo={onPreviewInfo}
+      onPageStatus={onPageStatus}
     />
   );
 }
 
 function PageForm({
-  page, siteId, canEdit, sources, linkTargets, locale, onSaved, onPreviewInfo,
-}: Omit<PageEditorProps, "pageId"> & { page: PageDetail }) {
+  page, siteId, canEdit, sources, linkTargets, locale, onSaved, onPageStatus,
+}: Omit<PageEditorProps, "pageId" | "publishNonce"> & { page: PageDetail }) {
   const [title, setTitle] = useState(page.title);
   const [imwebUrl, setImwebUrl] = useState(page.imwebUrl ?? "");
   const [sections, setSections] = useState<ExpoSection[]>(page.draft.sections);
@@ -492,8 +565,8 @@ function PageForm({
    * 새로 만들어지고, 자동저장 훅이 그걸 보고 기준선을 다시 잡는다. 동기화는 렌더가 아니라
    * 효과에서 한다(`use-page-autosave.ts` 와 같은 패턴).
    */
-  const reportRef = useRef(onPreviewInfo);
-  useEffect(() => { reportRef.current = onPreviewInfo; }, [onPreviewInfo]);
+  const reportRef = useRef(onPageStatus);
+  useEffect(() => { reportRef.current = onPageStatus; }, [onPageStatus]);
 
   /**
    * 발행본 쪽 값. **초안 저장(PATCH)은 이걸 바꾸지 않으므로** 저장이 도는 동안은 맞다.
@@ -504,12 +577,15 @@ function PageForm({
    * 그때는 발행 응답에서도 지문을 받아 함께 올려야 한다(페이지 상세는 pageId 가 바뀔
    * 때만 다시 읽으므로 저절로 갱신되지 않는다).
    */
-  const { publishedCodeDigest, hasPublished, draftRevision, codeDigest } = page;
+  const { publishedCodeDigest, hasPublished, draftRevision, codeDigest, liveAt, readiness, snippets } = page;
 
-  // 처음 한 번 — 미리보기가 무엇을 볼지 알아야 첫 프레임을 그린다.
+  // 처음 한 번, 그리고 발행 상태가 바뀔 때마다 — 오른쪽 칸이 그걸로 그린다.
   useEffect(() => {
-    reportRef.current({ pageId: page.id, revision: draftRevision, codeDigest, publishedCodeDigest, hasPublished });
-  }, [page.id, draftRevision, codeDigest, publishedCodeDigest, hasPublished]);
+    reportRef.current({
+      pageId: page.id, title: page.title, revision: draftRevision, codeDigest,
+      publishedCodeDigest, hasPublished, liveAt, readiness, snippets,
+    });
+  }, [page.id, page.title, draftRevision, codeDigest, publishedCodeDigest, hasPublished, liveAt, readiness, snippets]);
 
   const save = useCallback(async (
     next: typeof value, revision: number,
@@ -535,13 +611,14 @@ function PageForm({
     // 미리보기는 **저장된 것**을 읽는다 — 번호가 바뀌었으니 다시 불러야 한다.
     reportRef.current({
       pageId: page.id,
+      title: next.title,
       revision: savedRevision,
       codeDigest: String(body.page?.codeDigest ?? ""),
-      publishedCodeDigest, hasPublished,
+      publishedCodeDigest, hasPublished, liveAt, readiness, snippets,
     });
     onSaved();
     return { kind: "saved", revision: savedRevision };
-  }, [page.id, onSaved, publishedCodeDigest, hasPublished]);
+  }, [page.id, onSaved, publishedCodeDigest, hasPublished, liveAt, readiness, snippets]);
 
   const autosave = usePageAutosave({
     pageId: page.id,
@@ -621,7 +698,7 @@ function PreviewPane({
   previewToken: string | null;
   pageId: string | null;
   release: ExpoRelease;
-  info: PreviewInfo | null;
+  info: PageStatus | null;
   /** 아직 적용하지 않은 색. 미리보기에만 실어 보낸다 — 저장하지 않는다. */
   theme: ExpoTheme | null;
 }) {

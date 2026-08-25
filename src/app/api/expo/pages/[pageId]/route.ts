@@ -13,6 +13,10 @@ import { prepareDeletePage, prepareDraftWrite, serviceMessage, serviceStatus } f
 import { normalizeExpoPage } from "@/lib/expo/config";
 import { expoPreviewCodeDigest } from "@/lib/expo/code-digest";
 import { slugFromTitle } from "@/lib/expo/model";
+import { pageReadiness, sectionSnippetIssues } from "@/lib/expo/readiness";
+import { expoPageSnippet, expoSectionSnippet } from "@/lib/expo/snippet";
+import { getRequiredExpoPublicOrigin, expoOriginMessage } from "@/lib/expo/origin";
+import { sectionDef } from "@/lib/expo/registry";
 import { safeHttpUrl } from "@/lib/webinar-config";
 
 async function ownedPage(pageId: string, ctx: { userId: string; memberWorkspaceIds: string[] }) {
@@ -49,6 +53,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ page
        */
       codeDigest: expoPreviewCodeDigest(page!.draft),
       /**
+       * "왜 아직 안 나가는가" 를 서버가 판정해서 내려보낸다. 화면이 따로 판단하면
+       * **버튼은 눌리는데 아무 일도 안 일어나는** 상태가 생긴다(`readiness.ts` 머리말).
+       */
+      readiness: pageReadiness({
+        draft: page!.draft,
+        published: page!.published,
+        publishedAt: page!.publishedAt,
+        updatedAt: page!.updatedAt,
+        imwebUrl: page!.imwebUrl,
+      }),
+      snippets: buildSnippets(page!),
+      /**
        * 발행본 쪽 지문. 미리보기에서 발행본을 볼 때 쓴다 — 초안 지문을 그대로 보내면
        * 서버가 계산한 값과 달라 실행이 거절되고, 화면에는 이유가 안 보인다.
        * PATCH 는 발행본을 건드리지 않으므로 저장 응답에는 싣지 않는다.
@@ -58,6 +74,36 @@ export async function GET(request: Request, { params }: { params: Promise<{ page
       publishedAt: page!.publishedAt, liveAt: page!.liveAt, updatedAt: page!.updatedAt,
     },
   });
+}
+
+/**
+ * 붙일 코드 한 벌.
+ *
+ * 주소를 못 구하면 **코드를 만들지 않는다.** 빈 문자열이나 상대경로로 덮으면 붙인 사람은
+ * 붙였다고 믿고, 전시 기간에 조용히 빈 자리가 된다(`origin.ts` 머리말).
+ * 이유를 그대로 올려 화면이 말하게 한다.
+ *
+ * 구획 목록은 **초안에서 따로 내보내기를 켠 것**을 뽑는다 — 그게 운영자의 의도다.
+ * 실제로 붙일 수 있는지는 발행본 기준으로 판정해 사유를 함께 준다.
+ */
+function buildSnippets(page: { id: string; draft: unknown; published: unknown }) {
+  const origin = getRequiredExpoPublicOrigin();
+  if (!origin.ok) {
+    return { ok: false as const, message: expoOriginMessage(origin.reason) };
+  }
+
+  const draft = normalizeExpoPage(page.draft);
+  const sections = draft.sections
+    .filter((section) => section.embedEnabled)
+    .map((section) => ({
+      sid: section.sid,
+      type: section.type,
+      label: sectionDef(section.type)?.label ?? section.type,
+      snippet: expoSectionSnippet(origin.origin, page.id, section.sid),
+      issues: sectionSnippetIssues(page.published, section.sid),
+    }));
+
+  return { ok: true as const, page: expoPageSnippet(origin.origin, page.id), sections };
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ pageId: string }> }) {

@@ -19,6 +19,7 @@
  * 생성 IIFE 가 다섯 개 있다(랜딩 · 폼 · 대회 신청 · 대회 투표 · 대회 결과). 그래서
  * 홈페이지는 **여섯 번째 생성물**이다. 두 숫자가 다른 것은 착오가 아니다.
  */
+import { EXPO_PAGE_MOUNT_ATTR, EXPO_SECTION_MOUNT_ATTR } from "@/lib/expo/snippet";
 import { mountExpo, type ExpoMountHandle, type ExpoRuntimePayload } from "@/lib/expo/mount";
 
 export type ExpoBootConfig = ExpoRuntimePayload;
@@ -54,7 +55,10 @@ function warn(message: string, error?: unknown): void {
  * 그러면 "스크립트는 넣었는데 아무것도 안 나온다" 가 된다(폼 로더와 같은 규칙).
  */
 function findContainer(payload: ExpoBootConfig, script: HTMLScriptElement | null): HTMLElement | null {
-  const attr = payload.sectionId ? "data-mach-expo-section" : "data-mach-expo";
+  // 상수는 **스니펫을 만드는 쪽과 공유한다.** 각자 적어 두면 한쪽만 고쳐지는 날
+  // 코드는 붙었는데 런타임이 그 자리를 못 찾는다(스크립트 태그 자리로 폴백되어
+  // 엉뚱한 데 그려진다 — 아무도 못 알아챈다).
+  const attr = payload.sectionId ? EXPO_SECTION_MOUNT_ATTR : EXPO_PAGE_MOUNT_ATTR;
   const key = payload.sectionId ?? payload.pageId;
 
   const exact = document.querySelector<HTMLElement>(`[${attr}="${CSS.escape(key)}"]`);
