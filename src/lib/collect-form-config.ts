@@ -176,6 +176,20 @@ export interface CollectCompletion {
   showQr: boolean;
 }
 
+/** 등록 저장 직후 보내는 거래성 확인 메일. API 키·발신 주소는 서버 환경변수에만 둔다. */
+export interface CollectConfirmationEmail {
+  enabled: boolean;
+  subject: Localized;
+  heading: Localized;
+  /** 줄바꿈을 보존해 본문 첫머리에 표시한다. */
+  body: Localized;
+  buttonLabel: Localized;
+  /** 비우면 답장 주소를 지정하지 않는다. 발신 주소와 별개다. */
+  replyTo: string;
+  showQr: boolean;
+  includeEventInfo: boolean;
+}
+
 /**
  * 등록 확인(Find My QR) — 설계 §10.
  * 무료 전시는 `or`(둘 중 하나만 맞아도 열림)가 합리적이다. 티켓에 금전 가치가 없어 남의 티켓을
@@ -226,6 +240,7 @@ export interface CollectFormConfig {
   validation: CollectValidation;
   consent: { privacy: CollectConsentItem; marketing: CollectConsentItem; thirdParty: CollectConsentItem };
   completion: CollectCompletion;
+  confirmationEmail: CollectConfirmationEmail;
   lookup: CollectLookup;
   legal: CollectEventLegal;
   theme: CollectTheme;
@@ -266,6 +281,16 @@ export const EMPTY_FORM_CONFIG: CollectFormConfig = {
     thirdParty: { enabled: false, label: {}, body: {}, defaultChecked: false },
   },
   completion: { redirectUrlTemplate: "", showQr: true },
+  confirmationEmail: {
+    enabled: false,
+    subject: {},
+    heading: {},
+    body: {},
+    buttonLabel: {},
+    replyTo: "",
+    showQr: true,
+    includeEventInfo: true,
+  },
   /* 등록 확인은 **꺼진 채로 시작한다.** 켜면 이메일 하나만 아는 사람에게 남의 QR 티켓을
      보여 주는 화면이라, 운영자가 의식적으로 켜야 한다. 이 파일의 다른 토글도 전부 닫힘이 기본이다
      (eventInfo.enabled, consent.marketing.enabled, branch.enabled). or/showQr 은 켠 뒤의 기본값. */
@@ -448,6 +473,7 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
   const validationRaw = obj(c.validation);
   const consentRaw = obj(c.consent);
   const completionRaw = obj(c.completion);
+  const confirmationEmailRaw = obj(c.confirmationEmail);
   const lookupRaw = obj(c.lookup);
   const legalRaw = obj(c.legal);
   const thirdPartiesRaw = Array.isArray(legalRaw.thirdParties) ? legalRaw.thirdParties : [];
@@ -523,6 +549,16 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
       // 이라 안전한 쪽으로 닫힌다. {regNo} 같은 자리표시자는 경로·쿼리 문자로 문제없이 파싱된다.
       redirectUrlTemplate: safeHttpUrl(str(completionRaw.redirectUrlTemplate)),
       showQr: completionRaw.showQr !== false,
+    },
+    confirmationEmail: {
+      enabled: confirmationEmailRaw.enabled === true,
+      subject: toLocalized(confirmationEmailRaw.subject, locale),
+      heading: toLocalized(confirmationEmailRaw.heading, locale),
+      body: toLocalized(confirmationEmailRaw.body, locale),
+      buttonLabel: toLocalized(confirmationEmailRaw.buttonLabel, locale),
+      replyTo: str(confirmationEmailRaw.replyTo),
+      showQr: confirmationEmailRaw.showQr !== false,
+      includeEventInfo: confirmationEmailRaw.includeEventInfo !== false,
     },
     lookup: {
       enabled: lookupRaw.enabled === true,

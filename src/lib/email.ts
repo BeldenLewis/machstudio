@@ -7,6 +7,8 @@ interface SendArgs {
   subject: string;
   html: string;
   from?: string;
+  replyTo?: string;
+  idempotencyKey?: string;
 }
 
 export type SendResult = { sent: boolean; skipped?: boolean; error?: string };
@@ -15,7 +17,7 @@ export function emailConfigured(): boolean {
   return !!process.env.RESEND_API_KEY;
 }
 
-export async function sendEmail({ to, subject, html, from }: SendArgs): Promise<SendResult> {
+export async function sendEmail({ to, subject, html, from, replyTo, idempotencyKey }: SendArgs): Promise<SendResult> {
   const key = process.env.RESEND_API_KEY;
   if (!key) return { sent: false, skipped: true };
 
@@ -23,8 +25,12 @@ export async function sendEmail({ to, subject, html, from }: SendArgs): Promise<
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: sender, to: [to], subject, html }),
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+      },
+      body: JSON.stringify({ from: sender, to: [to], subject, html, ...(replyTo ? { reply_to: replyTo } : {}) }),
     });
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
