@@ -13,6 +13,7 @@ import { ensureFormStyles } from "./css";
 import { onAccentColor } from "@/lib/competition-render";
 import { COUNTRY_DIALS, flagEmoji, isKnownCountry } from "@/lib/collect-country";
 import type { CollectFormConfig } from "@/lib/collect-form-config";
+import { visitorBadgeCssVars } from "@/lib/collect-badge";
 
 
 const COPY = {
@@ -173,24 +174,6 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
    * 그래서 직접 받아서 blob 으로 저장한다(QR 라우트는 CORS 를 열어 두었다).
    * 그마저 막히면 새 탭으로 열어 준다 — 그때는 길게 눌러 저장하면 된다.
    */
-  async function saveQrImage(regNo: string): Promise<void> {
-    const url = `${opts.origin}/api/collect/qr/${encodeURIComponent(regNo)}`;
-    try {
-      const res = await fetch(url, { credentials: "omit" });
-      if (!res.ok) throw new Error("qr fetch failed");
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const a = h("a", { href: objectUrl, download: `ticket-${regNo}.png` }) as HTMLAnchorElement;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      // 즉시 해제하면 저장이 시작되기 전에 무효가 되는 브라우저가 있다.
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
-    } catch {
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
-  }
-
   function renderResult(view: {
     registrationNo: string;
     name: string;
@@ -211,7 +194,10 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
       general 인가 buyer 인가" 를 확인하려고 화면을 들여다봐야 했다. 입장 동선이 유형마다
       다르므로 이건 이름보다 먼저 눈에 들어와야 한다.
     */
-    if (view.visitorType) card.appendChild(h("div", { class: "msf-badge" }, view.visitorType));
+    if (view.visitorType) card.appendChild(h("div", {
+      class: "msf-badge",
+      style: visitorBadgeCssVars(view.visitorType),
+    }, view.visitorType));
     if (view.name) card.appendChild(h("div", { class: "msf-found-name" }, view.name));
 
     /*
@@ -251,10 +237,11 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
       card.appendChild(h("div", { class: "msf-regno-label" }, COPY.regNoLabel));
 
       if (!preview) {
-        const save = h("button", {
-          type: "button",
+        const save = h("a", {
           class: "msf-save",
-          onclick: () => { void saveQrImage(view.registrationNo); },
+          href: `${opts.origin}/api/collect/qr/${encodeURIComponent(view.registrationNo)}?download=1`,
+          target: "_blank",
+          rel: "noopener noreferrer",
         }, COPY.saveImage);
         card.appendChild(save);
         card.appendChild(h("div", { class: "msf-save-hint" }, COPY.saveHint));

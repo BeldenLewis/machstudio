@@ -24,7 +24,25 @@ export interface RealtimeReportData {
     rangeCount: number;
     previousRangeCount: number;
     rangeChange: number | null;
+    /** 이번해 1/1 ~ 현재 누적 (연중 목표 진행률 계산용, 전체기간 누적인 cumulativeCount와 다름) */
+    thisYearCumulativeCount: number;
+    /** 작년 1/1~12/31 전체 등록 수 — 올해 목표치로 사용 */
+    lastYearTotalCount: number;
+    goalProgressPercent: number | null;
+    /** 지금 조회 중인 구간의 작년 동기간 등록 수 */
+    lastYearRangeCount: number;
+    lastYearRangeChange: number | null;
   };
+  /** GA4 속성 미설정이거나 조회 실패면 null — 이 경우 퍼널 UI 전체를 숨긴다. */
+  funnel: {
+    homepageVisitors: number;
+    homepageVisitorsChange: number | null;
+    registrationPageVisitors: number | null;
+    registrationPageVisitorsChange: number | null;
+    registrants: number;
+    homepageToPageRate: number | null;
+    pageToRegistrantRate: number | null;
+  } | null;
   composition: Array<{
     key: string;
     label: string;
@@ -83,11 +101,11 @@ interface Props {
   rangeLabel: string;
 }
 
-function formatNumber(value: number) {
+export function formatNumber(value: number) {
   return value.toLocaleString("ko-KR");
 }
 
-function formatPercent(value: number | null) {
+export function formatPercent(value: number | null) {
   if (value === null || Number.isNaN(value)) return "비교 데이터 없음";
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(1)}%`;
@@ -212,7 +230,7 @@ function DedupCard({ dedup }: { dedup: RealtimeReportData["dedup"] }) {
   );
 }
 
-function ChangeBadge({ rangeChange }: MetricChange) {
+export function ChangeBadge({ rangeChange }: MetricChange) {
   if (rangeChange === null) {
     return <span className="rounded-full bg-secondary px-2 py-1 text-xs text-muted-foreground">비교 준비 중</span>;
   }

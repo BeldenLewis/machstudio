@@ -117,14 +117,22 @@ export const COLLECT_FORM_CSS = `
 .msf-chip:has(input:focus-visible),.msf-chip.is-focus{outline:2px solid var(--msf-accent);outline-offset:2px}
 
 /* 체크박스 한 줄 */
-.msf-check{display:flex;align-items:flex-start;gap:9px;font-size:13px;cursor:pointer;min-height:24px}
-.msf-check input{width:18px;height:18px;margin:2px 0 0;flex:0 0 auto;accent-color:var(--msf-accent);cursor:pointer}
+.msf-check{
+  display:flex !important;align-items:center !important;gap:10px !important;
+  min-height:24px;font-size:13px;line-height:1.45;cursor:pointer
+}
+.msf-check input{
+  display:block !important;width:18px !important;height:18px !important;min-width:18px !important;
+  margin:0 !important;padding:0 !important;flex:0 0 18px !important;
+  accent-color:var(--msf-accent);cursor:pointer
+}
+.msf-check span{display:block !important;min-width:0;line-height:1.45 !important}
 
 /* 동의 항목 한 줄 — 체크박스 라벨(가변 폭)과 "Details" 버튼(고정 폭)을 한 줄에 둔다.
    Details 가 라벨 아래 혼자 떨어져 있으면 그 항목과 상관없는 것처럼 보인다. */
-.msf-consent-row{display:flex;align-items:flex-start;gap:10px}
+.msf-consent-row{display:flex !important;align-items:center !important;gap:12px !important}
 .msf-consent-row .msf-check{flex:1;min-width:0}
-.msf-consent-row .msf-more{flex:0 0 auto;margin-top:1px}
+.msf-consent-row .msf-more{flex:0 0 auto;margin:0 !important}
 
 /* ── 안내 블록 ─────────────────────────────── */
 .msf-notice{background:var(--msf-soft);border-radius:var(--msf-radius);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
@@ -162,7 +170,10 @@ export const COLLECT_FORM_CSS = `
 .msf-state-title{font-size:16px;font-weight:700}
 .msf-state-body{font-size:13px;color:var(--msf-muted);margin-top:6px}
 
-.msf-done{text-align:center;background:var(--msf-soft);border-radius:var(--msf-radius);padding:26px 20px}
+.msf-done{
+  display:flex !important;flex-direction:column !important;align-items:center !important;
+  width:100% !important;text-align:center;background:var(--msf-soft);border-radius:var(--msf-radius);padding:26px 20px
+}
 .msf-done-title{font-size:17px;font-weight:700}
 /**
  * 등록번호는 **현장에서 눈으로 읽고 손으로 친다**(설계 §9.1·§12).
@@ -222,8 +233,10 @@ export const COLLECT_FORM_CSS = `
   display:inline-flex !important;align-items:center;justify-content:center;min-width:112px;
   margin:0 0 10px !important;padding:8px 18px !important;border-radius:999px;
   font-size:14px;font-weight:900;line-height:1;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--msf-accent);background:color-mix(in srgb, var(--msf-accent) 12%, #fff);
-  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--msf-accent) 28%, transparent);
+  color:var(--msf-badge-fg,var(--msf-accent-fg)) !important;
+  background:var(--msf-badge-bg,var(--msf-accent)) !important;
+  -webkit-text-fill-color:var(--msf-badge-fg,var(--msf-accent-fg)) !important;
+  box-shadow:0 4px 12px color-mix(in srgb, var(--msf-badge-bg,var(--msf-accent)) 24%, transparent);
 }
 
 /* 본인 확인 줄 — 가려진 연락처(collect-lookup 의 maskEmail/maskPhone).
@@ -243,7 +256,10 @@ export const COLLECT_FORM_CSS = `
 /* QR 저장 — 캡처가 안 되는 기기(일부 사내폰·키오스크)가 있어 파일로도 준다. */
 .msf-save{
   display:block;width:100%;margin-top:16px;padding:14px 18px;border:0;border-radius:var(--msf-radius);
-  background:var(--msf-accent);color:var(--msf-accent-fg);font:inherit;font-weight:800;cursor:pointer;
+  background:var(--msf-accent) !important;color:var(--msf-accent-fg) !important;
+  -webkit-text-fill-color:var(--msf-accent-fg) !important;
+  font:inherit;font-weight:800;cursor:pointer;
+  text-align:center;text-decoration:none !important;
 }
 .msf-save:hover{filter:brightness(1.08)}
 .msf-save-hint{margin-top:8px;font-size:11px;color:var(--msf-muted)}

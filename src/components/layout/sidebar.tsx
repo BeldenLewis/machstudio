@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  LayoutDashboard, BarChart3, LogOut,
+  LayoutDashboard, LayoutGrid, BarChart3, LogOut,
   ChevronDown, Plus, FolderOpen, Check, Loader2, Settings2, Settings, Database, Video, Link2, Pencil, Trash2, ShieldCheck, Menu, Trophy, Globe,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -589,6 +589,17 @@ export function Sidebar({ expoHomepageEnabled = false }: SidebarProps = {}) {
             관리자
           </Link>
         )}
+        <Link
+          href="/summary-dashboard"
+          className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors ${
+            pathname === "/summary-dashboard"
+              ? "bg-violet-500/10 text-violet-500 font-medium"
+              : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+          }`}
+        >
+          <LayoutGrid className="w-4 h-4" />
+          요약 대시보드
+        </Link>
         <div className="flex items-center gap-1">
           <NotificationPanel />
           <ThemeToggle />

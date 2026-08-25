@@ -33,6 +33,7 @@ import { COUNTRY_DIALS, flagEmoji, isKnownCountry } from "@/lib/collect-country"
 import { resolveRedirect } from "@/lib/collect-redirect";
 // 로더가 심어 둔 first-touch UTM 을 그대로 쓴다 — 파트너 사이트를 먼저 거친 방문자의 정본이다.
 import { buildUtmEnvelope } from "@/lib/attribution-client";
+import { visitorBadgeCssVars } from "@/lib/collect-badge";
 
 
 /**
@@ -43,6 +44,17 @@ import { buildUtmEnvelope } from "@/lib/attribution-client";
  * 예전 값 `0000000000000` 은 Luhn 을 **통과했다**(0 이 올바른 체크digit 이다).
  */
 const PREVIEW_REG_NO = "0000000000001";
+
+function maskedEmail(value: string): string {
+  const raw = value.trim();
+  const at = raw.lastIndexOf("@");
+  return at < 1 ? "" : `${raw[0]}•••${raw.slice(at)}`;
+}
+
+function maskedPhone(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  return digits.length < 8 ? "" : `•••••• ${digits.slice(-4)}`;
+}
 
 /** 안내 문구 — 로케일 대응은 §11 이후. 지금은 영어 단일 전시(LA)라 화면 문구도 여기 모은다. */
 const COPY = {
@@ -66,6 +78,8 @@ const COPY = {
   regNoLabel: "Registration number — show this at the venue",
   previewFlag: "Preview — nothing is saved",
   ticketLink: "Open my ticket page →",
+  saveImage: "Save as Image",
+  saveHint: "* If the button doesn't work, please take a screenshot.",
   previewDone: "Sample number — nothing was saved.",
   more: "Details",
   less: "Hide",
@@ -151,12 +165,17 @@ function str(v: unknown): string {
  * 그대로 놓이기 때문 — 오버레이가 그 흐름 안에 있으면 부모의 overflow/position 에 잘린다.
  * `.msf` 리셋을 다시 받아야 해서 클래스에 msf 를 같이 건다(css.ts 주석 참고).
  */
-function openTermsPopup(title: string, body: string, onAgree: () => void): void {
+function openTermsPopup(
+  title: string,
+  body: string,
+  onAgree: () => void,
+  themeStyle: Record<string, string | null>,
+): void {
   const closeBtn = h("button", { type: "button", class: "msf-terms-close" }, COPY.close);
   const agreeBtn = h("button", { type: "button", class: "msf-terms-agree" }, COPY.agree);
   const overlay = h(
     "div",
-    { class: "msf msf-overlay" },
+    { class: "msf msf-overlay", style: themeStyle },
     h(
       "div",
       { class: "msf-terms" },
@@ -285,14 +304,15 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
    * 그래서 같은 페이지에 다른 색의 폼이 두 개 붙어도 서로 안 섞인다.
    */
   const theme = config.theme;
+  const themeStyle = {
+    "--msf-accent": theme.accentColor || null,
+    "--msf-accent-fg": theme.accentColor ? onAccentColor(theme.accentColor) : null,
+    "--msf-fg": theme.textColor || null,
+    "--msf-bg": theme.surfaceColor || null,
+  };
   const root = h("div", {
     class: "msf",
-    style: {
-      "--msf-accent": theme.accentColor || null,
-      "--msf-accent-fg": theme.accentColor ? onAccentColor(theme.accentColor) : null,
-      "--msf-fg": theme.textColor || null,
-      "--msf-bg": theme.surfaceColor || null,
-    },
+    style: themeStyle,
   });
   const stack = h("div", { class: "msf-stack" });
   root.appendChild(stack);
@@ -703,7 +723,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
           clearIssue(issueKey);
           err.textContent = "";
           updateSubmitState();
-        });
+        }, themeStyle);
       });
       // Details 를 라벨 아래 별도 줄이 아니라 같은 줄 오른쪽에 둔다 — 혼자 아래에
       // 떨어져 있으면 라벨과 상관없는 항목처럼 보인다.
@@ -988,6 +1008,38 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     }, COPY.ticketLink);
   }
 
+  function saveTicketLink(regNo: string): HTMLElement | null {
+    if (preview) return null;
+    return h("a", {
+      class: "msf-save",
+      href: `${opts.origin}/api/collect/qr/${encodeURIComponent(regNo)}?download=1`,
+      target: "_blank",
+      rel: "noopener noreferrer",
+    }, COPY.saveImage);
+  }
+
+  function completionIdentity(): { name: string; visitorType: string; maskedEmail: string; maskedPhone: string } {
+    const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
+    const namePattern = /^(first|last|given|family|full)[_-]?names?$|^names?$|^surnames?$|^(first|last|given|family)$/i;
+    const name = config.fields
+      .filter((field) => [field.key, ...Object.values(field.label)]
+        .map((value) => String(value).trim().replace(/\s+/g, "_"))
+        .some((candidate) => namePattern.test(candidate)))
+      .map((field) => text(values[field.key]))
+      .filter(Boolean)
+      .join(" ");
+    const valueFor = (type: string) => {
+      const field = config.fields.find((item) => item.type === type);
+      return field ? text(values[field.key]) : "";
+    };
+    return {
+      name,
+      visitorType: config.branch.enabled ? text(values[config.branch.fieldKey]) : "",
+      maskedEmail: maskedEmail(valueFor("email")),
+      maskedPhone: maskedPhone(valueFor("tel")),
+    };
+  }
+
   // ── 렌더 ────────────────────────────────────────────────────────────
   const consentHost = h("div", { class: "msf-stack" });
   function renderConsent(): void {
@@ -1019,17 +1071,29 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
 
     // 완료 화면 — 이메일 연동 전에는 **여기가 등록자가 번호를 받는 첫 경로**다(설계 §2·§8).
     if (doneRegNo) {
+      const identity = completionIdentity();
+      const identityRows = [
+        ["Phone", identity.maskedPhone],
+        ["E-mail", identity.maskedEmail],
+      ].filter(([, value]) => Boolean(value));
       stack.appendChild(
         h("div", { class: "msf-done" },
           h("div", { class: "msf-done-title" }, COPY.doneTitle),
+          identity.visitorType ? h("div", { class: "msf-badge", style: visitorBadgeCssVars(identity.visitorType) }, identity.visitorType) : null,
+          identity.name ? h("div", { class: "msf-found-name" }, identity.name) : null,
           /**
            * QR 을 여기서 보여 준다 — 이메일 연동 전에는 등록자가 QR 을 받는 **첫 경로**다
            * (설계 §2·§8). 서버에서 그리므로 §9.2 규칙(EC Q·여백 4모듈·불투명 흰 배경)이
            * 세 자리(완료·티켓·이메일)에서 같다.
            */
           config.completion.showQr ? qrCard(doneRegNo) : null,
+          identityRows.length > 0 ? h("dl", { class: "msf-idcheck" },
+            ...identityRows.flatMap(([label, value]) => [h("dt", null, label), h("dd", null, value)]),
+          ) : null,
           h("div", { class: "msf-regno" }, doneRegNo),
           h("div", { class: "msf-regno-label" }, preview ? COPY.previewDone : COPY.regNoLabel),
+          config.completion.showQr ? saveTicketLink(doneRegNo) : null,
+          !preview && config.completion.showQr ? h("div", { class: "msf-save-hint" }, COPY.saveHint) : null,
           ticketLink(doneRegNo),
         ),
       );

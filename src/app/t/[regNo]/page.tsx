@@ -24,6 +24,7 @@ import { getClientIp, rateLimitAsync } from "@/lib/ratelimit";
 import { isValidRegistrationNo } from "@/lib/collect-registration-no";
 import { normalizeCollectForm } from "@/lib/collect-form-config";
 import { buildTicketView } from "@/lib/collect-lookup";
+import { visitorBadgePalette } from "@/lib/collect-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -144,7 +145,13 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
             본인이 이메일이나 전화를 직접 넣어 통과한 뒤라 가려서 보여 주지만, 여기는 그 관문이 없다.
           */}
           {view.visitorType && (
-            <p className="mt-4 inline-flex min-w-28 items-center justify-center rounded-full bg-orange-500 px-5 py-2 text-sm font-black uppercase tracking-[0.1em] text-white shadow-sm">
+            <p
+              className="mt-4 inline-flex min-w-28 items-center justify-center rounded-full px-5 py-2 text-sm font-black uppercase tracking-[0.1em] shadow-md"
+              style={{
+                backgroundColor: visitorBadgePalette(view.visitorType).background,
+                color: visitorBadgePalette(view.visitorType).foreground,
+              }}
+            >
               {view.visitorType}
             </p>
           )}

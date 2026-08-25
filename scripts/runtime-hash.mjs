@@ -82,6 +82,7 @@ export function formSourceFiles(root) {
     join(root, "src/lib/collect-form-config.ts"),
     join(root, "src/lib/collect-email.ts"),
     join(root, "src/lib/collect-country.ts"),
+    join(root, "src/lib/collect-badge.ts"),
     join(root, "src/lib/collect-redirect.ts"),
     join(root, "src/lib/dom/h.ts"),
     join(root, "src/lib/webinar-config.ts"),
