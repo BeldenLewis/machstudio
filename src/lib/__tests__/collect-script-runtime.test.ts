@@ -187,6 +187,28 @@ describe("아임웹 경로 — 오늘의 동작을 고정한다", () => {
     expect(h.sent).toHaveLength(0);
   });
 
+  /**
+   * "제출로 보이는 클릭"(정규식 매칭)이 실제 제출이 아닐 수 있다 — 그 순간 폼을 다 안
+   * 채웠으면 반쪽 레코드가 만들어진다(에듀테크 실측: 이름·이메일 없이 UTM만 있는 레코드가
+   * 계속 쌓임). 위치 인덱스 경로에도 값 정족수를 걸어, 매핑된 필드의 과반이 안 채워지면
+   * 앵커 소스처럼 아무것도 보내지 않아야 한다.
+   */
+  it("매핑된 필드의 절반도 안 채워지면 위치 인덱스 소스도 보내지 않는다", async () => {
+    const h = mount(
+      imwebForm([
+        { label: "이름", html: `<input value="">` },
+        { label: "이메일", html: `<input value="">` },
+        { label: "연락처", html: `<input value="">` },
+        // 4개 중 1개만 채워짐 — 무관한 클릭(쿠키 동의 등)이 우연히 이 상태를 캡처한 상황.
+        { label: "동의", html: `<label><input type="checkbox" checked>개인정보 수집 동의</label>` },
+      ]),
+      buildScript(LEGACY_MAPPINGS),
+    );
+    await h.submitAndLeave();
+
+    expect(h.sent).toHaveLength(0);
+  });
+
   /** 발견(discoveredFields)의 출처 — 이 값이 바뀌면 운영자 화면의 필드 목록이 통째로 바뀐다. */
   it("필드 메타를 `.form-group` 에서 뽑아 함께 보낸다", async () => {
     const h = mount(FILLED, buildScript(LEGACY_MAPPINGS));
