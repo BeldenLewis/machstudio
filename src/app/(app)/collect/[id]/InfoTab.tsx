@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * "기본 정보" 탭 — 일자·장소·관람시간·키컬러·하이라이트 영상·포스터.
+ * "기본 정보" 탭 — 일자·장소·관람시간·키컬러·Official Trailer·포스터.
  *
  * 연동형·빌더형 공통(tabs.ts 참고). 지금 당장은 화면에 안 쓰이는 값도 있지만(예: 관람시간),
  * 한 곳에 모아 두면 나중에 요약 카드·전년 대비 비교(진행률·페이스)·공개 페이지 등에서
@@ -136,7 +136,7 @@ export default function InfoTab({ sourceId, initial }: { sourceId: string; initi
         />
       </Field>
 
-      <Field label="하이라이트 영상" hint="유튜브 등 영상 링크">
+      <Field label="Official Trailer" hint="유튜브 등 영상 링크">
         <input
           value={info.highlightVideoUrl ?? ""}
           onChange={(e) => patch({ highlightVideoUrl: e.target.value })}
