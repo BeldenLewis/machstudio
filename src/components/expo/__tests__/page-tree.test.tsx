@@ -104,6 +104,17 @@ const deleteButton = (title: string) =>
 const anyButton = (text: string) =>
   [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === text);
 
+const nameInput = (title: string) =>
+  [...host.querySelectorAll<HTMLInputElement>("input")].find((i) => i.value === title);
+
+async function type(el: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  await act(async () => {
+    setter.call(el, value);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
 async function click(el: Element | null | undefined) {
   if (!el) throw new Error("없는 버튼");
   await act(async () => { el.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
@@ -128,9 +139,9 @@ afterEach(async () => {
 describe("보이기", () => {
   it("페이지를 순서대로 그리고 홈을 표시한다", async () => {
     await render();
-    expect(host.textContent).toContain("홈");
-    expect(host.textContent).toContain("전시 소개");
-    expect(host.textContent).toContain("참가 신청");
+    // 이름은 이제 **고칠 수 있는 칸**이라 textContent 가 아니라 value 로 있다(0클릭 편집).
+    const names = [...host.querySelectorAll<HTMLInputElement>("input")].map((i) => i.value);
+    expect(names).toEqual(["홈", "전시 소개", "참가 신청"]);
   });
 
   /** 홈은 지울 수 없다 — 서버도 거절한다(`prepareDeletePage`). */
@@ -259,5 +270,86 @@ describe("공개 중인 페이지", () => {
     await render();
     await click(deleteButton("전시 소개"));
     expect(document.body.textContent).not.toContain("지금 공개 중인 페이지예요");
+  });
+});
+
+/**
+ * 이름은 **여기서** 고친다(0클릭). 가운데 칸에도 두면 같은 값을 두 곳이 저장하게 되고,
+ * 한쪽이 저장 중일 때 다른 쪽이 옛 값으로 덮는 경합이 생긴다.
+ */
+describe("이름 고치기", () => {
+  it("치는 동안에는 보내지 않는다", async () => {
+    await render();
+    await type(nameInput("전시 소개")!, "전시 안내");
+
+    expect(calls).toEqual([]);
+    // 화면은 곧바로 친 값을 보여 준다 — 서버 값을 쓰면 왕복 동안 글자가 되돌아간다.
+    expect(nameInput("전시 안내")).toBeTruthy();
+  });
+
+  it("멈추면 그때 한 번 보낸다", async () => {
+    await render();
+    await type(nameInput("전시 소개")!, "전시 안내");
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+
+    const patches = calls.filter((c) => c.method === "PATCH");
+    expect(patches).toHaveLength(1);
+    expect(patches[0].url).toBe("/api/expo/pages/about");
+    expect(patches[0].body).toEqual({ title: "전시 안내" });
+  });
+
+  /** 연달아 쳐도 한 번만 나간다 — 글자마다 보내면 목록을 그만큼 다시 읽는다. */
+  it("연달아 쳐도 한 번만 보낸다", async () => {
+    await render();
+    const el = nameInput("전시 소개")!;
+    for (const v of ["전", "전시", "전시 안", "전시 안내"]) {
+      await type(el, v);
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    }
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+
+    const patches = calls.filter((c) => c.method === "PATCH");
+    expect(patches).toHaveLength(1);
+    expect(patches[0].body).toEqual({ title: "전시 안내" });
+  });
+
+  /** 칸을 떠나면 기다리지 않는다 — 다 쳤다는 신호다. */
+  it("포커스를 떠나면 바로 보낸다", async () => {
+    await render();
+    const el = nameInput("전시 소개")!;
+    await type(el, "전시 안내");
+    // React 의 onBlur 는 focusout 위임이다 — blur 는 버블하지 않아 안 닿는다.
+    await act(async () => { el.dispatchEvent(new FocusEvent("focusout", { bubbles: true })); });
+
+    expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(1);
+  });
+
+  /** 빈 이름을 보내면 서버가 "제목 없음" 으로 바꾼다 — 지우던 중에 이름이 뒤바뀐다. */
+  it("빈 이름은 보내지 않는다", async () => {
+    await render();
+    await type(nameInput("전시 소개")!, "   ");
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+
+    expect(calls).toEqual([]);
+  });
+
+  /** 고르지 않은 페이지도 여기서 바로 고칠 수 있다 — 그게 트리에 두는 값어치다. */
+  it("고르지 않은 페이지도 고칠 수 있다", async () => {
+    await render();
+    await type(nameInput("참가 신청")!, "신청 안내");
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+
+    expect(calls.filter((c) => c.method === "PATCH")[0].url).toBe("/api/expo/pages/apply");
+  });
+
+  it("칸에 들어가면 그 페이지가 골라진다", async () => {
+    await render();
+    await act(async () => { nameInput("참가 신청")!.dispatchEvent(new FocusEvent("focusin", { bubbles: true })); });
+    expect(onSelect).toHaveBeenCalledWith("apply");
+  });
+
+  it("뷰어에게는 고칠 칸을 주지 않는다", async () => {
+    await render(PAGES, { canEdit: false });
+    expect(host.querySelector("input")).toBeNull();
   });
 });

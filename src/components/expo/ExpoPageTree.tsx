@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { FINISH, R, SELECTED } from "@/components/ui/primitives";
@@ -29,6 +29,11 @@ import type { ExpoPageState } from "@/lib/expo/types";
  *
  * 유예 중에는 그 페이지를 못 고친다. 실행취소로 되살아날 수 있는 것을 편집하게 두면
  * 되살린 뒤 무엇이 남아 있어야 하는지 아무도 모른다.
+ *
+ * ── 이름은 여기서 고친다 ──────────────────────────────────────────────
+ * 행을 누르고 바로 타이핑한다(0클릭). 가운데 칸에도 이름 칸을 두지 않는 이유는 **같은 값을
+ * 두 곳이 저장하면** 한쪽이 저장 중일 때 다른 쪽이 옛 값으로 덮는 경합이 생기기 때문이다.
+ * 고르지 않은 페이지도 여기서 바로 고칠 수 있다 — 그게 트리에 두는 값어치다.
  */
 
 export interface ExpoPageRow {
@@ -113,6 +118,53 @@ export function ExpoPageTree({
       setOrder(null);
     }
   }, [siteId, pinHome, onReload]);
+
+  /**
+   * 고치는 중인 이름. 서버 값을 그대로 쓰면 저장 왕복 동안 글자가 되돌아간다.
+   * 저장이 끝나 목록을 다시 읽으면 지운다.
+   */
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  useEffect(() => {
+    const pending = timers.current;
+    return () => { Object.values(pending).forEach(clearTimeout); };
+  }, []);
+
+  const saveTitle = useCallback(async (pageId: string, title: string) => {
+    const trimmed = title.trim();
+    // 빈 이름은 보내지 않는다 — 서버가 "제목 없음" 으로 바꿔 버리면 지우던 중에 이름이 뒤바뀐다.
+    if (!trimmed) return;
+    try {
+      const res = await fetch(`/api/expo/pages/${encodeURIComponent(pageId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: trimmed }),
+      });
+      if (!res.ok) {
+        toast.error((await res.json().catch(() => ({}))).error ?? "이름을 바꾸지 못했어요");
+        return;
+      }
+      // 서버 값이 오면 고치던 값을 놓는다 — 서버가 자른 결과가 화면에 보여야 한다.
+      setDrafts((prev) => { const next = { ...prev }; delete next[pageId]; return next; });
+      onReload();
+    } catch {
+      toast.error("이름을 바꾸지 못했어요. 연결을 확인해 주세요.");
+    }
+  }, [onReload]);
+
+  const editTitle = useCallback((pageId: string, title: string) => {
+    setDrafts((prev) => ({ ...prev, [pageId]: title }));
+    if (timers.current[pageId]) clearTimeout(timers.current[pageId]);
+    timers.current[pageId] = setTimeout(() => { void saveTitle(pageId, title); }, 600);
+  }, [saveTitle]);
+
+  /** 포커스를 떠나면 기다리지 않고 보낸다 — 다 쳤다는 신호다. */
+  const flushTitle = useCallback((pageId: string) => {
+    const pending = drafts[pageId];
+    if (pending === undefined) return;
+    if (timers.current[pageId]) clearTimeout(timers.current[pageId]);
+    void saveTitle(pageId, pending);
+  }, [drafts, saveTitle]);
 
   /** 유예가 끝났다 — 이제야 서버에 지운다. 정확히 한 번. */
   const removeNow = useCallback(async (page: ExpoPageRow) => {
@@ -208,19 +260,34 @@ export function ExpoPageTree({
                 * 자리는 남겨 둔다 — 안 그러면 홈 행만 왼쪽으로 밀려 목록이 어긋난다.
                 */}
               {item.isHome ? <span className="block h-9 w-9 shrink-0" aria-hidden /> : handle}
-              <button
-                type="button"
-                onClick={() => onSelect(item.id)}
-                aria-current={active ? "page" : undefined}
-                className="flex min-w-0 flex-1 items-center gap-2 py-2 text-left text-sm"
-              >
-                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATE_DOT[state]}`} aria-hidden />
-                <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                {item.isHome ? (
-                  <span className="shrink-0 text-[11px] text-muted-foreground">홈</span>
-                ) : null}
-                <span className="sr-only">{STATE_LABEL[state]}</span>
-              </button>
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATE_DOT[state]}`} aria-hidden />
+              {canEdit ? (
+                /* 0클릭 — 누르고 바로 친다. 포커스가 곧 선택이라 키보드로도 같은 흐름이다. */
+                <input
+                  value={drafts[item.id] ?? item.title}
+                  onChange={(event) => editTitle(item.id, event.target.value)}
+                  onFocus={() => onSelect(item.id)}
+                  onBlur={() => flushTitle(item.id)}
+                  onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+                  maxLength={120}
+                  aria-label={`${item.title} 이름`}
+                  aria-current={active ? "page" : undefined}
+                  className="min-w-0 flex-1 truncate bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground/50"
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onSelect(item.id)}
+                  aria-current={active ? "page" : undefined}
+                  className="min-w-0 flex-1 truncate py-2 text-left text-sm"
+                >
+                  {item.title}
+                </button>
+              )}
+              {item.isHome ? (
+                <span className="shrink-0 text-[11px] text-muted-foreground">홈</span>
+              ) : null}
+              <span className="sr-only">{STATE_LABEL[state]}</span>
               {removeButton({
                 label: `${item.title} 페이지 삭제`,
                 onClick: () => void guardedRemove(item, requestRemove),

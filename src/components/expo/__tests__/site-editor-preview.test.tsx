@@ -142,17 +142,20 @@ async function click(el: Element | undefined) {
 }
 
 /**
- * 페이지 이름을 고쳐 자동저장을 한 바퀴 돌린다.
- * 라벨로 찾는다 — `querySelector("input")` 는 왼쪽 칸의 색 입력을 먼저 집는다.
+ * 자동저장을 한 바퀴 돌린다.
+ *
+ * **이름이 아니라 아임웹 주소를 고친다** — 페이지 이름은 왼쪽 트리로 옮겨 갔고 거기서
+ * 따로 저장한다(같은 값을 두 곳이 저장하면 경합이 생긴다). 가운데 칸의 자동저장을
+ * 건드리려면 이 칸이 맞다.
  */
-async function editAndSave(title: string) {
+async function editAndSave(value: string) {
   const label = [...host.querySelectorAll("label")]
-    .find((el) => el.textContent?.startsWith("페이지 이름"));
+    .find((el) => el.textContent?.startsWith("아임웹 주소"));
   const input = label?.querySelector("input");
-  if (!input) throw new Error("이름 칸이 없다");
+  if (!input) throw new Error("아임웹 주소 칸이 없다");
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
   await act(async () => {
-    setter.call(input, title);
+    setter.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
   // 디바운스(900ms)를 넘긴다.
@@ -528,17 +531,17 @@ describe("발행한 뒤", () => {
   it("초안은 덮어쓰지 않는다", async () => {
     vi.useFakeTimers();
     await render();
-    await editAndSave("고친 이름");
+    await editAndSave("https://example.com/새주소");
 
     const label = [...host.querySelectorAll("label")]
-      .find((el) => el.textContent?.startsWith("페이지 이름"));
-    expect(label?.querySelector("input")?.value).toBe("고친 이름");
+      .find((el) => el.textContent?.startsWith("아임웹 주소"));
+    expect(label?.querySelector("input")?.value).toBe("https://example.com/새주소");
 
     pageBody.hasPublished = true;
     await act(async () => { publishButton()?.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
     await act(async () => { await vi.advanceTimersByTimeAsync(100); });
 
-    // 서버가 준 옛 제목("홈")으로 되돌아가면 안 된다.
-    expect(label?.querySelector("input")?.value).toBe("고친 이름");
+    // 서버가 준 옛 값(null)으로 되돌아가면 안 된다.
+    expect(label?.querySelector("input")?.value).toBe("https://example.com/새주소");
   });
 });

@@ -563,14 +563,18 @@ function PageForm({
   page, siteId, canEdit, sources, linkTargets, locale, onSaved, onPageStatus,
   focusedSid,
 }: Omit<PageEditorProps, "pageId" | "publishNonce"> & { page: PageDetail }) {
-  const [title, setTitle] = useState(page.title);
+  /**
+   * 이름은 **왼쪽 트리가 소유한다.** 여기에도 두면 같은 값을 두 곳이 저장하게 되고,
+   * 한쪽이 저장 중일 때 다른 쪽이 옛 값으로 덮는 경합이 생긴다. 트리에서 고치는 것이
+   * 0클릭이라 그쪽이 맞는 자리다(스펙 §페이지 트리).
+   */
   const [imwebUrl, setImwebUrl] = useState(page.imwebUrl ?? "");
   const [sections, setSections] = useState<ExpoSection[]>(page.draft.sections);
 
   /** 자동저장이 보는 값. **행 키가 들어 있다** — 저장 직전에 뗀다. */
   const value = useMemo(
-    () => ({ title, imwebUrl, sections }),
-    [title, imwebUrl, sections],
+    () => ({ imwebUrl, sections }),
+    [imwebUrl, sections],
   );
 
   /**
@@ -599,7 +603,6 @@ function PageForm({
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        title: next.title,
         imwebUrl: next.imwebUrl,
         // 편집기 전용 키는 여기서 뗀다 — 발행 스냅샷과 공개 페이로드에 들어가면 안 된다.
         draft: { sections: stripExpoRowKeys(next.sections) },
@@ -616,7 +619,7 @@ function PageForm({
     // 미리보기는 **저장된 것**을 읽는다 — 번호가 바뀌었으니 다시 불러야 한다.
     reportRef.current({
       pageId: page.id,
-      title: next.title,
+      title: page.title,
       revision: savedRevision,
       codeDigest: String(body.page?.codeDigest ?? ""),
       publishedCodeDigest, hasPublished, liveAt, readiness, snippets,
@@ -666,17 +669,6 @@ function PageForm({
           </p>
         </div>
       ) : null}
-
-      <label className="block">
-        <span className="text-sm font-medium">페이지 이름</span>
-        <Field
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          disabled={!canEdit}
-          maxLength={120}
-          className={`mt-1.5 ${FIELD_CLS}`}
-        />
-      </label>
 
       <label className="block">
         <span className="text-sm font-medium">아임웹 주소</span>
