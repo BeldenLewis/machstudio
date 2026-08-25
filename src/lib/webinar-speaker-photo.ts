@@ -1,7 +1,7 @@
 /**
- * 세션에 붙는 이미지 두 종류(연사 사진 · 로고)의 업로드 규칙 — 라우트·에디터가 공유하는 단일 정의.
+ * 단순 이미지 업로드 규칙(연사 사진·세션 로고·수집 소스 포스터 등) — 라우트·에디터가 공유하는 단일 정의.
  *
- * 두 종류를 한 파일에 둔 이유: 허용 형식과 크기 한도가 **완전히 같고**, 그 한도의 근거(아래 Vercel
+ * 한 파일에 둔 이유: 허용 형식과 크기 한도가 **완전히 같고**, 그 한도의 근거(아래 Vercel
  * 상한)가 한 번만 적혀 있어야 한다. 복제하면 한쪽만 고쳐져 갈라진다 — 랜딩 미디어 쪽이 실제로
  * 그렇게 5MB 로 갈라진 채 남아 있다.
  */
@@ -42,6 +42,10 @@ export function validateSpeakerPhoto(file: { type: string; size: number }): stri
 
 export function validateSessionLogo(file: { type: string; size: number }): string | null {
   return validateSessionImage(file, "로고");
+}
+
+export function validatePoster(file: { type: string; size: number }): string | null {
+  return validateSessionImage(file, "포스터");
 }
 
 export function speakerPhotoExtension(contentType: string) {

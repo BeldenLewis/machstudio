@@ -88,6 +88,32 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     webhookUrl, notifyOnSubmit, allowedOrigins, formPagePatterns, dedupKeyFields, fieldGroupSelector,
   } = body;
 
+  /**
+   * "기본 정보" 탭(일자·장소·관람시간·키컬러·하이라이트 영상·포스터) — venueConfig 는
+   * 원래 "개최일·게이트·배지 등 현장 운영 설정"용으로 만들어 둔 자유 JSON 이라 스키마
+   * 마이그레이션 없이 여기 담는다. 알려진 키만 골라 트림/길이 제한한다 — 운영자가 콘솔에서
+   * 임의 JSON 을 넣어도 레코드 조회 API 응답이 커지거나 이상한 키가 영구히 남지 않게.
+   */
+  let normalizedVenueConfig: Record<string, string> | undefined;
+  if (body.venueConfig !== undefined) {
+    const v = (body.venueConfig ?? {}) as Record<string, unknown>;
+    const pick = (key: string, max = 300) => {
+      const raw = v[key];
+      if (typeof raw !== "string") return undefined;
+      const trimmed = raw.trim().slice(0, max);
+      return trimmed || undefined;
+    };
+    normalizedVenueConfig = {
+      ...(pick("eventStart", 10) && { eventStart: pick("eventStart", 10)! }),
+      ...(pick("eventEnd", 10) && { eventEnd: pick("eventEnd", 10)! }),
+      ...(pick("venue") && { venue: pick("venue")! }),
+      ...(pick("visitingHours") && { visitingHours: pick("visitingHours")! }),
+      ...(pick("accentColor", 20) && { accentColor: pick("accentColor", 20)! }),
+      ...(pick("highlightVideoUrl", 500) && { highlightVideoUrl: pick("highlightVideoUrl", 500)! }),
+      ...(pick("posterUrl", 500) && { posterUrl: pick("posterUrl", 500)! }),
+    };
+  }
+
   // 필드 감지 선택자 — 비거나 형식이 아니면 기본값(아임웹 관례)으로 되돌린다. 조용히 빈 채로
   // 저장하면 연동형 스크립트가 아무 필드도 못 찾는 채로 조용히 배포된다.
   const normalizedFieldGroupSelector: string | undefined =
@@ -181,6 +207,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(normalizedAllowed !== undefined && { allowedOrigins: normalizedAllowed }),
       ...(normalizedFormPagePatterns !== undefined && { formPagePatterns: normalizedFormPagePatterns }),
       ...(normalizedDedupKeyFields !== undefined && { dedupKeyFields: normalizedDedupKeyFields }),
+      ...(normalizedVenueConfig !== undefined && { venueConfig: normalizedVenueConfig as unknown as object }),
       ...(normalizedFieldGroupSelector !== undefined && { fieldGroupSelector: normalizedFieldGroupSelector }),
       /**
        * 폼 정의는 **정규화해서 저장한다.**
