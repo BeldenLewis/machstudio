@@ -19,6 +19,7 @@ import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/contexts/workspace";
 import ActiveToggle from "@/app/(app)/collect/_components/ActiveToggle";
 import FormBuilderTab from "./FormBuilderTab";
+import InfoTab, { type VenueInfo } from "./InfoTab";
 import { tabsFor, type Tab } from "./tabs";
 import dynamic from "next/dynamic";
 const ImportModal = dynamic(() => import("./ImportModal"), { ssr: false });
@@ -90,6 +91,8 @@ interface CollectSource {
   formPagePatterns: string[];
   dedupKeyFields: string[];
   fieldGroupSelector: string;
+  /** 일자·장소·관람시간·키컬러·하이라이트 영상·포스터 — InfoTab.tsx VenueInfo 와 같은 모양. */
+  venueConfig: VenueInfo | null;
   fieldMappings: FieldMapping[];
   discoveredFields: DiscoveredField[] | null;
   _count: { records: number };
@@ -1150,6 +1153,11 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
 
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+
+          {/* 기본 정보 탭 */}
+          {tab === "info" && (
+            <InfoTab sourceId={source.id} initial={source.venueConfig ?? {}} />
+          )}
 
           {/* 수집 데이터 탭 */}
           {tab === "records" && (
