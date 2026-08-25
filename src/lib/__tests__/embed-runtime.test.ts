@@ -4,8 +4,14 @@ import { describe, expect, it } from "vitest";
 import { LANDING_RUNTIME_JS, LANDING_RUNTIME_SRC_HASH } from "@/generated/landing-runtime";
 import { FORM_RUNTIME_JS, FORM_RUNTIME_SRC_HASH } from "@/generated/form-runtime";
 import { EXPO_RUNTIME_JS, EXPO_RUNTIME_SRC_HASH } from "@/generated/expo-runtime";
+import { COMPETITION_RUNTIME_SRC_HASH } from "@/generated/competition-runtime";
+import { COMPETITION_VOTE_RUNTIME_SRC_HASH } from "@/generated/competition-vote-runtime";
+import { COMPETITION_RESULT_RUNTIME_SRC_HASH } from "@/generated/competition-result-runtime";
 import { COLLECT_FORM_CSS } from "@/lib/collect-form/css";
-import { expoSourceHash, formSourceHash, landingSourceHash } from "../../../scripts/runtime-hash.mjs";
+import {
+  competitionResultSourceHash, competitionSourceHash, competitionVoteSourceHash,
+  expoSourceHash, formSourceHash, landingSourceHash,
+} from "../../../scripts/runtime-hash.mjs";
 
 const ROOT = resolve(__dirname, "../../..");
 
@@ -34,6 +40,27 @@ describe("임베드 번들이 소스와 동기화돼 있다", () => {
    */
   it("홈페이지 런타임", () => {
     expect(EXPO_RUNTIME_SRC_HASH).toBe(expoSourceHash(ROOT));
+  });
+
+  /**
+   * 대회 3종은 **오래도록 이 검사가 없었다.** 각자 빌드 스크립트 안에 손으로 적은 목록이
+   * 있었고, 그중 둘은 커밋된 해시가 이미 소스와 어긋나 있었다 — `npm run dev` 를 돌릴
+   * 때마다 워킹트리가 더러워지는 원인이기도 했다(predev 가 번들을 다시 굽는다).
+   *
+   * 더 나쁜 것은 목록 자체가 실제 번들 입력과 달랐다는 점이다(2026-08-25 실측).
+   * 그래서 이 검사만으로는 부족하고, 목록을 metafile 과 대조하는 검사가 함께 있어야 한다
+   * (embed-runtime-manifest.test.ts). 셋 다 이제 그 대조를 받는다.
+   */
+  it("대회 신청 런타임", () => {
+    expect(COMPETITION_RUNTIME_SRC_HASH).toBe(competitionSourceHash(ROOT));
+  });
+
+  it("대회 투표 런타임", () => {
+    expect(COMPETITION_VOTE_RUNTIME_SRC_HASH).toBe(competitionVoteSourceHash(ROOT));
+  });
+
+  it("대회 결과 런타임", () => {
+    expect(COMPETITION_RESULT_RUNTIME_SRC_HASH).toBe(competitionResultSourceHash(ROOT));
   });
 });
 
