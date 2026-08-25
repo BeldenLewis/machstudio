@@ -10,10 +10,16 @@ interface ProjectSummaryCardProps {
   data: RealtimeReportData;
   /** 기본은 data.project.name — 소스 단위로 좁혀 쓸 때(수집 소스 상세) 소스명으로 덮어써 구분한다. */
   title?: string;
+  /**
+   * 워크스페이스가 채널별로 직접 지정한 색 — 호출부가 넘긴다(WorkspaceProvider 컨텍스트에
+   * 직접 기대지 않는다. 컨텍스트의 workspace 는 초기 로드 시 목록 API 응답만 들고 있어
+   * channelColors 처럼 상세 API 전용 필드가 비어 있을 수 있다).
+   */
+  channelColors?: Record<string, string> | null;
 }
 
 /** 요약 대시보드와 수집 소스 상세의 "수집 데이터" 탭이 함께 쓰는 압축 카드. */
-export default function ProjectSummaryCard({ data, title }: ProjectSummaryCardProps) {
+export default function ProjectSummaryCard({ data, title, channelColors }: ProjectSummaryCardProps) {
   const trend = data.cumulativeTrend.slice(-14).map((point) => point.count);
 
   const funnelStages = data.funnel
@@ -54,7 +60,7 @@ export default function ProjectSummaryCard({ data, title }: ProjectSummaryCardPr
             <Route className="h-3.5 w-3.5" />
             유입경로
           </div>
-          <DonutChart data={data.utmBySource} />
+          <DonutChart data={data.utmBySource} channelColors={channelColors} />
         </div>
 
         <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52">
