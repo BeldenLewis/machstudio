@@ -1,7 +1,7 @@
 "use client";
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import { useChartColors, seriesColor } from "@/components/ui/use-chart-colors";
+import { useChartColors, entityColor } from "@/components/ui/use-chart-colors";
 import { formatNumber } from "./RealtimeReport";
 
 const OTHER_COLOR_LIGHT = "#a3a3a3";
@@ -29,8 +29,13 @@ export default function DonutChart({ data, maxSlices = 4 }: DonutChartProps) {
   const restCount = rest.reduce((sum, row) => sum + row.count, 0);
   const total = sorted.reduce((sum, row) => sum + row.count, 0) || 1;
 
+  // 같은 차트 안에서 라벨 해시가 겹쳐도 색이 겹치지 않게(entityColor 참고) — 차트 하나당 새로 만든다.
+  const usedSlots = new Set<number>();
   const slices = [
-    ...top.map((row, i) => ({ label: row.label || "(direct)", count: row.count, color: seriesColor(colors, i) ?? OTHER_COLOR_LIGHT })),
+    ...top.map((row) => {
+      const label = row.label || "(direct)";
+      return { label, count: row.count, color: entityColor(colors, label, usedSlots) ?? OTHER_COLOR_LIGHT };
+    }),
     ...(restCount > 0 ? [{ label: "기타", count: restCount, color: OTHER_COLOR_LIGHT }] : []),
   ];
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { use } from "react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import {
@@ -11,7 +11,7 @@ import {
   ChevronLeft, ChevronRight, Search, Filter, Activity, Shield,
   RefreshCcw, Bell, Webhook, KeyRound, Eraser, AlertTriangle, ShieldAlert,
   MoreHorizontal, Link2, Wrench, HardDriveDownload, Columns3, MapPin, X, Layers,
-  Eye, EyeOff,
+  Eye, EyeOff, BarChart3,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -35,6 +35,14 @@ import ProjectSummaryCard from "@/app/(app)/dashboard/ProjectSummaryCard";
 import type { RealtimeReportData } from "@/app/(app)/dashboard/RealtimeReport";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
+
+const GA4_MANUAL_ENTRY = "__manual__";
+
+interface Ga4PropertyOption {
+  propertyId: string;
+  displayName: string;
+  accountDisplayName: string;
+}
 
 type SortKind = "createdAt" | "field" | "utmSource" | "utmMedium";
 interface SortState {
@@ -165,6 +173,15 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   const [sourceReport, setSourceReport] = useState<RealtimeReportData | null>(null);
   const [sourceReportLoading, setSourceReportLoading] = useState(false);
 
+  // GA4 분석 연동 — 소스가 아니라 "프로젝트" 단위 설정이지만(§데이터 관리 탭 참고),
+  // 데이터를 다루는 이 화면에서 바로 고칠 수 있어야 접근성이 있다.
+  const [ga4PropertyId, setGa4PropertyId] = useState("");
+  const [ga4RegistrationPagePath, setGa4RegistrationPagePath] = useState("");
+  const [ga4Properties, setGa4Properties] = useState<Ga4PropertyOption[] | null>(null);
+  const [ga4ManualEntryChoice, setGa4ManualEntryChoice] = useState<boolean | null>(null);
+  const [ga4Loading, setGa4Loading] = useState(false);
+  const [ga4Saving, setGa4Saving] = useState(false);
+
   const [records, setRecords] = useState<CollectRecord[]>([]);
   const [recordsTotal, setRecordsTotal] = useState(0); // 필터 적용된 서버 카운트 (현재 조회 조건 기준)
   const [recordsLoading, setRecordsLoading] = useState(false);
@@ -276,6 +293,58 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       setSourceReportLoading(false);
     }
   }, []);
+
+  const fetchGa4Settings = useCallback(async (projectId: string) => {
+    setGa4Loading(true);
+    try {
+      const [projectRes, propsRes] = await Promise.all([
+        fetch(`/api/projects/${projectId}`),
+        fetch(`/api/ga4-properties`),
+      ]);
+      const projectData = await projectRes.json().catch(() => ({}));
+      if (projectRes.ok && projectData.project) {
+        setGa4PropertyId(projectData.project.ga4PropertyId ?? "");
+        setGa4RegistrationPagePath(projectData.project.ga4RegistrationPagePath ?? "");
+      }
+      const propsData = await propsRes.json().catch(() => ({}));
+      setGa4Properties(propsRes.ok && Array.isArray(propsData.properties) ? propsData.properties : null);
+    } finally {
+      setGa4Loading(false);
+    }
+  }, []);
+
+  const handleSaveGa4 = async () => {
+    if (!source) return;
+    setGa4Saving(true);
+    try {
+      const res = await fetch(`/api/projects/${source.projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ga4PropertyId, ga4RegistrationPagePath }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast.error(d.error ?? "저장 실패");
+        return;
+      }
+      toast.success("분석 연동 설정을 저장했어요");
+    } finally {
+      setGa4Saving(false);
+    }
+  };
+
+  // 목록 조회 실패, 또는 저장된 값이 목록에 없으면(오래된 값/권한 변경) 잃어버리지 않게 수동 입력이 기본값 —
+  // 사용자가 셀렉트에서 직접 고른 적 있으면(ga4ManualEntryChoice) 그 선택이 항상 우선한다.
+  const ga4ManualEntry = useMemo(() => {
+    if (ga4ManualEntryChoice !== null) return ga4ManualEntryChoice;
+    if (ga4Properties === null) return true;
+    return !!ga4PropertyId && !ga4Properties.some((p) => p.propertyId === ga4PropertyId);
+  }, [ga4ManualEntryChoice, ga4Properties, ga4PropertyId]);
+
+  const ga4SelectValue = useMemo(() => {
+    if (ga4Properties === null || ga4ManualEntry) return GA4_MANUAL_ENTRY;
+    return ga4PropertyId || "";
+  }, [ga4Properties, ga4ManualEntry, ga4PropertyId]);
 
   // 현재 검색/필터/정렬 상태를 records API 쿼리스트링으로 직렬화 (페이지네이션 제외)
   const buildFilterQuery = useCallback(() => {
@@ -477,6 +546,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   // 탭별 최초 1회 fetch 최적화 (탭 재방문 시 불필요한 재요청 방지)
   const hasFetchedScriptRef = useRef(false);
   const hasFetchedActivityRef = useRef(false);
+  const hasFetchedGa4Ref = useRef(false);
   // 전체 선택 모드를 fetchRecords 의존성에서 제외하기 위한 ref 미러
   const selectAllMatchingRef = useRef(selectAllMatching);
   useEffect(() => { selectAllMatchingRef.current = selectAllMatching; }, [selectAllMatching]);
@@ -535,6 +605,12 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       fetchActivity();
     }
   }, [tab, fetchActivity]);
+  useEffect(() => {
+    if (tab === "data-mgmt" && !hasFetchedGa4Ref.current && source) {
+      hasFetchedGa4Ref.current = true;
+      fetchGa4Settings(source.projectId);
+    }
+  }, [tab, source, fetchGa4Settings]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -2198,6 +2274,110 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
           {/* 데이터 관리 탭 */}
           {tab === "data-mgmt" && (
             <div className="space-y-4 max-w-2xl">
+              {/* 분석 연동 (GA4) — 이 소스가 아니라 프로젝트 전체에 적용되는 설정이라 아래 안내에서 밝힌다 */}
+              <div className="p-4 rounded-2xl border border-border bg-background space-y-3">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-violet-500" />
+                  <h3 className="text-sm font-medium">분석 연동 (GA4)</h3>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  이미 설치된 GA4에서 홈페이지·사전등록 페이지 방문자 수를 가져와 요약 카드 퍼널에 표시해요.
+                  이 프로젝트 전체에 적용되는 설정이에요 — 이 프로젝트에 다른 수집 소스가 있다면 거기도 함께 바뀌어요.
+                </p>
+                {ga4Loading ? (
+                  <div className="flex items-center justify-center h-20">
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-medium text-muted-foreground">GA4 속성</span>
+                      {ga4Properties !== null && ga4Properties.length > 0 ? (
+                        <select
+                          value={ga4SelectValue}
+                          onChange={(e) => {
+                            if (e.target.value === GA4_MANUAL_ENTRY) {
+                              setGa4ManualEntryChoice(true);
+                            } else {
+                              setGa4ManualEntryChoice(false);
+                              setGa4PropertyId(e.target.value);
+                            }
+                          }}
+                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm outline-none transition-colors focus:border-violet-400"
+                        >
+                          <option value="" disabled>속성을 선택하세요</option>
+                          {ga4PropertyId && !ga4Properties.some((p) => p.propertyId === ga4PropertyId) && (
+                            <option value={ga4PropertyId}>현재 값: {ga4PropertyId} (목록에 없음)</option>
+                          )}
+                          {Object.entries(
+                            ga4Properties.reduce<Record<string, Ga4PropertyOption[]>>((groups, p) => {
+                              (groups[p.accountDisplayName] ??= []).push(p);
+                              return groups;
+                            }, {}),
+                          ).map(([account, props]) => (
+                            <optgroup key={account} label={account}>
+                              {props.map((p) => (
+                                <option key={p.propertyId} value={p.propertyId}>
+                                  {p.displayName} ({p.propertyId})
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                          <option value={GA4_MANUAL_ENTRY}>직접 입력...</option>
+                        </select>
+                      ) : (
+                        <>
+                          <input
+                            type="text"
+                            value={ga4PropertyId}
+                            onChange={(e) => setGa4PropertyId(e.target.value)}
+                            placeholder="예: 123456789"
+                            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm outline-none transition-colors focus:border-violet-400"
+                          />
+                          {ga4Properties === null && (
+                            <span className="block text-[11px] text-muted-foreground">
+                              접근 가능한 속성 목록을 불러오지 못해 직접 입력해야 해요.
+                            </span>
+                          )}
+                        </>
+                      )}
+                      {ga4Properties !== null && ga4Properties.length > 0 && ga4ManualEntry && (
+                        <input
+                          type="text"
+                          value={ga4PropertyId}
+                          onChange={(e) => setGa4PropertyId(e.target.value)}
+                          placeholder="예: 123456789"
+                          className="mt-1.5 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm outline-none transition-colors focus:border-violet-400"
+                        />
+                      )}
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-medium text-muted-foreground">사전등록 페이지 경로 (선택)</span>
+                      <input
+                        type="text"
+                        value={ga4RegistrationPagePath}
+                        onChange={(e) => setGa4RegistrationPagePath(e.target.value)}
+                        placeholder="예: /Pre-registration"
+                        className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm outline-none transition-colors focus:border-violet-400"
+                      />
+                      <span className="block text-[11px] text-muted-foreground">
+                        비워두면 사전등록 페이지 방문자는 표시하지 않아요.
+                      </span>
+                    </label>
+                    <motion.button
+                      whileHover={{ y: -1 }}
+                      whileTap={{ scale: 0.96 }}
+                      transition={spring}
+                      onClick={handleSaveGa4}
+                      disabled={ga4Saving}
+                      className="px-3 py-1.5 rounded-lg bg-violet-500 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50 w-fit"
+                    >
+                      {ga4Saving ? "저장 중..." : "저장"}
+                    </motion.button>
+                  </>
+                )}
+              </div>
+
               {/* 백업 */}
               <div className="p-4 rounded-2xl border border-red-500/30 bg-background space-y-3">
                 <div className="flex items-center gap-2">
