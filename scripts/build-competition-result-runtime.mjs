@@ -6,26 +6,15 @@
  * 투표 런타임(build-competition-vote-runtime.mjs)과 같은 규약이다: 생성물을 커밋하고,
  * /c/{id}/result 라우트가 이 문자열을 그대로 서빙한다.
  */
+import { competitionResultSourceHash } from "./runtime-hash.mjs";
 import { build } from "esbuild";
-import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(root, "src/generated/competition-result-runtime.ts");
 
-/** 입력 소스 트리 해시 — esbuild 버전이 올라가도 무관하게 stale 을 판정한다. */
-function sourceHash() {
-  const files = [
-    join(root, "src/embed/competition-result-entry.ts"),
-    join(root, "src/lib/competition-render.ts"),
-    join(root, "src/lib/competition-result-css.ts"),
-  ];
-  const hash = createHash("sha256");
-  for (const f of files) hash.update(readFileSync(f));
-  return "sha256:" + hash.digest("hex").slice(0, 32);
-}
 
 const result = await build({
   entryPoints: [join(root, "src/embed/competition-result-entry.ts")],
@@ -47,7 +36,7 @@ writeFileSync(
   OUT,
   `// 자동 생성 — 직접 고치지 마세요. \`node scripts/build-competition-result-runtime.mjs\` 로 재생성됩니다.\n` +
     `// 소스: src/embed/competition-result-entry.ts + src/lib/competition-*.ts\n\n` +
-    `export const COMPETITION_RESULT_RUNTIME_SRC_HASH = ${JSON.stringify(sourceHash())};\n\n` +
+    `export const COMPETITION_RESULT_RUNTIME_SRC_HASH = ${JSON.stringify(competitionResultSourceHash(root))};\n\n` +
     `export const COMPETITION_RESULT_RUNTIME_JS = ${JSON.stringify(js)};\n`,
 );
 

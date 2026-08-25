@@ -148,3 +148,78 @@ export function expoSourceFiles(root) {
 export function expoSourceHash(root) {
   return hashFiles(expoSourceFiles(root));
 }
+
+// ── 대회 3종 ────────────────────────────────────────────────────────────
+//
+// 이 셋은 오래도록 **검사가 없었다.** 각자 빌드 스크립트 안에 손으로 적은 목록이 있었는데,
+// esbuild metafile 과 대조해 보니 셋 다 실제 입력과 달랐다(2026-08-25 실측):
+//   competition 11개 적힘 / 실제 20개 · vote 5개 / 6개 · result 3개 / 6개
+// 게다가 번들에 들어가지도 않는 파일(competition-config.ts 등)을 해시하고 있었다.
+//
+// 그래서 검사를 붙이는 것만으로는 부족했다 — 목록이 짧으면 **stale 검사는 초록인데 커밋된
+// 번들은 낡는다.** 예를 들어 `competition-strings.ts`(방문자에게 보이는 문구)를 고쳐도
+// 기록된 해시가 안 바뀐다. 목록을 실제 입력에 맞추고, manifest 테스트가 계속 대조한다.
+
+/** 대회 신청 런타임. */
+export function competitionSourceFiles(root) {
+  return ([
+    join(root, "src/embed/competition-entry.ts"),
+    join(root, "src/lib/competition-render.ts"),
+    join(root, "src/lib/competition-status.ts"),
+    join(root, "src/lib/competition-strings.ts"),
+    // 신청 폼의 국가 선택 — 문구가 여기 있다.
+    join(root, "src/lib/collect-country.ts"),
+    join(root, "src/lib/dom/h.ts"),
+    join(root, "src/lib/dom/scroll-lock.ts"),
+    // 공고 오버레이가 랜딩의 효과·오버레이를 그대로 쓴다.
+    join(root, "src/lib/landing/effects.ts"),
+    join(root, "src/lib/landing/overlay.ts"),
+    join(root, "src/lib/notice/build-model.ts"),
+    join(root, "src/lib/notice/config.ts"),
+    join(root, "src/lib/notice/css.ts"),
+    join(root, "src/lib/notice/media-focus.ts"),
+    join(root, "src/lib/notice/mount.ts"),
+    join(root, "src/lib/notice/shell-css.ts"),
+    join(root, "src/lib/notice/strings.ts"),
+    join(root, "src/lib/notice/view-hero.ts"),
+    join(root, "src/lib/notice/view-sections.ts"),
+    join(root, "src/lib/webinar-config.ts"),
+    join(root, "src/lib/webinar-image.ts"),
+  ]).sort();
+}
+
+export function competitionSourceHash(root) {
+  return hashFiles(competitionSourceFiles(root));
+}
+
+/** 대회 투표 런타임. */
+export function competitionVoteSourceFiles(root) {
+  return ([
+    join(root, "src/embed/competition-vote-entry.ts"),
+    join(root, "src/lib/collect-country.ts"),
+    join(root, "src/lib/competition-render.ts"),
+    join(root, "src/lib/competition-strings.ts"),
+    join(root, "src/lib/competition-vote-css.ts"),
+    join(root, "src/lib/competition-vote-strings.ts"),
+  ]).sort();
+}
+
+export function competitionVoteSourceHash(root) {
+  return hashFiles(competitionVoteSourceFiles(root));
+}
+
+/** 대회 결과 런타임. */
+export function competitionResultSourceFiles(root) {
+  return ([
+    join(root, "src/embed/competition-result-entry.ts"),
+    join(root, "src/lib/collect-country.ts"),
+    join(root, "src/lib/competition-render.ts"),
+    join(root, "src/lib/competition-result-css.ts"),
+    join(root, "src/lib/competition-result-strings.ts"),
+    join(root, "src/lib/competition-strings.ts"),
+  ]).sort();
+}
+
+export function competitionResultSourceHash(root) {
+  return hashFiles(competitionResultSourceFiles(root));
+}
