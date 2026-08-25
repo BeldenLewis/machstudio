@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ExternalLink, Loader2, Plus } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AutosaveScope, AggregateAutosaveIndicator, useReportAutosave } from "@/components/ui/autosave-scope";
 import { Field, FIELD_CLS, FINISH, R, Segmented } from "@/components/ui/primitives";
@@ -14,6 +14,7 @@ import { EXPO_DEFAULT_THEME, normalizeExpoTheme } from "@/lib/expo/config";
 import { ExpoProjectSync } from "@/components/expo/ExpoProjectSync";
 import { SectionsEditor } from "@/components/expo/SectionEditor";
 import { ExpoTemplateSave } from "@/components/expo/ExpoTemplateSave";
+import { ExpoPageTree } from "@/components/expo/ExpoPageTree";
 import {
   ExpoPublishPanel,
   type ExpoReadinessView,
@@ -21,9 +22,8 @@ import {
 } from "@/components/expo/ExpoPublishPanel";
 import { attachExpoRowKeys, stripExpoRowKeys } from "@/lib/expo/row-key";
 import { usePageAutosave, type ExpoSaveOutcome } from "@/lib/expo/use-page-autosave";
-import { derivePageState } from "@/lib/expo/model";
 import type { ExpoPermissions, ExpoRelease } from "@/lib/expo/permissions";
-import type { ExpoPageState, ExpoSection, ExpoTheme } from "@/lib/expo/types";
+import type { ExpoSection, ExpoTheme } from "@/lib/expo/types";
 
 /**
  * 홈페이지 편집 — **탐색 · 편집 · 미리보기 3열**.
@@ -160,6 +160,11 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
   const [statusByPage, setStatusByPage] = useState<Record<string, PageStatus>>({});
   /** 발행·공개가 끝났다는 신호. 가운데 칸이 이 번호를 보고 발행 쪽 값만 다시 읽는다. */
   const [publishNonce, setPublishNonce] = useState(0);
+  /**
+   * 삭제 유예(5초) 중인 페이지. 되살아날 수 있는 것을 편집하게 두면 **되살린 뒤 무엇이
+   * 남아 있어야 하는지 아무도 모른다** — 그래서 그동안 편집·발행을 잠근다.
+   */
+  const [pendingPages, setPendingPages] = useState<ReadonlySet<string>>(new Set());
   const reportStatus = useCallback((next: PageStatus) => {
     setStatusByPage((prev) => ({ ...prev, [next.pageId]: next }));
   }, []);
@@ -259,17 +264,23 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
   }
 
   const status = selected ? statusByPage[selected.id] ?? null : null;
+  /** 지금 보고 있는 페이지가 삭제 유예 중인가. */
+  const pendingSelected = Boolean(selected && pendingPages.has(selected.id));
 
   return (
     <Shell siteName={site.name} siteUrl={site.siteUrl}>
       <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(200px,240px)_minmax(0,1fr)_minmax(280px,380px)]">
         <div className="space-y-3">
-          <PageNavigator
+          <ExpoPageTree
+            siteId={siteId}
             pages={pages}
             selectedId={selected?.id ?? null}
             canEdit={permissions.canEdit}
+            canManageSite={permissions.canManageSite}
             onSelect={selectPage}
             onAdd={addPage}
+            onReload={reload}
+            onPendingChange={setPendingPages}
           />
           {/* 색은 `canPublish` 다 — 저장하는 순간 이미 공개된 페이지가 바뀐다. */}
           {permissions.canPublish ? (
@@ -300,7 +311,7 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
             key={selected.id}
             pageId={selected.id}
             siteId={siteId}
-            canEdit={permissions.canEdit}
+            canEdit={permissions.canEdit && !pendingSelected}
             sources={sources}
             linkTargets={linkTargets}
             locale={site.defaultLocale || "ko"}
@@ -331,7 +342,7 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
               liveAt={status.liveAt}
               readiness={status.readiness}
               snippets={status.snippets}
-              canPublish={permissions.canPublish}
+              canPublish={permissions.canPublish && !pendingSelected}
               onChanged={() => setPublishNonce((n) => n + 1)}
             />
           ) : null}
@@ -374,68 +385,6 @@ function Shell({
   );
 }
 
-const STATE_LABEL: Record<ExpoPageState, string> = {
-  draft: "초안",
-  published: "발행됨",
-  live: "공개 중",
-};
-
-/** 상태는 색만으로 구분하지 않는다 — 점 + 글자를 함께 준다. */
-const STATE_DOT: Record<ExpoPageState, string> = {
-  draft: "bg-muted-foreground/40",
-  published: "bg-amber-500",
-  live: "bg-emerald-500",
-};
-
-function PageNavigator({
-  pages, selectedId, canEdit, onSelect, onAdd,
-}: {
-  pages: PageSummary[];
-  selectedId: string | null;
-  canEdit: boolean;
-  onSelect: (id: string) => void;
-  onAdd: () => void;
-}) {
-  return (
-    <nav className={`${R.panel} ${FINISH.s1} bg-card p-2`} aria-label="페이지">
-      <ul className="space-y-0.5">
-        {pages.map((page) => {
-          const state = derivePageState({ published: page.hasPublished ? {} : null, liveAt: page.liveAt });
-          const active = page.id === selectedId;
-          return (
-            <li key={page.id}>
-              <button
-                type="button"
-                onClick={() => onSelect(page.id)}
-                aria-current={active ? "page" : undefined}
-                className={`flex w-full items-center gap-2 ${R.control} px-2.5 py-2 text-left text-sm transition-colors ${
-                  active ? "bg-violet-500/12 text-violet-600 dark:text-violet-300" : "hover:bg-secondary"
-                }`}
-              >
-                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATE_DOT[state]}`} aria-hidden />
-                <span className="min-w-0 flex-1 truncate">{page.title}</span>
-                {page.isHome ? (
-                  <span className="shrink-0 text-[11px] text-muted-foreground">홈</span>
-                ) : null}
-                <span className="sr-only">{STATE_LABEL[state]}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-      {canEdit ? (
-        <button
-          type="button"
-          onClick={onAdd}
-          className={`mt-1 flex w-full items-center gap-2 ${R.control} px-2.5 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-secondary`}
-        >
-          <Plus className="h-4 w-4" aria-hidden />
-          페이지
-        </button>
-      ) : null}
-    </nav>
-  );
-}
 
 interface PageEditorProps {
   pageId: string;
