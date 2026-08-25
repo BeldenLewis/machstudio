@@ -33,6 +33,16 @@ export interface RealtimeReportData {
     lastYearRangeCount: number;
     lastYearRangeChange: number | null;
   };
+  /**
+   * 이 리포트가 센 기간. 요약 대시보드는 **주간 보고에 캡처해 붙이는 화면**이라,
+   * 기간이 화면에 없으면 그 캡처가 나중에 "언제 것인지 / 무엇 대비인지" 를 못 답한다.
+   */
+  range: {
+    from: string;
+    to: string;
+    previousFrom: string;
+    previousTo: string;
+  };
   /** GA4 속성 미설정이거나 조회 실패면 null — 이 경우 퍼널 UI 전체를 숨긴다. */
   funnel: {
     homepageVisitors: number;
