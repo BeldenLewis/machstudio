@@ -25,6 +25,7 @@ import { isValidRegistrationNo } from "@/lib/collect-registration-no";
 import { normalizeCollectForm } from "@/lib/collect-form-config";
 import { buildTicketView } from "@/lib/collect-lookup";
 import { visitorBadgePalette } from "@/lib/collect-badge";
+import { TicketDownloadButton } from "./TicketDownloadButton";
 
 export const dynamic = "force-dynamic";
 
@@ -194,15 +195,18 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
           {/*
             파일로도 받게 한다 — 캡처가 막힌 기기(일부 사내폰·키오스크)가 있고,
             캡처는 화면 밝기 자동 조절 때문에 QR 대비가 낮게 저장되는 경우가 있다.
-            같은 출처라 download 속성이 그대로 듣는다(임베드 조회 화면은 교차 출처라 blob 으로 받는다).
+            QR만 저장하지 않고 행사명·배지·이름·연락처·등록번호를 한 장으로 만든다.
           */}
-          <a
-            href={`/api/collect/qr/${encodeURIComponent(view.registrationNo)}`}
-            download={`ticket-${view.registrationNo}.png`}
-            className="mt-5 block w-full rounded-xl bg-neutral-900 px-4 py-3 text-sm font-bold text-white"
-          >
-            Save as Image
-          </a>
+          <TicketDownloadButton ticket={{
+            eventName: config.legal.eventName || record.source.name,
+            registrationNo: view.registrationNo,
+            qrUrl: `/api/collect/qr/${encodeURIComponent(view.registrationNo)}`,
+            name: view.name,
+            visitorType: view.visitorType,
+            maskedEmail: view.maskedEmail,
+            maskedPhone: view.maskedPhone,
+            accentColor: config.theme.accentColor,
+          }} />
           <p className="mt-2 text-[11px] text-neutral-500">
             * If the button doesn&apos;t work, please take a screenshot.
           </p>

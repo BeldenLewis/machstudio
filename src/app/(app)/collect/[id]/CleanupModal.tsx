@@ -16,9 +16,11 @@ interface FieldMapping {
 }
 
 interface PreviewResult {
-  groups: number;
+  mode?: "duplicates" | "empty";
+  groups?: number;
   toDelete: number;
-  sampleGroups: Array<{ key: string; total: number; kept: string; deleted: string[] }>;
+  sampleGroups?: Array<{ key: string; total: number; kept: string; deleted: string[] }>;
+  sample?: Array<{ id: string; createdAt: string; snippet: string }>;
 }
 
 interface CleanupModalProps {
@@ -30,6 +32,7 @@ interface CleanupModalProps {
 
 export default function CleanupModal({ sourceId, fieldMappings, onClose, onCleaned }: CleanupModalProps) {
   const confirm = useConfirm();
+  const [mode, setMode] = useState<"duplicates" | "empty">("duplicates");
   const [keyField, setKeyField] = useState(fieldMappings[0]?.key ?? "");
   const [keep, setKeep] = useState<"latest" | "oldest">("latest");
   const [preview, setPreview] = useState<PreviewResult | null>(null);
@@ -44,7 +47,7 @@ export default function CleanupModal({ sourceId, fieldMappings, onClose, onClean
       const res = await fetch(`/api/collect-sources/${sourceId}/records/cleanup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyField, keep, dryRun: true }),
+        body: JSON.stringify({ mode, keyField, keep, dryRun: true }),
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error ?? "분석 실패"); return; }
@@ -56,17 +59,22 @@ export default function CleanupModal({ sourceId, fieldMappings, onClose, onClean
 
   const handleRun = async () => {
     if (!preview || preview.toDelete === 0) return;
-    if (!(await confirm({ title: "삭제할까요?", description: `${preview.toDelete}건을 삭제해요. 되돌릴 수 없어요.`, confirmLabel: "삭제", tone: "danger" }))) return;
+    const description = mode === "empty"
+      ? `"${fieldLabel(keyField)}" 값이 비어있는 ${preview.toDelete}건을 삭제해요. 되돌릴 수 없어요.`
+      : `${preview.toDelete}건을 삭제해요. 되돌릴 수 없어요.`;
+    if (!(await confirm({ title: "삭제할까요?", description, confirmLabel: "삭제", tone: "danger" }))) return;
     setRunning(true);
     try {
       const res = await fetch(`/api/collect-sources/${sourceId}/records/cleanup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyField, keep }),
+        body: JSON.stringify({ mode, keyField, keep }),
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error ?? "정리 실패"); return; }
-      toast.success(`${data.deleted}건 정리됐어요 (${data.groups}개 그룹)`);
+      toast.success(
+        mode === "empty" ? `${data.deleted}건 정리됐어요` : `${data.deleted}건 정리됐어요 (${data.groups}개 그룹)`,
+      );
       onCleaned();
       onClose();
     } finally {
@@ -77,7 +85,7 @@ export default function CleanupModal({ sourceId, fieldMappings, onClose, onClean
   const fieldLabel = (key: string) => fieldMappings.find((f) => f.key === key)?.label || key;
 
   return (
-    <ModalShell open onClose={onClose} title="중복 데이터 정리" size="md" footer={
+    <ModalShell open onClose={onClose} title={mode === "empty" ? "빈 레코드 삭제" : "중복 데이터 정리"} size="md" footer={
       preview && preview.toDelete > 0 ? (
         <motion.button
           whileHover={{ y: -1 }}
@@ -94,6 +102,36 @@ export default function CleanupModal({ sourceId, fieldMappings, onClose, onClean
     }>
       <div className="space-y-5">
           <div>
+            <label className="text-xs text-muted-foreground mb-1.5 block">정리 방식</label>
+            <div className="relative flex items-center gap-1 p-0.5 rounded-xl border border-border bg-background w-fit">
+              {([
+                { value: "duplicates", label: "중복 정리" },
+                { value: "empty", label: "빈 레코드 삭제" },
+              ] as const).map((opt) => {
+                const active = mode === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => { setMode(opt.value); setPreview(null); }}
+                    className={`relative z-10 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      active ? "text-white" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {active && (
+                      <motion.span
+                        layoutId="cleanup-mode-pill"
+                        transition={spring}
+                        className="absolute inset-0 -z-10 rounded-lg bg-violet-500"
+                      />
+                    )}
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
             <label className="text-xs text-muted-foreground mb-1.5 block">기준 필드</label>
             <select
               value={keyField}
@@ -106,36 +144,40 @@ export default function CleanupModal({ sourceId, fieldMappings, onClose, onClean
               ))}
             </select>
             <p className="text-[11px] text-muted-foreground mt-1.5">
-              이 필드의 값이 같은 레코드를 중복으로 간주해요 (대소문자 무시, 앞뒤 공백 무시)
+              {mode === "empty"
+                ? "이 필드가 비어있는 레코드를 전부 삭제 대상으로 잡아요 — 예: 성명이 비어있으면 사람이 실제로 제출한 게 아닐 가능성이 높아요."
+                : "이 필드의 값이 같은 레코드를 중복으로 간주해요 (대소문자 무시, 앞뒤 공백 무시)"}
             </p>
           </div>
 
-          <div>
-            <label className="text-xs text-muted-foreground mb-1.5 block">유지할 레코드</label>
-            <div className="relative flex items-center gap-1 p-0.5 rounded-xl border border-border bg-background w-fit">
-              {(["latest", "oldest"] as const).map((mode) => {
-                const active = keep === mode;
-                return (
-                  <button
-                    key={mode}
-                    onClick={() => { setKeep(mode); setPreview(null); }}
-                    className={`relative z-10 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                      active ? "text-white" : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {active && (
-                      <motion.span
-                        layoutId="cleanup-keep-pill"
-                        transition={spring}
-                        className="absolute inset-0 -z-10 rounded-lg bg-violet-500"
-                      />
-                    )}
-                    {mode === "latest" ? "최신 1건 유지" : "가장 오래된 1건 유지"}
-                  </button>
-                );
-              })}
+          {mode === "duplicates" && (
+            <div>
+              <label className="text-xs text-muted-foreground mb-1.5 block">유지할 레코드</label>
+              <div className="relative flex items-center gap-1 p-0.5 rounded-xl border border-border bg-background w-fit">
+                {(["latest", "oldest"] as const).map((keepMode) => {
+                  const active = keep === keepMode;
+                  return (
+                    <button
+                      key={keepMode}
+                      onClick={() => { setKeep(keepMode); setPreview(null); }}
+                      className={`relative z-10 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        active ? "text-white" : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {active && (
+                        <motion.span
+                          layoutId="cleanup-keep-pill"
+                          transition={spring}
+                          className="absolute inset-0 -z-10 rounded-lg bg-violet-500"
+                        />
+                      )}
+                      {keepMode === "latest" ? "최신 1건 유지" : "가장 오래된 1건 유지"}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           <motion.button
             whileHover={{ y: -1 }}
@@ -146,7 +188,7 @@ export default function CleanupModal({ sourceId, fieldMappings, onClose, onClean
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-border text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-40"
           >
             {analyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-            {analyzing ? "분석 중..." : "중복 분석"}
+            {analyzing ? "분석 중..." : mode === "empty" ? "빈 레코드 분석" : "중복 분석"}
           </motion.button>
 
           <AnimatePresence>
@@ -158,11 +200,13 @@ export default function CleanupModal({ sourceId, fieldMappings, onClose, onClean
               transition={spring}
               className="space-y-3"
             >
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-xl border border-border bg-secondary/30">
-                  <p className="text-[11px] text-muted-foreground">중복 그룹</p>
-                  <p className="text-xl font-semibold mt-0.5">{preview.groups.toLocaleString()}</p>
-                </div>
+              <div className={mode === "empty" ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
+                {mode === "duplicates" && (
+                  <div className="p-3 rounded-xl border border-border bg-secondary/30">
+                    <p className="text-[11px] text-muted-foreground">중복 그룹</p>
+                    <p className="text-xl font-semibold mt-0.5">{(preview.groups ?? 0).toLocaleString()}</p>
+                  </div>
+                )}
                 <div className={`p-3 rounded-xl border ${preview.toDelete > 0 ? "border-red-500/30 bg-red-500/5" : "border-border bg-secondary/30"}`}>
                   <p className="text-[11px] text-muted-foreground">삭제될 레코드</p>
                   <p className={`text-xl font-semibold mt-0.5 ${preview.toDelete > 0 ? "text-red-500" : ""}`}>
@@ -171,7 +215,7 @@ export default function CleanupModal({ sourceId, fieldMappings, onClose, onClean
                 </div>
               </div>
 
-              {preview.sampleGroups.length > 0 && (
+              {mode === "duplicates" && preview.sampleGroups && preview.sampleGroups.length > 0 && (
                 <div>
                   <p className="text-[11px] text-muted-foreground mb-2">미리보기 (상위 10개 그룹)</p>
                   <div className="rounded-xl border border-border overflow-hidden">
@@ -197,10 +241,34 @@ export default function CleanupModal({ sourceId, fieldMappings, onClose, onClean
                 </div>
               )}
 
+              {mode === "empty" && preview.sample && preview.sample.length > 0 && (
+                <div>
+                  <p className="text-[11px] text-muted-foreground mb-2">미리보기 (최대 10건 — 다른 필드에 남은 값)</p>
+                  <div className="rounded-xl border border-border overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-secondary/50 border-b border-border">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">시간</th>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">남은 값</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.sample.map((s) => (
+                          <tr key={s.id} className="border-b border-border last:border-0">
+                            <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{new Date(s.createdAt).toLocaleString("ko-KR")}</td>
+                            <td className="px-3 py-2 max-w-[300px] truncate font-mono">{s.snippet}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {preview.toDelete === 0 && (
                 <div className="flex items-center gap-2 p-3 rounded-xl border border-border bg-secondary/30 text-xs text-muted-foreground">
                   <Check className="w-3.5 h-3.5 text-green-500" />
-                  중복 없음 — 정리할 데이터가 없어요
+                  {mode === "empty" ? "빈 레코드 없음 — 정리할 데이터가 없어요" : "중복 없음 — 정리할 데이터가 없어요"}
                 </div>
               )}
 

@@ -291,6 +291,25 @@ ${utmCore}
      * 앵커가 없는 기존 소스는 anchored 가 0이라 이 줄이 아무 일도 하지 않는다.
      */
     if (anchored > 0 && resolved * 2 < anchored) return {};
+    /**
+     * **값 정족수(모든 소스 공통).** 지도상 anchored 정족수는 "요소를 찾았는가"만 본다 —
+     * 위치 인덱스 소스는 이 신호 자체가 없고, 앵커 소스도 폼이 아닌 페이지에서 요소만
+     * 우연히 몇 개 걸리고 값은 안 채워진 경우를 못 잡는다. 무관한 버튼 클릭 하나로
+     * capture() 가 그 순간의 DOM 을 캡처하면(§) 실제 신청서는 아직 한 글자도 안 썼는데
+     * "요소는 있으니" 레코드가 만들어진다 — 실제로 이렇게 쌓인 게 있다(에듀테크 실측:
+     * 진짜 등록 2,297건에 반해 이런 반쪽 레코드가 섞여 총합이 부풀었다).
+     * 매핑된 필드의 **과반수가 실제 값**을 가져야만 진짜 제출로 본다. select 의 미선택
+     * placeholder("==선택==" 등)도 빈 값이 아닌 문자열이라 이 계산에 몇 개는 끼어들 수
+     * 있지만, 실제 신청서는 필드 수가 많아(수십 개) 그 정도로는 과반을 못 넘는다.
+     */
+    var mapped = FIELD_MAP.length;
+    if (mapped > 0) {
+      var filled = 0;
+      FIELD_MAP.forEach(function(field) {
+        if (data[field.key] && String(data[field.key]).trim() !== "") filled++;
+      });
+      if (filled * 2 < mapped) return {};
+    }
     return data;
   }
 
@@ -384,16 +403,15 @@ ${utmCore}
       triggered = true;
       var payload = pendingData || collectData();
       /**
-       * **앵커 소스는 빈 payload 를 보내지 않는다.**
+       * **빈 payload 는 보내지 않는다(모든 소스 공통).**
        * 성공 문구가 폼이 아닌 페이지에서 잡히면 collectData 가 {} 를 내는데, {} 는 truthy 라
-       * 그대로 빈 레코드가 저장된다(기존 소스에서 실제로 그렇게 쌓인 게 있다).
-       * 기존 소스의 산출을 지금 바꾸지는 않는다 — 새로 붙는 앵커 소스에 그 버그를 물려주지 않을 뿐이다.
+       * 그대로 빈 레코드가 저장된다 — 실제로 그렇게 쌓인 게 있었다. collectData 자체에
+       * 값 정족수 가드가 생겼지만(위 §), pendingData 는 그 가드 이전 시점(capture() 호출
+       * 당시)의 캡처값이라 여기서 한 번 더 본다.
        */
-      if (HAS_ANCHORS) {
-        var any = false;
-        for (var k in payload) { if (payload[k] && String(payload[k]).trim() !== "") { any = true; break; } }
-        if (!any) { triggered = false; return; }
-      }
+      var any = false;
+      for (var k in payload) { if (payload[k] && String(payload[k]).trim() !== "") { any = true; break; } }
+      if (!any) { triggered = false; return; }
       doSend(payload);
       // 재무장 — 같은 페이지에서 추가 제출 가능하도록 3초 후 리셋
       setTimeout(function() { triggered = false; pendingData = null; }, 3000);

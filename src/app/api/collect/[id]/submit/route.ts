@@ -18,6 +18,9 @@ import { fireWebhook } from "@/lib/webhook";
 import { normalizeCollectForm } from "@/lib/collect-form-config";
 import { submissionInputFromBody, prepareBuilderSubmission } from "@/lib/collect-submit";
 import { generateRegistrationNo } from "@/lib/collect-registration-no";
+import { buildCollectConfirmationEmail } from "@/lib/collect-confirmation-email";
+import { sendEmail } from "@/lib/email";
+import { qrPngBuffer } from "@/lib/collect-qr";
 
 function normalizeOrigin(s: string): string {
   try {
@@ -177,6 +180,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     referrer: request.headers.get("referer"),
     userAgent: request.headers.get("user-agent"),
     ip: ip === "unknown" ? null : ip,
+    emailStatus: config.confirmationEmail.enabled
+      ? (p.emailNormalized ? "pending" : "missing_recipient")
+      : null,
   };
 
   /**
@@ -221,6 +227,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // 5회 연속 번호 충돌 — 사실상 일어나지 않지만, 조용히 200 을 주면 등록이 사라진다.
     return NextResponse.json({ error: "등록번호를 발급하지 못했어요" }, { status: 503, headers });
   }
+  const committedRecordId = recordId;
 
   /**
    * 응답 이후 작업은 `after()` 안에서 돈다. 그냥 떠 있는 프로미스로 두면 서버리스에서
@@ -228,12 +235,65 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
    * 파트너 시스템과 담당자에게는 아무것도 안 가는, 알아채기 어려운 실패다.
    */
   after(async () => {
+    if (config.confirmationEmail.enabled && p.emailNormalized && registrationNo) {
+      try {
+        // 같은 후처리가 재진입해도 pending 한 작업 하나만 발송권을 얻는다.
+        const claimed = await prisma.collectRecord.updateMany({
+          where: { id: committedRecordId, emailStatus: "pending" },
+          data: { emailStatus: "sending", emailError: null },
+        });
+        if (claimed.count === 1) {
+          const message = buildCollectConfirmationEmail({
+            config,
+            sourceName: source.name,
+            locale: p.locale,
+            registrationNo,
+            data: p.data,
+          });
+          const attachments = config.confirmationEmail.showQr
+            ? [{
+                content: (await qrPngBuffer(registrationNo)).toString("base64"),
+                filename: `Korea-Expo-registration-${registrationNo}.png`,
+                contentId: message.qrContentId,
+              }]
+            : undefined;
+          const replyTo = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.confirmationEmail.replyTo)
+            ? config.confirmationEmail.replyTo
+            : undefined;
+          const result = await sendEmail({
+            to: p.emailNormalized,
+            subject: message.subject,
+            html: message.html,
+            replyTo,
+            idempotencyKey: `collect-confirmation/${committedRecordId}`,
+            attachments,
+          });
+          await prisma.collectRecord.update({
+            where: { id: committedRecordId },
+            data: result.sent
+              ? { emailStatus: "sent", emailSentAt: new Date(), emailError: null }
+              : {
+                  emailStatus: result.skipped ? "skipped" : "failed",
+                  emailError: (result.error || "RESEND_API_KEY is not configured").slice(0, 500),
+                },
+          });
+        }
+      } catch (e) {
+        const error = e instanceof Error ? e.message : "confirmation email failed";
+        console.warn("[collect-confirmation-email] failed:", error);
+        await prisma.collectRecord.update({
+          where: { id: committedRecordId },
+          data: { emailStatus: "failed", emailError: error.slice(0, 500) },
+        }).catch(() => undefined);
+      }
+    }
+
     if (source.webhookUrl) {
       fireWebhook(source.webhookUrl, {
       event: "record.created",
       sourceId: source.id,
       sourceName: source.name,
-      recordId,
+      recordId: committedRecordId,
         registrationNo,
         data: p.data,
         createdAt: new Date().toISOString(),
@@ -251,7 +311,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             data: members.map((m) => ({
               userId: m.userId,
               type: "COLLECT_SUBMITTED",
-              data: { sourceId: source.id, sourceName: source.name, recordId } as never,
+              data: { sourceId: source.id, sourceName: source.name, recordId: committedRecordId } as never,
             })),
           });
         }
