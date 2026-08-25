@@ -13,6 +13,7 @@ import { normalizeHexColor } from "@/lib/color";
 import { EXPO_DEFAULT_THEME, normalizeExpoTheme } from "@/lib/expo/config";
 import { ExpoProjectSync } from "@/components/expo/ExpoProjectSync";
 import { SectionsEditor } from "@/components/expo/SectionEditor";
+import { ExpoTemplateSave } from "@/components/expo/ExpoTemplateSave";
 import {
   ExpoPublishPanel,
   type ExpoReadinessView,
@@ -283,6 +284,10 @@ function EditorBody({ siteId, siteName, permissions, release }: ExpoSiteEditorPr
               }}
               anyLive={pages.some((page) => page.liveAt)}
             />
+          ) : null}
+          {/* 템플릿 저장은 `canEdit` 이다 — 새 템플릿을 만들 뿐 이 사이트를 건드리지 않는다. */}
+          {permissions.canEdit ? (
+            <ExpoTemplateSave siteId={siteId} siteName={site.name} />
           ) : null}
         </div>
 
