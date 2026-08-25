@@ -49,6 +49,8 @@ class FakeResizeObserver {
 }
 
 const { ExpoSiteEditor } = await import("@/components/expo/ExpoSiteEditor");
+// 발행 패널이 공용 확인 모달을 쓴다 — 프로바이더 없이 렌더하면 훅이 던진다.
+const { ConfirmProvider } = await import("@/components/ui/confirm-dialog");
 
 const TOKEN = "prev-token";
 const PAGE_ID = "pg1";
@@ -113,11 +115,13 @@ async function render() {
   await act(async () => {
     root = createRoot(host);
     root.render(
-      <ExpoSiteEditor
-        siteId="s1" projectId="p1" siteName="사이트"
-        permissions={permissions}
-        release={{ publicEmbedEnabled: false }}
-      />,
+      <ConfirmProvider>
+        <ExpoSiteEditor
+          siteId="s1" projectId="p1" siteName="사이트"
+          permissions={permissions}
+          release={{ publicEmbedEnabled: false }}
+        />
+      </ConfirmProvider>,
     );
   });
 }
@@ -163,6 +167,11 @@ beforeEach(() => {
     draft: { sections: [] }, draftRevision: 7,
     hasPublished: false, liveAt: null,
     codeDigest: "", publishedCodeDigest: "",
+    readiness: {
+      canPublish: true, canGoLive: false,
+      publishIssues: [], liveIssues: [], notes: [],
+    },
+    snippets: { ok: true, page: { code: "<script></script>", src: "https://x/h/pg1" }, sections: [] },
   };
   vi.stubGlobal("ResizeObserver", FakeResizeObserver);
   stubFetch();
