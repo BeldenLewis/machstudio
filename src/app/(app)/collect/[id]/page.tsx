@@ -1559,7 +1559,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                   <div>
                     <h3 className="text-sm font-medium">필드 매핑</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      인덱스는 아래 &ldquo;필드 묶음 선택자&rdquo;로 찾은 순서(0부터)예요 · 눈 아이콘으로 수집 데이터 표에 보일지 정해요(값은 계속 수집돼요)
+                      인덱스는 아래 &ldquo;필드 묶음 선택자&rdquo;로 찾은 순서(0부터)예요 · 눈 아이콘으로 수집 데이터 표에 보일지 정해요(값은 계속 수집돼요) · &ldquo;필수&rdquo;를 하나라도 켜면, 그 필드들이 전부 채워진 제출만 저장돼요
                     </p>
                   </div>
                 </div>
@@ -1588,6 +1588,18 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                           <option value="checkbox">체크박스</option>
                           <option value="radio">라디오</option>
                         </select>
+                        <label
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-border text-xs text-muted-foreground shrink-0 cursor-pointer hover:bg-secondary transition-colors"
+                          title="이 필드가 비어있으면 그 제출 자체를 저장하지 않아요 (수집 스크립트가 전송 전에 걸러요)"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={field.isRequired}
+                            onChange={(e) => updateField(idx, { isRequired: e.target.checked })}
+                            className="w-3.5 h-3.5 accent-violet-500"
+                          />
+                          필수
+                        </label>
                         <button onClick={() => updateField(idx, { hidden: !field.hidden })}
                           title={field.hidden ? "수집 데이터 표에서 숨김 — 클릭해서 보이기" : "수집 데이터 표에 보임 — 클릭해서 숨기기"}
                           className={`p-1 rounded-lg transition-colors shrink-0 ${field.hidden ? "text-muted-foreground hover:text-foreground hover:bg-secondary" : "text-violet-500 hover:bg-violet-500/10"}`}>

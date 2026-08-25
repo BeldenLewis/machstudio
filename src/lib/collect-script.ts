@@ -21,6 +21,12 @@ export type CollectFieldMapping = {
    */
   matchBy?: "id" | "name" | null;
   matchValue?: string | null;
+  /**
+   * 이 필드가 비어있으면 제출 자체를 저장하지 않는다(운영자가 '필드' 탭에서 켠다).
+   * 하나라도 켜져 있으면 **켜진 필드 전부**가 채워져야 하고, 아무도 안 켜져 있으면
+   * §정족수(매핑된 필드의 과반)로 대체된다 — 필수를 안 정한 기존 소스의 동작을 안 바꾼다.
+   */
+  required?: boolean;
 };
 
 export type CollectScriptSource = {
@@ -65,7 +71,8 @@ export function buildCollectScripts({
         f.matchBy && f.matchValue
           ? `, mb: ${JSON.stringify(f.matchBy)}, mv: ${JSON.stringify(f.matchValue)}`
           : "";
-      return `    { index: ${f.index}, key: ${JSON.stringify(f.key)}, label: ${JSON.stringify(f.label)}${anchor} }`;
+      const req = f.required ? ", req: true" : "";
+      return `    { index: ${f.index}, key: ${JSON.stringify(f.key)}, label: ${JSON.stringify(f.label)}${anchor}${req} }`;
     })
     .join(",\n");
 
@@ -301,14 +308,26 @@ ${utmCore}
      * 매핑된 필드의 **과반수가 실제 값**을 가져야만 진짜 제출로 본다. select 의 미선택
      * placeholder("==선택==" 등)도 빈 값이 아닌 문자열이라 이 계산에 몇 개는 끼어들 수
      * 있지만, 실제 신청서는 필드 수가 많아(수십 개) 그 정도로는 과반을 못 넘는다.
+     *
+     * **운영자가 '필드' 탭에서 필수를 지정했으면 과반 대신 그 필드 전부**를 본다 — "성명이
+     * 비어있는데 저장되는 게 말이 안 된다" 는 요건은 어림값(과반)이 아니라 정확한 필수
+     * 목록으로 풀어야 한다. 하나도 안 켜져 있으면(req 가 하나도 없으면) 과반 검사로 대체.
      */
-    var mapped = FIELD_MAP.length;
-    if (mapped > 0) {
-      var filled = 0;
-      FIELD_MAP.forEach(function(field) {
-        if (data[field.key] && String(data[field.key]).trim() !== "") filled++;
+    var requiredFields = FIELD_MAP.filter(function(f) { return f.req; });
+    if (requiredFields.length > 0) {
+      var allRequiredFilled = requiredFields.every(function(field) {
+        return data[field.key] && String(data[field.key]).trim() !== "";
       });
-      if (filled * 2 < mapped) return {};
+      if (!allRequiredFilled) return {};
+    } else {
+      var mapped = FIELD_MAP.length;
+      if (mapped > 0) {
+        var filled = 0;
+        FIELD_MAP.forEach(function(field) {
+          if (data[field.key] && String(data[field.key]).trim() !== "") filled++;
+        });
+        if (filled * 2 < mapped) return {};
+      }
     }
     return data;
   }
