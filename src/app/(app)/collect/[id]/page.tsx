@@ -1199,8 +1199,8 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                           >
                             <Wand2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                             <div>
-                              <div className="font-medium">중복 정리</div>
-                              <div className="text-muted-foreground text-[11px]">중복 레코드 제거</div>
+                              <div className="font-medium">데이터 정리</div>
+                              <div className="text-muted-foreground text-[11px]">중복·빈 레코드 제거</div>
                             </div>
                           </button>
                           <div className="border-t border-border" />
