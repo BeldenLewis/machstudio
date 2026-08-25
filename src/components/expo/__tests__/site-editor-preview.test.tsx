@@ -72,12 +72,20 @@ let holdPageDetail: ((body: unknown) => void) | null = null;
 let detailCount = 0;
 /** 사이트 PATCH 로 실제로 나간 본문들. 색은 자동저장이 아니라는 것을 여기서 본다. */
 let sitePatches: unknown[] = [];
+/** 목록이 돌려주는 이름. 트리의 이름 PATCH 가 서버처럼 이걸 바꾼다. */
+let listTitle = "홈";
 
 function stubFetch() {
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
     const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body } as Response);
     if (url.startsWith("/api/expo/pages/")) {
       if (init?.method === "PATCH") {
+        const body = JSON.parse(String(init.body ?? "{}"));
+        // 이름 바꾸기는 자동저장이 아니다 — 트리가 따로 보낸다. 같이 세면 저장 횟수가 거짓말한다.
+        if (typeof body.title === "string") {
+          listTitle = body.title;
+          return ok({ page: { id: PAGE_ID, title: body.title } });
+        }
         patchCount += 1;
         return ok({ page: { id: PAGE_ID, ...nextSave } });
       }
@@ -104,7 +112,7 @@ function stubFetch() {
           theme: { accent: "#1f3a5f", lightBg: "#ffffff", darkBg: "#111318" },
         },
         pages: [{
-          id: PAGE_ID, slug: "home", title: "홈", isHome: true, sortOrder: 0,
+          id: PAGE_ID, slug: "home", title: listTitle, isHome: true, sortOrder: 0,
           imwebUrl: null, hasPublished: Boolean(pageBody.hasPublished), liveAt,
         }],
         sources: [],
@@ -166,6 +174,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   patchCount = 0;
   sitePatches = [];
+  listTitle = "홈";
   liveAt = null;
   detailCount = 0;
   holdPageDetail = () => {};
@@ -543,5 +552,53 @@ describe("발행한 뒤", () => {
 
     // 서버가 준 옛 값(null)으로 되돌아가면 안 된다.
     expect(label?.querySelector("input")?.value).toBe("https://example.com/새주소");
+  });
+});
+
+/**
+ * 이름의 출처는 **하나**여야 한다.
+ *
+ * 페이지 이름은 왼쪽 트리에서 고치는데, 가운데 칸의 상세는 `pageId` 가 바뀔 때만 다시
+ * 읽는다. 그래서 상세가 실어 보낸 이름을 오른쪽 칸이 쓰면, 이름을 고쳐도 **페이지를
+ * 떠났다 돌아오기 전까지** 발행 패널이 옛 이름을 단다 — 그 이름은 공개 스위치를
+ * 스크린리더가 읽는 이름이기도 하다("○○ 아임웹에 내보내기").
+ */
+describe("페이지 이름", () => {
+  /** 스위치의 읽는 이름 — 여기에 페이지 이름이 실린다. */
+  const switchName = () =>
+    [...host.querySelectorAll('[role="switch"], input[type="checkbox"]')]
+      .map((el) => el.getAttribute("aria-label") ?? "")
+      .join(" | ");
+
+  async function rename(next: string) {
+    const input = [...host.querySelectorAll("input")]
+      .find((el) => (el.getAttribute("aria-label") ?? "").endsWith(" 이름"));
+    if (!input) throw new Error("이름 칸이 없다");
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setter.call(input, next);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    // 트리의 이름 디바운스(600ms) + 목록 다시 읽기.
+    await act(async () => { await vi.advanceTimersByTimeAsync(900); });
+  }
+
+  it("트리에서 고친 이름이 발행 패널에 바로 따라온다", async () => {
+    vi.useFakeTimers();
+    await render();
+    expect(switchName()).toContain("홈");
+
+    await rename("첫 화면");
+
+    expect(switchName()).toContain("첫 화면");
+    expect(switchName()).not.toContain("홈 아임웹에");
+  });
+
+  /** 이름을 고쳐도 자동저장이 도는 것은 아니다 — 트리가 자기 요청으로 따로 저장한다. */
+  it("이름 바꾸기가 가운데 칸의 자동저장을 돌리지 않는다", async () => {
+    vi.useFakeTimers();
+    await render();
+    await rename("첫 화면");
+    expect(patchCount).toBe(0);
   });
 });

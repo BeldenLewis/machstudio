@@ -97,7 +97,7 @@ export function validatePageDraft(raw: unknown): ValidateResult {
   if (sections.length > EXPO_LIMITS.sectionsPerPage) {
     errors.push({
       path: "sections", code: "too-many",
-      message: `한 페이지에 섹션은 ${EXPO_LIMITS.sectionsPerPage}개까지예요 (지금 ${sections.length}개)`,
+      message: `한 페이지에 구획은 ${EXPO_LIMITS.sectionsPerPage}개까지예요 (지금 ${sections.length}개)`,
     });
   }
 
@@ -105,7 +105,7 @@ export function validatePageDraft(raw: unknown): ValidateResult {
     const s = obj(raw);
     const def = sectionDef(String(s.type ?? ""));
     if (!def) {
-      errors.push({ path: `sections[${i}].type`, code: "unknown-type", message: "알 수 없는 섹션이에요" });
+      errors.push({ path: `sections[${i}].type`, code: "unknown-type", message: "알 수 없는 구획이에요" });
       return;
     }
     const content = obj(s.content);

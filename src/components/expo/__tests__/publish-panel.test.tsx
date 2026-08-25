@@ -150,23 +150,23 @@ describe("발행", () => {
       readiness: {
         ...READY,
         canPublish: false,
-        publishIssues: [{ code: "no-sections", message: "아직 섹션이 없어요." }],
+        publishIssues: [{ code: "no-sections", message: "아직 구획이 없어요." }],
       },
     });
     expect(panelButton("발행하기")?.disabled).toBe(true);
-    expect(host.textContent).toContain("아직 섹션이 없어요");
+    expect(host.textContent).toContain("아직 구획이 없어요");
   });
 
   /** 서버가 화면보다 최신이다 — 거절 사유를 그대로 옮긴다. */
   it("서버가 거절하면 그 사유를 보여 준다", async () => {
     nextResponse = {
       ok: false, status: 422,
-      body: { error: "아직 발행할 수 없어요", issues: [{ code: "no-renderable-section", message: "내보낼 섹션이 없어요." }] },
+      body: { error: "아직 발행할 수 없어요", issues: [{ code: "no-renderable-section", message: "내보낼 구획이 없어요." }] },
     };
     await render();
     await click(panelButton("발행하기"));
 
-    expect(toastError).toHaveBeenCalledWith("내보낼 섹션이 없어요.");
+    expect(toastError).toHaveBeenCalledWith("내보낼 구획이 없어요.");
     expect(onChanged).not.toHaveBeenCalled();
   });
 });
@@ -250,12 +250,12 @@ describe("붙일 코드", () => {
         sections: [{
           sid: "s1", label: "키비주얼",
           snippet: { code: "<script></script>", src: "https://x/h/pg1/s1" },
-          issues: [{ code: "section-not-published", message: "이 섹션은 발행본에 없어요." }],
+          issues: [{ code: "section-not-published", message: "이 구획은 발행본에 없어요." }],
         }],
       },
     });
     expect(host.querySelector<HTMLButtonElement>('button[aria-label="키비주얼 코드 복사"]')?.disabled).toBe(true);
-    expect(host.textContent).toContain("이 섹션은 발행본에 없어요");
+    expect(host.textContent).toContain("이 구획은 발행본에 없어요");
   });
 
   it("따로 내보내기를 켠 구획이 없으면 어떻게 켜는지 알려 준다", async () => {

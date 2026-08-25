@@ -221,7 +221,7 @@ function Harness() {
                   code: `<script async src="https://machstudio.example.com/h/harness-page/${SID(3)}"></script>\n<div data-mach-expo-section></div>`,
                 },
                 issues: stage === "draft"
-                  ? [{ code: "section-not-published", message: "이 섹션은 발행본에 없어요. 페이지를 발행하면 코드를 복사할 수 있어요." }]
+                  ? [{ code: "section-not-published", message: "이 구획은 발행본에 없어요. 페이지를 발행하면 코드를 복사할 수 있어요." }]
                   : [],
               }],
             }}

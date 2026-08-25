@@ -75,17 +75,21 @@ describe("넘치면 자르지 않고 거절한다", () => {
     if (!r.ok) expect(r.errors[0].path).toBe("sections[0].content.items[1].title");
   });
 
-  it("섹션 수가 많으면 거절한다", () => {
+  it("구획 수가 많으면 거절한다", () => {
     const many = Array.from({ length: EXPO_LIMITS.sectionsPerPage + 1 }, (_, i) => ({
       sid: uid(i + 1), type: "textblock", variant: "prose", content: { body: "본문" },
     }));
-    expect(validatePageDraft(draft(many)).ok).toBe(false);
+    const r = validatePageDraft(draft(many));
+    expect(r.ok).toBe(false);
+    // 편집기의 개수 경고("한 페이지에 구획은 N개까지예요")와 같은 말을 써야 한다.
+    if (!r.ok) expect(r.errors[0].message).toContain("한 페이지에 구획은");
   });
 
-  it("모르는 섹션 타입은 거절한다 — 쓰기에서는 조용히 버리지 않는다", () => {
+  it("모르는 구획 타입은 거절한다 — 쓰기에서는 조용히 버리지 않는다", () => {
     const r = validatePageDraft(draft([{ sid: uid(1), type: "정체불명", variant: "x" }]));
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors[0].code).toBe("unknown-type");
+    if (!r.ok) expect(r.errors[0].message).not.toContain("섹션");
   });
 
   it("모양이 아니면 거절한다", () => {

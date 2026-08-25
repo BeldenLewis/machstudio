@@ -90,7 +90,11 @@ interface PageStatus {
    * 코드 지문이 실려 나간다(서버는 거절하지만, 화면에는 "코드가 바뀌었어요" 가 뜬다).
    */
   pageId: string;
-  title: string;
+  /**
+   * **이름은 여기 없다.** 상세는 `pageId` 가 바뀔 때만 다시 읽으므로, 트리에서 이름을
+   * 고쳐도 이 보고에 실린 이름은 그대로다 — 페이지를 떠났다 돌아오기 전까지 발행 패널이
+   * 옛 이름을 단다. 이름의 출처는 트리가 고치는 **페이지 목록** 하나뿐이다.
+   */
   revision: number;
   codeDigest: string;
   publishedCodeDigest: string;
@@ -390,7 +394,9 @@ function EditorBody({ siteId, siteName, permissions, release, previewOrigin }: E
           {status ? (
             <ExpoPublishPanel
               pageId={status.pageId}
-              pageTitle={status.title}
+              // 이름은 목록에서 — 트리가 고치는 곳이 거기다. `status.pageId` 로 맞춰 읽어야
+              // 페이지를 막 바꾼 순간 **앞 페이지의 상태에 새 페이지의 이름**이 붙지 않는다.
+              pageTitle={pages?.find((p) => p.id === status.pageId)?.title ?? ""}
               hasPublished={status.hasPublished}
               liveAt={status.liveAt}
               readiness={status.readiness}
@@ -619,7 +625,6 @@ function PageForm({
     // 미리보기는 **저장된 것**을 읽는다 — 번호가 바뀌었으니 다시 불러야 한다.
     reportRef.current({
       pageId: page.id,
-      title: page.title,
       revision: savedRevision,
       codeDigest: String(body.page?.codeDigest ?? ""),
       publishedCodeDigest, hasPublished, liveAt, readiness, snippets,
@@ -647,10 +652,10 @@ function PageForm({
    */
   useEffect(() => {
     reportRef.current({
-      pageId: page.id, title: page.title, revision: draftRevision, codeDigest,
+      pageId: page.id, revision: draftRevision, codeDigest,
       publishedCodeDigest, hasPublished, liveAt, readiness, snippets,
     });
-  }, [page.id, page.title, draftRevision, codeDigest, publishedCodeDigest, hasPublished, liveAt, readiness, snippets]);
+  }, [page.id, draftRevision, codeDigest, publishedCodeDigest, hasPublished, liveAt, readiness, snippets]);
 
   /** 저장 상태만 따로. 불리언이라 **전환마다 한 번**이지 타이핑할 때마다가 아니다. */
   useEffect(() => {

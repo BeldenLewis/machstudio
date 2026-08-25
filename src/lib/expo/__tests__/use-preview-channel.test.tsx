@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, useRef } from "react";
+import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useExpoPreviewChannel } from "@/lib/expo/use-preview-channel";
@@ -31,11 +31,16 @@ let push: ((theme: { accent: string; lightBg: string; darkBg: string }) => void)
 /** 프레임의 contentWindow 를 흉내낸다 — postMessage 를 가로채 본다. */
 let frameWindow: { postMessage: (msg: unknown, origin: string) => void };
 let posted: Array<{ msg: unknown; origin: string }> = [];
+/**
+ * 실제 iframe 대신 `contentWindow` 만 흉내낸 것을 물린다.
+ *
+ * `useRef` 로 만들어 렌더 중에 `.current` 를 쓰지 않는다 — ref 는 렌더의 입력이 아니라서
+ * 그렇게 쓰면 린트가 막고(react-hooks/refs), 실제로도 훅이 리스너를 붙이는 시점과
+ * ref 가 채워지는 시점이 갈린다. 훅이 요구하는 건 `{ current }` 뿐이므로 밖에서 만들어 넘긴다.
+ */
+let frameRef: { current: HTMLIFrameElement | null };
 
 function Probe() {
-  const frameRef = useRef<HTMLIFrameElement | null>(null);
-  // 실제 iframe 대신 contentWindow 만 흉내낸 객체를 물린다.
-  frameRef.current = { contentWindow: frameWindow } as unknown as HTMLIFrameElement;
   const api = useExpoPreviewChannel({
     pageId: PAGE,
     origin: ORIGIN,
@@ -43,8 +48,8 @@ function Probe() {
     onSelectSection: (sid) => { selected.push(sid); },
     onCustomCodeReady: (digest) => { codeReady.push(digest); },
   });
-  channel = api.channel;
-  push = api.pushTheme;
+  // 렌더 중에 밖의 변수를 건드리지 않는다 — 그건 렌더의 부작용이다.
+  useEffect(() => { channel = api.channel; push = api.pushTheme; });
   return null;
 }
 
@@ -66,6 +71,7 @@ beforeEach(async () => {
   codeReady = [];
   posted = [];
   frameWindow = { postMessage: (msg, origin) => { posted.push({ msg, origin }); } };
+  frameRef = { current: { contentWindow: frameWindow } as unknown as HTMLIFrameElement };
   host = document.createElement("div");
   document.body.appendChild(host);
   await act(async () => {
