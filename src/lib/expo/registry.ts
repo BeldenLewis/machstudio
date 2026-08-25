@@ -110,7 +110,13 @@ export const EXPO_SECTIONS: readonly SectionDef[] = [
       { id: "cta", label: "요약 + 버튼" },
     ],
     slots: [
-      { key: "sourceRef", kind: "sourceRef", label: "사전등록 소스" },
+      /**
+       * **필수다.** 렌더러는 소스가 없으면 이 구획을 통째로 건너뛴다
+       * (`view-page.ts`: "소스가 안 붙어 있으면 그릴 것이 없다"). 필수로 걸어 두지 않으면
+       * 제목 한 줄만 있어도 `hasContent` 가 true 라 편집기는 "멀쩡함", 발행 점검도 통과,
+       * 그런데 공개 화면에는 아무것도 안 나온다 — 어디에도 단서가 없다.
+       */
+      { key: "sourceRef", kind: "sourceRef", label: "사전등록 소스", required: true },
       { key: "heading", kind: "text", label: "제목" },
       { key: "note", kind: "textarea", label: "안내" },
     ],

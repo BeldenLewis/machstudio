@@ -7,10 +7,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { guardExpoRoute, readJsonBody, authFailure, fieldErrors } from "@/lib/expo/route-guard";
-import { requireOwnedPage } from "@/lib/expo/auth";
+import { requireOwnedPage, requireWorkspaceAdmin } from "@/lib/expo/auth";
 import { validatePageDraft } from "@/lib/expo/request";
 import { prepareDeletePage, prepareDraftWrite, serviceMessage, serviceStatus } from "@/lib/expo/site-service";
 import { normalizeExpoPage } from "@/lib/expo/config";
+import { expoPreviewCodeDigest } from "@/lib/expo/code-digest";
 import { slugFromTitle } from "@/lib/expo/model";
 import { safeHttpUrl } from "@/lib/webinar-config";
 
@@ -41,6 +42,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ page
       isHome: page!.isHome, sortOrder: page!.sortOrder, imwebUrl: page!.imwebUrl,
       draft: normalizeExpoPage(page!.draft),
       draftRevision: page!.draftRevision,
+      /**
+       * 붙여넣은 코드의 지문. 편집기 미리보기가 "이 코드를 실행" 을 요청할 때 그대로
+       * 되돌려 보낸다 — 서버가 계산한 값과 정확히 같을 때만 실행된다(code-digest.ts).
+       * 편집기가 직접 계산하지 않는 이유: 알고리즘이 두 벌이 되면 어긋나는 날이 온다.
+       */
+      codeDigest: expoPreviewCodeDigest(page!.draft),
+      /**
+       * 발행본 쪽 지문. 미리보기에서 발행본을 볼 때 쓴다 — 초안 지문을 그대로 보내면
+       * 서버가 계산한 값과 달라 실행이 거절되고, 화면에는 이유가 안 보인다.
+       * PATCH 는 발행본을 건드리지 않으므로 저장 응답에는 싣지 않는다.
+       */
+      publishedCodeDigest: expoPreviewCodeDigest(page!.published),
       hasPublished: Boolean(page!.published),
       publishedAt: page!.publishedAt, liveAt: page!.liveAt, updatedAt: page!.updatedAt,
     },
@@ -105,7 +118,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ pa
     data,
     select: { id: true, slug: true, title: true, imwebUrl: true, draftRevision: true, updatedAt: true },
   });
-  return NextResponse.json({ page: updated });
+
+  /**
+   * 저장 응답에도 지문을 싣는다 — 코드를 고치면 옛 허가가 그 자리에서 낡아야 한다.
+   * 방금 쓴 값에서 뽑는다(다시 읽지 않는다): draft 는 최대 512KB 짜리 JSON 컬럼이고,
+   * 이번 요청에 draft 가 없었으면 저장된 것이 그대로이므로 읽어 온 값이 맞다.
+   */
+  const savedDraft = data.draft !== undefined ? data.draft : page!.draft;
+  return NextResponse.json({ page: { ...updated, codeDigest: expoPreviewCodeDigest(savedDraft) } });
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ pageId: string }> }) {
@@ -115,6 +135,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ p
 
   const { page, owned } = await ownedPage(pageId, guard.ctx);
   if (!owned.ok) return authFailure(owned.failure);
+
+  // 페이지 삭제도 `canManageSite` 다(`permissions.ts`).
+  const admin = requireWorkspaceAdmin(guard.ctx.userId, guard.ctx.workspaceRole(owned.value.site.workspaceId));
+  if (!admin.ok) return authFailure(admin.failure);
 
   const prepared = prepareDeletePage(page!);
   if (!prepared.ok) {

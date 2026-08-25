@@ -209,6 +209,43 @@ describe("초안과 발행본", () => {
     expect(args).toContain("초안 제목");
   });
 
+  /**
+   * `enabled` 는 **본다.** 공개 로더가 그 기준으로 거르므로(`renderableSections`),
+   * 여기서만 보여 주면 꺼 놓은 구획이 미리보기에는 있고 발행본에는 없다.
+   * 편집기에 그 스위치가 붙은 뒤로 실제로 누를 수 있는 경로다.
+   */
+  it("페이지에 표시를 끈 구획은 미리보기에도 안 나온다", async () => {
+    prismaMock.expoSite.findFirst.mockResolvedValue(site({
+      pages: [{
+        id: "pg1", isHome: true, sortOrder: 0,
+        draft: { sections: [section({ enabled: false })] },
+        published: null, imwebUrl: null, deletedAt: null,
+      }],
+    }));
+    const args = bootArgs(await (await get()).text());
+    expect(args).not.toContain("초안 제목");
+  });
+
+  /**
+   * 사이트 테마는 공개 로더가 **실시간으로** 읽는다 — 저장하는 순간 이미 붙여 둔
+   * 파트너 사이트의 색이 바뀐다. 그래서 저장 전에 여기서 먼저 볼 수 있어야 한다.
+   */
+  it("저장하지 않은 색으로도 그려 준다", async () => {
+    const args = bootArgs(await (await get("?accent=%23ff0000")).text());
+    expect(args).toContain('"accent":"#ff0000"');
+  });
+
+  it("색이 아닌 값은 저장된 색으로 돌아간다", async () => {
+    // 타이핑 중인 반쪽짜리 값이 화면을 깨면 안 된다.
+    const args = bootArgs(await (await get("?accent=%23ff")).text());
+    expect(args).toContain('"accent":"#1f3a5f"');
+  });
+
+  it("안 보낸 색은 저장된 것을 쓴다", async () => {
+    const args = bootArgs(await (await get("?accent=%23ff0000")).text());
+    expect(args).toContain('"lightBg":"#ffffff"');
+  });
+
   /** 부작용 판정은 mode 에서 온다 — 미리보기는 저장도 추적도 하지 않는다. */
   it("미리보기 mode 가 라이브가 되는 경로가 없다", async () => {
     for (const query of ["", "?published=1", "?container=wide", "?customCode=run"]) {

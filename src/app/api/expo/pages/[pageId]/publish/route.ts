@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { guardExpoRoute, authFailure } from "@/lib/expo/route-guard";
-import { requireOwnedPage } from "@/lib/expo/auth";
+import { requireOwnedPage, requireWorkspaceAdmin } from "@/lib/expo/auth";
 import { preparePublish } from "@/lib/expo/site-service";
 import { publishIssues } from "@/lib/expo/readiness";
 
@@ -26,6 +26,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ pag
   });
   const owned = requireOwnedPage(page, guard.ctx.userId, guard.ctx.memberWorkspaceIds);
   if (!owned.ok) return authFailure(owned.failure);
+
+  /**
+   * 발행은 **역할까지** 본다. 멤버십만 보면 MEMBER 도 발행할 수 있는데, 화면은 그에게
+   * `canPublish: false` 라고 말한다(`permissions.ts`) — 숨긴 버튼을 API 로는 누를 수 있는
+   * 상태였다. 버튼을 숨기는 것은 인가가 아니고, 라우트가 제자리에서 다시 판정해야 한다.
+   */
+  const admin = requireWorkspaceAdmin(guard.ctx.userId, guard.ctx.workspaceRole(owned.value.site.workspaceId));
+  if (!admin.ok) return authFailure(admin.failure);
 
   // 왜 못 나가는지를 운영자 말로 돌려준다 — 화면이 그 카드로 데려간다.
   const issues = publishIssues(page!.draft);
