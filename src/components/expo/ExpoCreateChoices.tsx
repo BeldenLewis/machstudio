@@ -6,6 +6,8 @@ import Link from "next/link";
 import { FilePlus2, Layers, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspace } from "@/contexts/workspace";
+import { ExpoChecklist } from "@/components/expo/ExpoChecklist";
+import type { ChecklistItem } from "@/lib/expo/template-service";
 
 /**
  * 홈페이지 만들기 — **빈 사이트**와 **템플릿**을 나란히 놓는다.
@@ -34,6 +36,13 @@ export function ExpoCreateChoices() {
   const [name, setName] = useState("");
   const [templates, setTemplates] = useState<TemplateRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  /**
+   * 만들었는데 **이어서 할 일이 있는** 상태. 곧바로 편집기로 보내면 그 목록을 아무도
+   * 못 읽는다 — 템플릿은 사전등록 소스·내부 링크·아임웹 주소를 일부러 비우는데,
+   * 비웠다는 사실을 모르면 다 된 줄 알고 발행한다.
+   * 할 일이 없으면 이 화면을 거치지 않고 바로 보낸다.
+   */
+  const [handoff, setHandoff] = useState<{ siteId: string; checklist: ChecklistItem[] } | null>(null);
 
   const generation = useMemo(
     () => (workspace && currentProject ? `${workspace.id}:${currentProject.id}` : ""),
@@ -102,12 +111,44 @@ export function ExpoCreateChoices() {
         toast.error((await res.json().catch(() => ({}))).error ?? "만들지 못했어요");
         return;
       }
-      const { site } = await res.json();
-      router.replace(`/homepage/${site.id}`);
+      const { site, checklist } = (await res.json()) as {
+        site: { id: string };
+        checklist?: ChecklistItem[];
+      };
+      // 할 일이 없으면 한 번 더 누르게 하지 않는다.
+      if (!checklist || checklist.length === 0) {
+        router.replace(`/homepage/${site.id}`);
+        return;
+      }
+      setHandoff({ siteId: site.id, checklist });
     } finally {
       setBusy(null);
     }
   }, [currentProject, name, router]);
+
+  if (handoff) {
+    return (
+      <div className="mt-6 space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold">홈페이지를 만들었어요</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            템플릿은 지난 전시의 연결을 일부러 비웁니다 — 그대로 두면 그 자리가 공개 화면에서
+            빠지거나 아무 데도 가지 않는 버튼이 돼요.
+          </p>
+        </div>
+
+        <ExpoChecklist items={handoff.checklist} />
+
+        <button
+          type="button"
+          onClick={() => router.replace(`/homepage/${handoff.siteId}`)}
+          className="inline-flex min-h-9 items-center rounded-xl bg-violet-500 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-violet-600"
+        >
+          홈페이지 열기
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-6 space-y-6">
