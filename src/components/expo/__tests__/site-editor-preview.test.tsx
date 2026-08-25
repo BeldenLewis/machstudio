@@ -68,6 +68,8 @@ let patchCount = 0;
 let liveAt: string | null = null;
 /** 세우면 페이지 상세 응답을 붙잡는다 — "아직 모르는 상태" 를 만들 때 쓴다. */
 let holdPageDetail: ((body: unknown) => void) | null = null;
+/** 상세를 몇 번 불렀나 — 발행 뒤 다시 읽는지 여기서 본다. */
+let detailCount = 0;
 /** 사이트 PATCH 로 실제로 나간 본문들. 색은 자동저장이 아니라는 것을 여기서 본다. */
 let sitePatches: unknown[] = [];
 
@@ -79,11 +81,14 @@ function stubFetch() {
         patchCount += 1;
         return ok({ page: { id: PAGE_ID, ...nextSave } });
       }
+      // 발행·공개는 상세 조회가 아니다 — 같이 세면 "다시 읽었는가" 를 못 본다.
+      if (/\/(publish|live)$/.test(url)) return ok({ page: { id: PAGE_ID } });
       if (holdPageDetail) {
         return new Promise((resolve) => {
           holdPageDetail = (body) => resolve(ok(body));
         });
       }
+      detailCount += 1;
       return ok({ page: pageBody });
     }
     if (url.startsWith("/api/expo/")) {
@@ -158,6 +163,7 @@ beforeEach(() => {
   patchCount = 0;
   sitePatches = [];
   liveAt = null;
+  detailCount = 0;
   holdPageDetail = () => {};
   holdPageDetail = null;
   permissions = { canEdit: true, canPublish: true, canManageSite: true, canManageTemplates: true };
@@ -462,5 +468,64 @@ describe("색이 아닌 값", () => {
     await typeHex("#e2532c");
     expect(host.textContent).not.toContain("#RRGGBB 형식으로 적어 주세요");
     expect(buttonByText("적용")?.disabled).toBe(false);
+  });
+});
+
+/**
+ * **발행하면 발행본 쪽 값이 따라와야 한다.**
+ *
+ * 페이지 상세는 pageId 가 바뀔 때만 다시 읽는다. 발행은 그 상세를 바꾸는데(published,
+ * publishedAt, 그리고 거기서 파생되는 발행본 코드 지문) 다시 읽지 않으면 편집기가
+ * 세션 내내 옛 값을 들고 있게 된다 — 발행본을 보면서 "코드 실행 중" 이라고 적힌 채
+ * 자리표만 뜨는 상태다.
+ */
+describe("발행한 뒤", () => {
+  const publishButton = () =>
+    [...host.querySelectorAll("button")].find((b) => /발행/.test(b.textContent ?? ""));
+
+  it("발행 쪽 값을 다시 읽는다", async () => {
+    await render();
+    expect(detailCount).toBe(1);
+
+    // 서버가 발행 뒤에 돌려줄 상태.
+    pageBody.hasPublished = true;
+    pageBody.publishedCodeDigest = "digest-published";
+    await click(publishButton());
+
+    expect(detailCount).toBe(2);
+  });
+
+  /** 다시 읽은 값이 실제로 미리보기에 쓰여야 한다 — 읽기만 하고 안 쓰면 같은 증상이다. */
+  it("발행본을 볼 때 새 지문을 쓴다", async () => {
+    pageBody.codeDigest = "digest-draft";
+    await render();
+
+    pageBody.hasPublished = true;
+    pageBody.publishedCodeDigest = "digest-published";
+    await click(publishButton());
+
+    // 발행본으로 전환하고 코드 실행을 허가하면, 초안이 아니라 발행본 지문이 실려야 한다.
+    await click(buttonByText("발행본"));
+    await click(buttonByText("이 코드 실행하기"));
+    expect(frameSrc()).toContain("codeDigest=digest-published");
+    expect(frameSrc()).not.toContain("digest-draft");
+  });
+
+  /** 편집 중인 내용을 서버 사본으로 덮으면 방금 친 글이 사라진다. */
+  it("초안은 덮어쓰지 않는다", async () => {
+    vi.useFakeTimers();
+    await render();
+    await editAndSave("고친 이름");
+
+    const label = [...host.querySelectorAll("label")]
+      .find((el) => el.textContent?.startsWith("페이지 이름"));
+    expect(label?.querySelector("input")?.value).toBe("고친 이름");
+
+    pageBody.hasPublished = true;
+    await act(async () => { publishButton()?.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+
+    // 서버가 준 옛 제목("홈")으로 되돌아가면 안 된다.
+    expect(label?.querySelector("input")?.value).toBe("고친 이름");
   });
 });
