@@ -978,6 +978,19 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
       lastYearRangeCount,
       lastYearRangeChange,
     },
+    /**
+     * 이 리포트가 **어느 기간을 센 것인지**.
+     *
+     * 요약 대시보드는 주간 보고에 캡처해서 붙이는 화면이다. 기간이 안 적혀 있으면 그 캡처는
+     * 일주일 뒤에 "이게 언제 것이지", "+102% 는 무엇 대비지" 를 답할 수 없다 —
+     * 숫자만 있고 근거가 없는 이미지가 된다. 계산에 쓴 범위를 그대로 실어 보낸다.
+     */
+    range: {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      previousFrom: previousFrom.toISOString(),
+      previousTo: from.toISOString(),
+    },
     funnel,
     composition,
     emailDomainTop,

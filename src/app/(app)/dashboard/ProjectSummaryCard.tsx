@@ -32,7 +32,19 @@ export default function ProjectSummaryCard({ data }: ProjectSummaryCardProps) {
 
   return (
     <div className="rounded-2xl border border-border bg-background p-5">
-      <h3 className="text-base font-semibold">{data.project.name}</h3>
+      {/*
+        **캡처되는 화면이다.** 이 카드는 주간 보고에 그대로 붙는다. 기간이 안 적혀 있으면
+        일주일 뒤 그 이미지가 "언제 것인지 / +102% 가 무엇 대비인지" 를 답할 수 없다 —
+        숫자만 있고 근거가 없는 그림이 된다. 제목 옆에 조회 구간과 비교 구간을 함께 적는다.
+      */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h3 className="text-base font-semibold">{data.project.name}</h3>
+        <p className="text-[11px] tabular-nums text-muted-foreground">
+          {formatRange(data.range.from, data.range.to)}
+          <span className="mx-1.5 opacity-50">·</span>
+          직전 {formatRange(data.range.previousFrom, data.range.previousTo)} 대비
+        </p>
+      </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
         <div>
@@ -131,4 +143,18 @@ export default function ProjectSummaryCard({ data }: ProjectSummaryCardProps) {
       )}
     </div>
   );
+}
+
+/**
+ * 조회 구간을 한 줄로. **KST 달력일**로 적는다 — 집계가 KST 하루 경계로 세므로
+ * 화면도 같은 기준이어야 "이 날짜까지 센 것" 이 맞는 말이 된다.
+ * 끝 시각은 배타적 경계(다음 구간의 시작)라 하루를 빼서 마지막 날을 보여 준다.
+ */
+function formatRange(fromIso: string, toIso: string): string {
+  const KST = 9 * 60 * 60 * 1000;
+  const day = (iso: string, shiftMs = 0) => {
+    const d = new Date(new Date(iso).getTime() + shiftMs + KST);
+    return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+  };
+  return `${day(fromIso)} – ${day(toIso)}`;
 }
