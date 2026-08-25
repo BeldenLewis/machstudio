@@ -72,6 +72,12 @@ describe("normalizeCollectForm — 어떤 쓰레기가 와도 던지지 않는�
     expect(cfg({ fields: [{ key: "x", type: "date" }] }).fields[0].type).toBe("text");
   });
 
+  it("라디오를 사전등록 전용 단일 선택 유형으로 보존한다", () => {
+    const c = cfg({ fields: [{ key: "type", type: "radio", options: ["General", "Buyer"] }] });
+    expect(c.fields[0].type).toBe("radio");
+    expect(c.fields[0].options.map((option) => localize(option))).toEqual(["General", "Buyer"]);
+  });
+
   /**
    * 분기 기준 항목을 지웠는데 분기가 켜진 채로 남으면, 렌더러가 없는 key 의 값을 기다리며
    * 유형 문항을 영영 그리지 않는다 — 빌더에서 항목을 지우는 건 흔한 일이라 반드시 막는다.
@@ -139,6 +145,15 @@ describe("normalizeCollectForm — 어떤 쓰레기가 와도 던지지 않는�
   it("조회 항목이 비면 기본값으로 되돌린다 — 열 수 없는 등록 확인 화면 방지", () => {
     expect(cfg({ lookup: { fields: [] } }).lookup.fields).toEqual(EMPTY_FORM_CONFIG.lookup.fields);
     expect(cfg({ lookup: { fields: ["email", "카톡"] } }).lookup.fields).toEqual(["email"]);
+  });
+
+  it("라디오도 분기 기준으로 쓸 수 있다", () => {
+    const c = cfg({
+      fields: [{ key: "type", type: "radio", options: ["General", "Buyer"] }],
+      branch: { enabled: true, fieldKey: "type", groups: [{ value: "Buyer", fields: [{ key: "company", required: true }] }] },
+    });
+    expect(c.branch.enabled).toBe(true);
+    expect(visibleFields(c, { type: "Buyer" }).map((field) => field.key)).toEqual(["type", "company"]);
   });
 
   it("자동 확인 메일은 기본 꺼짐이고 명시적으로 켠 설정만 보존한다", () => {

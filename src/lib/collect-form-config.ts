@@ -68,9 +68,9 @@ export function localize(value: Localized | undefined, locale = DEFAULT_LOCALE):
 
 // ── 항목 ──────────────────────────────────────────────────────────────
 /** 웨비나 등록 폼과 **같은 유형 어휘**를 쓴다 — 빌더 컴포넌트를 공용화하기 위해서다. */
-export type CollectFieldType = WebinarFieldType;
+export type CollectFieldType = WebinarFieldType | "radio";
 
-const FIELD_TYPES: readonly CollectFieldType[] = WEBINAR_FIELD_TYPES;
+const FIELD_TYPES: readonly CollectFieldType[] = [...WEBINAR_FIELD_TYPES, "radio"];
 
 export interface CollectField {
   id: string;
@@ -81,7 +81,7 @@ export interface CollectField {
   placeholder: Localized;
   required: boolean;
   enabled: boolean;
-  /** select·multiple 의 선택지. 빈 문자열은 걸러진다(빈 드롭다운 항목 방지). */
+  /** select·radio·multiple 의 선택지. 빈 문자열은 걸러진다(빈 선택지 방지). */
   options: Localized[];
   /** multiple 전용 — 최대 선택 개수. 옵션 수 이상이면 무제한과 같아 저장하지 않는다. */
   maxSelect?: number;
@@ -92,7 +92,7 @@ export interface CollectField {
 /**
  * 유형 분기 — **폼당 하나**(설계 §16).
  *
- * 분기 기준은 별도 항목이 아니라 **일반 항목 중 하나**(보통 select)다. 그 항목에서 값을 고르면
+ * 분기 기준은 별도 항목이 아니라 **일반 항목 중 하나**(보통 select·radio)다. 그 항목에서 값을 고르면
  * 해당 그룹의 문항이 **그 항목 바로 아래**에 삽입된다(§4). 유형을 바꾸면 이전 그룹 문항은
  * 사라지되 공통 입력값은 남는다 — 그 동작은 렌더러 몫이고 여기서는 정의만 든다.
  */
@@ -799,7 +799,7 @@ export function validateSubmission(
         if (arr.some((v) => !labels.has(safeStr(v)))) issues.push({ key: f.key, code: "not_an_option" });
       }
     }
-    if (f.type === "select" && !f.allowOther && f.options.length) {
+    if ((f.type === "select" || f.type === "radio") && !f.allowOther && f.options.length) {
       const labels = new Set(f.options.flatMap((o) => Object.values(o)));
       if (!labels.has(safeStr(raw))) issues.push({ key: f.key, code: "not_an_option" });
     }
