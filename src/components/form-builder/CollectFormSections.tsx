@@ -90,6 +90,10 @@ export function CollectFormSections({
   const hasEmailField = config.fields.some((field) => field.enabled && field.type === "email");
   const replyToBad = confirmationEmail.replyTo !== ""
     && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(confirmationEmail.replyTo);
+  const hasEmailEventInfo = ev.eventDates.length > 0
+    || Boolean(localize(ev.venue, DEFAULT_LOCALE))
+    || ev.openingHours.length > 0
+    || ev.extraRows.some((row) => Boolean(localize(row.label, DEFAULT_LOCALE) && localize(row.value, DEFAULT_LOCALE)));
 
   const setEvent = (next: Partial<typeof ev>) => patch({ eventInfo: { ...ev, ...next } });
   const setWindow = (next: Partial<typeof win>) =>
@@ -512,14 +516,6 @@ export function CollectFormSections({
                 className={`${FIELD_CLS} resize-y leading-relaxed`}
               />
             </Row>
-            <Row label="티켓 버튼 문구">
-              <input
-                value={localize(confirmationEmail.buttonLabel, DEFAULT_LOCALE)}
-                onChange={(e) => patch({ confirmationEmail: { ...confirmationEmail, buttonLabel: toLocalized(e.target.value) } })}
-                placeholder="Open my ticket"
-                className={FIELD_CLS}
-              />
-            </Row>
             <Row label="답장 받을 이메일" hint="선택 사항이에요. 비우면 Reply-To를 따로 지정하지 않아요.">
               <input
                 type="email"
@@ -548,6 +544,12 @@ export function CollectFormSections({
                 일정·장소 표시
               </label>
             </div>
+            {confirmationEmail.includeEventInfo && !hasEmailEventInfo && (
+              <p className="flex items-start gap-1.5 text-[11px] text-amber-600">
+                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                일정·장소 표시는 켜져 있지만 표시할 값이 없어요. 위의 행사 개요에 개최일, 장소 또는 운영시간을 입력하세요.
+              </p>
+            )}
             <p className="text-[11px] leading-relaxed text-muted-foreground/70">
               발신 주소는 서버의 <code className="font-mono">EMAIL_FROM</code>을 사용해요. 이메일에만 넣을 추가 안내는 안내 블록의 위치를 ‘이메일’로 선택하세요.
             </p>

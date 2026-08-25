@@ -18,9 +18,8 @@ import { fireWebhook } from "@/lib/webhook";
 import { normalizeCollectForm } from "@/lib/collect-form-config";
 import { submissionInputFromBody, prepareBuilderSubmission } from "@/lib/collect-submit";
 import { generateRegistrationNo } from "@/lib/collect-registration-no";
-import { buildCollectConfirmationEmail } from "@/lib/collect-confirmation-email";
+import { buildCollectConfirmationEmail, renderCollectTicketPng } from "@/lib/collect-confirmation-email";
 import { sendEmail } from "@/lib/email";
-import { qrPngBuffer } from "@/lib/collect-qr";
 
 function normalizeOrigin(s: string): string {
   try {
@@ -252,9 +251,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           });
           const attachments = config.confirmationEmail.showQr
             ? [{
-                content: (await qrPngBuffer(registrationNo)).toString("base64"),
-                filename: `Korea-Expo-registration-${registrationNo}.png`,
-                contentId: message.qrContentId,
+                content: (await renderCollectTicketPng({ config, registrationNo, data: p.data })).toString("base64"),
+                filename: `Korea-Expo-ticket-${registrationNo}.png`,
+                contentId: message.ticketContentId,
               }]
             : undefined;
           const replyTo = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.confirmationEmail.replyTo)

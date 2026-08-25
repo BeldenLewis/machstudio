@@ -37,7 +37,7 @@ describe("sendEmail", () => {
       attachments: [{
         content: "cG5n",
         filename: "ticket.png",
-        contentId: "registration-qr",
+        contentId: "registration-ticket",
       }],
     })).resolves.toEqual({ sent: true });
 
@@ -47,7 +47,7 @@ describe("sendEmail", () => {
       from: "Korea Expo LA <notifications@en.usa.k-expo.org>",
       to: ["guest@example.com"],
       reply_to: "help@k-expo.org",
-      attachments: [{ content: "cG5n", filename: "ticket.png", content_id: "registration-qr" }],
+      attachments: [{ content: "cG5n", filename: "ticket.png", content_id: "registration-ticket" }],
     });
   });
 });
