@@ -27,13 +27,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <WorkspaceProvider>
       <ConfirmProvider>
-        <div className="flex h-screen bg-muted">
+        <div className="flex h-screen bg-muted print:block print:h-auto print:bg-white">
           {/*
             메뉴를 숨기는 것은 **인가가 아니다.** 홈페이지 레이아웃과 모든 API·공개
             핸들러가 각자 다시 게이트를 통과해야 한다.
           */}
-          <Sidebar expoHomepageEnabled={caps.admin} />
-          <main className="flex-1 overflow-y-auto bg-background rounded-2xl shadow-sm mt-16 mb-2 mx-2 pb-24 lg:pb-0 lg:mt-2 lg:mr-2 lg:ml-64">
+          <div className="print:hidden">
+            <Sidebar expoHomepageEnabled={caps.admin} />
+          </div>
+          <main className="flex-1 overflow-y-auto bg-background rounded-2xl shadow-sm mt-16 mb-2 mx-2 pb-24 lg:pb-0 lg:mt-2 lg:mr-2 lg:ml-64 print:m-0 print:overflow-visible print:rounded-none print:shadow-none print:pb-0">
             <WorkspaceGate>{children}</WorkspaceGate>
           </main>
         </div>

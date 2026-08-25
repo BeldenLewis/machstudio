@@ -31,6 +31,8 @@ import GdprModal from "./GdprModal";
 import RetentionPolicyEditor from "./RetentionPolicyEditor";
 import DateRangeField from "@/components/DateRangeField";
 import { formatKst, formatKstDateTime } from "@/lib/datetime";
+import ProjectSummaryCard from "@/app/(app)/dashboard/ProjectSummaryCard";
+import type { RealtimeReportData } from "@/app/(app)/dashboard/RealtimeReport";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -159,6 +161,9 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   const [source, setSource] = useState<CollectSource | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("records");
+  // 이 소스만의 요약 카드 — 프로젝트에 소스가 여럿이면 프로젝트 합계와 다른 숫자다.
+  const [sourceReport, setSourceReport] = useState<RealtimeReportData | null>(null);
+  const [sourceReportLoading, setSourceReportLoading] = useState(false);
 
   const [records, setRecords] = useState<CollectRecord[]>([]);
   const [recordsTotal, setRecordsTotal] = useState(0); // 필터 적용된 서버 카운트 (현재 조회 조건 기준)
@@ -253,6 +258,24 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       setIsLoading(false);
     }
   }, [id]);
+
+  // 소스 단위 요약 — generateDashboardReport 가 sourceId 필터를 지원해 이 소스만의 숫자를 받는다.
+  const fetchSourceReport = useCallback(async (workspaceId: string, projectId: string, sourceId: string) => {
+    setSourceReportLoading(true);
+    try {
+      const res = await fetch("/api/dashboard-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId, projectId, filters: { sourceId } }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok) setSourceReport(data);
+    } catch (error) {
+      console.error("[collect-source-summary] failed", error);
+    } finally {
+      setSourceReportLoading(false);
+    }
+  }, []);
 
   // 현재 검색/필터/정렬 상태를 records API 쿼리스트링으로 직렬화 (페이지네이션 제외)
   const buildFilterQuery = useCallback(() => {
@@ -459,6 +482,11 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => { selectAllMatchingRef.current = selectAllMatching; }, [selectAllMatching]);
 
   useEffect(() => { fetchSource(); }, [fetchSource]);
+
+  useEffect(() => {
+    if (!source) return;
+    void fetchSourceReport(source.workspaceId, source.projectId, source.id);
+  }, [source?.id, source?.workspaceId, source?.projectId, fetchSourceReport]);
   // 52,000건 capture 설치 경로와 localhost 경고는 현재 host를 함께 보여야 해 이번 범위에서 보존한다.
   // eslint-disable-next-line no-restricted-syntax
   useEffect(() => { setBrowserOrigin(window.location.origin); }, []);
@@ -1037,6 +1065,16 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
           {/* 수집 데이터 탭 */}
           {tab === "records" && (
             <div>
+              {sourceReport ? (
+                <div className="mb-4">
+                  <ProjectSummaryCard data={sourceReport} title={source.name} />
+                </div>
+              ) : sourceReportLoading ? (
+                <div className="mb-4 flex h-32 items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
+                  요약을 불러오는 중...
+                </div>
+              ) : null}
+
               <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                 <p className="text-sm text-muted-foreground">
                   {hasActiveFilter
@@ -1066,7 +1104,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                   </motion.button>
                   <motion.button
                     whileTap={{ scale: 0.92 }} transition={spring}
-                    onClick={fetchRecords}
+                    onClick={() => { fetchRecords(); void fetchSourceReport(source.workspaceId, source.projectId, source.id); }}
                     className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
