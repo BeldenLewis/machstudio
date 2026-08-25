@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, BarChart3, CalendarDays, Clock3, Mail, TrendingUp, UserCheck, Users } from "lucide-react";
+import { Activity, BarChart3, CalendarDays, Clock3, Gauge, Mail, TrendingUp, UserCheck, Users } from "lucide-react";
 import type { ElementType } from "react";
 import { useState } from "react";
 import { motion } from "framer-motion";
@@ -17,6 +17,23 @@ interface MetricChange {
 export interface RealtimeReportData {
   generatedAt: string;
   project: { id: string; name: string };
+  /**
+   * 특정 소스 하나로 필터했을 때만 채워진다 — 이름이 "YYYY..." 로 시작해 앞 연도를 하나
+   * 낮춘 이름의 소스가 같은 워크스페이스에 있을 때 그 소스를 "전년도"로 본다
+   * (dashboard-report route.ts computeYearOverYear). performance.goalProgressPercent 는
+   * **달력 연도** 기준 프로젝트 전체 집계라 소스 필터 상태에서는 분모가 0이 되기 쉽다 —
+   * 이건 그 대신 소스를 이름으로 짝지어 정확히 비교하고, 행사 일자가 있으면 D-day 페이스도 본다.
+   */
+  yearOverYear: null | {
+    compareSourceName: string;
+    compareTotal: number;
+    progressPercent: number | null;
+    daysUntilEvent: number | null;
+    pace: null | {
+      lastYearCountAtSameOffset: number;
+      paceRatio: number | null;
+    };
+  };
   performance: {
     yesterdayCount: number;
     todayCount: number;
@@ -236,6 +253,76 @@ function DedupCard({ dedup }: { dedup: RealtimeReportData["dedup"] }) {
       <p className="mt-2 text-xs text-muted-foreground">
         기간 내 이메일 보유 등록 {formatNumber(dedup.totalRecordsWithEmail)}건 중
       </p>
+    </motion.section>
+  );
+}
+
+/**
+ * 전년 대비 진행률·페이스. route.ts 가 소스 필터·이름 짝짓기에 실패하면 애초에 null 을
+ * 주므로("빈 껍데기를 노출하지 않는다", AGENTS.md), 렌더 쪽은 null 체크 하나로 끝난다.
+ */
+function YearOverYearCard({ yoy, currentTotal }: { yoy: NonNullable<RealtimeReportData["yearOverYear"]>; currentTotal: number }) {
+  const progressPct = yoy.progressPercent !== null ? Math.min(yoy.progressPercent, 100) : null;
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={spring}
+      className="rounded-2xl border border-border bg-background p-5"
+    >
+      <div className="mb-3 flex items-center gap-2">
+        <Gauge className="w-4 h-4 text-violet-500" />
+        <h3 className="text-sm font-semibold">전년 대비</h3>
+        <span className="text-xs text-muted-foreground">— {yoy.compareSourceName}</span>
+      </div>
+
+      {yoy.progressPercent !== null ? (
+        <>
+          <div className="flex items-baseline justify-between">
+            <p className="text-xs text-muted-foreground">누적 사전등록 진행률</p>
+            <p className="text-sm font-semibold">{formatNumber(currentTotal)} / {formatNumber(yoy.compareTotal)}건</p>
+          </div>
+          <div className="mt-2 flex items-center gap-3">
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${progressPct}%` }}
+                transition={spring}
+                className="h-full bg-violet-500/80"
+              />
+            </div>
+            <span className="shrink-0 text-lg font-semibold tabular-nums">{yoy.progressPercent.toFixed(0)}%</span>
+          </div>
+        </>
+      ) : (
+        <p className="text-xs text-muted-foreground">{yoy.compareSourceName}에 아직 등록 데이터가 없어 진행률을 계산할 수 없어요.</p>
+      )}
+
+      <div className="mt-4 border-t border-border pt-3">
+        {yoy.daysUntilEvent === null ? (
+          <p className="text-xs text-muted-foreground">
+            &ldquo;기본 정보&rdquo; 탭에서 이 행사의 일자를 입력하면 작년과 같은 D-day 시점끼리 등록 속도를 비교해 볼 수 있어요.
+          </p>
+        ) : yoy.pace === null ? (
+          <p className="text-xs text-muted-foreground">
+            {yoy.compareSourceName}의 &ldquo;기본 정보&rdquo;에도 일자를 입력하면 페이스 비교를 볼 수 있어요.
+          </p>
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">
+              {yoy.daysUntilEvent >= 0 ? `D-${yoy.daysUntilEvent}` : `D+${-yoy.daysUntilEvent}`} 시점 페이스
+              <span className="block mt-0.5">올해 {formatNumber(currentTotal)}건 · 작년 같은 시점 {formatNumber(yoy.pace.lastYearCountAtSameOffset)}건</span>
+            </p>
+            {yoy.pace.paceRatio !== null && (
+              <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                yoy.pace.paceRatio >= 100 ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600"
+              }`}>
+                작년의 {yoy.pace.paceRatio.toFixed(0)}%
+              </span>
+            )}
+          </div>
+        )}
+      </div>
     </motion.section>
   );
 }
@@ -746,6 +833,12 @@ export default function RealtimeReport({ data, loading, rangeLabel }: Props) {
           <span className="font-semibold">{formatNumber(data.performance.rangeCount)}건</span>
           <ChangeBadge rangeChange={data.performance.rangeChange} />
         </div>
+
+        {data.yearOverYear && (
+          <div className="mt-4">
+            <YearOverYearCard yoy={data.yearOverYear} currentTotal={data.performance.cumulativeCount} />
+          </div>
+        )}
 
         {data.dedup.totalRecordsWithEmail > 0 && (
           <div className="mt-4">

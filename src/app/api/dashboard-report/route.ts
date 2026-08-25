@@ -408,6 +408,90 @@ function cleanUtmValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+/**
+ * "2026 에듀테크 코리아 페어" → "2025 에듀테크 코리아 페어" 처럼, 이름 맨 앞 4자리 연도만
+ * 하나 낮춘 이름을 찾는다. 매년 새 소스를 만드는 운영 관례(이 프로젝트가 그렇게 쓴다)를
+ * 그대로 활용한 것 — 소스끼리 "전년도" 를 명시적으로 잇는 필드를 따로 만들지 않아도 된다.
+ * 이름 규칙을 안 따르는 소스는 그냥 비교 대상이 없는 것으로 본다(전년 대비 카드 숨김).
+ */
+function previousYearName(name: string): string | null {
+  const m = name.match(/^(\d{4})(.*)$/);
+  if (!m) return null;
+  return `${Number(m[1]) - 1}${m[2]}`;
+}
+
+interface YearOverYear {
+  compareSourceName: string;
+  compareTotal: number;
+  progressPercent: number | null;
+  daysUntilEvent: number | null;
+  pace: null | {
+    lastYearCountAtSameOffset: number;
+    paceRatio: number | null;
+  };
+}
+
+/**
+ * 전년 대비 진행률·페이스. 특정 소스 하나로 필터된 경우에만 의미가 있다("전체" 는 여러 행사가
+ * 섞여 있어 어느 행사의 전년인지 정할 수 없다) — 그래서 sourceId 필터가 없으면 호출하지 않는다.
+ * performance.goalProgressPercent(달력 연도 기준, 프로젝트 전체 집계)와 다른 지표다 — 그건
+ * 소스 필터가 걸리면 분모(작년 이 소스의 레코드)가 0이 되기 쉽다. 이건 소스를 이름으로
+ * 정확히 짝지어서 보고, 행사 일자가 있으면 D-day 기준 페이스까지 본다.
+ */
+async function computeYearOverYear(params: {
+  workspaceId: string;
+  sourceId: string;
+  now: Date;
+  currentTotal: number;
+}): Promise<YearOverYear | null> {
+  const { workspaceId, sourceId, now, currentTotal } = params;
+  const current = await prisma.collectSource.findUnique({
+    where: { id: sourceId },
+    select: { name: true, venueConfig: true },
+  });
+  if (!current) return null;
+  const compareName = previousYearName(current.name);
+  if (!compareName) return null;
+
+  const compareSource = await prisma.collectSource.findFirst({
+    where: { workspaceId, name: compareName, deletedAt: null },
+    select: { id: true, name: true, venueConfig: true },
+  });
+  if (!compareSource) return null;
+
+  const compareTotal = await prisma.collectRecord.count({ where: { sourceId: compareSource.id } });
+
+  const currentVenue = (current.venueConfig ?? {}) as { eventStart?: string };
+  const compareVenue = (compareSource.venueConfig ?? {}) as { eventStart?: string };
+  const currentEventStart = currentVenue.eventStart ? new Date(`${currentVenue.eventStart}T00:00:00+09:00`) : null;
+  const compareEventStart = compareVenue.eventStart ? new Date(`${compareVenue.eventStart}T00:00:00+09:00`) : null;
+
+  let daysUntilEvent: number | null = null;
+  let pace: YearOverYear["pace"] = null;
+  if (currentEventStart && !Number.isNaN(currentEventStart.getTime())) {
+    daysUntilEvent = Math.ceil((currentEventStart.getTime() - now.getTime()) / DAY_MS);
+    if (compareEventStart && !Number.isNaN(compareEventStart.getTime())) {
+      // "작년 행사까지 오늘과 같은 D-day 였던 시점" — 그때까지 작년은 몇 건이었는지 본다.
+      const targetCompareDate = new Date(compareEventStart.getTime() - daysUntilEvent * DAY_MS);
+      const lastYearCountAtSameOffset = await prisma.collectRecord.count({
+        where: { sourceId: compareSource.id, createdAt: { lte: targetCompareDate } },
+      });
+      pace = {
+        lastYearCountAtSameOffset,
+        paceRatio: lastYearCountAtSameOffset > 0 ? (currentTotal / lastYearCountAtSameOffset) * 100 : null,
+      };
+    }
+  }
+
+  return {
+    compareSourceName: compareSource.name,
+    compareTotal,
+    progressPercent: compareTotal > 0 ? (currentTotal / compareTotal) * 100 : null,
+    daysUntilEvent,
+    pace,
+  };
+}
+
 function buildHeatmapFromRows(rows: Array<{ dow: number; hour: number; count: number }>) {
   const dayLabels = ["월", "화", "수", "목", "금", "토", "일"];
   const matrix: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0));
@@ -962,9 +1046,14 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
     }
   }
 
+  const yearOverYear = filters?.sourceId && filters.sourceId !== "all"
+    ? await computeYearOverYear({ workspaceId, sourceId: filters.sourceId, now, currentTotal: cumulativeCount })
+    : null;
+
   const payload: RealtimeReportData = {
     generatedAt: now.toISOString(),
     project: { id: project.id, name: project.name },
+    yearOverYear,
     performance: {
       yesterdayCount,
       todayCount,
