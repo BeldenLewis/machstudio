@@ -16,7 +16,7 @@
  * 가 그것들을 **지운다**. 스키마 작업 전후로 이 숫자가 그대로인지 보는 것이 그 사고의
  * 유일한 조기 경보다.
  */
-import { PrismaClient } from "../src/generated/prisma/index.js";
+import { PrismaClient, Prisma } from "../src/generated/prisma/index.js";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 const TABLES = ["ExpoSite", "ExpoPage", "ExpoTemplate"];
@@ -73,6 +73,42 @@ try {
       else if (found.get(t) !== true) problems.push(`${t} 에 RLS 가 꺼져 있습니다.`);
     }
     notes.push(`Expo 테이블: ${found.size}/3 (RLS 전부 켜짐: ${[...found.values()].every(Boolean)})`);
+
+    /**
+     * **컬럼까지 본다.** 이 파일 머리말이 "테이블만 확인하면 어중간하게 적용된 상태를
+     * 준비됨으로 오판한다" 고 선언해 놓고 정작 컬럼을 안 봤다 — `draft`·`draftRevision`·
+     * `published`·`liveAt`·`lastSeenOrigin` 같은 것이 통째로 빠진 테이블도 통과했다.
+     * (인덱스·외래키 이름이 10개 컬럼을 간접 보증하지만 나머지는 무검증이었다.)
+     *
+     * 기대 목록은 **`schema.prisma` 에서 파생**한다. 손으로 적는 목록을 하나 더 만들면
+     * 그게 갈라지는 것이 이 문제의 재발 형태다.
+     */
+    const expectedColumns = new Map(TABLES.map((t) => {
+      const model = Prisma.dmmf.datamodel.models.find((m) => m.name === t);
+      // 관계 필드(kind === "object")는 컬럼이 아니다.
+      return [t, new Set((model?.fields ?? []).filter((f) => f.kind !== "object").map((f) => f.name))];
+    }));
+
+    const columns = await prisma.$queryRawUnsafe(`
+      SELECT c.relname AS "table", a.attname AS "column"
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+       WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname = ANY($1)`, TABLES);
+    const haveColumns = new Map(TABLES.map((t) => [t, new Set()]));
+    for (const row of columns) haveColumns.get(row.table)?.add(row.column);
+
+    for (const t of TABLES) {
+      if (!found.has(t)) continue;          // 테이블 부재는 위에서 이미 문제로 올렸다
+      const want = expectedColumns.get(t);
+      const have = haveColumns.get(t);
+      if (!want || want.size === 0) { problems.push(`${t} 를 schema.prisma 에서 찾지 못했습니다.`); continue; }
+      for (const c of want) if (!have.has(c)) problems.push(`${t}.${c} 컬럼이 없습니다.`);
+      // 여분 컬럼도 문제다 — Expo 3테이블은 이 마이그레이션이 만든 새 테이블이라,
+      // 스키마에 없는 컬럼이 있다는 건 누가 db push 로 손댔다는 뜻이다.
+      for (const c of have) if (!want.has(c)) problems.push(`${t}.${c} 는 schema.prisma 에 없는 컬럼입니다.`);
+      notes.push(`${t} 컬럼: ${have.size}/${want.size}`);
+    }
 
     const indexes = await prisma.$queryRawUnsafe(`
       SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace

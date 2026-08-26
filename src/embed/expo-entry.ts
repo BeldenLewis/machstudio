@@ -87,6 +87,15 @@ function findContainer(payload: ExpoBootConfig, script: HTMLScriptElement | null
  *
  * 호스트 리셋(`host-reset.ts`)이 **우리 호스트의** visibility 를 못 박지만, 그건 우리
  * 요소에만 해당한다 — 우리를 담은 **파트너의 래퍼**가 숨겨져 있으면 그 안이 다 안 보인다.
+ *
+ * ── 이건 되돌리지 않는다. 일부러다 ────────────────────────────────────
+ * `destroy()` 는 이 변경을 복원하지 않는다. **되돌리는 쪽이 더 나쁘다:**
+ *  · `wg_animated` 를 다시 붙이는 순간, 아임웹의 리빌 패스가 이미 지나갔으면 그 위젯은
+ *    **영영 숨겨진다** — 떠나면서 파트너 자신의 콘텐츠를 지우는 셈이다.
+ *  · 인라인 값의 원래 상태를 우리는 모른다. `style.visibility = ""` 는 복원이 아니라
+ *    제3의 값이다(파트너가 직접 인라인 hidden 을 쓰는 경우가 실재한다).
+ * 남는 흔적은 클래스 둘과 인라인 두 줄이고, 다음 로드에 파트너 HTML 이 그대로 돌아온다.
+ * **지켜야 할 것은 복원이 아니라 재적용이다** — 마운트가 다시 붙을 때마다 여기를 지나간다.
  */
 function unhideWidget(container: HTMLElement): void {
   try {

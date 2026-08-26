@@ -122,3 +122,63 @@ describe("자리가 없으면 알린다", () => {
     expect(invisibleWarnings()).toEqual([]);
   });
 });
+
+/**
+ * **아임웹 위젯 풀기 — 이 줄들은 지금까지 한 번도 실행된 적이 없다.**
+ *
+ * 위 `mountPoint` 는 호스트를 `document.body` 에 바로 붙이므로 `._widget_data` 조상이 없어
+ * `unhideWidget` 이 첫 줄에서 돌아간다. 남의 문서 요소를 만지는 코드가 무검증이었다.
+ *
+ * 아임웹 스크롤 리빌 테마는 위젯을 `._widget_data.wg_animated { visibility:hidden }` 으로
+ * 시작시키고 자기 요소만 풀어 준다. 우리 호스트 리셋은 **우리 요소에만** 걸리므로,
+ * 우리를 담은 파트너 래퍼가 숨겨져 있으면 구획이 라이브에서 영영 안 보인다.
+ */
+describe("숨겨진 아임웹 래퍼", () => {
+  function widgetMount() {
+    const widget = document.createElement("div");
+    widget.className = "_widget_data wg_animated";
+    widget.style.visibility = "hidden";
+    widget.style.opacity = "0";
+    const host = document.createElement("div");
+    host.setAttribute("data-mach-expo", "");
+    host.getBoundingClientRect = () => ({
+      width: 800, height: 600, top: 0, left: 0, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => ({}),
+    }) as DOMRect;
+    widget.appendChild(host);
+    document.body.appendChild(widget);
+    return { widget, host };
+  }
+
+  it("숨겨진 래퍼를 풀어 준다", () => {
+    const { widget } = widgetMount();
+    boot(payload);
+
+    expect(widget.style.visibility).toBe("visible");
+    expect(widget.style.opacity).toBe("1");
+    expect(widget.classList.contains("wg_animated")).toBe(false);
+    expect(widget.classList.contains("_ds_animated_except")).toBe(true);
+  });
+
+  /**
+   * **되돌리지 않는 것이 계약이다.** 되돌리면 아임웹의 리빌 패스가 이미 지나간 위젯에
+   * `wg_animated` 가 되붙어 **파트너 자신의 콘텐츠가 영영 숨는다** — 떠나면서 남의 페이지를
+   * 지우는 셈이다. 원래 인라인 값도 우리는 모른다.
+   *
+   * 이 테스트는 "정리를 안 하네" 하고 되돌리려는 다음 사람을 이유와 함께 막으려고 있다.
+   */
+  it("destroy 뒤에도 되돌리지 않는다 — 일부러다", () => {
+    const { widget } = widgetMount();
+    boot(payload);
+    destroy(payload);
+
+    expect(widget.style.visibility).toBe("visible");
+    expect(widget.classList.contains("wg_animated")).toBe(false);
+  });
+
+  /** 래퍼가 없으면 아무것도 안 만진다 — 남의 문서에서 찾지 못한 것을 지어내지 않는다. */
+  it("래퍼가 없으면 손대지 않는다", () => {
+    const host = mountPoint({ width: 800, height: 600 });
+    expect(() => boot(payload)).not.toThrow();
+    expect(host.parentElement).toBe(document.body);
+  });
+});

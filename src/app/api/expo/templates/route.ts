@@ -21,6 +21,7 @@ import {
   applyMediaToSnapshot, normalizeTemplateMeta, planTemplateSave, reconnectChecklist,
 } from "@/lib/expo/template-service";
 import { EXPO_LIMITS } from "@/lib/expo/registry";
+import { validateTemplateSnapshot } from "@/lib/expo/request";
 
 export async function GET(request: Request) {
   const guard = await guardExpoRoute(request);
@@ -112,6 +113,27 @@ export async function POST(request: Request) {
 
   // ③ DB 쓰기. 여기서 실패하면 ②가 만든 것을 되돌린다.
   const snapshot = applyMediaToSnapshot(plan.snapshot, media.map);
+
+  /**
+   * **상한을 여기서 다시 잰다.** `buildExpoTemplate` 이 이미 한 번 재지만 그건 ②가
+   * 이미지 주소를 템플릿 경로로 갈아끼우기 **전**이다 — 새 주소가 더 길어서 그 사이에
+   * 상한을 넘을 수 있다. 놓치면 저장은 201 인데 **복제할 때만 422** 가 나는 템플릿이 남는다.
+   *
+   * 던지는 대신 여기서 재는 이유: `applyMediaToSnapshot` 은 순수 함수이고, 거기서 던지면
+   * 아래 보상 삭제를 건너뛰어 복사한 파일이 고아로 남는다.
+   */
+  const sized = validateTemplateSnapshot(snapshot);
+  if (!sized.ok) {
+    const cleaned = await media.cleanup();
+    if (!cleaned.ok) console.error("[expo] 템플릿 미디어 고아", cleaned.orphans);
+    const mb = Math.round(EXPO_LIMITS.templateSnapshotBytes / (1024 * 1024));
+    return fieldErrors([{
+      path: "snapshot", code: "too-large",
+      // 원인을 말해야 한다 — 운영자에겐 방금까지 괜찮던 것이 갑자기 거절당하는 상황이다.
+      message: `이미지 주소까지 옮기고 나니 템플릿이 ${mb}MB 상한을 넘었어요. 이미지나 카드 수를 줄이고 다시 시도해 주세요`,
+    }]);
+  }
+
   try {
     await prisma.expoTemplate.create({
       data: {
