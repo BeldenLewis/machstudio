@@ -10,7 +10,8 @@ import { prisma } from "@/lib/prisma";
 import { guardExpoRoute, authFailure } from "@/lib/expo/route-guard";
 import { requireOwnedPage, requireWorkspaceAdmin } from "@/lib/expo/auth";
 import { preparePublish } from "@/lib/expo/site-service";
-import { publishIssues } from "@/lib/expo/readiness";
+import { launchLockIssue, publishIssues } from "@/lib/expo/readiness";
+import { newlyEmbedEnabled } from "@/lib/expo/release-gate";
 
 export async function POST(request: Request, { params }: { params: Promise<{ pageId: string }> }) {
   const { pageId } = await params;
@@ -20,7 +21,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ pag
   const page = await prisma.expoPage.findFirst({
     where: { id: pageId, deletedAt: null },
     select: {
-      id: true, siteId: true, draft: true,
+      id: true, siteId: true, draft: true, published: true,
       site: { select: { id: true, workspaceId: true, projectId: true } },
     },
   });
@@ -39,6 +40,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ pag
   const issues = publishIssues(page!.draft);
   if (issues.length > 0) {
     return NextResponse.json({ error: "아직 발행할 수 없어요", issues }, { status: 422 });
+  }
+
+  /**
+   * **발행만으로도 노출이 장전된다.** 구획 단독 임베드는 `liveAt` 을 보지 않고 발행본만
+   * 본다(`model.ts` 의 `standaloneSection`) — 그래서 공개 스위치를 잠그는 것만으로는
+   * 부족하다. 릴리스 승인 전에는 이번 발행으로 **새로 켜지는** 구획이 있으면 막는다.
+   *
+   * 비교 대상이 `published` 인 것이 핵심이다: 발행의 효과는 발행본에 미치므로, 이미
+   * 발행본에 켜져 있던 구획을 다시 발행하는 것은 새 노출이 아니다. 끄는 발행은 언제나 된다.
+   */
+  if (!guard.ctx.caps.publicEmbed) {
+    const arming = newlyEmbedEnabled(page!.draft, page!.published);
+    if (arming.length > 0) {
+      return NextResponse.json(
+        {
+          error: "아직 발행할 수 없어요",
+          issues: arming.map((sid) => launchLockIssue("launch-locked-embed", sid)),
+        },
+        { status: 422 },
+      );
+    }
   }
 
   const prepared = preparePublish(page!);

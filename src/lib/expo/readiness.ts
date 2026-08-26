@@ -6,6 +6,10 @@
  * 상태가 생기고, 그건 비개발자에게 고장으로 읽힌다.
  *
  * 문구를 여기 두는 이유: 이유와 문구가 갈리면 새 사유를 추가할 때 한쪽만 고쳐진다.
+ *
+ * **용어:** 화면에 나가는 문구는 전부 "구획" 이다. 코드 안에서는 `section` 이지만 편집기가
+ * 사용자에게 보여 주는 말은 "구획" 하나뿐이라(카탈로그·카드·토글·개수 경고), 여기서만 "섹션"
+ * 이라고 하면 같은 화면에 두 이름이 뜬다.
  */
 import { hasContent } from "@/lib/expo/model";
 import { normalizeExpoPage } from "@/lib/expo/config";
@@ -21,7 +25,11 @@ export type ReadinessCode =
   | "section-not-published"
   | "section-embed-off"
   | "section-empty"
-  | "no-imweb-url";
+  | "no-imweb-url"
+  /** 릴리스 승인 전이라 공개 스위치를 켤 수 없다. 끄는 것은 언제나 된다. */
+  | "launch-locked-live"
+  /** 릴리스 승인 전이라 구획 단독 내보내기를 켤 수 없다. */
+  | "launch-locked-embed";
 
 export interface ReadinessIssue {
   code: ReadinessCode;
@@ -31,16 +39,25 @@ export interface ReadinessIssue {
 }
 
 const MESSAGES: Record<ReadinessCode, string> = {
-  "no-sections": "아직 섹션이 없어요. 키비주얼이나 본문부터 추가해 보세요.",
-  "no-renderable-section": "내보낼 섹션이 없어요 — 켜져 있고 내용이 찬 섹션이 하나는 있어야 해요.",
-  "empty-enabled-section": "켜져 있는데 내용이 비어 있어요. 이 섹션은 화면에 나가지 않아요.",
+  "no-sections": "아직 구획이 없어요. 키비주얼이나 본문부터 추가해 보세요.",
+  "no-renderable-section": "내보낼 구획이 없어요 — 켜져 있고 내용이 찬 구획이 하나는 있어야 해요.",
+  "empty-enabled-section": "켜져 있는데 내용이 비어 있어요. 이 구획은 화면에 나가지 않아요.",
   "not-published": "아직 발행하지 않았어요. 발행해야 밖으로 나갈 사본이 만들어져요.",
   "draft-ahead-of-published": "발행 뒤에 고친 내용이 있어요. 다시 발행해야 밖에 반영돼요.",
-  "section-not-published": "이 섹션은 발행본에 없어요. 페이지를 발행하면 코드를 복사할 수 있어요.",
-  "section-embed-off": "이 섹션의 '따로 붙이기' 가 꺼져 있어요.",
+  "section-not-published": "이 구획은 발행본에 없어요. 페이지를 발행하면 코드를 복사할 수 있어요.",
+  "section-embed-off": "'이 구획만 따로 내보내기' 가 꺼져 있어요.",
   "section-empty": "내용이 비어 있어 붙여도 아무것도 나오지 않아요.",
   "no-imweb-url": "아임웹 페이지 주소가 없어요. 다른 페이지에서 이 페이지로 링크를 걸 수 없어요.",
+  "launch-locked-live": "아직 아임웹 공개가 열리지 않았어요. 준비가 끝나면 이 스위치를 켤 수 있어요.",
+  "launch-locked-embed": "아직 아임웹 공개가 열리지 않아 '이 구획만 따로 내보내기' 를 켤 수 없어요. 끄는 것은 언제든 돼요.",
 };
+
+/** 라우트가 릴리스 잠금 사유를 만들 때 쓴다. 문구가 갈라지지 않게 여기서만 만든다. */
+export function launchLockIssue(
+  code: "launch-locked-live" | "launch-locked-embed", sid?: string,
+): ReadinessIssue {
+  return issue(code, sid);
+}
 
 const issue = (code: ReadinessCode, sid?: string): ReadinessIssue => ({ code, sid, message: MESSAGES[code] });
 

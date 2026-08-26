@@ -72,6 +72,23 @@ describe("소스 목록 ↔ 실제 번들 입력", () => {
     expect(competitionVoteSourceFiles(ROOT)).toEqual(actual);
   }, 30_000);
 
+  /**
+   * **의존 방향** — 등록 폼 번들에 `src/lib/expo/*` 가 하나도 없어야 한다.
+   *
+   * 위 대조는 "목록과 실제 입력이 같은가" 만 본다. 그래서 목록에 expo 파일을 **추가하는**
+   * 사람은 초록을 받으면서 방향을 깰 수 있다. 이 검사는 목록과 무관하게 실제 입력만 본다.
+   *
+   * 왜 중요한가: 전문 팝업을 고치면서 `@/lib/expo/overlay` 를 값으로 가져오고 싶어지는데,
+   * 그러면 expo 4개(overlay·shell-css·sheet·host-reset) + dom/scroll-lock 이 딸려 와
+   * 약 +12KB(약 +16%)가 된다. 이 번들은 방문자 52,000명이 매번 내려받는다.
+   * 자리는 **예약이 실어 보내고**(`FormTargetRecord.overlay`) 폼은 그걸 부르기만 한다.
+   */
+  it("등록 폼 번들에 엑스포가 들어오지 않는다", async () => {
+    const inputs = await bundleInputs("src/embed/form-entry.ts");
+    const leaked = inputs.filter((p) => p.includes("/src/lib/expo/"));
+    expect(leaked).toEqual([]);
+  }, 30_000);
+
   it("대회 결과 런타임", async () => {
     const actual = await bundleInputs("src/embed/competition-result-entry.ts");
     expect(competitionResultSourceFiles(ROOT)).toEqual(actual);

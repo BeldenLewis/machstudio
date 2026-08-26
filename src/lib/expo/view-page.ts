@@ -104,6 +104,8 @@ export function renderExpoSections(
             sourceId, view: "form", mode: ctx.mode,
             container: slot, styleRoot: ctx.styleRoot, origin: ctx.origin,
             instanceKey: `${ctx.instancePrefix}:${section.sid}`,
+            // 동의 전문 팝업이 Shadow 밖으로 나가지 않게 — 다리가 포털 자리를 만든다.
+            themeVars: ctx.themeVars, sid: section.sid,
             doc: ctx.doc,
           });
           if (bridge) bridges.push(bridge);
@@ -142,6 +144,11 @@ export function renderExpoSections(
           container: modal.body, styleRoot: modal.styleRoot, origin: ctx.origin,
           // 같은 소스의 인라인 폼과 **다른 열쇠**여야 서로의 자리를 뺏지 않는다.
           instanceKey: `${ctx.instancePrefix}:${section.sid}:modal`,
+          /**
+           * 모달 안의 폼도 자기 임대를 받는다 — 팝업 레이어가 모달 레이어 **위**에 쌓이고,
+           * 그 덕에 모달의 `isTopmost()` 가 false 가 되어 Escape·Tab 이 알아서 비켜난다.
+           */
+          themeVars: ctx.themeVars, sid: section.sid,
           doc: ctx.doc,
         });
       });

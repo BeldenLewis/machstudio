@@ -64,6 +64,8 @@ export function landingSourceFiles(root) {
     join(root, "src/lib/webinar-speaker-links.ts"),
     // 스크롤 잠금 — 랜딩과 홈페이지가 body 하나를 공유하므로 구현이 한 벌이어야 한다.
     join(root, "src/lib/dom/scroll-lock.ts"),
+    // 색 계산 공용 계약 — 중복 세 벌을 여기로 모았다(W1 Task 20).
+    join(root, "src/lib/color.ts"),
   ]).sort();
 }
 
@@ -94,6 +96,11 @@ export function formSourceFiles(root) {
     join(root, "src/lib/competition-strings.ts"),
     join(root, "src/lib/legal-templates/tokens.ts"),
     join(root, "src/lib/legal-templates/types.ts"),
+    // 색 계산 공용 계약 — 중복 세 벌을 여기로 모았다(W1 Task 20).
+    join(root, "src/lib/color.ts"),
+    // 전문 팝업이 닫힐 때 포커스를 돌려준다. **`dom/focus` 만** 들어온다 —
+    // `@/lib/expo/*` 를 값으로 가져오면 expo 4개 + scroll-lock 이 딸려 와 약 +12KB 다.
+    join(root, "src/lib/dom/focus.ts"),
   ]).sort();
 }
 
@@ -185,6 +192,8 @@ export function competitionSourceFiles(root) {
     join(root, "src/lib/notice/view-sections.ts"),
     join(root, "src/lib/webinar-config.ts"),
     join(root, "src/lib/webinar-image.ts"),
+    // 색 계산 공용 계약 — 중복 세 벌을 여기로 모았다(W1 Task 20).
+    join(root, "src/lib/color.ts"),
   ]).sort();
 }
 
@@ -201,6 +210,8 @@ export function competitionVoteSourceFiles(root) {
     join(root, "src/lib/competition-strings.ts"),
     join(root, "src/lib/competition-vote-css.ts"),
     join(root, "src/lib/competition-vote-strings.ts"),
+    // 색 계산 공용 계약 — 중복 세 벌을 여기로 모았다(W1 Task 20).
+    join(root, "src/lib/color.ts"),
   ]).sort();
 }
 
@@ -217,6 +228,8 @@ export function competitionResultSourceFiles(root) {
     join(root, "src/lib/competition-result-css.ts"),
     join(root, "src/lib/competition-result-strings.ts"),
     join(root, "src/lib/competition-strings.ts"),
+    // 색 계산 공용 계약 — 중복 세 벌을 여기로 모았다(W1 Task 20).
+    join(root, "src/lib/color.ts"),
   ]).sort();
 }
 

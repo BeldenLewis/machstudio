@@ -171,6 +171,8 @@ function render(inst: Instance): void {
         serverNow: inst.cfg.serverNow,
         preview,
         styleRoot,
+        // 예약이 자리를 함께 줬으면 전문 팝업이 거기로 간다. 안 줬으면 document.body.
+        overlay: record?.overlay,
         /**
          * 라우트가 SWR 을 짧게(60초) 잡아 두므로 남는 지연은 작고, 런타임에도 5분 넘게
          * 과거인 serverNow 를 버리는 가드가 있다. 스크립트 태그로는 응답 헤더(Age)를

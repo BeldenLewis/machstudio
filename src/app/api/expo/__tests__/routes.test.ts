@@ -512,6 +512,120 @@ describe("발행·공개", () => {
   });
 });
 
+/**
+ * **릴리스 승인 전에는 밖으로 내보내는 것을 켤 수 없다.** 끄는 것은 언제나 된다.
+ *
+ * 공개 스위치만 잠그면 부족하다 — **구획 단독 임베드는 `liveAt` 을 보지 않고 발행본만
+ * 본다**(`model.ts` 의 `standaloneSection`). 그래서 발행만으로 노출이 미리 장전되고,
+ * 플래그를 켜는 순간 준비해 둔 구획이 그대로 나간다. 계획서가 "the flag alone cannot
+ * expose prepared content" 라고 쓴 상태가 그것이다.
+ *
+ * 이 describe 는 릴리스가 꺼져 있는 상태를 기본으로 쓴다(beforeEach 가 이미 그렇게 둔다).
+ */
+describe("릴리스 잠금", () => {
+  const base = { id: "pg1", siteId: "s1", site: { id: "s1", workspaceId: "w1", projectId: "p1" } };
+  const sec = (sid: string, embedEnabled: boolean) => ({
+    sid, type: "textblock", variant: "prose", content: { body: "본문" }, embedEnabled,
+  });
+  const ON = () => vi.stubEnv("EXPO_PUBLIC_EMBED_RELEASE", "on");
+
+  it("공개 스위치를 켤 수 없다", async () => {
+    prismaMock.expoPage.findFirst.mockResolvedValue({
+      ...base, published: { sections: [sec("00000000-0000-4000-8000-000000000001", false)] },
+    });
+    const { POST } = await import("@/app/api/expo/pages/[pageId]/live/route");
+
+    const res = await POST(write({ live: true }), { params: Promise.resolve({ pageId: "pg1" }) });
+    expect(res.status).toBe(422);
+    expect((await res.json()).issues.map((i: { code: string }) => i.code)).toContain("launch-locked-live");
+    expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
+  });
+
+  it("릴리스가 열리면 켤 수 있다", async () => {
+    ON();
+    prismaMock.expoPage.findFirst.mockResolvedValue({
+      ...base, published: { sections: [sec("00000000-0000-4000-8000-000000000001", false)] },
+    });
+    prismaMock.expoPage.update.mockResolvedValue({ id: "pg1", liveAt: new Date() });
+    const { POST } = await import("@/app/api/expo/pages/[pageId]/live/route");
+
+    expect((await POST(write({ live: true }), { params: Promise.resolve({ pageId: "pg1" }) })).status).toBe(200);
+  });
+
+  /** 발행이 구획을 **새로 켜는** 경우만 막는다. */
+  it("따로 내보내기를 새로 켜는 발행을 막는다", async () => {
+    const sid = "00000000-0000-4000-8000-000000000001";
+    prismaMock.expoPage.findFirst.mockResolvedValue({
+      ...base, draft: { sections: [sec(sid, true)] }, published: { sections: [sec(sid, false)] },
+    });
+    const { POST } = await import("@/app/api/expo/pages/[pageId]/publish/route");
+
+    const res = await POST(write({}), { params: Promise.resolve({ pageId: "pg1" }) });
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.issues[0].code).toBe("launch-locked-embed");
+    expect(body.issues[0].sid).toBe(sid);
+    expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
+  });
+
+  /** 이미 발행본에 켜져 있던 것을 다시 발행하는 것은 **새 노출이 아니다.** */
+  it("이미 켜져 있던 구획은 다시 발행해도 막지 않는다", async () => {
+    const sid = "00000000-0000-4000-8000-000000000001";
+    prismaMock.expoPage.findFirst.mockResolvedValue({
+      ...base, draft: { sections: [sec(sid, true)] }, published: { sections: [sec(sid, true)] },
+    });
+    prismaMock.expoPage.update.mockResolvedValue({ id: "pg1" });
+    const { POST } = await import("@/app/api/expo/pages/[pageId]/publish/route");
+
+    expect((await POST(write({}), { params: Promise.resolve({ pageId: "pg1" }) })).status).toBe(200);
+  });
+
+  /** 끄는 발행은 언제나 된다 — 되돌리기를 막으면 안 된다. */
+  it("따로 내보내기를 끄는 발행은 막지 않는다", async () => {
+    const sid = "00000000-0000-4000-8000-000000000001";
+    prismaMock.expoPage.findFirst.mockResolvedValue({
+      ...base, draft: { sections: [sec(sid, false)] }, published: { sections: [sec(sid, true)] },
+    });
+    prismaMock.expoPage.update.mockResolvedValue({ id: "pg1" });
+    const { POST } = await import("@/app/api/expo/pages/[pageId]/publish/route");
+
+    expect((await POST(write({}), { params: Promise.resolve({ pageId: "pg1" }) })).status).toBe(200);
+  });
+
+  it("초안 저장에서도 새로 켜는 것을 막는다", async () => {
+    const sid = "00000000-0000-4000-8000-000000000001";
+    prismaMock.expoPage.findFirst.mockResolvedValue({
+      ...base, draft: { sections: [sec(sid, false)] }, draftRevision: 3,
+    });
+    const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
+
+    const res = await PATCH(
+      write({ draft: { sections: [sec(sid, true)] }, draftRevision: 3 }, { }),
+      { params: Promise.resolve({ pageId: "pg1" }) },
+    );
+    expect(res.status).toBe(422);
+    expect((await res.json()).fields[0].code).toBe("launch-locked");
+    expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
+  });
+
+  /** 이미 켜 둔 구획이 있는 페이지가 **영구 저장 불가**가 되면 안 된다. */
+  it("이미 켜진 구획이 있어도 다른 값을 고쳐 저장할 수 있다", async () => {
+    const sid = "00000000-0000-4000-8000-000000000001";
+    prismaMock.expoPage.findFirst.mockResolvedValue({
+      ...base, draft: { sections: [sec(sid, true)] }, draftRevision: 3,
+    });
+    prismaMock.expoPage.update.mockResolvedValue({ id: "pg1", draftRevision: 4 });
+    const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
+
+    const next = { ...sec(sid, true), content: { body: "고친 본문" } };
+    const res = await PATCH(
+      write({ draft: { sections: [next] }, draftRevision: 3 }),
+      { params: Promise.resolve({ pageId: "pg1" }) },
+    );
+    expect(res.status).toBe(200);
+  });
+});
+
 describe("홈 페이지 보호", () => {
   it("홈은 지울 수 없다", async () => {
     prismaMock.expoPage.findFirst.mockResolvedValue({

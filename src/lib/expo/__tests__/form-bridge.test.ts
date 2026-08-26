@@ -124,3 +124,39 @@ describe("주소를 지어내지 않는다", () => {
     expect(handle.key.startsWith("a/../b:")).toBe(true);
   });
 });
+
+/**
+ * **전문 팝업이 놓일 자리를 다리가 준다.**
+ *
+ * 이 경로의 `styleRoot` 는 ShadowRoot 라 스타일이 그 안에만 들어간다. 팝업이
+ * `document.body` 로 나가면 CSS 를 하나도 못 받아 파트너 페이지 맨 아래에 서식 없는
+ * 약관 텍스트가 그려진다(W1 기준 3 위반이기도 하다).
+ *
+ * 자리를 **여기서** 주는 이유: `registerFormTarget` 을 부르는 곳이 저장소에서 여기
+ * 한 곳뿐이다. 호출부마다 넘기게 하면 세 번째 소비처가 생길 때 조용히 빠진다.
+ */
+describe("전문 팝업 자리", () => {
+  const THEME = { "--msx-accent": "#1f3a5f" };
+
+  it("테마와 sid 를 주면 예약에 자리가 실린다", () => {
+    const handle = attach({ themeVars: THEME, sid: "sid-1" })!;
+    const record = getFormTarget(handle.key)!;
+    expect(typeof record.overlay).toBe("function");
+  });
+
+  it("그 자리는 실제로 빌려진다 — Shadow 를 가진 레이어가 나온다", () => {
+    const handle = attach({ themeVars: THEME, sid: "sid-1" })!;
+    const slot = getFormTarget(handle.key)!.overlay!(() => {});
+    expect(slot).not.toBeNull();
+    expect(slot!.root).toBeInstanceOf(ShadowRoot);
+    // 잘림을 벗어나려면 body 직계여야 한다.
+    expect((slot!.root as ShadowRoot).host.parentElement).toBe(document.body);
+    slot!.release();
+  });
+
+  /** 테마를 모르면 자리를 만들지 않는다 — 색 없는 팝업을 그리느니 문서 경로가 낫다. */
+  it("테마·sid 가 없으면 자리를 주지 않는다", () => {
+    const handle = attach()!;
+    expect(getFormTarget(handle.key)!.overlay).toBeUndefined();
+  });
+});

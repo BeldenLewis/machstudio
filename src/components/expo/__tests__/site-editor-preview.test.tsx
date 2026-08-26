@@ -63,6 +63,8 @@ let host: HTMLDivElement;
 let root: Root;
 /** 서버가 다음 PATCH 응답에 실을 값. 테스트가 바꾼다. */
 let nextSave: { draftRevision: number; codeDigest: string };
+/** 세우면 다음 draft PATCH 를 422 로 거절한다 — 서버가 값을 거절한 상황. */
+let rejectNext: { errors: Array<{ path: string; message: string; sid?: string }> } | null = null;
 let pageBody: Record<string, unknown>;
 let patchCount = 0;
 let liveAt: string | null = null;
@@ -72,13 +74,25 @@ let holdPageDetail: ((body: unknown) => void) | null = null;
 let detailCount = 0;
 /** 사이트 PATCH 로 실제로 나간 본문들. 색은 자동저장이 아니라는 것을 여기서 본다. */
 let sitePatches: unknown[] = [];
+/** 목록이 돌려주는 이름. 트리의 이름 PATCH 가 서버처럼 이걸 바꾼다. */
+let listTitle = "홈";
 
 function stubFetch() {
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
     const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body } as Response);
     if (url.startsWith("/api/expo/pages/")) {
       if (init?.method === "PATCH") {
+        const body = JSON.parse(String(init.body ?? "{}"));
+        // 이름 바꾸기는 자동저장이 아니다 — 트리가 따로 보낸다. 같이 세면 저장 횟수가 거짓말한다.
+        if (typeof body.title === "string") {
+          listTitle = body.title;
+          return ok({ page: { id: PAGE_ID, title: body.title } });
+        }
         patchCount += 1;
+        if (rejectNext) {
+          const payload = rejectNext;
+          return { ok: false, status: 422, json: async () => payload } as Response;
+        }
         return ok({ page: { id: PAGE_ID, ...nextSave } });
       }
       // 발행·공개는 상세 조회가 아니다 — 같이 세면 "다시 읽었는가" 를 못 본다.
@@ -104,7 +118,7 @@ function stubFetch() {
           theme: { accent: "#1f3a5f", lightBg: "#ffffff", darkBg: "#111318" },
         },
         pages: [{
-          id: PAGE_ID, slug: "home", title: "홈", isHome: true, sortOrder: 0,
+          id: PAGE_ID, slug: "home", title: listTitle, isHome: true, sortOrder: 0,
           imwebUrl: null, hasPublished: Boolean(pageBody.hasPublished), liveAt,
         }],
         sources: [],
@@ -125,6 +139,7 @@ async function render() {
           siteId="s1" projectId="p1" siteName="사이트"
           permissions={permissions}
           release={{ publicEmbedEnabled: false }}
+          previewOrigin="https://machstudio.example.com"
         />
       </ConfirmProvider>,
     );
@@ -141,17 +156,20 @@ async function click(el: Element | undefined) {
 }
 
 /**
- * 페이지 이름을 고쳐 자동저장을 한 바퀴 돌린다.
- * 라벨로 찾는다 — `querySelector("input")` 는 왼쪽 칸의 색 입력을 먼저 집는다.
+ * 자동저장을 한 바퀴 돌린다.
+ *
+ * **이름이 아니라 아임웹 주소를 고친다** — 페이지 이름은 왼쪽 트리로 옮겨 갔고 거기서
+ * 따로 저장한다(같은 값을 두 곳이 저장하면 경합이 생긴다). 가운데 칸의 자동저장을
+ * 건드리려면 이 칸이 맞다.
  */
-async function editAndSave(title: string) {
+async function editAndSave(value: string) {
   const label = [...host.querySelectorAll("label")]
-    .find((el) => el.textContent?.startsWith("페이지 이름"));
+    .find((el) => el.textContent?.startsWith("아임웹 주소"));
   const input = label?.querySelector("input");
-  if (!input) throw new Error("이름 칸이 없다");
+  if (!input) throw new Error("아임웹 주소 칸이 없다");
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
   await act(async () => {
-    setter.call(input, title);
+    setter.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
   // 디바운스(900ms)를 넘긴다.
@@ -162,6 +180,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   patchCount = 0;
   sitePatches = [];
+  listTitle = "홈";
+  rejectNext = null;
   liveAt = null;
   detailCount = 0;
   holdPageDetail = () => {};
@@ -310,34 +330,46 @@ describe("사이트 색", () => {
     expect(sitePatches).toEqual([]);
   });
 
-  it("미리보기에 반영된다", async () => {
-    vi.useFakeTimers();
-    await render();
-    await setColor("#ff0000");
-    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
-    expect(frameSrc()).toContain("accent=%23ff0000");
-  });
-
   /**
-   * `<input type="color">` 는 선택기를 끄는 동안 정상 HEX 를 초당 수십 번 쏜다. 그대로
-   * 주소에 실으면 PreviewFrame 이 URL 을 key 로 쓰므로 **iframe 이 매번 다시 뜨고**
-   * /hp 로 그만큼 요청이 나간다.
+   * 색은 **프레임에 밀어 넣는다** — 주소에 싣지 않는다.
+   *
+   * 전에는 URL 에 실었는데, `<input type="color">` 가 선택기를 끄는 동안 정상 HEX 를 초당
+   * 수십 번 쏘고 PreviewFrame 이 URL 을 key 로 쓰는 탓에 **iframe 이 그만큼 파괴·재생성**됐다.
+   * 프레임 안쪽은 처음부터 `mach-expo-preview-theme` 를 받을 줄 알았다(`preview-bridge.ts`).
    */
-  it("고르는 동안에는 미리보기를 다시 띄우지 않는다", async () => {
-    vi.useFakeTimers();
+  it("미리보기 주소를 바꾸지 않는다 — 프레임을 다시 안 띄운다", async () => {
     await render();
     const before = frameSrc();
 
     for (const hex of ["#ff0000", "#ee0000", "#dd0000", "#cc0000"]) {
       await setColor(hex);
-      await act(async () => { await vi.advanceTimersByTimeAsync(30); });
     }
-    // 아직 안 멈췄다 — 주소는 그대로여야 한다.
     expect(frameSrc()).toBe(before);
+  });
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
-    // 멈추고 나서 마지막 색 하나만 반영된다.
-    expect(frameSrc()).toContain("accent=%23cc0000");
+  it("프레임에 색을 밀어 넣는다", async () => {
+    await render();
+    const frame = host.querySelector("iframe")!;
+    const posted: unknown[] = [];
+    // jsdom 의 contentWindow 는 실제 창이라 postMessage 를 가로채 볼 수 있다.
+    Object.defineProperty(frame, "contentWindow", {
+      value: { postMessage: (msg: unknown) => { posted.push(msg); } },
+      configurable: true,
+    });
+
+    await setColor("#ff0000");
+
+    const theme = posted.find((m) => (m as { type?: string }).type === "mach-expo-preview-theme");
+    expect(theme).toMatchObject({
+      pageId: PAGE_ID,
+      theme: expect.objectContaining({ accent: "#ff0000" }),
+    });
+  });
+
+  /** 통로가 붙으려면 채널이 주소에 실려야 한다 — 없으면 프레임이 통로를 아예 안 만든다. */
+  it("미리보기 주소에 채널을 싣는다", async () => {
+    await render();
+    expect(frameSrc()).toMatch(/channel=[0-9a-f-]{8,}/);
   });
 
   it("적용해야 서버로 나간다", async () => {
@@ -515,17 +547,121 @@ describe("발행한 뒤", () => {
   it("초안은 덮어쓰지 않는다", async () => {
     vi.useFakeTimers();
     await render();
-    await editAndSave("고친 이름");
+    await editAndSave("https://example.com/새주소");
 
     const label = [...host.querySelectorAll("label")]
-      .find((el) => el.textContent?.startsWith("페이지 이름"));
-    expect(label?.querySelector("input")?.value).toBe("고친 이름");
+      .find((el) => el.textContent?.startsWith("아임웹 주소"));
+    expect(label?.querySelector("input")?.value).toBe("https://example.com/새주소");
 
     pageBody.hasPublished = true;
     await act(async () => { publishButton()?.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
     await act(async () => { await vi.advanceTimersByTimeAsync(100); });
 
-    // 서버가 준 옛 제목("홈")으로 되돌아가면 안 된다.
-    expect(label?.querySelector("input")?.value).toBe("고친 이름");
+    // 서버가 준 옛 값(null)으로 되돌아가면 안 된다.
+    expect(label?.querySelector("input")?.value).toBe("https://example.com/새주소");
+  });
+});
+
+/**
+ * 이름의 출처는 **하나**여야 한다.
+ *
+ * 페이지 이름은 왼쪽 트리에서 고치는데, 가운데 칸의 상세는 `pageId` 가 바뀔 때만 다시
+ * 읽는다. 그래서 상세가 실어 보낸 이름을 오른쪽 칸이 쓰면, 이름을 고쳐도 **페이지를
+ * 떠났다 돌아오기 전까지** 발행 패널이 옛 이름을 단다 — 그 이름은 공개 스위치를
+ * 스크린리더가 읽는 이름이기도 하다("○○ 아임웹에 내보내기").
+ */
+/**
+ * **422 는 조용히 사라지면 안 된다.**
+ *
+ * 예전에는 `!res.ok` 를 전부 `failed` 로 뭉갰다. `failed` 는 기준선을 유지해 **다음 변경마다
+ * 다시 시도**되는데, 서버가 값을 거절한 것이므로 같은 값은 영원히 거절이다. 화면에는 이유가
+ * 한 글자도 안 떴다 — 운영자는 저장이 안 되고 있다는 사실조차 몰랐다.
+ * 쓰기 검증을 강하게 만들면서 이 처리를 같이 고치지 않으면 그 상태가 흔해진다.
+ */
+describe("서버가 값을 거절하면", () => {
+  const bannerText = () => host.textContent ?? "";
+
+  it("이유를 화면에 올린다", async () => {
+    vi.useFakeTimers();
+    await render();
+    rejectNext = { errors: [{ path: "sections[0].sid", message: "구획 하나가 신원 없이 왔어요.", sid: "sid-1" }] };
+    await editAndSave("https://example.com/x");
+
+    expect(bannerText()).toContain("저장하지 못했어요");
+    expect(bannerText()).toContain("구획 하나가 신원 없이 왔어요");
+  });
+
+  /** 409(다른 곳에서 먼저 저장)와 갈라야 한다 — 그건 기다리면 풀리고 이건 고쳐야 풀린다. */
+  it("409 배너와 다른 문구를 쓴다", async () => {
+    vi.useFakeTimers();
+    await render();
+    rejectNext = { errors: [{ path: "sections", message: "값이 안 돼요." }] };
+    await editAndSave("https://example.com/x");
+    expect(bannerText()).not.toContain("다른 곳에서 먼저 저장했어요");
+  });
+
+  /** 값을 고치면 안내가 사라지고 다시 시도된다 — 막힌 채로 두지 않는다. */
+  it("값을 고치면 안내가 사라지고 다시 보낸다", async () => {
+    vi.useFakeTimers();
+    await render();
+    rejectNext = { errors: [{ path: "sections", message: "값이 안 돼요." }] };
+    await editAndSave("https://example.com/x");
+    expect(bannerText()).toContain("저장하지 못했어요");
+
+    rejectNext = null;
+    const before = patchCount;
+    await editAndSave("https://example.com/고침");
+
+    expect(patchCount).toBeGreaterThan(before);
+    expect(bannerText()).not.toContain("저장하지 못했어요");
+  });
+
+  /** 이유가 비어 있어도 무언가는 말한다 — 빈 배너가 뜨면 고장으로 읽힌다. */
+  it("서버가 이유를 안 주면 일반 문구라도 낸다", async () => {
+    vi.useFakeTimers();
+    await render();
+    rejectNext = { errors: [] };
+    await editAndSave("https://example.com/x");
+    expect(bannerText()).toContain("저장할 수 없는 값이 있어요");
+  });
+});
+
+describe("페이지 이름", () => {
+  /** 스위치의 읽는 이름 — 여기에 페이지 이름이 실린다. */
+  const switchName = () =>
+    [...host.querySelectorAll('[role="switch"], input[type="checkbox"]')]
+      .map((el) => el.getAttribute("aria-label") ?? "")
+      .join(" | ");
+
+  async function rename(next: string) {
+    const input = [...host.querySelectorAll("input")]
+      .find((el) => (el.getAttribute("aria-label") ?? "").endsWith(" 이름"));
+    if (!input) throw new Error("이름 칸이 없다");
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setter.call(input, next);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    // 트리의 이름 디바운스(600ms) + 목록 다시 읽기.
+    await act(async () => { await vi.advanceTimersByTimeAsync(900); });
+  }
+
+  it("트리에서 고친 이름이 발행 패널에 바로 따라온다", async () => {
+    vi.useFakeTimers();
+    await render();
+    expect(switchName()).toContain("홈");
+
+    await rename("첫 화면");
+
+    expect(switchName()).toContain("첫 화면");
+    expect(switchName()).not.toContain("홈 아임웹에");
+  });
+
+  /** 이름을 고쳐도 자동저장이 도는 것은 아니다 — 트리가 자기 요청으로 따로 저장한다. */
+  it("이름 바꾸기가 가운데 칸의 자동저장을 돌리지 않는다", async () => {
+    vi.useFakeTimers();
+    await render();
+    await rename("첫 화면");
+    expect(patchCount).toBe(0);
   });
 });

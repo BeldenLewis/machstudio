@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  EXPO_HOST_MARK, EXPO_HOST_TAG, findExpoShell, mountExpoShell, type ExpoShellHandle,
+  EXPO_HOST_MARK, EXPO_HOST_TAG, findExpoShell, mountExpoShell,
 } from "@/lib/expo/shadow";
 import { EXPO_HOST_RESET_CSS, EXPO_PORTAL_RESET_CSS } from "@/lib/expo/host-reset";
 import { EXPO_SHEET_MARK, canAdoptStyleSheets, ensureExpoStyles, resetExpoSheetRegistry } from "@/lib/expo/sheet";
