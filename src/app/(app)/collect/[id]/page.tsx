@@ -33,6 +33,7 @@ import RetentionPolicyEditor from "./RetentionPolicyEditor";
 import DateRangeField from "@/components/DateRangeField";
 import { formatKst, formatKstDateTime } from "@/lib/datetime";
 import ProjectSummaryCard from "@/app/(app)/dashboard/ProjectSummaryCard";
+import { useWorkspaceChannelColors } from "@/components/ui/use-workspace-channel-colors";
 import type { RealtimeReportData } from "@/app/(app)/dashboard/RealtimeReport";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
@@ -176,7 +177,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   const [sourceReport, setSourceReport] = useState<RealtimeReportData | null>(null);
   const [sourceReportLoading, setSourceReportLoading] = useState(false);
   // 도넛 차트 채널 색 — 워크스페이스 단위 설정이라 소스가 아니라 워크스페이스 ID로 조회한다.
-  const [channelColors, setChannelColors] = useState<Record<string, string> | null>(null);
+  const { channelColors, setChannelColorOverride } = useWorkspaceChannelColors(source?.workspaceId);
 
   // GA4 분석 연동 — 소스가 아니라 "프로젝트" 단위 설정이지만(§데이터 관리 탭 참고),
   // 데이터를 다루는 이 화면에서 바로 고칠 수 있어야 접근성이 있다.
@@ -296,16 +297,6 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       console.error("[collect-source-summary] failed", error);
     } finally {
       setSourceReportLoading(false);
-    }
-  }, []);
-
-  const fetchChannelColors = useCallback(async (workspaceId: string) => {
-    try {
-      const res = await fetch(`/api/workspace/${workspaceId}`);
-      const data = await res.json().catch(() => null);
-      setChannelColors(res.ok ? data?.workspace?.channelColors ?? null : null);
-    } catch (error) {
-      console.error("[collect-source-summary] channel colors failed", error);
     }
   }, []);
 
@@ -571,8 +562,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     if (!source) return;
     void fetchSourceReport(source.workspaceId, source.projectId, source.id);
-    void fetchChannelColors(source.workspaceId);
-  }, [source?.id, source?.workspaceId, source?.projectId, fetchSourceReport, fetchChannelColors]);
+  }, [source?.id, source?.workspaceId, source?.projectId, fetchSourceReport]);
   // 52,000건 capture 설치 경로와 localhost 경고는 현재 host를 함께 보여야 해 이번 범위에서 보존한다.
   // eslint-disable-next-line no-restricted-syntax
   useEffect(() => { setBrowserOrigin(window.location.origin); }, []);
@@ -1164,7 +1154,12 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
             <div>
               {sourceReport ? (
                 <div className="mb-4">
-                  <ProjectSummaryCard data={sourceReport} title={source.name} channelColors={channelColors} />
+                  <ProjectSummaryCard
+                    data={sourceReport}
+                    title={source.name}
+                    channelColors={channelColors}
+                    onChannelColorChange={setChannelColorOverride}
+                  />
                 </div>
               ) : sourceReportLoading ? (
                 <div className="mb-4 flex h-32 items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">

@@ -16,10 +16,12 @@ interface ProjectSummaryCardProps {
    * channelColors 처럼 상세 API 전용 필드가 비어 있을 수 있다).
    */
   channelColors?: Record<string, string> | null;
+  /** 도넛 범례의 색 점을 눌러 그 채널 색을 바로 바꿀 수 있게 한다 — 없으면 점은 표시만. */
+  onChannelColorChange?: (label: string, hex: string) => void;
 }
 
 /** 요약 대시보드와 수집 소스 상세의 "수집 데이터" 탭이 함께 쓰는 압축 카드. */
-export default function ProjectSummaryCard({ data, title, channelColors }: ProjectSummaryCardProps) {
+export default function ProjectSummaryCard({ data, title, channelColors, onChannelColorChange }: ProjectSummaryCardProps) {
   const trend = data.cumulativeTrend.slice(-14).map((point) => point.count);
 
   const funnelStages = data.funnel
@@ -60,7 +62,7 @@ export default function ProjectSummaryCard({ data, title, channelColors }: Proje
             <Route className="h-3.5 w-3.5" />
             유입경로
           </div>
-          <DonutChart data={data.utmBySource} channelColors={channelColors} />
+          <DonutChart data={data.utmBySource} channelColors={channelColors} onColorChange={onChannelColorChange} />
         </div>
 
         <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52">
