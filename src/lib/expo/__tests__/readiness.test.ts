@@ -124,4 +124,21 @@ describe("문구", () => {
       expect(message).not.toMatch(/undefined|null/);
     }
   });
+
+  /**
+   * 편집기가 사용자에게 쓰는 말은 **"구획" 하나뿐이다** — 카탈로그("구획 추가"), 카드 삭제
+   * 라벨, 개수 경고("한 페이지에 구획은 40개까지예요"), 따로 내보내기 토글이 전부 그렇다.
+   * 그런데 이 문구들은 **같은 화면 안에** 뜬다(발행 패널·구획 카드 아래). 여기서만 "섹션"
+   * 이라고 하면 비개발자는 그게 다른 것인 줄 안다.
+   */
+  it("화면 문구에 '섹션' 을 쓰지 않는다 — 편집기는 '구획' 이라고 부른다", () => {
+    for (const [code, message] of Object.entries(EXPO_READINESS_MESSAGES)) {
+      expect(`${code}: ${message.includes("섹션")}`).toBe(`${code}: false`);
+    }
+  });
+
+  /** 사유가 컨트롤을 가리킬 땐 **화면에 실제로 있는 이름**이어야 한다. */
+  it("따로 내보내기 사유는 토글 이름을 그대로 부른다", () => {
+    expect(EXPO_READINESS_MESSAGES["section-embed-off"]).toContain("이 구획만 따로 내보내기");
+  });
 });

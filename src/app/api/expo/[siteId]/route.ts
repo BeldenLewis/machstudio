@@ -12,6 +12,7 @@ import { normalizeExpoTheme } from "@/lib/expo/config";
 import { normalizeHexColor } from "@/lib/color";
 import { pageSummary } from "@/lib/expo/site-service";
 import { safeHttpUrl } from "@/lib/webinar-config";
+import { sourceScopeWhere } from "@/lib/expo/source-scope";
 
 async function loadOwned(siteId: string, ctx: { userId: string; memberWorkspaceIds: string[] }) {
   const site = await prisma.expoSite.findFirst({
@@ -53,7 +54,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ site
    * 여기서 더 넓게 주면 운영자는 고를 수 있는데 공개 화면에서는 폼이 안 나온다.
    */
   const sources = await prisma.collectSource.findMany({
-    where: { projectId: site!.projectId, deletedAt: null, mode: "builder" },
+    where: sourceScopeWhere(site!.projectId),
     select: { id: true, name: true, isActive: true },
     orderBy: { createdAt: "desc" },
     take: 100,
@@ -131,8 +132,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ si
     if (body.collectSourceId === null) {
       data.collectSourceId = null;
     } else {
+      /**
+       * **`mode: "builder"` 가 빠져 있었다** — capture 모드 소스(아임웹에서 긁어 오는 쪽)를
+       * 사이트 기본 소스로 붙일 수 있었다. 그건 폼이 아니라서 홈페이지가 그리면
+       * 방문자에게 빈 껍데기가 나간다. 목록·draft·공개 로더와 같은 조건을 쓴다.
+       */
       const source = await prisma.collectSource.findFirst({
-        where: { id: String(body.collectSourceId), deletedAt: null },
+        where: sourceScopeWhere(owned.value.projectId, [String(body.collectSourceId)]),
         select: { id: true, projectId: true },
       });
       const same = requireSameProjectSource(owned.value, source);

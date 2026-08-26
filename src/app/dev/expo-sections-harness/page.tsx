@@ -20,6 +20,7 @@ import { useMemo, useState } from "react";
 import { notFound } from "next/navigation";
 import { SectionsEditor } from "@/components/expo/SectionEditor";
 import { ExpoPublishPanel } from "@/components/expo/ExpoPublishPanel";
+import { ExpoPageTree } from "@/components/expo/ExpoPageTree";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import { attachExpoRowKeys, stripExpoRowKeys, findRowKeyLeak } from "@/lib/expo/row-key";
 import { normalizeExpoPage } from "@/lib/expo/config";
@@ -152,6 +153,25 @@ function Harness() {
       </header>
 
       <div className="flex flex-wrap items-start gap-4">
+        {/* 왼쪽 칸 — 실제 폭(200~240px)에서 핸들·상태점·이름·삭제가 다 들어가는지 본다. */}
+        <div style={{ width: 240 }}>
+          <ExpoPageTree
+            siteId="harness-site"
+            pages={[
+              { id: "home", title: "홈", isHome: true, hasPublished: true, liveAt: "2026-08-01T00:00:00.000Z" },
+              { id: "about", title: "전시 소개", isHome: false, hasPublished: true, liveAt: null },
+              { id: "apply", title: "참가 신청 안내와 유의사항", isHome: false, hasPublished: false, liveAt: null },
+            ]}
+            selectedId="about"
+            canEdit={canEdit}
+            canManageSite={canEdit}
+            onSelect={() => {}}
+            onAdd={() => {}}
+            onReload={() => {}}
+            onPendingChange={() => {}}
+          />
+        </div>
+
         {/* 편집기가 실제로 앉는 칸 폭을 흉내낸다 — 3열 레이아웃의 가운데는 넓지 않다. */}
         <div
           className={`${R.panel} ${FINISH.s1} min-w-0 bg-card p-5`}
@@ -201,7 +221,7 @@ function Harness() {
                   code: `<script async src="https://machstudio.example.com/h/harness-page/${SID(3)}"></script>\n<div data-mach-expo-section></div>`,
                 },
                 issues: stage === "draft"
-                  ? [{ code: "section-not-published", message: "이 섹션은 발행본에 없어요. 페이지를 발행하면 코드를 복사할 수 있어요." }]
+                  ? [{ code: "section-not-published", message: "이 구획은 발행본에 없어요. 페이지를 발행하면 코드를 복사할 수 있어요." }]
                   : [],
               }],
             }}

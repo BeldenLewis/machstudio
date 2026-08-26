@@ -58,8 +58,18 @@ export function unlockScroll(): void {
   if (!state || --state.locks > 0) return;
 
   const body = document.body;
-  // 개별 속성을 되돌리지 않고 **원본 문자열을 통째로** 복원한다 — 호스트가 그 사이
-  // 다른 인라인 값을 넣었어도 우리가 지운 것만 정확히 되돌아간다.
+  /**
+   * 개별 속성을 되돌리지 않고 **원본 문자열을 통째로** 복원한다. 우리가 쓴 일곱 속성이
+   * 잔재 없이 사라지는 것을 이 한 줄이 보장한다 — 잠금 전 상태와 바이트가 같다.
+   *
+   * **대가: 잠금 중에 호스트가 body 에 넣은 인라인 값도 함께 지워진다.** 앞 판의 주석은
+   * "우리가 지운 것만 정확히 되돌아간다" 고 했는데 그건 속성별 복원의 설명이지 이 코드의
+   * 설명이 아니었다(이 로직은 처음부터 통째 복원이었다 — `landing/overlay.ts` 머리말 참고).
+   *
+   * 그럼에도 통째 복원을 유지한다: 잃는 것은 모달이 열려 있던 동안(폼 작성 수십 초)의
+   * 호스트 인라인 값이고, 막는 것은 **파트너 body 가 `position:fixed` 로 굳어 사이트 전체가
+   * 영영 스크롤 안 되는 것**이다. 교환이 한쪽으로 명백하다.
+   */
   if (state.savedStyle === null) body.removeAttribute("style");
   else body.setAttribute("style", state.savedStyle);
   if (!state.hadModalOpen) body.classList.remove("modal-open");

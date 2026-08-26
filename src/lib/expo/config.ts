@@ -31,7 +31,11 @@ const str = (v: unknown): string => (typeof v === "string" ? v : v == null ? "" 
 
 /** UUID 모양인가 — 형식만 본다(버전까지 따지면 옛 값이 통째로 날아간다). */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const isSid = (v: unknown): v is string => typeof v === "string" && UUID.test(v);
+/**
+ * 구획의 신원. **검증과 정규화가 같은 판정을 써야 한다** — 두 벌이 되는 순간
+ * "쓰기는 통과하는데 정규화가 버린다"(=구획이 조용히 사라진다)가 그 틈에서 되살아난다.
+ */
+export const isSid = (v: unknown): v is string => typeof v === "string" && UUID.test(v);
 
 /** UTF-8 바이트 기준으로 자른다 — 문자 수로 자르면 한글에서 상한을 넘는다. */
 function clampBytes(value: string, maxBytes: number): string {

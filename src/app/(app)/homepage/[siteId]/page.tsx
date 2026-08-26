@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireOwnedSite } from "@/lib/expo/auth";
 import { deriveExpoPermissions } from "@/lib/expo/permissions";
 import { isExpoPublicEmbedReleaseEnabled } from "@/lib/expo/capability";
+import { getPublicAppOrigin } from "@/lib/app-url";
 import type { WorkspaceRole } from "@/lib/expo/auth";
 import { ExpoSiteEditor } from "@/components/expo/ExpoSiteEditor";
 
@@ -51,6 +52,12 @@ export default async function HomepageDetailPage({
       siteName={site!.name}
       permissions={deriveExpoPermissions(role ?? null)}
       release={{ publicEmbedEnabled: isExpoPublicEmbedReleaseEnabled() }}
+      /**
+       * 미리보기 통로가 쓰는 오리진. **서버가 정한 값**을 내려보낸다 —
+       * 브라우저에서 `window.location.origin` 을 읽으면 프레임 쪽 판정(parentOrigin)과
+       * 어긋나 통로가 조용히 죽는다(AGENTS.md "새 면을 만들 때" ①과 같은 이유).
+       */
+      previewOrigin={getPublicAppOrigin() || ""}
     />
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Plus } from "lucide-react";
 import { Chip, FINISH, R, Segmented } from "@/components/ui/primitives";
 import { Switch } from "@/components/ui/switch";
@@ -70,16 +70,24 @@ export interface SectionsEditorProps {
   sections: ExpoSection[];
   onChange: (next: ExpoSection[]) => void;
   canEdit: boolean;
+  /** 릴리스 승인 전인가. **켜는 것만** 잠근다 — 이미 켠 것은 끌 수 있어야 한다. */
+  embedLocked?: boolean;
   siteId: string;
   sources?: readonly { id: string; name: string; isActive: boolean }[];
   /** 내부 링크 후보 — 지금 편집 중인 페이지를 포함한 이 사이트의 모든 페이지. */
   pages?: readonly LinkTarget[];
   /** 사이트의 defaultLocale — 글이 어느 로케일에 들어가는가. */
   locale: string;
+  /**
+   * 미리보기에서 누른 구획 — 그 카드로 데려가고 잠깐 테를 두른다.
+   * **값을 비우는 것은 부모가 한다**(잠깐 뒤에). 여기서 타이머로 지우면 효과 안에서
+   * state 를 바꾸게 되고, 그건 연쇄 렌더를 부른다(react-hooks 규칙).
+   */
+  focusedSid?: string | null;
 }
 
 export function SectionsEditor({
-  sections, onChange, canEdit, siteId, sources, pages, locale,
+  sections, onChange, canEdit, embedLocked = false, siteId, sources, pages, locale, focusedSid,
 }: SectionsEditorProps) {
   /**
    * 삭제 유예(5초) 중인 구획 — **화면에서만** 사라진 것들이다. 배열에는 그대로 있다.
@@ -98,6 +106,22 @@ export function SectionsEditor({
   );
 
   /**
+   * 미리보기에서 누른 구획으로 **데려간다.**
+   *
+   * 선택 모델을 새로 만들지 않는다 — 모든 구획이 이미 인라인으로 펼쳐져 있으므로(D14)
+   * 필요한 것은 "어디를 보라" 뿐이다. 스크롤로 옮기고, 테는 `focusedSid` 에서 그대로
+   * 파생시킨다(state 없음 — 효과에서 state 를 바꾸면 연쇄 렌더가 된다).
+   */
+  const rootRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!focusedSid) return;
+    // 못 찾으면(그 사이 지웠다) 아무 일도 하지 않는다.
+    rootRef.current
+      ?.querySelector<HTMLElement>(`[data-expo-sid="${CSS.escape(focusedSid)}"]`)
+      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focusedSid]);
+
+  /**
    * 배열에 들어 있는 타입들. **유예 중인 것도 센다** — 저장 payload 에 그대로 나가므로.
    * `pendingTypes` 는 그중 화면에서 사라진 것뿐인 타입이라, 버튼 설명을 가른다.
    */
@@ -113,7 +137,7 @@ export function SectionsEditor({
   }, [sections, pendingRemove]);
 
   return (
-    <section aria-labelledby="expo-sections-heading">
+    <section aria-labelledby="expo-sections-heading" ref={rootRef}>
       <div className="flex items-baseline justify-between gap-2">
         <h2 id="expo-sections-heading" className="text-sm font-semibold">구획</h2>
         {/* 유예로 사라진 것은 빼고 센다 — 안 그러면 5초 동안 화면의 카드 수와 어긋난다. */}
@@ -142,8 +166,10 @@ export function SectionsEditor({
           renderRow={(ctx) => (
             <SectionCard
               section={ctx.item}
+              flash={focusedSid === ctx.item.sid}
               controls={ctx}
               canEdit={canEdit}
+              embedLocked={embedLocked}
               siteId={siteId}
               sources={sources}
               pages={pages}
@@ -227,14 +253,17 @@ interface SectionCardProps {
     patch: (next: Partial<ExpoSection>) => void;
   };
   canEdit: boolean;
+  embedLocked: boolean;
   siteId: string;
   sources?: readonly { id: string; name: string; isActive: boolean }[];
   pages?: readonly LinkTarget[];
   locale: string;
+  /** 미리보기에서 방금 눌렀다 — 잠깐 테를 둘러 눈이 따라가게 한다. */
+  flash?: boolean;
 }
 
 function SectionCard({
-  section, controls, canEdit, siteId, sources, pages, locale,
+  section, controls, canEdit, embedLocked, siteId, sources, pages, locale, flash,
 }: SectionCardProps) {
   const def = sectionDef(section.type);
 
@@ -244,7 +273,10 @@ function SectionCard({
    */
   if (!def) {
     return (
-      <div className={`${R.surface} ${FINISH.s2Danger} flex items-center gap-2 bg-secondary p-2.5 text-xs`}>
+      <div
+        data-expo-sid={section.sid}
+        className={`${R.surface} ${FINISH.s2Danger} flex items-center gap-2 bg-secondary p-2.5 text-xs`}
+      >
         <span className="min-w-0 flex-1">
           <span className="font-medium">더 이상 쓰지 않는 구획</span>
           <span className="mt-0.5 block text-muted-foreground">
@@ -265,7 +297,11 @@ function SectionCard({
     patch({ content: { ...section.content, [key]: value } });
 
   return (
-    <div className={`${R.surface} ${FINISH.s2} space-y-2.5 bg-secondary p-2.5`}>
+    <div
+      data-expo-sid={section.sid}
+      /* 테는 `s2Key`(키 헤어라인)로 — 중립 테두리는 다크에서 레일과 구분이 안 된다. */
+      className={`${R.surface} ${flash ? FINISH.s2Key : FINISH.s2} space-y-2.5 bg-secondary p-2.5 transition-shadow`}
+    >
       {/* ── 머리 ─────────────────────────────────────────────────── */}
       <div className="flex items-center gap-1.5">
         {controls.handle}
@@ -363,13 +399,16 @@ function SectionCard({
           <Switch
             checked={section.embedEnabled}
             onChange={(embedEnabled) => patch({ embedEnabled })}
-            disabled={!canEdit}
+            // `&& !section.embedEnabled` 가 비대칭이다 — **이미 켠 것은 끌 수 있다.**
+            disabled={!canEdit || (embedLocked && !section.embedEnabled)}
             label={`${def.label} 이 구획만 따로 내보내기`}
           />
           <span>
             이 구획만 따로 내보내기
             <span className="ml-1 text-muted-foreground">
-              — 아임웹에 이 구획 하나만 붙일 때
+              {embedLocked && !section.embedEnabled
+                ? "— 아직 아임웹 공개가 열리지 않았어요"
+                : "— 아임웹에 이 구획 하나만 붙일 때"}
             </span>
           </span>
         </label>

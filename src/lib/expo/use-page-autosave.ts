@@ -38,7 +38,20 @@ export type ExpoSaveOutcome =
   /** 그 사이 다른 곳에서 저장했다. `revision` 은 서버의 현재 번호. */
   | { kind: "conflict"; revision: number }
   /** 네트워크·5xx. 재시도해도 되는 실패다. */
-  | { kind: "failed" };
+  | { kind: "failed" }
+  /**
+   * 서버가 **값을 거절했다**(422). 같은 값을 다시 보내면 또 거절이므로
+   * `failed` 와 달리 **재시도가 아니라 사람이 고칠 일**이다. 이유를 화면에 올린다.
+   */
+  | { kind: "rejected"; errors: ExpoRejection[] };
+
+/** 어느 칸이 왜 안 되는지. `request.ts` 의 `FieldError` 와 같은 모양이다. */
+export interface ExpoRejection {
+  path: string;
+  message: string;
+  /** 어느 구획인지 — 편집기가 그 카드로 데려간다. */
+  sid?: string;
+}
 
 export interface ExpoConflict {
   /** 서버의 현재 번호 — 화면이 "서버 내용으로 다시 불러오기" 에 쓴다. */
@@ -46,7 +59,7 @@ export interface ExpoConflict {
 }
 
 /** `flush()` 의 결과. 페이지 전환은 `clean`·`saved` 일 때만 진행한다. */
-export type FlushResult = "clean" | "saved" | "failed" | "conflict" | "disabled";
+export type FlushResult = "clean" | "saved" | "failed" | "conflict" | "rejected" | "disabled";
 
 export interface UsePageAutosaveOptions<T> {
   /**
@@ -70,6 +83,11 @@ export interface PageAutosave {
   state: AutosaveState;
   /** 409 를 만난 뒤의 상태. null 이 아니면 자동저장이 멈춰 있다. */
   conflict: ExpoConflict | null;
+  /**
+   * 422 로 거절당한 이유. 값이 바뀌면 저절로 사라진다 — 고치면 다시 시도되기 때문이다.
+   * **이게 없으면 자동저장이 조용히 계속 실패한다**(화면에는 아무 단서도 안 뜬다).
+   */
+  rejected: ExpoRejection[] | null;
   dirty: boolean;
   /** 대기분을 즉시 보내고 결과를 기다린다 — 페이지 전환 **전에** 부른다. */
   flush: () => Promise<FlushResult>;
@@ -94,8 +112,20 @@ export function usePageAutosave<T>(options: UsePageAutosaveOptions<T>): PageAuto
 
   const [state, setState] = useState<AutosaveState>("idle");
   const [conflict, setConflict] = useState<ExpoConflict | null>(null);
+  const [rejected, setRejected] = useState<ExpoRejection[] | null>(null);
+  /** 어떤 값이 거절당했는지 — 그 값이 바뀌면 안내를 치운다. */
+  const [rejectedAt, setRejectedAt] = useState<string | null>(null);
 
   const serialized = JSON.stringify(value);
+
+  /**
+   * 값이 바뀌면 거절 안내를 렌더 중에 치운다(효과가 아니다 — 한 프레임 늦으면 방금 고친
+   * 칸 아래에 옛 이유가 남는다). 다시 시도해서 또 거절되면 새 이유가 다시 온다.
+   */
+  if (rejected && rejectedAt !== null && rejectedAt !== serialized) {
+    setRejected(null);
+    setRejectedAt(null);
+  }
 
   const [anchor, setAnchor] = useState<Anchor>({ pageId, baseline: serialized, revision: initialRevision });
 
@@ -110,6 +140,8 @@ export function usePageAutosave<T>(options: UsePageAutosaveOptions<T>): PageAuto
     setAnchor({ pageId, baseline: serialized, revision: initialRevision });
     setState("idle");
     setConflict(null);
+    setRejected(null);
+    setRejectedAt(null);
   }
 
   /** 콜백에서 쓰는 사본들. **효과에서만** 쓴다 — 렌더 중에는 만지지 않는다. */
@@ -199,6 +231,20 @@ export function usePageAutosave<T>(options: UsePageAutosaveOptions<T>): PageAuto
           setConflict({ revision: outcome.revision });
           setState("error");
           return "conflict";
+        }
+
+        if (outcome.kind === "rejected") {
+          /**
+           * 기준선을 유지한다(=여전히 dirty). 같은 값으로는 다시 보내지 않지만,
+           * 사람이 값을 고치면 그 변경이 디바운스를 태워 다시 시도한다.
+           * 이유는 화면이 읽을 수 있게 남긴다.
+           */
+          setRejected(outcome.errors.length ? outcome.errors : [
+            { path: "sections", message: "저장할 수 없는 값이 있어요." },
+          ]);
+          setRejectedAt(snapshot);
+          setState("error");
+          return "rejected";
         }
 
         if (outcome.kind === "failed") {
@@ -299,5 +345,5 @@ export function usePageAutosave<T>(options: UsePageAutosaveOptions<T>): PageAuto
 
   const dirty = serialized !== anchor.baseline || state === "saving";
 
-  return { state, conflict, dirty, flush, resolveConflict, retry };
+  return { state, conflict, rejected, dirty, flush, resolveConflict, retry };
 }
