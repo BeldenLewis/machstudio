@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Filter, Route, Users } from "lucide-react";
+import { ArrowDown, Filter, Route, Users } from "lucide-react";
 import type { RealtimeReportData } from "./RealtimeReport";
 import { ChangeBadge, formatNumber } from "./RealtimeReport";
 import DonutChart from "./DonutChart";
@@ -60,7 +60,7 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
         </p>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
         <div>
           <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             <Route className="h-3.5 w-3.5" />
@@ -140,42 +140,40 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
             </div>
           )}
         </div>
-      </div>
 
-      {funnelStages.length > 0 && (
-        <div className="mt-4 border-t border-border pt-4">
-          <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <Filter className="h-3.5 w-3.5" />
-            주간 퍼널
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {funnelStages.map((stage, i) => (
-              <div key={stage.label} className="flex items-center gap-2">
-                <div className="min-w-[120px] rounded-xl border border-border bg-secondary/20 px-3 py-2">
-                  <div className="text-[11px] text-muted-foreground">{stage.label}</div>
-                  <div className="mt-0.5 text-lg font-semibold tabular-nums">{formatNumber(stage.value)}</div>
-                  {stage.change !== null && (
-                    <div className="mt-0.5">
-                      <ChangeBadge rangeChange={stage.change} />
+        {funnelStages.length > 0 && (
+          <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Filter className="h-3.5 w-3.5" />
+              주간 퍼널
+            </div>
+            <div className="mt-2 space-y-1">
+              {funnelStages.map((stage, i) => (
+                <div key={stage.label}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-[10px] text-muted-foreground">{stage.label}</span>
+                    <span className="flex shrink-0 items-center gap-1">
+                      <span className="text-sm font-semibold tabular-nums">{formatNumber(stage.value)}</span>
+                      {stage.change !== null && <ChangeBadge rangeChange={stage.change} />}
+                    </span>
+                  </div>
+                  {i < funnelStages.length - 1 && (
+                    <div className="my-0.5 flex items-center gap-1 pl-0.5 text-[10px] text-muted-foreground">
+                      <ArrowDown className="h-3 w-3" />
+                      <span className="tabular-nums">
+                        {funnelStages[i].value > 0
+                          ? Math.round((funnelStages[i + 1].value / funnelStages[i].value) * 100)
+                          : 0}
+                        %
+                      </span>
                     </div>
                   )}
                 </div>
-                {i < funnelStages.length - 1 && (
-                  <div className="flex flex-col items-center text-muted-foreground">
-                    <ArrowRight className="h-4 w-4" />
-                    <span className="text-[10px] tabular-nums">
-                      {funnelStages[i].value > 0
-                        ? Math.round((funnelStages[i + 1].value / funnelStages[i].value) * 100)
-                        : 0}
-                      %
-                    </span>
-                  </div>
-                )}
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
