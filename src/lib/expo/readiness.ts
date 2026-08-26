@@ -25,7 +25,11 @@ export type ReadinessCode =
   | "section-not-published"
   | "section-embed-off"
   | "section-empty"
-  | "no-imweb-url";
+  | "no-imweb-url"
+  /** 릴리스 승인 전이라 공개 스위치를 켤 수 없다. 끄는 것은 언제나 된다. */
+  | "launch-locked-live"
+  /** 릴리스 승인 전이라 구획 단독 내보내기를 켤 수 없다. */
+  | "launch-locked-embed";
 
 export interface ReadinessIssue {
   code: ReadinessCode;
@@ -44,7 +48,16 @@ const MESSAGES: Record<ReadinessCode, string> = {
   "section-embed-off": "'이 구획만 따로 내보내기' 가 꺼져 있어요.",
   "section-empty": "내용이 비어 있어 붙여도 아무것도 나오지 않아요.",
   "no-imweb-url": "아임웹 페이지 주소가 없어요. 다른 페이지에서 이 페이지로 링크를 걸 수 없어요.",
+  "launch-locked-live": "아직 아임웹 공개가 열리지 않았어요. 준비가 끝나면 이 스위치를 켤 수 있어요.",
+  "launch-locked-embed": "아직 아임웹 공개가 열리지 않아 '이 구획만 따로 내보내기' 를 켤 수 없어요. 끄는 것은 언제든 돼요.",
 };
+
+/** 라우트가 릴리스 잠금 사유를 만들 때 쓴다. 문구가 갈라지지 않게 여기서만 만든다. */
+export function launchLockIssue(
+  code: "launch-locked-live" | "launch-locked-embed", sid?: string,
+): ReadinessIssue {
+  return issue(code, sid);
+}
 
 const issue = (code: ReadinessCode, sid?: string): ReadinessIssue => ({ code, sid, message: MESSAGES[code] });
 

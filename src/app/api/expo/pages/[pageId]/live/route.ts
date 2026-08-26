@@ -9,7 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { guardExpoRoute, readJsonBody, authFailure } from "@/lib/expo/route-guard";
 import { requireOwnedPage, requireWorkspaceAdmin } from "@/lib/expo/auth";
 import { prepareLiveToggle } from "@/lib/expo/site-service";
-import { liveIssues } from "@/lib/expo/readiness";
+import { launchLockIssue, liveIssues } from "@/lib/expo/readiness";
 
 export async function POST(request: Request, { params }: { params: Promise<{ pageId: string }> }) {
   const { pageId } = await params;
@@ -40,7 +40,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ pag
 
   // 켤 때만 막는다 — 끄는 것은 언제나 되어야 한다(되돌리기를 막으면 안 된다).
   if (live) {
-    const issues = liveIssues(page!.published);
+    /**
+     * 릴리스 잠금과 발행 조건을 **합쳐서** 낸다. 잠금만 먼저 뱉으면, 잠금이 풀린 날
+     * "아직 발행하지 않았어요" 가 그제야 새로 튀어나온다.
+     */
+    const issues = [
+      ...(guard.ctx.caps.publicEmbed ? [] : [launchLockIssue("launch-locked-live")]),
+      ...liveIssues(page!.published),
+    ];
     if (issues.length > 0) {
       return NextResponse.json({ error: "아직 공개할 수 없어요", issues }, { status: 422 });
     }

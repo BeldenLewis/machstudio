@@ -24,7 +24,9 @@ export interface FieldError {
     /** 같은 sid 가 두 번 — 정규화가 뒤엣것을 버린다. */
     | "duplicate-sid"
     /** 한 페이지에 하나만 되는 구획이 두 번 — 정규화가 뒤엣것을 버린다. */
-    | "duplicate-singleton";
+    | "duplicate-singleton"
+    /** 릴리스 승인 전이라 밖으로 내보내는 스위치를 켤 수 없다. 끄는 것은 언제나 된다. */
+    | "launch-locked";
   message: string;
   /**
    * 어느 구획인지. 편집기가 `data-expo-sid` 로 카드를 찾아 데려간다 —

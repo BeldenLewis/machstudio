@@ -366,6 +366,7 @@ function EditorBody({ siteId, siteName, permissions, release, previewOrigin }: E
             locale={site.defaultLocale || "ko"}
             focusedSid={focusedSid}
             onFocusSection={focusSection}
+            embedLocked={!release.publicEmbedEnabled}
             onSaved={reload}
             onPageStatus={reportStatus}
             publishNonce={publishNonce}
@@ -403,6 +404,7 @@ function EditorBody({ siteId, siteName, permissions, release, previewOrigin }: E
               readiness={status.readiness}
               snippets={status.snippets}
               canPublish={permissions.canPublish && !pendingSelected}
+              launchLocked={!release.publicEmbedEnabled}
               saveBlocked={status.saveBlocked}
               onChanged={() => setPublishNonce((n) => n + 1)}
             />
@@ -466,12 +468,14 @@ interface PageEditorProps {
   focusedSid: string | null;
   /** 거절 안내에서 그 구획으로 데려갈 때 쓴다. 미리보기 클릭과 같은 통로다. */
   onFocusSection: (sid: string) => void;
+  /** 릴리스 승인 전인가 — 구획의 "따로 내보내기" 를 새로 켜는 것만 잠근다. */
+  embedLocked: boolean;
 }
 
 /** 페이지 하나의 편집 — 기본값과 구획. */
 function PageEditor({
   pageId, siteId, canEdit, sources, linkTargets, locale, onSaved, onPageStatus, publishNonce,
-  focusedSid, onFocusSection,
+  focusedSid, onFocusSection, embedLocked,
 }: PageEditorProps) {
   const [page, setPage] = useState<PageDetail | null>(null);
   const [failed, setFailed] = useState(false);
@@ -563,6 +567,7 @@ function PageEditor({
       locale={locale}
       focusedSid={focusedSid}
       onFocusSection={onFocusSection}
+      embedLocked={embedLocked}
       onSaved={onSaved}
       onPageStatus={onPageStatus}
     />
@@ -571,7 +576,7 @@ function PageEditor({
 
 function PageForm({
   page, siteId, canEdit, sources, linkTargets, locale, onSaved, onPageStatus,
-  focusedSid, onFocusSection,
+  focusedSid, onFocusSection, embedLocked,
 }: Omit<PageEditorProps, "pageId" | "publishNonce"> & { page: PageDetail }) {
   /**
    * 이름은 **왼쪽 트리가 소유한다.** 여기에도 두면 같은 값을 두 곳이 저장하게 되고,
@@ -744,6 +749,7 @@ function PageForm({
         sections={sections}
         onChange={setSections}
         canEdit={canEdit}
+        embedLocked={embedLocked}
         siteId={siteId}
         sources={sources}
         pages={linkTargets}

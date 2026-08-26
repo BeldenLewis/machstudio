@@ -70,6 +70,8 @@ export interface SectionsEditorProps {
   sections: ExpoSection[];
   onChange: (next: ExpoSection[]) => void;
   canEdit: boolean;
+  /** 릴리스 승인 전인가. **켜는 것만** 잠근다 — 이미 켠 것은 끌 수 있어야 한다. */
+  embedLocked?: boolean;
   siteId: string;
   sources?: readonly { id: string; name: string; isActive: boolean }[];
   /** 내부 링크 후보 — 지금 편집 중인 페이지를 포함한 이 사이트의 모든 페이지. */
@@ -85,7 +87,7 @@ export interface SectionsEditorProps {
 }
 
 export function SectionsEditor({
-  sections, onChange, canEdit, siteId, sources, pages, locale, focusedSid,
+  sections, onChange, canEdit, embedLocked = false, siteId, sources, pages, locale, focusedSid,
 }: SectionsEditorProps) {
   /**
    * 삭제 유예(5초) 중인 구획 — **화면에서만** 사라진 것들이다. 배열에는 그대로 있다.
@@ -167,6 +169,7 @@ export function SectionsEditor({
               flash={focusedSid === ctx.item.sid}
               controls={ctx}
               canEdit={canEdit}
+              embedLocked={embedLocked}
               siteId={siteId}
               sources={sources}
               pages={pages}
@@ -250,6 +253,7 @@ interface SectionCardProps {
     patch: (next: Partial<ExpoSection>) => void;
   };
   canEdit: boolean;
+  embedLocked: boolean;
   siteId: string;
   sources?: readonly { id: string; name: string; isActive: boolean }[];
   pages?: readonly LinkTarget[];
@@ -259,7 +263,7 @@ interface SectionCardProps {
 }
 
 function SectionCard({
-  section, controls, canEdit, siteId, sources, pages, locale, flash,
+  section, controls, canEdit, embedLocked, siteId, sources, pages, locale, flash,
 }: SectionCardProps) {
   const def = sectionDef(section.type);
 
@@ -395,13 +399,16 @@ function SectionCard({
           <Switch
             checked={section.embedEnabled}
             onChange={(embedEnabled) => patch({ embedEnabled })}
-            disabled={!canEdit}
+            // `&& !section.embedEnabled` 가 비대칭이다 — **이미 켠 것은 끌 수 있다.**
+            disabled={!canEdit || (embedLocked && !section.embedEnabled)}
             label={`${def.label} 이 구획만 따로 내보내기`}
           />
           <span>
             이 구획만 따로 내보내기
             <span className="ml-1 text-muted-foreground">
-              — 아임웹에 이 구획 하나만 붙일 때
+              {embedLocked && !section.embedEnabled
+                ? "— 아직 아임웹 공개가 열리지 않았어요"
+                : "— 아임웹에 이 구획 하나만 붙일 때"}
             </span>
           </span>
         </label>

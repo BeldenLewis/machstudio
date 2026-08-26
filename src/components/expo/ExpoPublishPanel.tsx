@@ -64,12 +64,17 @@ export interface ExpoPublishPanelProps {
    * 저장 중에 누르면 방금 친 글이 빠진 사본이 밖에 나간다.
    */
   saveBlocked?: boolean;
+  /**
+   * 릴리스 승인 전인가. 켜는 것만 잠근다 — **이미 켜져 있으면 끄기는 언제나 눌린다.**
+   */
+  launchLocked?: boolean;
   /** 발행·공개가 끝나면 부른다 — 화면이 서버 상태를 다시 읽는다. */
   onChanged: () => void;
 }
 
 export function ExpoPublishPanel({
   pageId, pageTitle, hasPublished, liveAt, readiness, snippets, canPublish, saveBlocked, onChanged,
+  launchLocked = false,
 }: ExpoPublishPanelProps) {
   const confirm = useConfirm();
   const [busy, setBusy] = useState<"publish" | "live" | null>(null);
@@ -189,7 +194,8 @@ export function ExpoPublishPanel({
             <Switch
               checked={live}
               onChange={(next) => void toggleLive(next)}
-              disabled={busy !== null || (!live && !readiness.canGoLive)}
+              // `!live &&` 안에 있으므로 **켜져 있으면 끄기는 항상 눌린다.**
+            disabled={busy !== null || (!live && (!readiness.canGoLive || launchLocked))}
               label={`${pageTitle} 아임웹에 내보내기`}
             />
             <span>
@@ -202,6 +208,11 @@ export function ExpoPublishPanel({
             </span>
           </label>
           {/* 켤 수 없을 때만 사유를 말한다 — 이미 켜져 있으면 끄는 건 언제나 된다. */}
+          {!live && launchLocked ? (
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              아직 아임웹 공개가 열리지 않았어요. 준비가 끝나면 켤 수 있어요.
+            </p>
+          ) : null}
           {!live ? <Reasons issues={readiness.liveIssues} /> : null}
         </div>
       ) : null}

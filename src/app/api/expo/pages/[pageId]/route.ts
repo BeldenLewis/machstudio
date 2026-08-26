@@ -10,6 +10,7 @@ import { guardExpoRoute, readJsonBody, authFailure, fieldErrors } from "@/lib/ex
 import { requireOwnedPage, requireWorkspaceAdmin } from "@/lib/expo/auth";
 import { validatePageDraft } from "@/lib/expo/request";
 import { changedSourceRefs, sourceScopeWhere } from "@/lib/expo/source-scope";
+import { newlyEmbedEnabled } from "@/lib/expo/release-gate";
 import { prepareDeletePage, prepareDraftWrite, serviceMessage, serviceStatus } from "@/lib/expo/site-service";
 import { normalizeExpoPage } from "@/lib/expo/config";
 import { expoPreviewCodeDigest } from "@/lib/expo/code-digest";
@@ -157,6 +158,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ pa
           code: "invalid-shape" as const,
           sid: c.sid,
           message: "그 사전등록 폼은 이 전시에서 쓸 수 없어요. 목록에서 다시 골라 주세요.",
+        })));
+      }
+    }
+
+    /**
+     * 릴리스 승인 전에는 구획의 "따로 내보내기" 를 **새로 켤 수 없다.** 끄는 것은 언제나 된다.
+     * 이전 값과 비교하는 것이 핵심이다 — "지금 켜져 있는 것" 을 막으면 이미 켜 둔 구획이
+     * 있는 페이지가 영구 저장 불가가 된다(글자 하나만 고쳐도 422).
+     */
+    if (!guard.ctx.caps.publicEmbed) {
+      const arming = newlyEmbedEnabled(body.draft, page!.draft);
+      if (arming.length > 0) {
+        return fieldErrors(arming.map((sid) => ({
+          path: "sections.embedEnabled",
+          code: "launch-locked" as const,
+          sid,
+          message: "아직 아임웹 공개가 열리지 않아 '이 구획만 따로 내보내기' 를 켤 수 없어요.",
         })));
       }
     }
