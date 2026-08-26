@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, Filter, Route, Users } from "lucide-react";
+import { ArrowRight, Route, Users } from "lucide-react";
 import type { RealtimeReportData } from "./RealtimeReport";
 import { ChangeBadge, formatNumber } from "./RealtimeReport";
 import DonutChart from "./DonutChart";
@@ -28,7 +28,13 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
     ? (data.performance.cumulativeCount / previousYear.totalCount) * 100
     : null;
 
-  const funnelStages = data.funnel
+  /**
+   * 퍼널의 마지막 단계(사전등록 완료)는 "주간 사전등록자" 박스의 숫자와 같다
+   * (둘 다 data.funnel.registrants === data.performance.rangeCount) — 그래서 별도 박스로
+   * 안 만들고, 마지막 화살표가 그 박스로 바로 이어지는 것처럼 그린다. 중복 숫자를 없애고
+   * "방문 → 방문 → 이번 주 등록자"라는 하나의 흐름으로 읽히게 한다.
+   */
+  const funnelPreStages = data.funnel
     ? [
         { label: "홈페이지 방문", value: data.funnel.homepageVisitors, change: data.funnel.homepageVisitorsChange },
         ...(data.funnel.registrationPageVisitors !== null
@@ -40,9 +46,9 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
               },
             ]
           : []),
-        { label: "사전등록 완료", value: data.funnel.registrants, change: null as number | null },
       ]
     : [];
+  const conversionRate = (from: number, to: number) => (from > 0 ? Math.round((to / from) * 100) : 0);
 
   return (
     <div className="rounded-2xl border border-border bg-background p-5">
@@ -60,8 +66,8 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
         </p>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
-        <div>
+      <div className="mt-4 flex flex-wrap items-stretch gap-3">
+        <div className="min-w-[200px] flex-1">
           <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             <Route className="h-3.5 w-3.5" />
             유입경로
@@ -69,7 +75,33 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
           <DonutChart data={data.utmBySource} channelColors={channelColors} onColorChange={onChannelColorChange} />
         </div>
 
-        <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52">
+        {/*
+          홈페이지 방문 → 사전등록 페이지 방문 → (화살표) → 주간 사전등록자.
+          마지막 단계는 별도 박스가 아니라 바로 아래 "주간 사전등록자" 박스로 흘러들어가는
+          화살표로 그린다 — 그 박스 숫자와 사전등록 완료 숫자가 원래 같은 값이라 중복 표시하지 않는다.
+        */}
+        {funnelPreStages.map((stage, i) => {
+          const nextValue = i < funnelPreStages.length - 1 ? funnelPreStages[i + 1].value : data.performance.rangeCount;
+          return (
+            <div key={stage.label} className="flex shrink-0 items-center gap-2">
+              <div className="w-28 shrink-0 rounded-2xl border border-border bg-secondary/20 px-3 py-2.5">
+                <div className="truncate text-[10px] text-muted-foreground">{stage.label}</div>
+                <div className="mt-0.5 text-base font-semibold tabular-nums">{formatNumber(stage.value)}</div>
+                {stage.change !== null && (
+                  <div className="mt-0.5">
+                    <ChangeBadge rangeChange={stage.change} />
+                  </div>
+                )}
+              </div>
+              <div className="flex shrink-0 flex-col items-center text-muted-foreground">
+                <ArrowRight className="h-4 w-4" />
+                <span className="text-[10px] tabular-nums">{conversionRate(stage.value, nextValue)}%</span>
+              </div>
+            </div>
+          );
+        })}
+
+        <div className="shrink-0 rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52">
           <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
               <Users className="h-3.5 w-3.5" />
@@ -96,7 +128,7 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
           )}
         </div>
 
-        <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52">
+        <div className="shrink-0 rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52">
           <span className="text-xs font-medium text-muted-foreground">누적 사전등록자</span>
           <div className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">
             {formatNumber(data.performance.cumulativeCount)}
@@ -140,39 +172,6 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
             </div>
           )}
         </div>
-
-        {funnelStages.length > 0 && (
-          <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52">
-            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-              <Filter className="h-3.5 w-3.5" />
-              주간 퍼널
-            </div>
-            <div className="mt-2 space-y-1">
-              {funnelStages.map((stage, i) => (
-                <div key={stage.label}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 truncate text-[10px] text-muted-foreground">{stage.label}</span>
-                    <span className="flex shrink-0 items-center gap-1">
-                      <span className="text-sm font-semibold tabular-nums">{formatNumber(stage.value)}</span>
-                      {stage.change !== null && <ChangeBadge rangeChange={stage.change} />}
-                    </span>
-                  </div>
-                  {i < funnelStages.length - 1 && (
-                    <div className="my-0.5 flex items-center gap-1 pl-0.5 text-[10px] text-muted-foreground">
-                      <ArrowDown className="h-3 w-3" />
-                      <span className="tabular-nums">
-                        {funnelStages[i].value > 0
-                          ? Math.round((funnelStages[i + 1].value / funnelStages[i].value) * 100)
-                          : 0}
-                        %
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
