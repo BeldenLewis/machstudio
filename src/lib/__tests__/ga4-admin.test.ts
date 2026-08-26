@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * GA4 속성 드롭다운(ProjectAnalyticsSettingsModal)이 기대는 계약:
+ * GA4 속성 드롭다운(수집 소스 상세 › 데이터 관리 탭)이 기대는 계약:
  *  · 크리덴셜이 없거나 깨졌으면 절대 API를 호출하지 않고 null 을 준다 — 호출부가 수동 입력으로 폴백한다.
  *  · 여러 계정의 속성을 한 목록으로 모으고, 화면에 그대로 뿌릴 수 있게 이름순으로 정렬한다.
  *  · Admin API 호출이 실패해도(네트워크 등) throw 하지 않는다 — GA4 미설정 프로젝트와 같은 폴백 경로.

@@ -58,7 +58,7 @@ export function CollectFieldCard({
   removeButton: (opts?: { label?: string }) => ReactNode | null;
   /** 이 항목이 유형 분기의 기준인가. */
   isBranchKey: boolean;
-  /** 분기 기준으로 지정/해제. select 일 때만 준다. */
+  /** 분기 기준으로 지정/해제. select·radio 일 때만 준다. */
   onMakeBranch: ((on: boolean) => void) | null;
   /** 이미 쓰인 key 들 — 중복이면 저장해도 하나가 버려지므로 그 자리에서 알린다. */
   takenKeys: ReadonlySet<string>;
@@ -90,8 +90,8 @@ export function CollectFieldCard({
     // 선택형이 아니게 되면 선택지·기타 허용은 버린다(남겨 두면 다시 선택형으로 바꿀 때
     // 예전 목록이 유령처럼 살아 돌아온다).
     if (!CHOICE_TYPES.includes(t)) { next.options = []; next.allowOther = undefined; }
-    // 분기 기준은 select 만 될 수 있다 — 유형을 바꾸면 기준에서 내린다.
-    if (t !== "select" && isBranchKey) onMakeBranch?.(false);
+    // 하나만 고르는 select·radio만 분기 기준으로 쓴다.
+    if (t !== "select" && t !== "radio" && isBranchKey) onMakeBranch?.(false);
     patch(next);
   };
 
@@ -171,7 +171,7 @@ export function CollectFieldCard({
               ownerTitle={labelText}
               listId={`copt:${field.id}`}
             />
-            {field.type === "select" && onMakeBranch && (
+            {(field.type === "select" || field.type === "radio") && onMakeBranch && (
               <label className="mt-2 flex select-none items-center gap-1.5 text-[11px] text-muted-foreground">
                 <Switch checked={isBranchKey} onChange={onMakeBranch} label="이 항목으로 유형 분기" />
                 이 항목으로 유형별 문항 분기 (폼당 하나)

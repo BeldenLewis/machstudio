@@ -71,6 +71,32 @@ describe("등록 폼 렌더", () => {
     expect(order).toEqual(["Email", "Phone", "Visitor type", "Company"]);
   });
 
+  it("라디오는 선택지를 바로 펼쳐 보이고 한 번의 선택으로 분기한다", () => {
+    const radioConfig = normalizeCollectForm({
+      fields: [{
+        id: "type", key: "type", label: { en: "Visitor type" }, type: "radio", required: true, enabled: true,
+        options: [{ en: "General" }, { en: "Buyer" }, { en: "Press" }],
+      }],
+      branch: {
+        enabled: true,
+        fieldKey: "type",
+        groups: [{ value: "Buyer", fields: [{ id: "company", key: "company", label: { en: "Company" }, type: "text", enabled: true }] }],
+      },
+    });
+    mount({ config: radioConfig });
+
+    const radios = [...host.querySelectorAll<HTMLInputElement>('.msf-radio-group input[type="radio"]')];
+    expect(radios.map((radio) => radio.value)).toEqual(["General", "Buyer", "Press"]);
+    expect(labels()).not.toContain("Company");
+
+    const buyer = radios.find((radio) => radio.value === "Buyer")!;
+    buyer.checked = true;
+    buyer.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(labels().map((label) => label.replace("*", ""))).toEqual(["Visitor type", "Company"]);
+    expect(host.querySelector<HTMLInputElement>('.msf-radio-group input[value="Buyer"]')?.checked).toBe(true);
+  });
+
   it("접수 창 밖이면 폼 대신 상태 화면 — 마감 화면을 미리 볼 수 있어야 한다", () => {
     mount({ forceStatus: "closed" });
     expect(text()).toContain("closed");

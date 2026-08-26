@@ -59,6 +59,9 @@ model Workspace {
   /// 위 두 필드와 같은 이유로 워크스페이스 자산이다. { default: OrgProfile, byCountry?: {...} }
   /// 모양(WorkspaceLegalProfile, src/lib/legal-templates/types.ts). null = 아직 설정 안 함.
   legalProfile          Json?
+  /// 유입경로 도넛 차트 채널별 사용자 지정 색 — { "네이버": "#0a9e6e", ... } (정규화된 라벨 → hex).
+  /// null = 아직 커스텀 안 함(내장 브랜드 기본 팔레트 + 해시 폴백을 그대로 씀).
+  channelColors         Json?
 
   members              WorkspaceMember[]
   projects             Project[]

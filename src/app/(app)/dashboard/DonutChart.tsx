@@ -1,7 +1,7 @@
 "use client";
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import { useChartColors, seriesColor } from "@/components/ui/use-chart-colors";
+import { useChartColors, resolveChannelColor } from "@/components/ui/use-chart-colors";
 import { formatNumber } from "./RealtimeReport";
 
 const OTHER_COLOR_LIGHT = "#a3a3a3";
@@ -10,9 +10,11 @@ interface DonutChartProps {
   data: Array<{ label: string; count: number; percent: number }>;
   /** 색 슬롯이 seriesColor 기준 4개(0~3)뿐이라, 나머지는 항상 "기타"로 접는다. */
   maxSlices?: number;
+  /** 워크스페이스가 채널별로 직접 지정한 색 — 브랜드 근사·해시 폴백보다 우선한다. */
+  channelColors?: Record<string, string> | null;
 }
 
-export default function DonutChart({ data, maxSlices = 4 }: DonutChartProps) {
+export default function DonutChart({ data, maxSlices = 4, channelColors }: DonutChartProps) {
   const colors = useChartColors();
 
   if (!data.length) {
@@ -29,8 +31,13 @@ export default function DonutChart({ data, maxSlices = 4 }: DonutChartProps) {
   const restCount = rest.reduce((sum, row) => sum + row.count, 0);
   const total = sorted.reduce((sum, row) => sum + row.count, 0) || 1;
 
+  // 같은 차트 안에서 라벨 해시가 겹쳐도 색이 겹치지 않게(entityColor 참고) — 차트 하나당 새로 만든다.
+  const usedSlots = new Set<number>();
   const slices = [
-    ...top.map((row, i) => ({ label: row.label || "(direct)", count: row.count, color: seriesColor(colors, i) ?? OTHER_COLOR_LIGHT })),
+    ...top.map((row) => {
+      const label = row.label || "(direct)";
+      return { label, count: row.count, color: resolveChannelColor(colors, label, channelColors, usedSlots) ?? OTHER_COLOR_LIGHT };
+    }),
     ...(restCount > 0 ? [{ label: "기타", count: restCount, color: OTHER_COLOR_LIGHT }] : []),
   ];
 

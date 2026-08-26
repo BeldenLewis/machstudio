@@ -21,6 +21,8 @@ interface Workspace {
   marketingBodyTemplate?: string | null;
   /** 법률 문구 생성기의 조직 정보(회사명·주소·담당 이메일) — WorkspaceLegalProfile 모양. */
   legalProfile?: unknown;
+  /** 유입경로 도넛 차트 채널별 사용자 지정 색 — { "네이버": "#hex", ... }. 목록 API에는 없음. */
+  channelColors?: unknown;
 }
 
 interface WorkspaceContextType {

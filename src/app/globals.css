@@ -152,6 +152,17 @@
   --series-3: #d4679f;
   --series-4: #af6700;
   --series-5: #008369;
+  /* 유입경로 도넛의 알려진 마케팅 채널용 브랜드-근사 색(entityColor 의 해시 폴백보다 우선).
+     validate_palette.js (면 #ffffff): 명도대역 PASS · 채도하한 PASS · CVD PASS(최악 인접
+     ΔE 12.4 deutan) · 정상시야 PASS(ΔE 19.5) · 대비 PASS(전부 ≥3:1). 실제 브랜드색(네이버
+     초록 #03C75A, 카카오 노랑 #FEE500 등)은 이 여섯 체크를 통과 못 해 — 명도·채도를 맞춰
+     "그 계열"로만 근사했다. 카카오는 원색 노랑 대신 브랜드명 유래(카카오=cacao)의 갈색 계열. */
+  --brand-naver: #0a9e6e;
+  --brand-kakao: #9c4a15;
+  --brand-google: #2a6fdb;
+  --brand-instagram: #a3216b;
+  --brand-youtube: #e0522a;
+  --brand-facebook: #5b4fc7;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -211,6 +222,15 @@
   --series-3: #d4679f;
   --series-4: #c98000;
   --series-5: #009c80;
+  /* 브랜드 근사 색(다크) — 라이트와 같은 hue, 다크 면(#171717) 기준으로 다시 계산.
+     validate_palette.js: 전 항목 PASS(경고 0) — 라이트 값을 그대로 쓰면 카카오·페이스북이
+     대비 3:1 을 못 넘겨(WARN) 명도를 개별로 올렸다. */
+  --brand-naver: #0fa878;
+  --brand-kakao: #b25818;
+  --brand-google: #3b7ce8;
+  --brand-instagram: #c14685;
+  --brand-youtube: #eb6136;
+  --brand-facebook: #7267d9;
 }
 
 @layer base {

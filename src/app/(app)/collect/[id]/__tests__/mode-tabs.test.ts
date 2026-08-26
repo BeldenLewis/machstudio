@@ -11,11 +11,11 @@ describe("tabsFor", () => {
   const ids = (mode: string) => tabsFor(mode).map((t) => t.id);
 
   it("연동형은 기존 탭 구성 그대로 — 등록 폼 탭만 안 보인다", () => {
-    expect(ids("capture")).toEqual(["records", "fields", "script", "install", "settings", "data-mgmt", "activity"]);
+    expect(ids("capture")).toEqual(["info", "records", "fields", "script", "install", "settings", "data-mgmt", "activity"]);
   });
 
   it("빌더형은 스크립트·필드 매핑·설치 대신 등록 폼", () => {
-    expect(ids("builder")).toEqual(["records", "form", "settings", "data-mgmt", "activity"]);
+    expect(ids("builder")).toEqual(["info", "records", "form", "settings", "data-mgmt", "activity"]);
   });
 
   /** mode 는 DB 에서 제약 없는 String 이다 — 모르는 값이 오면 기존 동작으로 떨어져야 한다. */

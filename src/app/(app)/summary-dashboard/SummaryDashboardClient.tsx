@@ -26,15 +26,23 @@ export default function SummaryDashboardClient() {
   const [reports, setReports] = useState<RealtimeReportData[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchedAt, setFetchedAt] = useState<Date | null>(null);
+  // 도넛 차트 채널 색 — WorkspaceProvider 컨텍스트의 workspace 는 초기 로드 시 목록 API 값만
+  // 들고 있어(channelColors 는 상세 API 전용) 직접 조회한다. 카드마다가 아니라 한 번만.
+  const [channelColors, setChannelColors] = useState<Record<string, string> | null>(null);
 
   const fetchReports = useCallback(async () => {
     if (!workspace) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/summary-dashboard?workspaceId=${workspace.id}`);
-      const data = await res.json().catch(() => null);
-      setReports(res.ok ? data.projects ?? [] : []);
+      const [reportsRes, wsDetailRes] = await Promise.all([
+        fetch(`/api/summary-dashboard?workspaceId=${workspace.id}`),
+        fetch(`/api/workspace/${workspace.id}`),
+      ]);
+      const data = await reportsRes.json().catch(() => null);
+      setReports(reportsRes.ok ? data.projects ?? [] : []);
       setFetchedAt(new Date());
+      const wsData = await wsDetailRes.json().catch(() => null);
+      setChannelColors(wsDetailRes.ok ? wsData?.workspace?.channelColors ?? null : null);
     } catch (error) {
       console.error("[summary-dashboard] failed", error);
       setReports([]);
@@ -125,7 +133,7 @@ export default function SummaryDashboardClient() {
         <div className="space-y-4 print:space-y-3">
           {reports.map((report) => (
             <div key={report.project.id} className="break-inside-avoid">
-              <ProjectSummaryCard data={report} />
+              <ProjectSummaryCard data={report} channelColors={channelColors} />
             </div>
           ))}
         </div>

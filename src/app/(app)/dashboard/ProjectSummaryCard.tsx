@@ -10,11 +10,21 @@ interface ProjectSummaryCardProps {
   data: RealtimeReportData;
   /** 기본은 data.project.name — 소스 단위로 좁혀 쓸 때(수집 소스 상세) 소스명으로 덮어써 구분한다. */
   title?: string;
+  /**
+   * 워크스페이스가 채널별로 직접 지정한 색 — 호출부가 넘긴다(WorkspaceProvider 컨텍스트에
+   * 직접 기대지 않는다. 컨텍스트의 workspace 는 초기 로드 시 목록 API 응답만 들고 있어
+   * channelColors 처럼 상세 API 전용 필드가 비어 있을 수 있다).
+   */
+  channelColors?: Record<string, string> | null;
 }
 
 /** 요약 대시보드와 수집 소스 상세의 "수집 데이터" 탭이 함께 쓰는 압축 카드. */
-export default function ProjectSummaryCard({ data, title }: ProjectSummaryCardProps) {
+export default function ProjectSummaryCard({ data, title, channelColors }: ProjectSummaryCardProps) {
   const trend = data.cumulativeTrend.slice(-14).map((point) => point.count);
+  const previousYear = data.performance.previousYear;
+  const finalProgress = previousYear && previousYear.totalCount > 0
+    ? (data.performance.cumulativeCount / previousYear.totalCount) * 100
+    : null;
 
   const funnelStages = data.funnel
     ? [
@@ -54,7 +64,7 @@ export default function ProjectSummaryCard({ data, title }: ProjectSummaryCardPr
             <Route className="h-3.5 w-3.5" />
             유입경로
           </div>
-          <DonutChart data={data.utmBySource} />
+          <DonutChart data={data.utmBySource} channelColors={channelColors} />
         </div>
 
         <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52">
@@ -70,10 +80,10 @@ export default function ProjectSummaryCard({ data, title }: ProjectSummaryCardPr
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-[10px] text-muted-foreground">전주 대비</span>
             <ChangeBadge rangeChange={data.performance.rangeChange} />
-            {data.performance.lastYearRangeCount > 0 && (
+            {previousYear?.rangeCount !== null && previousYear?.rangeCount !== undefined && (
               <>
-                <span className="text-[10px] text-muted-foreground">작년 대비</span>
-                <ChangeBadge rangeChange={data.performance.lastYearRangeChange} />
+                <span className="text-[10px] text-muted-foreground">전년 동일 D구간</span>
+                <ChangeBadge rangeChange={previousYear.rangeChange} />
               </>
             )}
           </div>
@@ -89,21 +99,42 @@ export default function ProjectSummaryCard({ data, title }: ProjectSummaryCardPr
           <div className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">
             {formatNumber(data.performance.cumulativeCount)}
           </div>
-          {data.performance.goalProgressPercent !== null && (
-            <div className="mt-2">
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                <span>작년 실적 대비</span>
-                <span className="font-medium text-foreground">{Math.round(data.performance.goalProgressPercent)}%</span>
-              </div>
-              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-violet-500"
-                  style={{ width: `${Math.min(100, data.performance.goalProgressPercent)}%` }}
-                />
-              </div>
-              <div className="mt-0.5 text-right text-[10px] text-muted-foreground">
-                작년 {formatNumber(data.performance.lastYearTotalCount)}
-              </div>
+          {previousYear && (
+            <div className="mt-2 space-y-2">
+              {previousYear.paceCount !== null && previousYear.dDay !== null && (
+                <div className="rounded-xl bg-background px-2.5 py-2 shadow-sm">
+                  <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+                    <span>{formatDday(previousYear.dDay)} 동일 시점</span>
+                    <span>{previousYear.eventYear ?? "전년"}년 {formatNumber(previousYear.paceCount)}명</span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-medium">등록 속도</span>
+                    <ChangeBadge rangeChange={previousYear.paceChange} />
+                  </div>
+                </div>
+              )}
+              {finalProgress !== null && (
+                <div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>전년 최종 실적 대비</span>
+                    <span className="font-medium text-foreground">{Math.round(finalProgress)}%</span>
+                  </div>
+                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-violet-500"
+                      style={{ width: `${Math.min(100, finalProgress)}%` }}
+                    />
+                  </div>
+                  <div className="mt-0.5 text-right text-[10px] text-muted-foreground">
+                    {previousYear.sourceName} · {formatNumber(previousYear.totalCount)}명
+                  </div>
+                </div>
+              )}
+              {finalProgress === null && previousYear.paceCount === null && (
+                <p className="text-right text-[10px] text-muted-foreground">
+                  {previousYear.sourceName} · 최종 {formatNumber(previousYear.totalCount)}명
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -145,6 +176,11 @@ export default function ProjectSummaryCard({ data, title }: ProjectSummaryCardPr
       )}
     </div>
   );
+}
+
+function formatDday(day: number): string {
+  if (day === 0) return "D-day";
+  return day > 0 ? `D-${day}` : `D+${Math.abs(day)}`;
 }
 
 /**

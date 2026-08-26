@@ -501,6 +501,62 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
         updateSubmitState();
       });
       wrap.appendChild(sel);
+    } else if (f.type === "radio") {
+      if (options.length === 0) {
+        wrap.appendChild(h("div", { class: "msf-hint" }, "No options configured"));
+      } else {
+        const group = h("div", {
+          class: "msf-radio-group",
+          id: inputId,
+          role: "radiogroup",
+          "aria-label": labelText,
+          "aria-invalid": invalid,
+          "aria-describedby": errId,
+        });
+        const paint = () => {
+          const selected = str(values[f.key]);
+          for (const option of Array.from(group.children) as HTMLElement[]) {
+            const on = option.getAttribute("data-v") === selected;
+            option.setAttribute("data-on", on ? "1" : "0");
+            const radio = option.querySelector("input") as HTMLInputElement | null;
+            if (radio) radio.checked = on;
+          }
+        };
+        for (const option of options) {
+          const radio = h("input", {
+            type: "radio",
+            name: inputId,
+            value: option,
+            "data-msf-key": f.key,
+          }) as HTMLInputElement;
+          const choice = h("label", { class: "msf-radio-option", "data-v": option },
+            radio,
+            h("span", { class: "msf-radio-mark", "aria-hidden": "true" }),
+            h("span", null, option),
+          );
+          radio.addEventListener("focus", () => choice.classList.add("is-focus"));
+          radio.addEventListener("blur", () => choice.classList.remove("is-focus"));
+          radio.addEventListener("change", () => {
+            if (!radio.checked) return;
+            values[f.key] = option;
+            clearIssue(f.key);
+            markStarted();
+            if (config.branch.enabled && config.branch.fieldKey === f.key) {
+              track(preview, "ms_visitor_type_selected", { visitor_type: canonicalBranchValue(config, option) });
+              renderFields();
+              const again = fieldsHost.querySelector<HTMLInputElement>(`input[name="${cssId(inputId)}"]:checked`);
+              if (again) again.focus();
+            } else {
+              err.textContent = "";
+              paint();
+            }
+            updateSubmitState();
+          });
+          group.appendChild(choice);
+        }
+        paint();
+        wrap.appendChild(group);
+      }
     } else if (f.type === "multiple") {
       if (options.length === 0) {
         wrap.appendChild(h("div", { class: "msf-hint" }, "No options configured"));
