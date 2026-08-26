@@ -1156,7 +1156,11 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
 
           {/* 기본 정보 탭 */}
           {tab === "info" && (
-            <InfoTab sourceId={source.id} initial={source.venueConfig ?? {}} />
+            <InfoTab
+              sourceId={source.id}
+              initial={source.venueConfig ?? {}}
+              onSaved={(venueConfig) => setSource((current) => current ? { ...current, venueConfig } : current)}
+            />
           )}
 
           {/* 수집 데이터 탭 */}

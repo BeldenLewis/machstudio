@@ -15,6 +15,7 @@ import { Loader2, Upload, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useAutosave } from "@/components/ui/use-autosave";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
+import { AutosaveIndicator } from "@/components/ui/autosave-indicator";
 import { FIELD_CLS, R } from "@/components/ui/primitives";
 import { ColorField, BRAND_PRESETS } from "@/components/ui/ColorField";
 import { extractDominantColor } from "@/lib/color-extract";
@@ -39,7 +40,15 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-export default function InfoTab({ sourceId, initial }: { sourceId: string; initial: VenueInfo }) {
+export default function InfoTab({
+  sourceId,
+  initial,
+  onSaved,
+}: {
+  sourceId: string;
+  initial: VenueInfo;
+  onSaved?: (value: VenueInfo) => void;
+}) {
   const [info, setInfo] = useState<VenueInfo>(initial);
   const [extracting, setExtracting] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -53,9 +62,11 @@ export default function InfoTab({ sourceId, initial }: { sourceId: string; initi
         // 빈 문자열도 명시적으로 보낸다 — "지운다" 는 뜻이다(patch() 가 undefined 만 걸러낸다).
         body: JSON.stringify({ venueConfig: next }),
       });
-      return res.ok;
+      if (!res.ok) return false;
+      onSaved?.(next);
+      return true;
     } catch { return false; }
-  }, [sourceId]);
+  }, [onSaved, sourceId]);
 
   const { state: saveState, retry } = useAutosave(info, save);
   useReportAutosave(saveState, retry);
@@ -92,11 +103,14 @@ export default function InfoTab({ sourceId, initial }: { sourceId: string; initi
 
   return (
     <div className="max-w-2xl space-y-6">
-      <div>
-        <h3 className="text-sm font-medium">기본 정보</h3>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          이 행사의 기본값이에요. 요약 대시보드의 전년 대비 진행률·페이스 비교가 여기 날짜를 기준으로 계산돼요.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-medium">기본 정보</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            이 행사의 기본값이에요. 요약 대시보드의 전년 대비 진행률·페이스 비교가 여기 날짜를 기준으로 계산돼요.
+          </p>
+        </div>
+        <AutosaveIndicator state={saveState} onRetry={retry} />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
