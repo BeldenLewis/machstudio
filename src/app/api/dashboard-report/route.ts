@@ -977,6 +977,10 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
     ? await (async () => {
         const propertyId = project.ga4PropertyId!;
         const pagePathPrefix = project.ga4RegistrationPagePath || null;
+        // 작년 웹사이트는 대개 다른 GA4 속성이라(행사마다 새로 만듦) 프로젝트에 별도 저장된
+        // 속성 ID가 있어야만, 그리고 등록 쪽 "전년 동일 D구간"과 같은 전제(양쪽 소스 행사
+        // 일자 확인됨)를 만족할 때만 시도한다 — 못 만족하면 조용히 생략(부분 데이터로 오해 방지).
+        const previousYearPropertyId = hasPaceComparison ? project.ga4PreviousYearPropertyId : null;
         const [
           homepageVisitors,
           previousHomepageVisitors,
@@ -984,6 +988,8 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
           previousRegistrationPageVisitors,
           homepageVisitorsDailyRows,
           registrationPageVisitorsDailyRows,
+          previousYearHomepageVisitors,
+          previousYearRegistrationPageVisitors,
         ] = await Promise.all([
           getGa4ActiveUsers({ propertyId, from, to }),
           getGa4ActiveUsers({ propertyId, from: previousFrom, to: from }),
@@ -991,6 +997,12 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
           pagePathPrefix ? getGa4ActiveUsers({ propertyId, pagePathPrefix, from: previousFrom, to: from }) : Promise.resolve(null),
           getGa4ActiveUsersByDay({ propertyId, from, to }),
           pagePathPrefix ? getGa4ActiveUsersByDay({ propertyId, pagePathPrefix, from, to }) : Promise.resolve(null),
+          previousYearPropertyId
+            ? getGa4ActiveUsers({ propertyId: previousYearPropertyId, from: previousEventRangeFrom!, to: previousEventRangeTo! })
+            : Promise.resolve(null),
+          previousYearPropertyId && pagePathPrefix
+            ? getGa4ActiveUsers({ propertyId: previousYearPropertyId, pagePathPrefix, from: previousEventRangeFrom!, to: previousEventRangeTo! })
+            : Promise.resolve(null),
         ]);
         if (homepageVisitors === null) return null;
         const homepageVisitorsChange =
@@ -1001,12 +1013,22 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
           registrationPageVisitors !== null && previousRegistrationPageVisitors && previousRegistrationPageVisitors > 0
             ? ((registrationPageVisitors - previousRegistrationPageVisitors) / previousRegistrationPageVisitors) * 100
             : null;
+        const homepageVisitorsYoyChange =
+          previousYearHomepageVisitors && previousYearHomepageVisitors > 0
+            ? ((homepageVisitors - previousYearHomepageVisitors) / previousYearHomepageVisitors) * 100
+            : null;
+        const registrationPageVisitorsYoyChange =
+          registrationPageVisitors !== null && previousYearRegistrationPageVisitors && previousYearRegistrationPageVisitors > 0
+            ? ((registrationPageVisitors - previousYearRegistrationPageVisitors) / previousYearRegistrationPageVisitors) * 100
+            : null;
         return {
           homepageVisitors,
           homepageVisitorsChange,
+          homepageVisitorsYoyChange,
           homepageVisitorsDaily: buildGa4DailyTrend(homepageVisitorsDailyRows, from, to),
           registrationPageVisitors,
           registrationPageVisitorsChange,
+          registrationPageVisitorsYoyChange,
           registrationPageVisitorsDaily: pagePathPrefix ? buildGa4DailyTrend(registrationPageVisitorsDailyRows, from, to) : null,
           registrants: rangeCount,
           homepageToPageRate:

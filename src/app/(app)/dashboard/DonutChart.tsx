@@ -56,8 +56,11 @@ export default function DonutChart({ data, maxSlices = 5, channelColors, onColor
   ];
 
   return (
-    <div className="flex max-w-xs items-center gap-4">
-      <div className="h-[140px] w-[140px] shrink-0">
+    // print:에서만 훨씬 좁게 — 화면에서는 그대로, PDF는 A4 가로에 프로젝트 3개가 들어가야 해서
+    // 카드 전체(도넛+통계 4칸)가 한 줄에 맞아야 한다. max-w-xs(320px)가 있어도 부모가 flex-wrap
+    // 이라 인쇄 폭이 좁으면 이 블록부터 줄바꿈되고 범례가 잘렸다.
+    <div className="flex max-w-xs items-center gap-4 print:max-w-[170px] print:gap-1.5">
+      <div className="h-[140px] w-[140px] shrink-0 print:h-[70px] print:w-[70px]">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -81,14 +84,14 @@ export default function DonutChart({ data, maxSlices = 5, channelColors, onColor
           </PieChart>
         </ResponsiveContainer>
       </div>
-      <ul className="min-w-0 space-y-1.5">
+      <ul className="min-w-0 space-y-1.5 print:space-y-0.5">
         {slices.map((slice) => {
           const editable = !!onColorChange && slice.label !== "기타";
           return (
-            <li key={slice.label} className="flex items-center gap-2 text-xs">
+            <li key={slice.label} className="flex items-center gap-2 text-xs print:gap-1 print:text-[8px]">
               {editable ? (
                 <label
-                  className="relative h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full ring-offset-1 ring-offset-background transition-shadow hover:ring-2 hover:ring-violet-400"
+                  className="relative h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full ring-offset-1 ring-offset-background transition-shadow hover:ring-2 hover:ring-violet-400 print:h-1.5 print:w-1.5"
                   style={{ backgroundColor: slice.color }}
                   title={`${slice.label} 색 바꾸기`}
                 >
@@ -101,9 +104,12 @@ export default function DonutChart({ data, maxSlices = 5, channelColors, onColor
                   />
                 </label>
               ) : (
-                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
+                <span className="h-2 w-2 shrink-0 rounded-full print:h-1.5 print:w-1.5" style={{ backgroundColor: slice.color }} />
               )}
-              <span className="min-w-0 truncate text-muted-foreground">{slice.label}</span>
+              {/* 화면에서는 한 줄로 잘라 보여주지만, 인쇄본은 보고 자료라 라벨을 잘라내지 않는다 */}
+              <span className="min-w-0 truncate text-muted-foreground print:overflow-visible print:whitespace-normal print:break-words">
+                {slice.label}
+              </span>
               <span className="shrink-0 font-medium tabular-nums">{Math.round((slice.count / total) * 100)}%</span>
             </li>
           );

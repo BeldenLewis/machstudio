@@ -41,6 +41,7 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
           icon: Globe,
           value: data.funnel.homepageVisitors,
           change: data.funnel.homepageVisitorsChange,
+          yoyChange: data.funnel.homepageVisitorsYoyChange,
           daily: data.funnel.homepageVisitorsDaily,
         },
         ...(data.funnel.registrationPageVisitors !== null
@@ -50,6 +51,7 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
                 icon: MousePointerClick,
                 value: data.funnel.registrationPageVisitors,
                 change: data.funnel.registrationPageVisitorsChange,
+                yoyChange: data.funnel.registrationPageVisitorsYoyChange,
                 daily: data.funnel.registrationPageVisitorsDaily,
               },
             ]
@@ -58,15 +60,22 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
     : [];
   const conversionRate = (from: number, to: number) => (from > 0 ? Math.round((to / from) * 100) : 0);
 
+  /**
+   * 화면에서는 그대로, PDF 인쇄에서만 훨씬 좁게 — A4 가로 한 장에 프로젝트 카드 3개가
+   * 들어가야 하는데, 화면 기준 폭(lg:w-52 × 최대 4칸)은 인쇄 가용 폭보다 넓어 줄바꿈되고
+   * 도넛 범례가 잘렸다. 통계 칸 4개가 공유하는 크기라 한곳에서 통일해서 관리한다.
+   */
+  const statBoxClass = "rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52 print:w-32 print:px-2.5 print:py-2";
+
   return (
-    <div className="rounded-2xl border border-border bg-background p-5">
+    <div className="rounded-2xl border border-border bg-background p-5 print:p-3">
       {/*
         **캡처되는 화면이다.** 이 카드는 주간 보고에 그대로 붙는다. 기간이 안 적혀 있으면
         일주일 뒤 그 이미지가 "언제 것인지 / +102% 가 무엇 대비인지" 를 답할 수 없다 —
         숫자만 있고 근거가 없는 그림이 된다. 제목 옆에 조회 구간과 비교 구간을 함께 적는다.
       */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h3 className="text-base font-semibold">{title ?? data.project.name}</h3>
+        <h3 className="text-base font-semibold print:text-sm">{title ?? data.project.name}</h3>
         <p className="text-[11px] tabular-nums text-muted-foreground">
           {formatRange(data.range.from, data.range.to)}
           <span className="mx-1.5 opacity-50">·</span>
@@ -74,10 +83,10 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
         </p>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-stretch gap-3">
-        <div className="min-w-[200px] flex-1">
-          <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <Route className="h-3.5 w-3.5" />
+      <div className="mt-4 flex flex-wrap items-stretch gap-3 print:mt-2 print:gap-2">
+        <div className="min-w-[200px] flex-1 print:w-[170px] print:min-w-0 print:flex-none">
+          <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground print:mb-1 print:text-[9px]">
+            <Route className="h-3.5 w-3.5 print:h-2.5 print:w-2.5" />
             유입경로
           </div>
           <DonutChart data={data.utmBySource} channelColors={channelColors} onColorChange={onChannelColorChange} />
@@ -92,43 +101,53 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
           const nextValue = i < funnelPreStages.length - 1 ? funnelPreStages[i + 1].value : data.performance.rangeCount;
           const Icon = stage.icon;
           return (
-            <div key={stage.label} className="flex shrink-0 items-stretch gap-2">
-              <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52">
-                <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                  <Icon className="h-3.5 w-3.5" />
+            <div key={stage.label} className="flex shrink-0 items-stretch gap-2 print:gap-1">
+              <div className={statBoxClass}>
+                <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground print:text-[9px]">
+                  <Icon className="h-3.5 w-3.5 print:h-2.5 print:w-2.5" />
                   {stage.label}
                 </span>
-                <div className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">
+                <div className="mt-2 text-2xl font-semibold tabular-nums tracking-tight print:mt-1 print:text-base">
                   {formatNumber(stage.value)}
                 </div>
-                {stage.change !== null && (
+                {(stage.change !== null || stage.yoyChange !== null) && (
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="text-[10px] text-muted-foreground">전주 대비</span>
-                    <ChangeBadge rangeChange={stage.change} />
+                    {stage.change !== null && (
+                      <>
+                        <span className="text-[10px] text-muted-foreground">전주 대비</span>
+                        <ChangeBadge rangeChange={stage.change} />
+                      </>
+                    )}
+                    {stage.yoyChange !== null && (
+                      <>
+                        <span className="text-[10px] text-muted-foreground">전년 동일 D구간</span>
+                        <ChangeBadge rangeChange={stage.yoyChange} />
+                      </>
+                    )}
                   </div>
                 )}
                 {stage.daily && stage.daily.length >= 2 && (
-                  <div className="mt-2">
+                  <div className="mt-2 print:mt-1">
                     <Sparkline points={stage.daily} />
                   </div>
                 )}
               </div>
               <div className="flex shrink-0 flex-col items-center justify-center text-muted-foreground">
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight className="h-4 w-4 print:h-3 print:w-3" />
                 <span className="text-[10px] tabular-nums">{conversionRate(stage.value, nextValue)}%</span>
               </div>
             </div>
           );
         })}
 
-        <div className="shrink-0 rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52">
+        <div className={`shrink-0 ${statBoxClass}`}>
           <div className="flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-              <Users className="h-3.5 w-3.5" />
+            <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground print:text-[9px]">
+              <Users className="h-3.5 w-3.5 print:h-2.5 print:w-2.5" />
               주간 사전등록자
             </span>
           </div>
-          <div className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">
+          <div className="mt-2 text-2xl font-semibold tabular-nums tracking-tight print:mt-1 print:text-base">
             {formatNumber(data.performance.rangeCount)}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -142,15 +161,15 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
             )}
           </div>
           {trend.length >= 2 && (
-            <div className="mt-2">
+            <div className="mt-2 print:mt-1">
               <Sparkline points={trend} />
             </div>
           )}
         </div>
 
-        <div className="shrink-0 rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52">
-          <span className="text-xs font-medium text-muted-foreground">누적 사전등록자</span>
-          <div className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">
+        <div className={`shrink-0 ${statBoxClass}`}>
+          <span className="text-xs font-medium text-muted-foreground print:text-[9px]">누적 사전등록자</span>
+          <div className="mt-2 text-2xl font-semibold tabular-nums tracking-tight print:mt-1 print:text-base">
             {formatNumber(data.performance.cumulativeCount)}
           </div>
           {previousYear && (
