@@ -343,11 +343,17 @@ function YearOverYearCard({ yoy, currentTotal }: { yoy: NonNullable<RealtimeRepo
 
 export function ChangeBadge({ rangeChange }: MetricChange) {
   if (rangeChange === null) {
-    return <span className="rounded-full bg-secondary px-2 py-1 text-xs text-muted-foreground">비교 준비 중</span>;
+    return (
+      <span className="rounded-full bg-secondary px-2 py-1 text-xs text-muted-foreground print:px-1.5 print:py-0.5 print:text-[9px]">
+        비교 준비 중
+      </span>
+    );
   }
   const positive = rangeChange >= 0;
   return (
-    <span className={`rounded-full px-2 py-1 text-xs font-medium ${positive ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-600"}`}>
+    <span
+      className={`rounded-full px-2 py-1 text-xs font-medium print:px-1.5 print:py-0.5 print:text-[9px] ${positive ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-600"}`}
+    >
       {formatPercent(rangeChange)}
     </span>
   );

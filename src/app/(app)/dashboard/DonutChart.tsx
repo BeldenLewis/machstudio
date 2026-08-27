@@ -56,10 +56,10 @@ export default function DonutChart({ data, maxSlices = 5, channelColors, onColor
   ];
 
   return (
-    // 인쇄에서는 부모가 격자 칸이라(ProjectSummaryCard의 print:grid-cols-2) 이 칸 하나가
-    // 넉넉한 폭을 갖는다 — max-w-xs(320px) 제한만 풀고(print:max-w-none) 칸 폭을 그대로 쓴다.
-    <div className="flex max-w-xs items-center gap-4 print:max-w-none print:w-full print:gap-2">
-      <div className="h-[140px] w-[140px] shrink-0 print:h-[85px] print:w-[85px]">
+    // 인쇄에서는 부모가 한 행의 5칸 중 하나라(ProjectSummaryCard) 폭이 아주 좁다 —
+    // 차트를 범례 옆이 아니라 위에 작게 두고 세로로 쌓아 좁은 칸에서도 범례가 잘리지 않게 한다.
+    <div className="flex max-w-xs items-center gap-4 print:max-w-none print:w-full print:flex-col print:items-start print:gap-1">
+      <div className="h-[140px] w-[140px] shrink-0 print:h-[46px] print:w-[46px]">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -83,7 +83,7 @@ export default function DonutChart({ data, maxSlices = 5, channelColors, onColor
           </PieChart>
         </ResponsiveContainer>
       </div>
-      <ul className="min-w-0 space-y-1.5 print:space-y-0.5">
+      <ul className="min-w-0 space-y-1.5 print:w-full print:space-y-0.5">
         {slices.map((slice) => {
           const editable = !!onColorChange && slice.label !== "기타";
           return (

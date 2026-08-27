@@ -61,12 +61,13 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
   const conversionRate = (from: number, to: number) => (from > 0 ? Math.round((to / from) * 100) : 0);
 
   /**
-   * 화면에서는 그대로, PDF 인쇄에서만 2열 격자로 — 처음엔 flex 한 줄로 눌러 봤는데, 세로형
-   * (또는 폭이 좁은 어떤 인쇄든)에서 flex-wrap 이 제멋대로 줄바꿈해 화살표가 다음 박스가
-   * 아니라 허공을 가리키는 문제가 났다(칸마다 폭이 달라 줄마다 개수가 달라짐). 격자는
-   * 폭이 좁든 넓든 항상 2열로 가지런히 쌓여 이 문제가 원천적으로 없다.
+   * 화면에서는 그대로, PDF 인쇄에서는 한 프로젝트 = 한 행(유입경로·홈페이지 방문·사전등록
+   * 페이지 방문·주간 사전등록자·누적 사전등록자 총 5칸)에 다 들어가야 한 페이지에 3개
+   * 프로젝트가 쌓인다. flex-wrap 은 폭이 좁으면 줄이 갈려 화살표가 허공을 가리키는 문제가
+   * 났었다 — print:flex-nowrap + 각 칸 flex-1 min-w-0 로 항상 한 줄에서 균등하게
+   * 줄어들게 한다(칸 개수가 4개든 5개든 자동으로 폭을 나눠 가져 격자보다 안전하다).
    */
-  const statBoxClass = "rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52 print:w-full print:px-2.5 print:py-2";
+  const statBoxClass = "rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52 print:flex-1 print:min-w-0 print:px-1.5 print:py-1.5";
 
   return (
     <div className="rounded-2xl border border-border bg-background p-5 print:p-3">
@@ -84,8 +85,8 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
         </p>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-stretch gap-3 print:mt-2 print:grid print:grid-cols-2 print:gap-1.5">
-        <div className="min-w-[200px] flex-1 print:w-full">
+      <div className="mt-4 flex flex-wrap items-stretch gap-3 print:mt-2 print:flex-nowrap print:gap-1.5">
+        <div className="min-w-[200px] flex-1 print:min-w-0">
           <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground print:mb-1 print:text-[9px]">
             <Route className="h-3.5 w-3.5 print:h-2.5 print:w-2.5" />
             유입경로
@@ -97,8 +98,8 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
           홈페이지 방문 → 사전등록 페이지 방문 → (화살표) → 주간 사전등록자.
           마지막 단계는 별도 박스가 아니라 바로 아래 "주간 사전등록자" 박스로 흘러들어가는
           화살표로 그린다 — 그 박스 숫자와 사전등록 완료 숫자가 원래 같은 값이라 중복 표시하지 않는다.
-          인쇄에서는 화살표를 빼고(격자에서 줄이 갈리면 다음 박스를 안 가리키게 됨) 전환율을
-          박스 안 텍스트로 옮긴다 — print:contents 로 이 래퍼를 지워 박스 자체가 격자 칸이 되게 한다.
+          인쇄에서는 화살표를 빼고(한 줄에 5칸을 채워야 해서 자리가 없다) 전환율을 박스 안
+          텍스트로 옮긴다 — print:contents 로 이 래퍼를 지워 박스 자체가 행의 flex 칸이 되게 한다.
         */}
         {funnelPreStages.map((stage, i) => {
           const nextValue = i < funnelPreStages.length - 1 ? funnelPreStages[i + 1].value : data.performance.rangeCount;
@@ -179,22 +180,22 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
             {formatNumber(data.performance.cumulativeCount)}
           </div>
           {previousYear && (
-            <div className="mt-2 space-y-2">
+            <div className="mt-2 space-y-2 print:mt-1 print:space-y-1">
               {previousYear.paceCount !== null && previousYear.dDay !== null && (
-                <div className="rounded-xl bg-background px-2.5 py-2 shadow-sm">
-                  <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+                <div className="rounded-xl bg-background px-2.5 py-2 shadow-sm print:px-1.5 print:py-1">
+                  <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground print:text-[8px]">
                     <span>{formatDday(previousYear.dDay)} 동일 시점</span>
                     <span>{previousYear.eventYear ?? "전년"}년 {formatNumber(previousYear.paceCount)}명</span>
                   </div>
                   <div className="mt-1 flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-medium">등록 속도</span>
+                    <span className="text-[11px] font-medium print:text-[9px]">등록 속도</span>
                     <ChangeBadge rangeChange={previousYear.paceChange} />
                   </div>
                 </div>
               )}
               {finalProgress !== null && (
                 <div>
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground print:text-[9px]">
                     <span>전년 최종 실적 대비</span>
                     <span className="font-medium text-foreground">{Math.round(finalProgress)}%</span>
                   </div>
@@ -204,13 +205,13 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
                       style={{ width: `${Math.min(100, finalProgress)}%` }}
                     />
                   </div>
-                  <div className="mt-0.5 text-right text-[10px] text-muted-foreground">
+                  <div className="mt-0.5 text-right text-[10px] text-muted-foreground print:text-[8px]">
                     {previousYear.sourceName} · {formatNumber(previousYear.totalCount)}명
                   </div>
                 </div>
               )}
               {finalProgress === null && previousYear.paceCount === null && (
-                <p className="text-right text-[10px] text-muted-foreground">
+                <p className="text-right text-[10px] text-muted-foreground print:text-[8px]">
                   {previousYear.sourceName} · 최종 {formatNumber(previousYear.totalCount)}명
                 </p>
               )}
