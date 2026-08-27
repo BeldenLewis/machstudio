@@ -72,8 +72,11 @@ export interface RealtimeReportData {
   funnel: {
     homepageVisitors: number;
     homepageVisitorsChange: number | null;
+    /** 요약 카드의 미니 추이선용 — 조회 구간(range.from~to) 매일의 방문자 수, 날짜순. */
+    homepageVisitorsDaily: number[] | null;
     registrationPageVisitors: number | null;
     registrationPageVisitorsChange: number | null;
+    registrationPageVisitorsDaily: number[] | null;
     registrants: number;
     homepageToPageRate: number | null;
     pageToRegistrantRate: number | null;

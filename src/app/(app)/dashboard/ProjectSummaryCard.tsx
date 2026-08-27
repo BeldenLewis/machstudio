@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Route, Users } from "lucide-react";
+import { ArrowRight, Globe, MousePointerClick, Route, Users } from "lucide-react";
 import type { RealtimeReportData } from "./RealtimeReport";
 import { ChangeBadge, formatNumber } from "./RealtimeReport";
 import DonutChart from "./DonutChart";
@@ -36,13 +36,21 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
    */
   const funnelPreStages = data.funnel
     ? [
-        { label: "홈페이지 방문", value: data.funnel.homepageVisitors, change: data.funnel.homepageVisitorsChange },
+        {
+          label: "홈페이지 방문",
+          icon: Globe,
+          value: data.funnel.homepageVisitors,
+          change: data.funnel.homepageVisitorsChange,
+          daily: data.funnel.homepageVisitorsDaily,
+        },
         ...(data.funnel.registrationPageVisitors !== null
           ? [
               {
                 label: "사전등록 페이지 방문",
+                icon: MousePointerClick,
                 value: data.funnel.registrationPageVisitors,
                 change: data.funnel.registrationPageVisitorsChange,
+                daily: data.funnel.registrationPageVisitorsDaily,
               },
             ]
           : []),
@@ -82,18 +90,30 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
         */}
         {funnelPreStages.map((stage, i) => {
           const nextValue = i < funnelPreStages.length - 1 ? funnelPreStages[i + 1].value : data.performance.rangeCount;
+          const Icon = stage.icon;
           return (
-            <div key={stage.label} className="flex shrink-0 items-center gap-2">
-              <div className="w-28 shrink-0 rounded-2xl border border-border bg-secondary/20 px-3 py-2.5">
-                <div className="truncate text-[10px] text-muted-foreground">{stage.label}</div>
-                <div className="mt-0.5 text-base font-semibold tabular-nums">{formatNumber(stage.value)}</div>
+            <div key={stage.label} className="flex shrink-0 items-stretch gap-2">
+              <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52">
+                <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <Icon className="h-3.5 w-3.5" />
+                  {stage.label}
+                </span>
+                <div className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">
+                  {formatNumber(stage.value)}
+                </div>
                 {stage.change !== null && (
-                  <div className="mt-0.5">
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-[10px] text-muted-foreground">전주 대비</span>
                     <ChangeBadge rangeChange={stage.change} />
                   </div>
                 )}
+                {stage.daily && stage.daily.length >= 2 && (
+                  <div className="mt-2">
+                    <Sparkline points={stage.daily} />
+                  </div>
+                )}
               </div>
-              <div className="flex shrink-0 flex-col items-center text-muted-foreground">
+              <div className="flex shrink-0 flex-col items-center justify-center text-muted-foreground">
                 <ArrowRight className="h-4 w-4" />
                 <span className="text-[10px] tabular-nums">{conversionRate(stage.value, nextValue)}%</span>
               </div>
