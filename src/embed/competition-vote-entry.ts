@@ -32,6 +32,7 @@ interface MediaItem {
   kind: "image" | "youtube";
   url?: string;
   videoId?: string;
+  role?: "logo";
 }
 
 interface EntryDto {
@@ -171,7 +172,9 @@ async function start(payload: BootPayload) {
 }
 
 function mediaThumbHtml(entry: EntryDto): string {
-  const image = entry.media.find((m) => m.kind === "image" && m.url);
+  // 대표 사진은 로고가 아닌 이미지를 우선한다 — 로고만 올렸다면 그거라도 보여준다.
+  const image = entry.media.find((m) => m.kind === "image" && m.url && m.role !== "logo")
+    ?? entry.media.find((m) => m.kind === "image" && m.url);
   if (image?.url) {
     return `<img class="mcv-thumb-img" src="${escapeHtml(image.url)}" alt="" loading="lazy">`;
   }
@@ -183,6 +186,11 @@ function mediaThumbHtml(entry: EntryDto): string {
       <span class="mcv-play">▶</span></button>`;
   }
   return `<div class="mcv-thumb-empty"></div>`;
+}
+
+/** 팀 로고 — 대표 사진과 별개로 카드 제목 옆에 작은 배지로 얹는다. */
+function logoUrl(entry: EntryDto): string | null {
+  return entry.media.find((m) => m.kind === "image" && m.role === "logo" && m.url)?.url ?? null;
 }
 
 /**
@@ -222,11 +230,15 @@ function renderVote(mount: HTMLElement, state: StateDto, payload: BootPayload, d
           : "";
       // 배지로 "마감"을 알려 놓고 버튼은 여전히 눌러 보게 두면, 눌러야 비로소 마감을 아는 게 된다.
       const closedNow = state.reason !== "ok";
+      const logo = logoUrl(entry);
       return `<article class="mcv-card${voted ? " is-voted" : ""}" data-mcv-entry="${escapeHtml(entry.id)}">
         <div class="mcv-media">${mediaThumbHtml(entry)}</div>
         <div class="mcv-body">
           <div class="mcv-head"><span class="mcv-no">${escapeHtml(entry.entryNo)}</span>${tallyText}</div>
-          <h3 class="mcv-title">${escapeHtml(entry.title)}</h3>
+          <div class="mcv-title-row">
+            <h3 class="mcv-title">${escapeHtml(entry.title)}</h3>
+            ${logo ? `<img class="mcv-logo" src="${escapeHtml(logo)}" alt="" loading="lazy">` : ""}
+          </div>
           ${entry.teamName ? `<p class="mcv-team">${escapeHtml(entry.teamName)}</p>` : ""}
           ${entry.summary ? `<p class="mcv-summary">${escapeHtml(entry.summary)}</p>` : ""}
           <button type="button" class="mcv-btn" data-mcv-vote="${escapeHtml(entry.id)}"${closedNow ? " disabled" : ""}>
