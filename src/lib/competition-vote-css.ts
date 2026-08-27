@@ -68,7 +68,7 @@ export const VOTE_CSS = `
 .mcv-title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .mcv-title { font-size: 15px; font-weight: 700; line-height: 1.4; margin: 0; word-break: keep-all; }
 /* 대표 사진과 구분되는 팀 로고 — 카드 그림자 마감과 같은 규칙으로 테두리 대신 그림자를 쓴다. */
-.mcv-logo { flex: none; width: 30px; height: 30px; border-radius: 999px; object-fit: cover;
+.mcv-logo { flex: none; width: 45px; height: 45px; border-radius: 999px; object-fit: cover;
   background: var(--mc-surface); box-shadow: 0 1px 3px rgba(0,0,0,.18); }
 .mcv-team { font-size: 12.5px; opacity: .7; margin: 0; }
 .mcv-summary { font-size: 12.5px; line-height: 1.6; opacity: .75; margin: 0;
