@@ -60,6 +60,8 @@ interface FieldMapping {
   label: string;
   type: string;
   isRequired: boolean;
+  /** 프로젝트 대시보드에 이 필드의 값 분포를 카드로 보여줄지. 기본 true(§ 스키마 주석). */
+  showInDashboard: boolean;
   sortOrder: number;
   /** 수집 데이터 표(목록)에서 이 열을 숨긴다 — 값은 계속 수집되고 상세·CSV엔 그대로 나온다. */
   hidden: boolean;
@@ -995,6 +997,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       label: f.label || `필드 ${f.index}`,
       type: f.type || "text",
       isRequired: false,
+      showInDashboard: true,
       sortOrder: i,
       hidden: false,
     }));
@@ -1018,6 +1021,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
         label: f.label || `필드 ${i}`,
         type: f.type || "text",
         isRequired: false,
+        showInDashboard: true,
         sortOrder: i,
         hidden: false,
       }));
@@ -1055,6 +1059,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       label: "",
       type: "text",
       isRequired: false,
+      showInDashboard: true,
       sortOrder: f.length,
       hidden: false,
     }]);
@@ -1731,7 +1736,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                   <div>
                     <h3 className="text-sm font-medium">필드 매핑</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      인덱스는 아래 &ldquo;필드 묶음 선택자&rdquo;로 찾은 순서(0부터)예요 · 눈 아이콘으로 수집 데이터 표에 보일지 정해요(값은 계속 수집돼요) · &ldquo;필수&rdquo;를 하나라도 켜면, 그 필드들이 전부 채워진 제출만 저장돼요
+                      인덱스는 아래 &ldquo;필드 묶음 선택자&rdquo;로 찾은 순서(0부터)예요 · 눈 아이콘으로 수집 데이터 표에 보일지 정해요(값은 계속 수집돼요) · &ldquo;필수&rdquo;를 하나라도 켜면, 그 필드들이 전부 채워진 제출만 저장돼요 · &ldquo;통계&rdquo;는 프로젝트 대시보드에 값 분포 카드로 보일지예요(기본 켜짐, 필요없으면 꺼주세요)
                     </p>
                   </div>
                 </div>
@@ -1771,6 +1776,18 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                             className="w-3.5 h-3.5 accent-violet-500"
                           />
                           필수
+                        </label>
+                        <label
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-border text-xs text-muted-foreground shrink-0 cursor-pointer hover:bg-secondary transition-colors"
+                          title="프로젝트 대시보드에 이 필드의 값 분포를 카드로 보여줘요 — 필요없으면 꺼도 수집 자체는 계속돼요"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={field.showInDashboard}
+                            onChange={(e) => updateField(idx, { showInDashboard: e.target.checked })}
+                            className="w-3.5 h-3.5 accent-violet-500"
+                          />
+                          통계
                         </label>
                         <button onClick={() => updateField(idx, { hidden: !field.hidden })}
                           title={field.hidden ? "수집 데이터 표에서 숨김 — 클릭해서 보이기" : "수집 데이터 표에 보임 — 클릭해서 숨기기"}
