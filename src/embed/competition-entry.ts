@@ -233,7 +233,9 @@ function bindImageInputs(form: HTMLFormElement, payload: BootPayload): Map<strin
   form.querySelectorAll<HTMLInputElement>("[data-mc-image]").forEach((input) => {
     const key = input.getAttribute("data-mc-key") ?? "";
     const max = Number(input.getAttribute("data-mc-max") || 3);
-    const gallery = input.parentElement?.querySelector<HTMLElement>("[data-mc-files]");
+    // input.parentElement 는 <label class="mc-file-btn"> 이고 .mc-files 는 그 형제라
+    // parentElement 기준 querySelector 로는 못 찾는다 — .mc-field 까지 올라가서 찾는다.
+    const gallery = input.closest(".mc-field")?.querySelector<HTMLElement>("[data-mc-files]");
     uploaded.set(key, []);
 
     input.addEventListener("change", async () => {
@@ -504,9 +506,10 @@ function bindSubmit(
       if (value) data[field.key] = value;
     }
 
-    const media = Array.from(uploaded.entries()).flatMap(([, urls]) =>
-      urls.map((url, i) => ({ kind: "image" as const, url, sortOrder: i })),
-    );
+    const media = Array.from(uploaded.entries()).flatMap(([key, urls]) => {
+      const isLogo = payload.config.form.fields.find((f) => f.key === key)?.isLogo === true;
+      return urls.map((url, i) => ({ kind: "image" as const, url, sortOrder: i, ...(isLogo ? { role: "logo" as const } : {}) }));
+    });
 
     if (payload.preview) {
       show("success", t.previewSubmitted);
