@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { FINISH, R } from "@/components/ui/primitives";
 import { formatKst } from "@/lib/datetime";
 import { normalizeMedia, youtubeThumbnailUrl } from "@/lib/competition-config";
+import EntryDetailModal from "./EntryDetailModal";
 import type { CompetitionDetail } from "./page";
 
 interface Entry {
@@ -18,6 +19,7 @@ interface Entry {
   teamName: string | null;
   summary: string | null;
   media: unknown;
+  data: unknown;
   contactName: string | null;
   contactEmail: string | null;
   contactPhone: string | null;
@@ -25,6 +27,9 @@ interface Entry {
   isPublished: boolean;
   sortOrder: number;
   advanced: boolean;
+  agreePrivacy: boolean;
+  agreeMarketing: boolean;
+  agreeThirdParty: boolean;
   submittedAt: string;
 }
 
@@ -45,6 +50,7 @@ export default function EntriesTab({
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [detailEntryId, setDetailEntryId] = useState<string | null>(null);
 
   const fetchEntries = useCallback(async () => {
     setLoading(true);
@@ -154,7 +160,11 @@ export default function EntriesTab({
                 onUpdated={(next) => setEntries((prev) => prev.map((e) => (e.id === entry.id ? { ...e, ...next } : e)))}
               />
 
-              <div className="min-w-0 flex-1">
+              <button
+                onClick={() => setDetailEntryId(entry.id)}
+                className="min-w-0 flex-1 rounded-lg py-0.5 text-left transition-colors hover:bg-secondary/50"
+                title="눌러서 신청 내용 전체 보기"
+              >
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="truncate text-sm font-medium">{entry.title}</span>
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${status.tone}`}>{status.label}</span>
@@ -168,7 +178,7 @@ export default function EntriesTab({
                   {[entry.teamName, entry.contactName, entry.contactEmail].filter(Boolean).join(" · ")}
                 </p>
                 <p className="text-[10px] text-muted-foreground/70">{formatKst(entry.submittedAt)}</p>
-              </div>
+              </button>
 
               {video?.kind === "youtube" && (
                 <a
@@ -213,6 +223,13 @@ export default function EntriesTab({
           );
         })}
       </div>
+
+      {detailEntryId && (() => {
+        const detailEntry = entries.find((e) => e.id === detailEntryId);
+        return detailEntry ? (
+          <EntryDetailModal competition={competition} entry={detailEntry} onClose={() => setDetailEntryId(null)} />
+        ) : null;
+      })()}
     </div>
   );
 }
