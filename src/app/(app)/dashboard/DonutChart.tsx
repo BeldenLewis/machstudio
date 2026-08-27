@@ -56,11 +56,10 @@ export default function DonutChart({ data, maxSlices = 5, channelColors, onColor
   ];
 
   return (
-    // print:에서만 훨씬 좁게 — 화면에서는 그대로, PDF는 A4 가로에 프로젝트 3개가 들어가야 해서
-    // 카드 전체(도넛+통계 4칸)가 한 줄에 맞아야 한다. max-w-xs(320px)가 있어도 부모가 flex-wrap
-    // 이라 인쇄 폭이 좁으면 이 블록부터 줄바꿈되고 범례가 잘렸다.
-    <div className="flex max-w-xs items-center gap-4 print:max-w-[170px] print:gap-1.5">
-      <div className="h-[140px] w-[140px] shrink-0 print:h-[70px] print:w-[70px]">
+    // 인쇄에서는 부모가 격자 칸이라(ProjectSummaryCard의 print:grid-cols-2) 이 칸 하나가
+    // 넉넉한 폭을 갖는다 — max-w-xs(320px) 제한만 풀고(print:max-w-none) 칸 폭을 그대로 쓴다.
+    <div className="flex max-w-xs items-center gap-4 print:max-w-none print:w-full print:gap-2">
+      <div className="h-[140px] w-[140px] shrink-0 print:h-[85px] print:w-[85px]">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie

@@ -61,11 +61,12 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
   const conversionRate = (from: number, to: number) => (from > 0 ? Math.round((to / from) * 100) : 0);
 
   /**
-   * 화면에서는 그대로, PDF 인쇄에서만 훨씬 좁게 — A4 가로 한 장에 프로젝트 카드 3개가
-   * 들어가야 하는데, 화면 기준 폭(lg:w-52 × 최대 4칸)은 인쇄 가용 폭보다 넓어 줄바꿈되고
-   * 도넛 범례가 잘렸다. 통계 칸 4개가 공유하는 크기라 한곳에서 통일해서 관리한다.
+   * 화면에서는 그대로, PDF 인쇄에서만 2열 격자로 — 처음엔 flex 한 줄로 눌러 봤는데, 세로형
+   * (또는 폭이 좁은 어떤 인쇄든)에서 flex-wrap 이 제멋대로 줄바꿈해 화살표가 다음 박스가
+   * 아니라 허공을 가리키는 문제가 났다(칸마다 폭이 달라 줄마다 개수가 달라짐). 격자는
+   * 폭이 좁든 넓든 항상 2열로 가지런히 쌓여 이 문제가 원천적으로 없다.
    */
-  const statBoxClass = "rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52 print:w-32 print:px-2.5 print:py-2";
+  const statBoxClass = "rounded-2xl border border-border bg-secondary/20 px-4 py-3 lg:w-52 print:w-full print:px-2.5 print:py-2";
 
   return (
     <div className="rounded-2xl border border-border bg-background p-5 print:p-3">
@@ -83,8 +84,8 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
         </p>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-stretch gap-3 print:mt-2 print:gap-2">
-        <div className="min-w-[200px] flex-1 print:w-[170px] print:min-w-0 print:flex-none">
+      <div className="mt-4 flex flex-wrap items-stretch gap-3 print:mt-2 print:grid print:grid-cols-2 print:gap-1.5">
+        <div className="min-w-[200px] flex-1 print:w-full">
           <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground print:mb-1 print:text-[9px]">
             <Route className="h-3.5 w-3.5 print:h-2.5 print:w-2.5" />
             유입경로
@@ -96,12 +97,14 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
           홈페이지 방문 → 사전등록 페이지 방문 → (화살표) → 주간 사전등록자.
           마지막 단계는 별도 박스가 아니라 바로 아래 "주간 사전등록자" 박스로 흘러들어가는
           화살표로 그린다 — 그 박스 숫자와 사전등록 완료 숫자가 원래 같은 값이라 중복 표시하지 않는다.
+          인쇄에서는 화살표를 빼고(격자에서 줄이 갈리면 다음 박스를 안 가리키게 됨) 전환율을
+          박스 안 텍스트로 옮긴다 — print:contents 로 이 래퍼를 지워 박스 자체가 격자 칸이 되게 한다.
         */}
         {funnelPreStages.map((stage, i) => {
           const nextValue = i < funnelPreStages.length - 1 ? funnelPreStages[i + 1].value : data.performance.rangeCount;
           const Icon = stage.icon;
           return (
-            <div key={stage.label} className="flex shrink-0 items-stretch gap-2 print:gap-1">
+            <div key={stage.label} className="flex shrink-0 items-stretch gap-2 print:contents">
               <div className={statBoxClass}>
                 <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground print:text-[9px]">
                   <Icon className="h-3.5 w-3.5 print:h-2.5 print:w-2.5" />
@@ -126,14 +129,17 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
                     )}
                   </div>
                 )}
+                <p className="hidden print:block print:mt-0.5 print:text-[8px] print:text-muted-foreground">
+                  다음 단계 전환 {conversionRate(stage.value, nextValue)}%
+                </p>
                 {stage.daily && stage.daily.length >= 2 && (
                   <div className="mt-2 print:mt-1">
                     <Sparkline points={stage.daily} />
                   </div>
                 )}
               </div>
-              <div className="flex shrink-0 flex-col items-center justify-center text-muted-foreground">
-                <ArrowRight className="h-4 w-4 print:h-3 print:w-3" />
+              <div className="flex shrink-0 flex-col items-center justify-center text-muted-foreground print:hidden">
+                <ArrowRight className="h-4 w-4" />
                 <span className="text-[10px] tabular-nums">{conversionRate(stage.value, nextValue)}%</span>
               </div>
             </div>
