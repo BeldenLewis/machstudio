@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, Loader2, Trash2, Users } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ExternalLink, ImagePlus, Loader2, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { InlineError } from "@/components/ui/inline-error";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -129,6 +129,7 @@ export default function EntriesTab({
           const media = normalizeMedia(entry.media);
           const thumb = media.find((m) => m.kind === "image");
           const video = media.find((m) => m.kind === "youtube");
+          const logo = media.find((m) => m.kind === "image" && m.role === "logo");
           const status = STATUS_META[entry.status] ?? STATUS_META.submitted;
           return (
             <div key={entry.id} className={`flex flex-wrap items-center gap-3 bg-background p-3 ${R.surface} ${FINISH.s2}`}>
@@ -145,6 +146,13 @@ export default function EntriesTab({
                   <img src={youtubeThumbnailUrl(video.videoId)} alt="" className="h-full w-full object-cover" />
                 ) : null}
               </div>
+
+              <EntryLogoControl
+                competitionId={competition.id}
+                entry={entry}
+                logoUrl={logo?.kind === "image" ? logo.url : null}
+                onUpdated={(next) => setEntries((prev) => prev.map((e) => (e.id === entry.id ? { ...e, ...next } : e)))}
+              />
 
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -205,6 +213,92 @@ export default function EntriesTab({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * 참가작 로고 — 관리자가 직접 넣거나 뗀다.
+ *
+ * 신청 폼에 "팀 로고로 써요" 항목을 켜도 **그 이후 들어오는 신청부터만** 적용된다(제출
+ * 당시엔 어느 사진이 로고 필드에서 왔는지 기록이 없다). 이미 접수된 참가작은 소급 적용이
+ * 안 되므로, 여기서 직접 올려야 투표 카드에 로고가 붙는다.
+ */
+function EntryLogoControl({
+  competitionId,
+  entry,
+  logoUrl,
+  onUpdated,
+}: {
+  competitionId: string;
+  entry: Entry;
+  logoUrl: string | null;
+  onUpdated: (next: Partial<Entry>) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+
+  const upload = async (file: File) => {
+    setBusy(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch(`/api/competitions/${competitionId}/entries/${entry.id}/logo`, { method: "POST", body });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(data.error ?? "로고 업로드에 실패했어요"); return; }
+      onUpdated(data.entry);
+      toast.success("로고를 넣었어요");
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/competitions/${competitionId}/entries/${entry.id}/logo`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(data.error ?? "삭제에 실패했어요"); return; }
+      onUpdated(data.entry);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="group relative h-12 w-12 shrink-0" title="투표 카드 제목 옆에 작은 배지로 나가는 팀 로고예요">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); }}
+      />
+      <button
+        onClick={() => fileRef.current?.click()}
+        disabled={busy}
+        className={`flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-secondary transition-opacity hover:opacity-80 disabled:opacity-50 ${R.control}`}
+        aria-label={logoUrl ? "로고 바꾸기" : "로고 올리기"}
+      >
+        {busy ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+        ) : logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logoUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <ImagePlus className="h-3.5 w-3.5 text-muted-foreground/50" />
+        )}
+      </button>
+      {logoUrl && !busy && (
+        <button
+          onClick={remove}
+          className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-background text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-red-500 group-hover:opacity-100"
+          aria-label="로고 빼기"
+        >
+          <Trash2 className="h-2.5 w-2.5" />
+        </button>
+      )}
     </div>
   );
 }
