@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import type { RealtimeReportData } from "@/app/(app)/dashboard/RealtimeReport";
 import { normalizeUtmKey } from "@/lib/attribution-normalize";
-import { getGa4ActiveUsers } from "@/lib/ga4";
+import { getGa4ActiveUsers, getGa4ActiveUsersByDay } from "@/lib/ga4";
 import {
   equivalentPreviousCutoff,
   eventDday,
@@ -575,6 +575,29 @@ function getKstDateKey(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * GA4 일별 방문자 행("YYYYMMDD" 키, 방문 0인 날은 행 자체가 없음)을 조회 구간의
+ * 매일에 맞춰 0으로 채운 연속 배열로 편다 — 요약 카드 미니 추이선(Sparkline)이
+ * cumulativeTrend 와 같은 "구간 전체를 빠짐없이" 규칙을 따르게 한다.
+ */
+export function buildGa4DailyTrend(rows: Array<{ date: string; count: number }> | null, from: Date, to: Date): number[] | null {
+  if (!rows) return null;
+  const byDate = new Map<string, number>();
+  for (const row of rows) {
+    if (row.date.length !== 8) continue;
+    const key = `${row.date.slice(0, 4)}-${row.date.slice(4, 6)}-${row.date.slice(6, 8)}`;
+    byDate.set(key, row.count);
+  }
+  const points: number[] = [];
+  let cursor = getKstDayStart(from);
+  const end = getKstDayStart(to);
+  while (cursor.getTime() <= end.getTime()) {
+    points.push(byDate.get(getKstDateKey(cursor)) ?? 0);
+    cursor = new Date(cursor.getTime() + DAY_MS);
+  }
+  return points;
+}
+
 interface UtmTrendRecord {
   createdAt: Date;
   utmSource: string | null;
@@ -954,11 +977,20 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
     ? await (async () => {
         const propertyId = project.ga4PropertyId!;
         const pagePathPrefix = project.ga4RegistrationPagePath || null;
-        const [homepageVisitors, previousHomepageVisitors, registrationPageVisitors, previousRegistrationPageVisitors] = await Promise.all([
+        const [
+          homepageVisitors,
+          previousHomepageVisitors,
+          registrationPageVisitors,
+          previousRegistrationPageVisitors,
+          homepageVisitorsDailyRows,
+          registrationPageVisitorsDailyRows,
+        ] = await Promise.all([
           getGa4ActiveUsers({ propertyId, from, to }),
           getGa4ActiveUsers({ propertyId, from: previousFrom, to: from }),
           pagePathPrefix ? getGa4ActiveUsers({ propertyId, pagePathPrefix, from, to }) : Promise.resolve(null),
           pagePathPrefix ? getGa4ActiveUsers({ propertyId, pagePathPrefix, from: previousFrom, to: from }) : Promise.resolve(null),
+          getGa4ActiveUsersByDay({ propertyId, from, to }),
+          pagePathPrefix ? getGa4ActiveUsersByDay({ propertyId, pagePathPrefix, from, to }) : Promise.resolve(null),
         ]);
         if (homepageVisitors === null) return null;
         const homepageVisitorsChange =
@@ -972,8 +1004,10 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
         return {
           homepageVisitors,
           homepageVisitorsChange,
+          homepageVisitorsDaily: buildGa4DailyTrend(homepageVisitorsDailyRows, from, to),
           registrationPageVisitors,
           registrationPageVisitorsChange,
+          registrationPageVisitorsDaily: pagePathPrefix ? buildGa4DailyTrend(registrationPageVisitorsDailyRows, from, to) : null,
           registrants: rangeCount,
           homepageToPageRate:
             registrationPageVisitors !== null && homepageVisitors > 0
