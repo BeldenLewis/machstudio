@@ -153,6 +153,94 @@ function CopyCodeButton({ text, label = "코드 복사" }: { text: string; label
   );
 }
 
+/**
+ * GA4 속성 선택 — 이번 해/작년 두 곳에서 같은 UI를 쓴다(전년 비교를 켜려면 작년 속성도
+ * 지정해야 해서). 목록 조회 실패, 또는 저장된 값이 목록에 없으면(오래된 값·권한 변경)
+ * 잃어버리지 않게 수동 입력이 기본값 — 사용자가 셀렉트에서 직접 고른 적 있으면 그 선택이
+ * 항상 우선한다.
+ */
+function Ga4PropertySelect({ value, onChange, properties }: {
+  value: string;
+  onChange: (next: string) => void;
+  properties: Ga4PropertyOption[] | null;
+}) {
+  const [manualEntryChoice, setManualEntryChoice] = useState<boolean | null>(null);
+  const manualEntry = useMemo(() => {
+    if (manualEntryChoice !== null) return manualEntryChoice;
+    if (properties === null) return true;
+    return !!value && !properties.some((p) => p.propertyId === value);
+  }, [manualEntryChoice, properties, value]);
+  const selectValue = useMemo(() => {
+    if (properties === null || manualEntry) return GA4_MANUAL_ENTRY;
+    return value || "";
+  }, [properties, manualEntry, value]);
+
+  if (properties !== null && properties.length > 0) {
+    return (
+      <>
+        <select
+          value={selectValue}
+          onChange={(e) => {
+            if (e.target.value === GA4_MANUAL_ENTRY) {
+              setManualEntryChoice(true);
+            } else {
+              setManualEntryChoice(false);
+              onChange(e.target.value);
+            }
+          }}
+          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm outline-none transition-colors focus:border-violet-400"
+        >
+          <option value="" disabled>속성을 선택하세요</option>
+          {value && !properties.some((p) => p.propertyId === value) && (
+            <option value={value}>현재 값: {value} (목록에 없음)</option>
+          )}
+          {Object.entries(
+            properties.reduce<Record<string, Ga4PropertyOption[]>>((groups, p) => {
+              (groups[p.accountDisplayName] ??= []).push(p);
+              return groups;
+            }, {}),
+          ).map(([account, props]) => (
+            <optgroup key={account} label={account}>
+              {props.map((p) => (
+                <option key={p.propertyId} value={p.propertyId}>
+                  {p.displayName} ({p.propertyId})
+                </option>
+              ))}
+            </optgroup>
+          ))}
+          <option value={GA4_MANUAL_ENTRY}>직접 입력...</option>
+        </select>
+        {manualEntry && (
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="예: 123456789"
+            className="mt-1.5 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm outline-none transition-colors focus:border-violet-400"
+          />
+        )}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="예: 123456789"
+        className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm outline-none transition-colors focus:border-violet-400"
+      />
+      {properties === null && (
+        <span className="block text-[11px] text-muted-foreground">
+          접근 가능한 속성 목록을 불러오지 못해 직접 입력해야 해요.
+        </span>
+      )}
+    </>
+  );
+}
+
 function timeStr(dateStr: string) {
   return formatKst(dateStr, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
@@ -182,9 +270,9 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   // GA4 분석 연동 — 소스가 아니라 "프로젝트" 단위 설정이지만(§데이터 관리 탭 참고),
   // 데이터를 다루는 이 화면에서 바로 고칠 수 있어야 접근성이 있다.
   const [ga4PropertyId, setGa4PropertyId] = useState("");
+  const [ga4PreviousYearPropertyId, setGa4PreviousYearPropertyId] = useState("");
   const [ga4RegistrationPagePath, setGa4RegistrationPagePath] = useState("");
   const [ga4Properties, setGa4Properties] = useState<Ga4PropertyOption[] | null>(null);
-  const [ga4ManualEntryChoice, setGa4ManualEntryChoice] = useState<boolean | null>(null);
   const [ga4Loading, setGa4Loading] = useState(false);
   const [ga4Saving, setGa4Saving] = useState(false);
 
@@ -310,6 +398,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       const projectData = await projectRes.json().catch(() => ({}));
       if (projectRes.ok && projectData.project) {
         setGa4PropertyId(projectData.project.ga4PropertyId ?? "");
+        setGa4PreviousYearPropertyId(projectData.project.ga4PreviousYearPropertyId ?? "");
         setGa4RegistrationPagePath(projectData.project.ga4RegistrationPagePath ?? "");
       }
       const propsData = await propsRes.json().catch(() => ({}));
@@ -326,7 +415,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       const res = await fetch(`/api/projects/${source.projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ga4PropertyId, ga4RegistrationPagePath }),
+        body: JSON.stringify({ ga4PropertyId, ga4PreviousYearPropertyId, ga4RegistrationPagePath }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -338,19 +427,6 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       setGa4Saving(false);
     }
   };
-
-  // 목록 조회 실패, 또는 저장된 값이 목록에 없으면(오래된 값/권한 변경) 잃어버리지 않게 수동 입력이 기본값 —
-  // 사용자가 셀렉트에서 직접 고른 적 있으면(ga4ManualEntryChoice) 그 선택이 항상 우선한다.
-  const ga4ManualEntry = useMemo(() => {
-    if (ga4ManualEntryChoice !== null) return ga4ManualEntryChoice;
-    if (ga4Properties === null) return true;
-    return !!ga4PropertyId && !ga4Properties.some((p) => p.propertyId === ga4PropertyId);
-  }, [ga4ManualEntryChoice, ga4Properties, ga4PropertyId]);
-
-  const ga4SelectValue = useMemo(() => {
-    if (ga4Properties === null || ga4ManualEntry) return GA4_MANUAL_ENTRY;
-    return ga4PropertyId || "";
-  }, [ga4Properties, ga4ManualEntry, ga4PropertyId]);
 
   // 현재 검색/필터/정렬 상태를 records API 쿼리스트링으로 직렬화 (페이지네이션 제외)
   const buildFilterQuery = useCallback(() => {
@@ -2312,64 +2388,15 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                   <>
                     <label className="block space-y-1.5">
                       <span className="text-xs font-medium text-muted-foreground">GA4 속성</span>
-                      {ga4Properties !== null && ga4Properties.length > 0 ? (
-                        <select
-                          value={ga4SelectValue}
-                          onChange={(e) => {
-                            if (e.target.value === GA4_MANUAL_ENTRY) {
-                              setGa4ManualEntryChoice(true);
-                            } else {
-                              setGa4ManualEntryChoice(false);
-                              setGa4PropertyId(e.target.value);
-                            }
-                          }}
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm outline-none transition-colors focus:border-violet-400"
-                        >
-                          <option value="" disabled>속성을 선택하세요</option>
-                          {ga4PropertyId && !ga4Properties.some((p) => p.propertyId === ga4PropertyId) && (
-                            <option value={ga4PropertyId}>현재 값: {ga4PropertyId} (목록에 없음)</option>
-                          )}
-                          {Object.entries(
-                            ga4Properties.reduce<Record<string, Ga4PropertyOption[]>>((groups, p) => {
-                              (groups[p.accountDisplayName] ??= []).push(p);
-                              return groups;
-                            }, {}),
-                          ).map(([account, props]) => (
-                            <optgroup key={account} label={account}>
-                              {props.map((p) => (
-                                <option key={p.propertyId} value={p.propertyId}>
-                                  {p.displayName} ({p.propertyId})
-                                </option>
-                              ))}
-                            </optgroup>
-                          ))}
-                          <option value={GA4_MANUAL_ENTRY}>직접 입력...</option>
-                        </select>
-                      ) : (
-                        <>
-                          <input
-                            type="text"
-                            value={ga4PropertyId}
-                            onChange={(e) => setGa4PropertyId(e.target.value)}
-                            placeholder="예: 123456789"
-                            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm outline-none transition-colors focus:border-violet-400"
-                          />
-                          {ga4Properties === null && (
-                            <span className="block text-[11px] text-muted-foreground">
-                              접근 가능한 속성 목록을 불러오지 못해 직접 입력해야 해요.
-                            </span>
-                          )}
-                        </>
-                      )}
-                      {ga4Properties !== null && ga4Properties.length > 0 && ga4ManualEntry && (
-                        <input
-                          type="text"
-                          value={ga4PropertyId}
-                          onChange={(e) => setGa4PropertyId(e.target.value)}
-                          placeholder="예: 123456789"
-                          className="mt-1.5 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm outline-none transition-colors focus:border-violet-400"
-                        />
-                      )}
+                      <Ga4PropertySelect value={ga4PropertyId} onChange={setGa4PropertyId} properties={ga4Properties} />
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-medium text-muted-foreground">작년 GA4 속성 (선택)</span>
+                      <Ga4PropertySelect value={ga4PreviousYearPropertyId} onChange={setGa4PreviousYearPropertyId} properties={ga4Properties} />
+                      <span className="block text-[11px] text-muted-foreground">
+                        지정하면 홈페이지·사전등록 페이지 방문에도 &quot;전년 동일 D구간&quot; 비교가 떠요.
+                        이번 해·작년 소스 양쪽에 행사 일자가 설정돼 있어야 계산돼요(기본 정보 탭).
+                      </span>
                     </label>
                     <label className="block space-y-1.5">
                       <span className="text-xs font-medium text-muted-foreground">사전등록 페이지 경로 (선택)</span>

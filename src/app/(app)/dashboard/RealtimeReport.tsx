@@ -72,10 +72,13 @@ export interface RealtimeReportData {
   funnel: {
     homepageVisitors: number;
     homepageVisitorsChange: number | null;
+    /** project.ga4PreviousYearPropertyId 가 있고 양쪽 소스에 행사 일자가 있어야만 값이 온다. */
+    homepageVisitorsYoyChange: number | null;
     /** 요약 카드의 미니 추이선용 — 조회 구간(range.from~to) 매일의 방문자 수, 날짜순. */
     homepageVisitorsDaily: number[] | null;
     registrationPageVisitors: number | null;
     registrationPageVisitorsChange: number | null;
+    registrationPageVisitorsYoyChange: number | null;
     registrationPageVisitorsDaily: number[] | null;
     registrants: number;
     homepageToPageRate: number | null;
