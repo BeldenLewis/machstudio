@@ -12,10 +12,11 @@
  */
 import { h, clearNode } from "@/lib/dom/h";
 import { onAccentColor } from "@/lib/competition-render";
-import { COLLECT_FORM_CSS } from "./css";
+import { ensureFormStyles } from "./css";
 import {
   DEFAULT_LOCALE,
   REGISTRATION_STATUSES,
+  canonicalBranchValue,
   localize,
   noticeValueKey,
   resolveRegistrationStatus,
@@ -32,8 +33,11 @@ import { COUNTRY_DIALS, flagEmoji, isKnownCountry } from "@/lib/collect-country"
 import { resolveRedirect } from "@/lib/collect-redirect";
 // 로더가 심어 둔 first-touch UTM 을 그대로 쓴다 — 파트너 사이트를 먼저 거친 방문자의 정본이다.
 import { buildUtmEnvelope } from "@/lib/attribution-client";
+import { visitorBadgeCssVars } from "@/lib/collect-badge";
+import { downloadTicketImage } from "./ticket-image";
+import type { FormOverlayOpener, FormOverlaySlot } from "@/lib/collect-form/target-registry";
+import { deepActiveElement } from "@/lib/dom/focus";
 
-const STYLE_ID = "msf-css";
 
 /**
  * 미리보기 완료 화면에 쓰는 더미 등록번호(설계 §16.1 "화면 확인용 더미 번호로 렌더").
@@ -43,6 +47,17 @@ const STYLE_ID = "msf-css";
  * 예전 값 `0000000000000` 은 Luhn 을 **통과했다**(0 이 올바른 체크digit 이다).
  */
 const PREVIEW_REG_NO = "0000000000001";
+
+function maskedEmail(value: string): string {
+  const raw = value.trim();
+  const at = raw.lastIndexOf("@");
+  return at < 1 ? "" : `${raw[0]}•••${raw.slice(at)}`;
+}
+
+function maskedPhone(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  return digits.length < 8 ? "" : `•••••• ${digits.slice(-4)}`;
+}
 
 /** 안내 문구 — 로케일 대응은 §11 이후. 지금은 영어 단일 전시(LA)라 화면 문구도 여기 모은다. */
 const COPY = {
@@ -66,9 +81,13 @@ const COPY = {
   regNoLabel: "Registration number — show this at the venue",
   previewFlag: "Preview — nothing is saved",
   ticketLink: "Open my ticket page →",
+  saveImage: "Save as Image",
+  saveHint: "* If the button doesn't work, please take a screenshot.",
   previewDone: "Sample number — nothing was saved.",
   more: "Details",
   less: "Hide",
+  close: "Close",
+  agree: "I agree",
   period: "Period",
   venue: "Venue",
   openingHours: "Opening Hours",
@@ -107,6 +126,17 @@ export interface MountCollectFormOptions {
   serverNow?: string | null;
   /** 응답이 CDN 캐시에 머문 시간(ms). serverNow 가 그만큼 과거라 되돌린다. */
   ageMs?: number;
+  /**
+   * 스타일을 넣을 루트. 홈페이지 섹션은 자기 ShadowRoot 를 준다 — 문서 head 에 넣으면
+   * Shadow 안까지 닿지 않아 폼이 스타일 없이 그려진다. 안 주면 문서(지금까지와 같다).
+   */
+  styleRoot?: Document | ShadowRoot;
+  /**
+   * 전문 팝업을 놓을 자리를 빌려 준다. 안 주면 `document.body` — 지금까지의 동작이다.
+   * Shadow 안에서 도는 경우(홈페이지 구획) 이걸 안 받으면 팝업이 **스타일을 하나도
+   * 못 받은 채** 파트너 문서 맨 아래에 그려진다.
+   */
+  overlay?: FormOverlayOpener;
 }
 
 export interface CollectFormHandle {
@@ -114,13 +144,7 @@ export interface CollectFormHandle {
 }
 
 /** 스타일은 문서당 1벌. 폼이 두 개 붙어도 한 번만 넣는다. */
-function ensureStyles(): void {
-  if (typeof document === "undefined" || document.getElementById(STYLE_ID)) return;
-  const style = document.createElement("style");
-  style.id = STYLE_ID;
-  style.textContent = COLLECT_FORM_CSS;
-  document.head.appendChild(style);
-}
+
 
 /**
  * dataLayer 단일 창구(설계 §18). Meta 픽셀·Google Ads 를 직접 부르지 않는다 —
@@ -143,10 +167,93 @@ function str(v: unknown): string {
   return typeof v === "string" ? v : v == null ? "" : String(v);
 }
 
+/**
+ * 동의 전문 팝업 — 대회 폼(competition-entry.ts bindConsentPopups)·웨비나 로더(openTerms)와
+ * 같은 패턴으로 맞춘다. 이 폼만 인라인 드롭다운이면 같은 방문자가 폼마다 다른 상호작용을
+ * 겪는다. `document.body` 에 새 루트로 붙는 이유는 이 폼 자체가 호스트 문서 흐름 안에
+ * 그대로 놓이기 때문 — 오버레이가 그 흐름 안에 있으면 부모의 overflow/position 에 잘린다.
+ * `.msf` 리셋을 다시 받아야 해서 클래스에 msf 를 같이 건다(css.ts 주석 참고).
+ */
+function openTermsPopup(
+  title: string,
+  body: string,
+  onAgree: () => void,
+  themeStyle: Record<string, string | null>,
+  open?: FormOverlayOpener,
+): () => void {
+  const closeBtn = h("button", { type: "button", class: "msf-terms-close" }, COPY.close);
+  const agreeBtn = h("button", { type: "button", class: "msf-terms-agree" }, COPY.agree);
+  const overlay = h(
+    "div",
+    { class: "msf msf-overlay", style: themeStyle },
+    h(
+      "div",
+      { class: "msf-terms" },
+      h("div", { class: "msf-terms-head" }, title),
+      h("div", { class: "msf-terms-body" }, body),
+      h("div", { class: "msf-terms-actions" }, closeBtn, agreeBtn),
+    ),
+  );
+
+  /** 열기 전에 잡아 둔다 — 닫을 때 여기로 포커스를 돌려준다. */
+  const opener = deepActiveElement(document) as HTMLElement | null;
+  let slot: FormOverlaySlot | null = null;
+  let closed = false;
+
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") { e.preventDefault(); close(); }
+  };
+
+  function close(): void {
+    if (closed) return;                 // 멱등 — 이중 해제가 무해한 no-op
+    closed = true;
+    document.removeEventListener("keydown", onKey, true);
+    overlay.remove();
+    const s = slot; slot = null;        // 먼저 비우고 반납한다(재진입 순서)
+    s?.release();
+    if (opener && opener.isConnected) {
+      try { opener.focus({ preventScroll: true }); } catch { /* 호스트를 깨뜨리지 않는다 */ }
+    }
+  }
+
+  closeBtn.addEventListener("click", close);
+  agreeBtn.addEventListener("click", () => { onAgree(); close(); });
+
+  slot = open ? open(() => { slot = null; close(); }) : null;
+
+  if (slot) {
+    /**
+     * **빌린 자리** — 레이어가 이미 화면을 덮고 있다(`.msx-portal` 은 fixed·inset:0·
+     * 스크림·가운데 정렬). 여기서 또 깔면 스크림이 두 겹이 되고 패딩이 겹친다.
+     * 그래서 **레이어 쪽을 중화**하고 `.msf-overlay` 자신의 fixed·스크림·max-height 는
+     * 한 글자도 안 건드린다 — 그래야 두 경로의 모양이 같다.
+     */
+    slot.layer.setAttribute("data-msx-bare", "1");
+    slot.layer.style.background = "none";
+    slot.layer.style.padding = "0";
+    slot.layer.style.display = "block";
+    ensureFormStyles(slot.root);        // ★ Shadow 안에서도 스타일이 닿는다
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+    slot.layer.appendChild(overlay);
+  } else {
+    // ── 문서 경로(단독 /f · 아임웹 직접 임베드): 지금까지와 똑같다 ──
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+    document.body.appendChild(overlay);
+  }
+
+  document.addEventListener("keydown", onKey, true);
+  return close;
+}
+
 export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHandle {
-  ensureStyles();
+  ensureFormStyles(opts.styleRoot);
 
   const { config, mount } = opts;
+  /**
+   * 지금 열려 있는 전문 팝업을 닫는 함수. **인스턴스 스코프다** — 한 페이지에 폼이
+   * 둘일 수 있다(인라인 구획 + CTA 모달). 모듈에 두면 서로의 팝업 참조를 덮어쓴다.
+   */
+  let closeTerms: (() => void) | null = null;
   const preview = opts.preview === true;
   const lang = opts.locale || config.defaultLocale || DEFAULT_LOCALE;
   const t = (v: Localized | undefined) => localize(v, lang);
@@ -256,14 +363,15 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
    * 그래서 같은 페이지에 다른 색의 폼이 두 개 붙어도 서로 안 섞인다.
    */
   const theme = config.theme;
+  const themeStyle = {
+    "--msf-accent": theme.accentColor || null,
+    "--msf-accent-fg": theme.accentColor ? onAccentColor(theme.accentColor) : null,
+    "--msf-fg": theme.textColor || null,
+    "--msf-bg": theme.surfaceColor || null,
+  };
   const root = h("div", {
     class: "msf",
-    style: {
-      "--msf-accent": theme.accentColor || null,
-      "--msf-accent-fg": theme.accentColor ? onAccentColor(theme.accentColor) : null,
-      "--msf-fg": theme.textColor || null,
-      "--msf-bg": theme.surfaceColor || null,
-    },
+    style: themeStyle,
   });
   const stack = h("div", { class: "msf-stack" });
   root.appendChild(stack);
@@ -382,7 +490,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
         clearIssue(f.key);
         markStarted();
         if (config.branch.enabled && config.branch.fieldKey === f.key) {
-          track(preview, "ms_visitor_type_selected", { visitor_type: sel.value });
+          track(preview, "ms_visitor_type_selected", { visitor_type: canonicalBranchValue(config, sel.value) });
           // 분기 기준이 바뀌면 항목 목록 자체가 달라진다 — 이 영역만 다시 그리고 포커스를 되돌린다.
           renderFields();
           const again = fieldsHost.querySelector<HTMLSelectElement>(`#${cssId(inputId)}`);
@@ -393,6 +501,62 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
         updateSubmitState();
       });
       wrap.appendChild(sel);
+    } else if (f.type === "radio") {
+      if (options.length === 0) {
+        wrap.appendChild(h("div", { class: "msf-hint" }, "No options configured"));
+      } else {
+        const group = h("div", {
+          class: "msf-radio-group",
+          id: inputId,
+          role: "radiogroup",
+          "aria-label": labelText,
+          "aria-invalid": invalid,
+          "aria-describedby": errId,
+        });
+        const paint = () => {
+          const selected = str(values[f.key]);
+          for (const option of Array.from(group.children) as HTMLElement[]) {
+            const on = option.getAttribute("data-v") === selected;
+            option.setAttribute("data-on", on ? "1" : "0");
+            const radio = option.querySelector("input") as HTMLInputElement | null;
+            if (radio) radio.checked = on;
+          }
+        };
+        for (const option of options) {
+          const radio = h("input", {
+            type: "radio",
+            name: inputId,
+            value: option,
+            "data-msf-key": f.key,
+          }) as HTMLInputElement;
+          const choice = h("label", { class: "msf-radio-option", "data-v": option },
+            radio,
+            h("span", { class: "msf-radio-mark", "aria-hidden": "true" }),
+            h("span", null, option),
+          );
+          radio.addEventListener("focus", () => choice.classList.add("is-focus"));
+          radio.addEventListener("blur", () => choice.classList.remove("is-focus"));
+          radio.addEventListener("change", () => {
+            if (!radio.checked) return;
+            values[f.key] = option;
+            clearIssue(f.key);
+            markStarted();
+            if (config.branch.enabled && config.branch.fieldKey === f.key) {
+              track(preview, "ms_visitor_type_selected", { visitor_type: canonicalBranchValue(config, option) });
+              renderFields();
+              const again = fieldsHost.querySelector<HTMLInputElement>(`input[name="${cssId(inputId)}"]:checked`);
+              if (again) again.focus();
+            } else {
+              err.textContent = "";
+              paint();
+            }
+            updateSubmitState();
+          });
+          group.appendChild(choice);
+        }
+        paint();
+        wrap.appendChild(group);
+      }
     } else if (f.type === "multiple") {
       if (options.length === 0) {
         wrap.appendChild(h("div", { class: "msf-hint" }, "No options configured"));
@@ -666,19 +830,20 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
 
     const body = t(item.body);
     if (body) {
-      let open = false;
-      const detail = h("div", { class: "msf-notice-body" }, body);
-      detail.style.display = "none";
       const btn = h("button", { type: "button", class: "msf-more" }, COPY.more);
       btn.addEventListener("click", () => {
-        open = !open;
-        detail.style.display = open ? "" : "none";
-        btn.textContent = open ? COPY.less : COPY.more;
+        closeTerms?.();                       // 두 번 열지 않는다
+        closeTerms = openTermsPopup(labelText, body, () => {
+          cb.checked = true;
+          onChange(true);
+          clearIssue(issueKey);
+          err.textContent = "";
+          updateSubmitState();
+        }, themeStyle, opts.overlay);
       });
       // Details 를 라벨 아래 별도 줄이 아니라 같은 줄 오른쪽에 둔다 — 혼자 아래에
-      // 떨어져 있으면 라벨과 상관없는 항목처럼 보인다(전문 자체는 그 아래 한 줄 전체를 쓴다).
+      // 떨어져 있으면 라벨과 상관없는 항목처럼 보인다.
       wrap.appendChild(h("div", { class: "msf-consent-row" }, label, btn));
-      wrap.appendChild(detail);
     } else {
       wrap.appendChild(label);
     }
@@ -742,7 +907,11 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     if (submitting || duplicate) return;
     hideBanner();
 
-    const visitorType = config.branch.enabled ? str(values[config.branch.fieldKey]) : undefined;
+    // canonicalBranchValue 로 로케일 라벨을 group.value 로 접는다 — 분석 이벤트가 언어별로
+    // 갈라지지 않게(collect-form-config.ts 주석). generate_lead 도 이 값을 그대로 쓴다.
+    const visitorType = config.branch.enabled
+      ? canonicalBranchValue(config, str(values[config.branch.fieldKey]))
+      : undefined;
     track(preview, "ms_form_submit", visitorType ? { visitor_type: visitorType } : undefined);
 
     // 접수 창을 **누를 때 다시 본다.** 폼을 열어 둔 채로 마감 시각이 지나갈 수 있다.
@@ -955,6 +1124,43 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     }, COPY.ticketLink);
   }
 
+  function saveTicketLink(regNo: string, identity: ReturnType<typeof completionIdentity>): HTMLElement | null {
+    if (preview) return null;
+    return h("button", {
+      type: "button",
+      class: "msf-save",
+      onclick: () => { void downloadTicketImage({
+        eventName: config.legal.eventName,
+        registrationNo: regNo,
+        qrUrl: `${opts.origin}/api/collect/qr/${encodeURIComponent(regNo)}`,
+        ...identity,
+        accentColor: config.theme.accentColor,
+      }).catch(() => window.alert("We couldn't save the ticket image. Please take a screenshot instead.")); },
+    }, COPY.saveImage);
+  }
+
+  function completionIdentity(): { name: string; visitorType: string; maskedEmail: string; maskedPhone: string } {
+    const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
+    const namePattern = /^(first|last|given|family|full)[_-]?names?$|^names?$|^surnames?$|^(first|last|given|family)$/i;
+    const name = config.fields
+      .filter((field) => [field.key, ...Object.values(field.label)]
+        .map((value) => String(value).trim().replace(/\s+/g, "_"))
+        .some((candidate) => namePattern.test(candidate)))
+      .map((field) => text(values[field.key]))
+      .filter(Boolean)
+      .join(" ");
+    const valueFor = (type: string) => {
+      const field = config.fields.find((item) => item.type === type);
+      return field ? text(values[field.key]) : "";
+    };
+    return {
+      name,
+      visitorType: config.branch.enabled ? text(values[config.branch.fieldKey]) : "",
+      maskedEmail: maskedEmail(valueFor("email")),
+      maskedPhone: maskedPhone(valueFor("tel")),
+    };
+  }
+
   // ── 렌더 ────────────────────────────────────────────────────────────
   const consentHost = h("div", { class: "msf-stack" });
   function renderConsent(): void {
@@ -986,17 +1192,29 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
 
     // 완료 화면 — 이메일 연동 전에는 **여기가 등록자가 번호를 받는 첫 경로**다(설계 §2·§8).
     if (doneRegNo) {
+      const identity = completionIdentity();
+      const identityRows = [
+        ["Phone", identity.maskedPhone],
+        ["E-mail", identity.maskedEmail],
+      ].filter(([, value]) => Boolean(value));
       stack.appendChild(
         h("div", { class: "msf-done" },
           h("div", { class: "msf-done-title" }, COPY.doneTitle),
+          identity.visitorType ? h("div", { class: "msf-badge", style: visitorBadgeCssVars(identity.visitorType) }, identity.visitorType) : null,
+          identity.name ? h("div", { class: "msf-found-name" }, identity.name) : null,
           /**
            * QR 을 여기서 보여 준다 — 이메일 연동 전에는 등록자가 QR 을 받는 **첫 경로**다
            * (설계 §2·§8). 서버에서 그리므로 §9.2 규칙(EC Q·여백 4모듈·불투명 흰 배경)이
            * 세 자리(완료·티켓·이메일)에서 같다.
            */
           config.completion.showQr ? qrCard(doneRegNo) : null,
+          identityRows.length > 0 ? h("dl", { class: "msf-idcheck" },
+            ...identityRows.flatMap(([label, value]) => [h("dt", null, label), h("dd", null, value)]),
+          ) : null,
           h("div", { class: "msf-regno" }, doneRegNo),
           h("div", { class: "msf-regno-label" }, preview ? COPY.previewDone : COPY.regNoLabel),
+          config.completion.showQr ? saveTicketLink(doneRegNo, identity) : null,
+          !preview && config.completion.showQr ? h("div", { class: "msf-save-hint" }, COPY.saveHint) : null,
           ticketLink(doneRegNo),
         ),
       );
@@ -1103,6 +1321,9 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
   return {
     destroy() {
       destroyed = true;
+      // 열려 있던 전문 팝업도 닫는다 — 빌린 자리를 반납해야 포털 호스트가 정리된다.
+      // (문서 경로에서도 마찬가지다: 예전에는 폼이 사라져도 팝업이 body 에 남았다.)
+      closeTerms?.();
       if (dupTimer) clearTimeout(dupTimer);
       if (boundaryTimer) clearTimeout(boundaryTimer);
       // 이동 예약을 안 끄면 빌더 옆칸을 다시 마운트한 뒤에도 1초 뒤 화면이 넘어간다.

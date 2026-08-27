@@ -39,7 +39,7 @@ describe("항목 형식 표 — 두 빌더의 단일 출처", () => {
   });
 
   it("선택형은 드롭다운·복수 선택 둘뿐 — 옵션 편집이 걸리는 유형", () => {
-    expect([...CHOICE_TYPES].sort()).toEqual(["multiple", "select"]);
+    expect([...CHOICE_TYPES].sort()).toEqual(["multiple", "radio", "select"]);
   });
 });
 

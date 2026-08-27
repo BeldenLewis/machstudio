@@ -12,6 +12,7 @@ import { competitionFormStrings } from "./competition-strings";
 import type { CompetitionConfig, CompetitionNoticeBlock } from "./competition-config";
 import type { CompetitionPhase } from "./competition-status";
 import { COUNTRY_DIALS, flagEmoji, isKnownCountry } from "./collect-country";
+import { onAccentColor } from "@/lib/color";
 
 export interface CompetitionTheme {
   accentColor?: string;
@@ -41,19 +42,13 @@ export function safeUrl(value: string): string {
 }
 
 /**
- * 키 컬러 위 글자색. 아주 밝은 키컬러(노랑·연회색)에서만 진한 글자를 쓴다.
- * 임계값 0.78 은 웨비나 로더(publicFormOnAccent)와 **같은 값**이어야 한다 — 두 곳의 CTA 가
- * 같은 브랜드 색에서 다른 글자색을 내면 안 된다.
+ * 키 컬러 위 글자색.
+ *
+ * 계산은 `@/lib/color` 한 곳에 있다. **이름은 여기 그대로 둔다** — 폼 로더(`collect-form/mount`,
+ * `lookup-mount`), 공고(`notice/mount`, `notice/build-model`), 대회 공개 화면(`show/[token]`)이
+ * 전부 이 파일에서 가져간다.
  */
-export function onAccentColor(value: string): string {
-  let hex = String(value || "").trim().replace("#", "");
-  if ((hex.length !== 3 && hex.length !== 6) || /[^0-9a-f]/i.test(hex)) return "#ffffff";
-  if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
-  const r = parseInt(hex.slice(0, 2), 16);
-  const g = parseInt(hex.slice(2, 4), 16);
-  const b = parseInt(hex.slice(4, 6), 16);
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 >= 0.78 ? "#1a1a1f" : "#ffffff";
-}
+export { onAccentColor } from "@/lib/color";
 
 export function buildCompetitionCss(theme: CompetitionTheme): string {
   const accent = theme.accentColor || "#6d28d9";

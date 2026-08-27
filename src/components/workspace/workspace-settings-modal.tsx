@@ -3,10 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { FileText, X, Edit2, Check, Plus, Trash2, Crown, ShieldCheck, User as UserIcon, GripVertical, Tag, Layers, AlertTriangle, Loader2 } from "lucide-react";
+import { FileText, X, Edit2, Check, Plus, Trash2, Crown, ShieldCheck, User as UserIcon, GripVertical, Tag, Layers, AlertTriangle, Loader2, Palette } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspace } from "@/contexts/workspace";
 import { Select } from "@/components/ui/select";
+import { useChartColors, type BrandKey } from "@/components/ui/use-chart-colors";
 import { LEGAL_COUNTRIES } from "@/lib/legal-templates";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
@@ -18,7 +19,16 @@ interface Member {
   user: { id: string; name: string | null; email: string; avatarUrl: string | null };
 }
 
-type ModalTab = "general" | "utm" | "consent";
+type ModalTab = "general" | "utm" | "consent" | "channelColors";
+
+const BRAND_LABELS: Record<BrandKey, string> = {
+  naver: "네이버",
+  kakao: "카카오",
+  google: "구글",
+  instagram: "인스타그램",
+  youtube: "유튜브",
+  facebook: "페이스북",
+};
 
 const ROLE_LABEL: Record<string, string> = { OWNER: "소유자", ADMIN: "편집자", MEMBER: "뷰어" };
 const ROLE_ICON: Record<string, React.ElementType> = { OWNER: Crown, ADMIN: ShieldCheck, MEMBER: UserIcon };
@@ -281,6 +291,53 @@ export function WorkspaceSettingsModal({ open, onClose }: Props) {
     } finally { setIsSavingLegal(false); }
   };
 
+  /**
+   * 채널(UTM 소스)별 도넛 차트 색 — 코드에 내장된 브랜드 기본값(예: 네이버=초록) 위에
+   * 사용자가 직접 지정한 색을 얹는다. workspace.channelColors 는 override 만 담는다 —
+   * 기본값은 저장하지 않고, 브랜드 칩을 눌러 프리필한 뒤 사용자가 저장해야 override 로 굳는다.
+   */
+  const chartColors = useChartColors();
+  const [channelColorEntries, setChannelColorEntries] = useState<Array<{ label: string; color: string }>>([]);
+  const [newChannelLabel, setNewChannelLabel] = useState("");
+  const [newChannelColor, setNewChannelColor] = useState("#8b5cf6");
+  const [isSavingChannelColors, setIsSavingChannelColors] = useState(false);
+  useEffect(() => {
+    const stored = (workspace?.channelColors as Record<string, string> | null | undefined) ?? null;
+    setChannelColorEntries(stored ? Object.entries(stored).map(([label, color]) => ({ label, color })) : []);
+  }, [workspace?.channelColors]);
+
+  const addBrandAsOverride = (key: BrandKey) => {
+    const label = BRAND_LABELS[key];
+    if (channelColorEntries.some((e) => e.label.toLowerCase() === label.toLowerCase())) return;
+    setChannelColorEntries((prev) => [...prev, { label, color: chartColors.brands[key] }]);
+  };
+
+  const addChannelColorEntry = () => {
+    const label = newChannelLabel.trim();
+    if (!label) return;
+    setChannelColorEntries((prev) => [
+      ...prev.filter((e) => e.label.toLowerCase() !== label.toLowerCase()),
+      { label, color: newChannelColor },
+    ]);
+    setNewChannelLabel("");
+  };
+
+  const handleSaveChannelColors = async () => {
+    if (!workspace?.id) return;
+    setIsSavingChannelColors(true);
+    try {
+      const channelColors = Object.fromEntries(channelColorEntries.map((e) => [e.label, e.color]));
+      const res = await fetch(`/api/workspace/${workspace.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channelColors }),
+      });
+      if (!res.ok) { toast.error("채널 색을 저장하지 못했어요"); return; }
+      await refreshWorkspaces();
+      toast.success("채널 색을 저장했어요 — 요약 카드의 도넛 차트에 반영돼요");
+    } finally { setIsSavingChannelColors(false); }
+  };
+
   const handleInvite = async () => {
     if (!inviteEmail.trim() || !workspace?.id) return;
     setIsInviting(true);
@@ -486,6 +543,9 @@ export function WorkspaceSettingsModal({ open, onClose }: Props) {
     ...(canManage ? [{ key: "utm" as ModalTab, label: "UTM 규칙", icon: Tag }] : []),
     // 약관 전문은 조직 자산이라 워크스페이스에 둔다 — 웨비나마다 다시 붙여넣을 값이 아니다(IA 8단계).
     ...(canManage ? [{ key: "consent" as ModalTab, label: "약관", icon: FileText }] : []),
+    // 채널 색도 조직 자산 — 마케팅 채널은 프로젝트를 넘나들며 재사용되고, 요약 대시보드가
+    // 여러 프로젝트 카드를 한 화면에 나란히 보여주므로 워크스페이스 전체가 공유해야 의미 있다.
+    ...(canManage ? [{ key: "channelColors" as ModalTab, label: "채널 색", icon: Palette }] : []),
   ];
 
   return (
@@ -1061,6 +1121,107 @@ export function WorkspaceSettingsModal({ open, onClose }: Props) {
                             </motion.button>
                           )}
                         </AnimatePresence>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {activeTab === "channelColors" && (
+                    <motion.div key="channelColors" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="space-y-5">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">채널 색</p>
+                        <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                          요약 카드의 유입경로 도넛 차트에서 채널(UTM 소스)마다 쓸 색이에요. 알려진 채널은
+                          기본 브랜드 색을 자동으로 써요 — 아래에서 직접 지정하면 그 색이 항상 우선해요.
+                        </p>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] font-medium text-muted-foreground">기본 브랜드 색 — 눌러서 바꾸기</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(Object.keys(BRAND_LABELS) as BrandKey[]).map((key) => (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => addBrandAsOverride(key)}
+                              className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-violet-400 hover:text-foreground"
+                            >
+                              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: chartColors.brands[key] }} />
+                              {BRAND_LABELS[key]}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="h-px bg-border" />
+
+                      <div className="space-y-2">
+                        <p className="text-[11px] font-medium text-muted-foreground">지정한 색</p>
+                        {channelColorEntries.length === 0 ? (
+                          <p className="text-sm text-muted-foreground py-3 text-center border border-dashed border-border rounded-xl">
+                            아직 지정한 채널 색이 없어요 — 위 브랜드 칩을 누르거나 아래에서 새로 추가하세요
+                          </p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {channelColorEntries.map((entry, i) => (
+                              <div key={entry.label} className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border">
+                                <input
+                                  type="color"
+                                  value={entry.color}
+                                  onChange={(e) => {
+                                    const color = e.target.value;
+                                    setChannelColorEntries((prev) => prev.map((p, idx) => (idx === i ? { ...p, color } : p)));
+                                  }}
+                                  className="h-7 w-7 shrink-0 cursor-pointer rounded border border-border bg-transparent p-0"
+                                />
+                                <span className="flex-1 text-sm font-medium truncate">{entry.label}</span>
+                                <span className="text-xs text-muted-foreground font-mono">{entry.color}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setChannelColorEntries((prev) => prev.filter((_, idx) => idx !== i))}
+                                  className="p-1 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <input
+                            type="color"
+                            value={newChannelColor}
+                            onChange={(e) => setNewChannelColor(e.target.value)}
+                            className="h-9 w-9 shrink-0 cursor-pointer rounded-lg border border-border bg-transparent p-0"
+                          />
+                          <input
+                            type="text"
+                            value={newChannelLabel}
+                            onChange={(e) => setNewChannelLabel(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") addChannelColorEntry(); }}
+                            placeholder="채널 이름 (예: naver, tiktok, 오프라인)"
+                            className={`${smInputCls} flex-1`}
+                          />
+                          <motion.button whileTap={{ scale: 0.95 }} onClick={addChannelColorEntry}
+                            disabled={!newChannelLabel.trim()}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-500 text-white text-xs font-medium hover:bg-violet-600 transition-colors disabled:opacity-40 shrink-0">
+                            <Plus className="w-3.5 h-3.5" />추가
+                          </motion.button>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          이름은 실제 UTM 소스 값과 같아야 매칭돼요(대소문자는 상관없어요) — 예: utm_source=naver 라면 &quot;naver&quot; 또는 &quot;네이버&quot;.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleSaveChannelColors}
+                          disabled={isSavingChannelColors}
+                          className="rounded-xl bg-violet-500 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-violet-600 disabled:opacity-50"
+                        >
+                          {isSavingChannelColors ? "저장 중…" : "저장"}
+                        </button>
                       </div>
                     </motion.div>
                   )}

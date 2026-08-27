@@ -68,9 +68,9 @@ export function localize(value: Localized | undefined, locale = DEFAULT_LOCALE):
 
 // ── 항목 ──────────────────────────────────────────────────────────────
 /** 웨비나 등록 폼과 **같은 유형 어휘**를 쓴다 — 빌더 컴포넌트를 공용화하기 위해서다. */
-export type CollectFieldType = WebinarFieldType;
+export type CollectFieldType = WebinarFieldType | "radio";
 
-const FIELD_TYPES: readonly CollectFieldType[] = WEBINAR_FIELD_TYPES;
+const FIELD_TYPES: readonly CollectFieldType[] = [...WEBINAR_FIELD_TYPES, "radio"];
 
 export interface CollectField {
   id: string;
@@ -81,7 +81,7 @@ export interface CollectField {
   placeholder: Localized;
   required: boolean;
   enabled: boolean;
-  /** select·multiple 의 선택지. 빈 문자열은 걸러진다(빈 드롭다운 항목 방지). */
+  /** select·radio·multiple 의 선택지. 빈 문자열은 걸러진다(빈 선택지 방지). */
   options: Localized[];
   /** multiple 전용 — 최대 선택 개수. 옵션 수 이상이면 무제한과 같아 저장하지 않는다. */
   maxSelect?: number;
@@ -92,7 +92,7 @@ export interface CollectField {
 /**
  * 유형 분기 — **폼당 하나**(설계 §16).
  *
- * 분기 기준은 별도 항목이 아니라 **일반 항목 중 하나**(보통 select)다. 그 항목에서 값을 고르면
+ * 분기 기준은 별도 항목이 아니라 **일반 항목 중 하나**(보통 select·radio)다. 그 항목에서 값을 고르면
  * 해당 그룹의 문항이 **그 항목 바로 아래**에 삽입된다(§4). 유형을 바꾸면 이전 그룹 문항은
  * 사라지되 공통 입력값은 남는다 — 그 동작은 렌더러 몫이고 여기서는 정의만 든다.
  */
@@ -176,6 +176,20 @@ export interface CollectCompletion {
   showQr: boolean;
 }
 
+/** 등록 저장 직후 보내는 거래성 확인 메일. API 키·발신 주소는 서버 환경변수에만 둔다. */
+export interface CollectConfirmationEmail {
+  enabled: boolean;
+  subject: Localized;
+  heading: Localized;
+  /** 줄바꿈을 보존해 본문 첫머리에 표시한다. */
+  body: Localized;
+  buttonLabel: Localized;
+  /** 비우면 답장 주소를 지정하지 않는다. 발신 주소와 별개다. */
+  replyTo: string;
+  showQr: boolean;
+  includeEventInfo: boolean;
+}
+
 /**
  * 등록 확인(Find My QR) — 설계 §10.
  * 무료 전시는 `or`(둘 중 하나만 맞아도 열림)가 합리적이다. 티켓에 금전 가치가 없어 남의 티켓을
@@ -226,6 +240,7 @@ export interface CollectFormConfig {
   validation: CollectValidation;
   consent: { privacy: CollectConsentItem; marketing: CollectConsentItem; thirdParty: CollectConsentItem };
   completion: CollectCompletion;
+  confirmationEmail: CollectConfirmationEmail;
   lookup: CollectLookup;
   legal: CollectEventLegal;
   theme: CollectTheme;
@@ -266,6 +281,16 @@ export const EMPTY_FORM_CONFIG: CollectFormConfig = {
     thirdParty: { enabled: false, label: {}, body: {}, defaultChecked: false },
   },
   completion: { redirectUrlTemplate: "", showQr: true },
+  confirmationEmail: {
+    enabled: false,
+    subject: {},
+    heading: {},
+    body: {},
+    buttonLabel: {},
+    replyTo: "",
+    showQr: true,
+    includeEventInfo: true,
+  },
   /* 등록 확인은 **꺼진 채로 시작한다.** 켜면 이메일 하나만 아는 사람에게 남의 QR 티켓을
      보여 주는 화면이라, 운영자가 의식적으로 켜야 한다. 이 파일의 다른 토글도 전부 닫힘이 기본이다
      (eventInfo.enabled, consent.marketing.enabled, branch.enabled). or/showQr 은 켠 뒤의 기본값. */
@@ -448,6 +473,7 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
   const validationRaw = obj(c.validation);
   const consentRaw = obj(c.consent);
   const completionRaw = obj(c.completion);
+  const confirmationEmailRaw = obj(c.confirmationEmail);
   const lookupRaw = obj(c.lookup);
   const legalRaw = obj(c.legal);
   const thirdPartiesRaw = Array.isArray(legalRaw.thirdParties) ? legalRaw.thirdParties : [];
@@ -523,6 +549,16 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
       // 이라 안전한 쪽으로 닫힌다. {regNo} 같은 자리표시자는 경로·쿼리 문자로 문제없이 파싱된다.
       redirectUrlTemplate: safeHttpUrl(str(completionRaw.redirectUrlTemplate)),
       showQr: completionRaw.showQr !== false,
+    },
+    confirmationEmail: {
+      enabled: confirmationEmailRaw.enabled === true,
+      subject: toLocalized(confirmationEmailRaw.subject, locale),
+      heading: toLocalized(confirmationEmailRaw.heading, locale),
+      body: toLocalized(confirmationEmailRaw.body, locale),
+      buttonLabel: toLocalized(confirmationEmailRaw.buttonLabel, locale),
+      replyTo: str(confirmationEmailRaw.replyTo),
+      showQr: confirmationEmailRaw.showQr !== false,
+      includeEventInfo: confirmationEmailRaw.includeEventInfo !== false,
     },
     lookup: {
       enabled: lookupRaw.enabled === true,
@@ -636,26 +672,34 @@ export interface SubmissionIssue {
   code: "required" | "invalid_email" | "invalid_phone" | "unknown_key" | "too_many" | "not_an_option" | "consent_required";
 }
 
+/**
+ * 분기 기준 항목에서 고른 값으로 그룹을 찾는다.
+ *
+ * 그룹 매칭은 **어느 로케일의 라벨로 골랐든** 같은 그룹을 찾아야 한다.
+ *
+ * group.value 는 평문 한 줄인데 선택지는 로케일 맵이다. 그대로 비교하면 한국어로 고른
+ * 사람의 값("바이어")이 group.value("Buyer")와 안 맞아 **분기 문항이 통째로 사라진다** —
+ * 선택지 검증(not_an_option)은 모든 로케일 라벨을 받아 주므로 제출은 통과하고, 필수 문항이
+ * 검증 없이 지나가거나 채워 넣은 답이 unknown_key 로 거부된다(둘 다 조용히 잘못된다).
+ * 그래서 고른 값이 속한 선택지를 먼저 찾아 그 **모든 번역**을 후보로 놓고 매칭한다.
+ */
+function resolveBranchGroup(
+  config: CollectFormConfig,
+  chosen: string,
+): { value: string; fields: CollectField[] } | undefined {
+  const trigger = config.fields.find((f) => f.key === config.branch.fieldKey);
+  const picked = trigger?.options.find((o) => Object.values(o).includes(chosen));
+  const aliases = new Set<string>(picked ? Object.values(picked) : []);
+  aliases.add(chosen);
+  return config.branch.groups.find((g) => aliases.has(g.value));
+}
+
 /** 분기 그룹까지 펼친 "지금 이 응답에 유효한 항목" 목록. */
 export function visibleFields(config: CollectFormConfig, values: Record<string, unknown>): CollectField[] {
   const base = config.fields.filter((f) => f.enabled);
   if (!config.branch.enabled) return base;
   const chosen = safeStr(values[config.branch.fieldKey] ?? "");
-
-  /**
-   * 그룹 매칭은 **어느 로케일의 라벨로 골랐든** 같은 그룹을 찾아야 한다.
-   *
-   * group.value 는 평문 한 줄인데 선택지는 로케일 맵이다. 그대로 비교하면 한국어로 고른
-   * 사람의 값("바이어")이 group.value("Buyer")와 안 맞아 **분기 문항이 통째로 사라진다** —
-   * 선택지 검증(not_an_option)은 모든 로케일 라벨을 받아 주므로 제출은 통과하고, 필수 문항이
-   * 검증 없이 지나가거나 채워 넣은 답이 unknown_key 로 거부된다(둘 다 조용히 잘못된다).
-   * 그래서 고른 값이 속한 선택지를 먼저 찾아 그 **모든 번역**을 후보로 놓고 매칭한다.
-   */
-  const trigger = config.fields.find((f) => f.key === config.branch.fieldKey);
-  const picked = trigger?.options.find((o) => Object.values(o).includes(chosen));
-  const aliases = new Set<string>(picked ? Object.values(picked) : []);
-  aliases.add(chosen);
-  const group = config.branch.groups.find((g) => aliases.has(g.value));
+  const group = resolveBranchGroup(config, chosen);
   if (!group) return base;
 
   // 기준 항목 **바로 아래**에 끼워 넣는다 — 화면 순서와 검증 순서가 같아야 한다(§4).
@@ -666,6 +710,19 @@ export function visibleFields(config: CollectFormConfig, values: Record<string, 
   const extra = group.fields.filter((f) => f.enabled && !taken.has(f.key));
   if (at < 0) return [...base, ...extra];
   return [...base.slice(0, at + 1), ...extra, ...base.slice(at + 1)];
+}
+
+/**
+ * 분기 선택값을 **로케일 무관 canonical 값**(group.value)으로 정규화한다.
+ *
+ * 분석 이벤트(ms_visitor_type_selected, generate_lead 등)에 로케일 화면 라벨을 그대로 실으면
+ * 같은 세그먼트가 언어별로 다른 값("바이어" vs "Buyer")으로 갈라져, GTM 트리거가 언어마다
+ * 따로 깨진다(설계 §18). 매칭되는 그룹이 없으면(분기 꺼짐·값 없음) 원본을 그대로 돌려준다 —
+ * 이벤트가 최소한 뭔가는 싣게.
+ */
+export function canonicalBranchValue(config: CollectFormConfig, chosen: string): string {
+  if (!config.branch.enabled || !chosen) return chosen;
+  return resolveBranchGroup(config, chosen)?.value ?? chosen;
 }
 
 /**
@@ -742,7 +799,7 @@ export function validateSubmission(
         if (arr.some((v) => !labels.has(safeStr(v)))) issues.push({ key: f.key, code: "not_an_option" });
       }
     }
-    if (f.type === "select" && !f.allowOther && f.options.length) {
+    if ((f.type === "select" || f.type === "radio") && !f.allowOther && f.options.length) {
       const labels = new Set(f.options.flatMap((o) => Object.values(o)));
       if (!labels.has(safeStr(raw))) issues.push({ key: f.key, code: "not_an_option" });
     }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   EMPTY_FORM_CONFIG,
+  canonicalBranchValue,
   localize,
   normalizeCollectForm,
   resolveRegistrationStatus,
@@ -69,6 +70,12 @@ describe("normalizeCollectForm — 어떤 쓰레기가 와도 던지지 않는�
 
   it("모르는 유형은 text 로 — 렌더러가 분기에서 떨어지지 않게", () => {
     expect(cfg({ fields: [{ key: "x", type: "date" }] }).fields[0].type).toBe("text");
+  });
+
+  it("라디오를 사전등록 전용 단일 선택 유형으로 보존한다", () => {
+    const c = cfg({ fields: [{ key: "type", type: "radio", options: ["General", "Buyer"] }] });
+    expect(c.fields[0].type).toBe("radio");
+    expect(c.fields[0].options.map((option) => localize(option))).toEqual(["General", "Buyer"]);
   });
 
   /**
@@ -140,6 +147,41 @@ describe("normalizeCollectForm — 어떤 쓰레기가 와도 던지지 않는�
     expect(cfg({ lookup: { fields: ["email", "카톡"] } }).lookup.fields).toEqual(["email"]);
   });
 
+  it("라디오도 분기 기준으로 쓸 수 있다", () => {
+    const c = cfg({
+      fields: [{ key: "type", type: "radio", options: ["General", "Buyer"] }],
+      branch: { enabled: true, fieldKey: "type", groups: [{ value: "Buyer", fields: [{ key: "company", required: true }] }] },
+    });
+    expect(c.branch.enabled).toBe(true);
+    expect(visibleFields(c, { type: "Buyer" }).map((field) => field.key)).toEqual(["type", "company"]);
+  });
+
+  it("자동 확인 메일은 기본 꺼짐이고 명시적으로 켠 설정만 보존한다", () => {
+    expect(cfg({}).confirmationEmail).toEqual(EMPTY_FORM_CONFIG.confirmationEmail);
+    const c = cfg({
+      confirmationEmail: {
+        enabled: true,
+        subject: "Registration confirmed",
+        heading: "You're registered",
+        body: "Line one\nLine two",
+        buttonLabel: "Open ticket",
+        replyTo: "help@example.com",
+        showQr: false,
+        includeEventInfo: false,
+      },
+    });
+    expect(c.confirmationEmail).toMatchObject({
+      enabled: true,
+      subject: { en: "Registration confirmed" },
+      heading: { en: "You're registered" },
+      body: { en: "Line one\nLine two" },
+      buttonLabel: { en: "Open ticket" },
+      replyTo: "help@example.com",
+      showQr: false,
+      includeEventInfo: false,
+    });
+  });
+
   it("국가 코드는 2글자만 — 아니면 기본값 US", () => {
     expect(cfg({ validation: { defaultCountry: "kr" } }).validation.defaultCountry).toBe("KR");
     expect(cfg({ validation: { defaultCountry: "Korea" } }).validation.defaultCountry).toBe("US");
@@ -187,6 +229,17 @@ describe("리뷰가 잡은 결함 — 회귀 방지", () => {
     expect(validateSubmission(c, { type: "바이어" }, { ...deps, consent: {} }).map((i) => i.code)).toContain("required");
     // 채워 넣은 답이 unknown_key 로 거부되지 않는다
     expect(validateSubmission(c, { type: "바이어", budget: "1억" }, { ...deps, consent: {} })).toEqual([]);
+  });
+
+  it("canonicalBranchValue 는 어느 로케일 라벨을 골라도 같은 canonical 값을 낸다 — 분석 이벤트가 언어별로 안 갈라진다", () => {
+    const c = cfg({
+      fields: [{ key: "type", type: "select", options: [{ en: "Buyer", ko: "바이어" }] }],
+      branch: { enabled: true, fieldKey: "type", groups: [{ value: "Buyer", fields: [] }] },
+    });
+    expect(canonicalBranchValue(c, "바이어")).toBe("Buyer");
+    expect(canonicalBranchValue(c, "Buyer")).toBe("Buyer");
+    // 매칭되는 그룹이 없으면 원본을 그대로 돌려준다 — 이벤트가 최소한 뭔가는 싣게.
+    expect(canonicalBranchValue(c, "Press")).toBe("Press");
   });
 
   it("분기 항목이 공통 항목과 key 가 겹치면 하나만 남는다", () => {

@@ -7,7 +7,7 @@
  * DB 를 보지 않는다 — 조회 조건을 만드는 일과, 찾은 레코드에서 **보여줄 것만 추리는** 일만
  * 한다. 그 둘이 라우트 안에 섞여 있으면 "무엇을 노출하는가" 를 나중에 아무도 못 읽는다.
  */
-import { toE164 } from "@/lib/collect-phone";
+import { toE164, isSupportedCountry } from "@/lib/collect-phone";
 import { isValidCollectEmail, normalizeEmail } from "@/lib/collect-submit";
 import type { CollectFormConfig, Localized } from "@/lib/collect-form-config";
 
@@ -15,6 +15,12 @@ import type { CollectFormConfig, Localized } from "@/lib/collect-form-config";
 export interface LookupInput {
   email?: unknown;
   phone?: unknown;
+  /**
+   * 등록 폼과 같은 국가 선택(§6.3). 등록자가 기본 국가가 아닌 나라를 골라 등록했다면
+   * 저장된 번호도 그 나라 기준 E.164 다 — 조회도 같은 국가를 골라야 같은 값이 나온다.
+   * 안 왔거나 모르는 코드면 `config.validation.defaultCountry` 로 되돌아간다.
+   */
+  phoneCountry?: unknown;
 }
 
 /** 정규화된 조회 조건. 둘 다 null 이면 조회 자체를 하지 않는다. */
@@ -40,7 +46,10 @@ export function buildLookupCriteria(config: CollectFormConfig, input: LookupInpu
   const emailNormalized = rawEmail && isValidCollectEmail(rawEmail) ? rawEmail : null;
 
   const rawPhone = allowPhone ? String(input.phone ?? "").trim() : "";
-  const phoneE164 = rawPhone ? toE164(rawPhone, config.validation.defaultCountry) : null;
+  const phoneCountry = isSupportedCountry(input.phoneCountry)
+    ? String(input.phoneCountry).toUpperCase()
+    : config.validation.defaultCountry;
+  const phoneE164 = rawPhone ? toE164(rawPhone, phoneCountry) : null;
 
   if (!emailNormalized && !phoneE164) return null;
 
@@ -67,6 +76,9 @@ export interface TicketView {
   name: string;
   /** 참관객 유형 — 분기 기준 항목의 값. 분기가 없으면 빈 문자열. */
   visitorType: string;
+  /** 티켓을 주운 사람이 원문을 알 수 없도록 가린 본인 확인용 연락처. */
+  maskedEmail: string;
+  maskedPhone: string;
 }
 
 /** 조회 화면에 내보내는 것 — **이게 전부다**(§10.2 "표시 정보는 최소화"). */
@@ -202,5 +214,16 @@ export function buildTicketView(
 
   const visitorType = config.branch.enabled ? str(data[config.branch.fieldKey]) : "";
 
-  return { registrationNo: record.registrationNo, name, visitorType };
+  const pick = (type: string) => {
+    const field = config.fields.find((f) => f.type === type);
+    return field ? str(data[field.key]) : "";
+  };
+
+  return {
+    registrationNo: record.registrationNo,
+    name,
+    visitorType,
+    maskedEmail: maskEmail(pick("email")),
+    maskedPhone: maskPhone(pick("tel")),
+  };
 }

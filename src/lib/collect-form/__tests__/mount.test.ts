@@ -39,6 +39,7 @@ afterEach(() => {
   handle = null;
   host.remove();
   document.getElementById("msf-css")?.remove();
+  document.querySelectorAll(".msf-overlay").forEach((el) => el.remove());
   delete (window as { dataLayer?: unknown[] }).dataLayer;
   vi.restoreAllMocks();
 });
@@ -68,6 +69,32 @@ describe("등록 폼 렌더", () => {
 
     const order = labels().map((l) => l.replace("*", ""));
     expect(order).toEqual(["Email", "Phone", "Visitor type", "Company"]);
+  });
+
+  it("라디오는 선택지를 바로 펼쳐 보이고 한 번의 선택으로 분기한다", () => {
+    const radioConfig = normalizeCollectForm({
+      fields: [{
+        id: "type", key: "type", label: { en: "Visitor type" }, type: "radio", required: true, enabled: true,
+        options: [{ en: "General" }, { en: "Buyer" }, { en: "Press" }],
+      }],
+      branch: {
+        enabled: true,
+        fieldKey: "type",
+        groups: [{ value: "Buyer", fields: [{ id: "company", key: "company", label: { en: "Company" }, type: "text", enabled: true }] }],
+      },
+    });
+    mount({ config: radioConfig });
+
+    const radios = [...host.querySelectorAll<HTMLInputElement>('.msf-radio-group input[type="radio"]')];
+    expect(radios.map((radio) => radio.value)).toEqual(["General", "Buyer", "Press"]);
+    expect(labels()).not.toContain("Company");
+
+    const buyer = radios.find((radio) => radio.value === "Buyer")!;
+    buyer.checked = true;
+    buyer.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(labels().map((label) => label.replace("*", ""))).toEqual(["Visitor type", "Company"]);
+    expect(host.querySelector<HTMLInputElement>('.msf-radio-group input[value="Buyer"]')?.checked).toBe(true);
   });
 
   it("접수 창 밖이면 폼 대신 상태 화면 — 마감 화면을 미리 볼 수 있어야 한다", () => {
@@ -181,6 +208,57 @@ describe("동의 항목", () => {
     expect(row).not.toBeNull();
     expect(row?.querySelector(".msf-check")).not.toBeNull();
     expect(row?.querySelector(".msf-more")).not.toBeNull();
+  });
+
+  /** 대회 폼·웨비나 로더와 같은 팝업 UX 로 통일한다 — 인라인 드롭다운이면 폼마다 동작이 다르다. */
+  it("전문 보기(Details) 를 누르면 인라인 확장이 아니라 팝업이 뜬다", () => {
+    mount({
+      config: normalizeCollectForm({
+        consent: { privacy: { enabled: true, label: { en: "Privacy" }, body: { en: "전문 내용" } } },
+      }),
+    });
+    expect(document.querySelector(".msf-overlay")).toBeNull();
+
+    host.querySelector<HTMLButtonElement>(".msf-more")!.click();
+
+    const overlay = document.querySelector(".msf-overlay");
+    expect(overlay).not.toBeNull();
+    expect(overlay?.textContent).toContain("전문 내용");
+    // 팝업은 host 바깥에 붙는다 — 폼 자체의 overflow/position 에 안 잘리게.
+    // **빌린 자리를 안 주면** document.body 다(단독 /f · 아임웹 직접 임베드가 이 경로).
+    expect(host.contains(overlay)).toBe(false);
+    expect(overlay?.parentElement).toBe(document.body);
+
+    const checkbox = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(checkbox.checked).toBe(false);
+    overlay!.querySelector<HTMLButtonElement>(".msf-terms-agree")!.click();
+    expect(checkbox.checked).toBe(true);
+    expect(document.querySelector(".msf-overlay")).toBeNull();
+  });
+
+  it("전문 팝업도 폼의 키컬러를 이어받는다", () => {
+    mount({
+      config: normalizeCollectForm({
+        theme: { accentColor: "#FF8500" },
+        consent: { privacy: { enabled: true, label: { en: "Privacy" }, body: { en: "Policy" } } },
+      }),
+    });
+    host.querySelector<HTMLButtonElement>(".msf-more")!.click();
+    const overlay = document.querySelector<HTMLElement>(".msf-overlay")!;
+    expect(overlay.style.getPropertyValue("--msf-accent")).toBe("#FF8500");
+  });
+
+  it("팝업 닫기를 누르면 동의하지 않은 채로 닫힌다", () => {
+    mount({
+      config: normalizeCollectForm({
+        consent: { privacy: { enabled: true, label: { en: "Privacy" }, body: { en: "전문 내용" } } },
+      }),
+    });
+    host.querySelector<HTMLButtonElement>(".msf-more")!.click();
+    document.querySelector<HTMLButtonElement>(".msf-terms-close")!.click();
+
+    expect(document.querySelector(".msf-overlay")).toBeNull();
+    expect(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false);
   });
 });
 
@@ -570,5 +648,152 @@ describe("제출", () => {
     const dl = ((window as { dataLayer?: Array<Record<string, unknown>> }).dataLayer ?? []);
     const lead = dl.find((e) => e.event === "generate_lead")!;
     expect(lead.ms_consent).toBe("denied");
+  });
+
+  /**
+   * §18 이벤트 계약 — visitor_type 은 로케일 화면 라벨이 아니라 canonical group.value 여야 한다.
+   * 아니면 같은 세그먼트가 언어별로 다른 값("바이어" vs "Buyer")으로 갈라져 GTM 트리거가
+   * 언어마다 따로 깨진다.
+   */
+  it("한국어 라벨로 골라도 visitor_type 은 canonical 값(Buyer)으로 나간다", async () => {
+    const bilingual = normalizeCollectForm({
+      fields: [
+        { id: "f1", key: "email", label: { en: "Email" }, type: "email", required: true, enabled: true },
+        {
+          id: "f2", key: "type", label: { en: "Visitor type" }, type: "select", enabled: true,
+          options: [{ en: "General", ko: "일반" }, { en: "Buyer", ko: "바이어" }],
+        },
+      ],
+      branch: { enabled: true, fieldKey: "type", groups: [{ value: "Buyer", fields: [] }] },
+      consent: { privacy: { enabled: true, label: { en: "Privacy" } } },
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ registrationNo: "1234567890128", rid: "r1" }), { status: 201 }),
+    );
+    mount({ config: bilingual, preview: false, locale: "ko" });
+    fill('input[type="email"]', "a@b.com");
+    const sel = host.querySelector<HTMLSelectElement>("select[data-msf-key]")!;
+    sel.value = "바이어";
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    tickPrivacy();
+    submitBtn().click();
+    await flush();
+
+    const dl = ((window as { dataLayer?: Array<Record<string, unknown>> }).dataLayer ?? []);
+    expect(dl.find((e) => e.event === "ms_visitor_type_selected")?.visitor_type).toBe("Buyer");
+    expect(dl.find((e) => e.event === "ms_form_submit")?.visitor_type).toBe("Buyer");
+    expect(dl.find((e) => e.event === "generate_lead")?.visitor_type).toBe("Buyer");
+  });
+});
+
+/**
+ * **동의 전문 팝업이 Shadow 밖으로 새지 않는가.**
+ *
+ * 팝업이 `document.body` 로 나가는 것 자체는 정당하다 — 폼이 호스트 문서 흐름 안에 있어서
+ * 오버레이가 그 안에 있으면 부모의 overflow/position 에 잘린다. 문제는 **홈페이지 경로**다:
+ * 거기서는 스타일이 그 구획의 ShadowRoot 안에만 들어가므로, body 에 붙은 팝업은
+ * `position:fixed` 도 배경도 `.msf` 리셋도 서체도 **하나도 못 받는다** — 파트너 페이지
+ * 맨 아래에 서식 없는 약관 텍스트 덩어리가 그려진다.
+ *
+ * 그래서 자리를 **예약한 쪽이 실어 보낸다**. 폼은 그 자리가 어디서 왔는지 모른다.
+ */
+describe("전문 팝업 — 빌린 자리", () => {
+  function makeSlot() {
+    const shadowHost = document.createElement("div");
+    document.body.appendChild(shadowHost);
+    const root = shadowHost.attachShadow({ mode: "open" });
+    const layer = document.createElement("div");
+    root.appendChild(layer);
+    let released = 0;
+    return { layer, root, release: () => { released += 1; }, released: () => released, shadowHost };
+  }
+
+  function openTerms(overlayOpt?: Parameters<typeof mount>[0] extends never ? never : unknown) {
+    return mount({
+      overlay: overlayOpt,
+      config: normalizeCollectForm({
+        consent: { privacy: { enabled: true, label: { en: "Privacy" }, body: { en: "전문 내용" } } },
+      }),
+    } as Parameters<typeof mount>[0]);
+  }
+
+  it("자리를 주면 그 안에 붙는다 — document.body 로 새지 않는다", () => {
+    const slot = makeSlot();
+    openTerms(() => slot);
+    host.querySelector<HTMLButtonElement>(".msf-more")!.click();
+
+    const overlay = slot.layer.querySelector(".msf-overlay");
+    expect(overlay).not.toBeNull();
+    expect(overlay!.textContent).toContain("전문 내용");
+    // body 직계에는 없어야 한다.
+    expect([...document.body.children].some((el) => el.classList.contains("msf-overlay"))).toBe(false);
+  });
+
+  /** 이게 이 수정의 핵심 — 빌린 자리에 **스타일이 닿아야** 한다. */
+  it("빌린 자리에 폼 스타일을 넣는다", () => {
+    const slot = makeSlot();
+    openTerms(() => slot);
+    host.querySelector<HTMLButtonElement>(".msf-more")!.click();
+    expect(slot.root.querySelector("style")).not.toBeNull();
+  });
+
+  /**
+   * 레이어는 이미 화면을 덮는 스크림이다. 여기서 또 깔면 두 겹이 되므로 **레이어를 중화**하고
+   * `.msf-overlay` 자신의 fixed·스크림·max-height 는 건드리지 않는다 — 두 경로가 같아야 한다.
+   */
+  it("레이어를 중화하되 오버레이 자신은 그대로 둔다", () => {
+    const slot = makeSlot();
+    openTerms(() => slot);
+    host.querySelector<HTMLButtonElement>(".msf-more")!.click();
+    expect(slot.layer.getAttribute("data-msx-bare")).toBe("1");
+    const overlay = slot.layer.querySelector(".msf-overlay")!;
+    expect(overlay.getAttribute("style") ?? "").not.toContain("position");
+  });
+
+  it("닫으면 자리를 반납한다", () => {
+    const slot = makeSlot();
+    openTerms(() => slot);
+    host.querySelector<HTMLButtonElement>(".msf-more")!.click();
+    slot.layer.querySelector<HTMLButtonElement>(".msf-terms-close")!.click();
+    expect(slot.released()).toBe(1);
+    expect(slot.layer.querySelector(".msf-overlay")).toBeNull();
+  });
+
+  it("동의해도 자리를 반납한다", () => {
+    const slot = makeSlot();
+    openTerms(() => slot);
+    host.querySelector<HTMLButtonElement>(".msf-more")!.click();
+    slot.layer.querySelector<HTMLButtonElement>(".msf-terms-agree")!.click();
+    expect(slot.released()).toBe(1);
+    expect(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(true);
+  });
+
+  /** 자리를 못 빌리면(null) 문서 경로로 떨어진다 — 팝업이 아예 안 뜨면 안 된다. */
+  it("자리를 못 빌리면 document.body 로 떨어진다", () => {
+    openTerms(() => null);
+    host.querySelector<HTMLButtonElement>(".msf-more")!.click();
+    const overlay = document.querySelector(".msf-overlay");
+    expect(overlay).not.toBeNull();
+    expect(overlay!.parentElement).toBe(document.body);
+  });
+
+  /** Escape 로도 닫힌다 — 모달 안에 있을 때 아무것도 안 하는 공백을 남기지 않는다. */
+  it("Escape 로 닫힌다", () => {
+    const slot = makeSlot();
+    openTerms(() => slot);
+    host.querySelector<HTMLButtonElement>(".msf-more")!.click();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(slot.layer.querySelector(".msf-overlay")).toBeNull();
+    expect(slot.released()).toBe(1);
+  });
+
+  /** 두 번 눌러도 팝업이 겹치지 않는다. */
+  it("두 번 열면 앞엣것을 닫는다", () => {
+    const slot = makeSlot();
+    openTerms(() => slot);
+    const btn = host.querySelector<HTMLButtonElement>(".msf-more")!;
+    btn.click();
+    btn.click();
+    expect(slot.layer.querySelectorAll(".msf-overlay")).toHaveLength(1);
   });
 });

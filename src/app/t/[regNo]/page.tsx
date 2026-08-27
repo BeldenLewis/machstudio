@@ -24,6 +24,8 @@ import { getClientIp, rateLimitAsync } from "@/lib/ratelimit";
 import { isValidRegistrationNo } from "@/lib/collect-registration-no";
 import { normalizeCollectForm } from "@/lib/collect-form-config";
 import { buildTicketView } from "@/lib/collect-lookup";
+import { visitorBadgePalette } from "@/lib/collect-badge";
+import { TicketDownloadButton } from "./TicketDownloadButton";
 
 export const dynamic = "force-dynamic";
 
@@ -144,7 +146,13 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
             본인이 이메일이나 전화를 직접 넣어 통과한 뒤라 가려서 보여 주지만, 여기는 그 관문이 없다.
           */}
           {view.visitorType && (
-            <p className="mt-4 inline-block rounded-full bg-neutral-900/5 px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.08em] text-neutral-700 ring-1 ring-neutral-900/10">
+            <p
+              className="mt-4 inline-flex min-w-28 items-center justify-center rounded-full px-5 py-2 text-sm font-black uppercase tracking-[0.1em] shadow-md"
+              style={{
+                backgroundColor: visitorBadgePalette(view.visitorType).background,
+                color: visitorBadgePalette(view.visitorType).foreground,
+              }}
+            >
               {view.visitorType}
             </p>
           )}
@@ -162,6 +170,23 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
             />
           </div>
 
+          {(view.maskedPhone || view.maskedEmail) && (
+            <dl className="mx-auto mt-4 grid w-full max-w-[280px] grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 rounded-xl bg-neutral-100 px-4 py-3 text-left text-xs">
+              {view.maskedPhone && (
+                <>
+                  <dt className="font-medium text-neutral-500">Phone</dt>
+                  <dd className="min-w-0 break-all text-right font-bold text-neutral-800">{view.maskedPhone}</dd>
+                </>
+              )}
+              {view.maskedEmail && (
+                <>
+                  <dt className="font-medium text-neutral-500">E-mail</dt>
+                  <dd className="min-w-0 break-all text-right font-bold text-neutral-800">{view.maskedEmail}</dd>
+                </>
+              )}
+            </dl>
+          )}
+
           <p className="mt-4 font-mono text-lg font-bold tracking-[0.14em] text-neutral-900">
             {view.registrationNo}
           </p>
@@ -170,15 +195,18 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
           {/*
             파일로도 받게 한다 — 캡처가 막힌 기기(일부 사내폰·키오스크)가 있고,
             캡처는 화면 밝기 자동 조절 때문에 QR 대비가 낮게 저장되는 경우가 있다.
-            같은 출처라 download 속성이 그대로 듣는다(임베드 조회 화면은 교차 출처라 blob 으로 받는다).
+            QR만 저장하지 않고 행사명·배지·이름·연락처·등록번호를 한 장으로 만든다.
           */}
-          <a
-            href={`/api/collect/qr/${encodeURIComponent(view.registrationNo)}`}
-            download={`ticket-${view.registrationNo}.png`}
-            className="mt-5 block w-full rounded-xl bg-neutral-900 px-4 py-3 text-sm font-bold text-white"
-          >
-            Save as Image
-          </a>
+          <TicketDownloadButton ticket={{
+            eventName: config.legal.eventName || record.source.name,
+            registrationNo: view.registrationNo,
+            qrUrl: `/api/collect/qr/${encodeURIComponent(view.registrationNo)}`,
+            name: view.name,
+            visitorType: view.visitorType,
+            maskedEmail: view.maskedEmail,
+            maskedPhone: view.maskedPhone,
+            accentColor: config.theme.accentColor,
+          }} />
           <p className="mt-2 text-[11px] text-neutral-500">
             * If the button doesn&apos;t work, please take a screenshot.
           </p>

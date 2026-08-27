@@ -187,6 +187,64 @@ describe("아임웹 경로 — 오늘의 동작을 고정한다", () => {
     expect(h.sent).toHaveLength(0);
   });
 
+  /**
+   * "제출로 보이는 클릭"(정규식 매칭)이 실제 제출이 아닐 수 있다 — 그 순간 폼을 다 안
+   * 채웠으면 반쪽 레코드가 만들어진다(에듀테크 실측: 이름·이메일 없이 UTM만 있는 레코드가
+   * 계속 쌓임). 위치 인덱스 경로에도 값 정족수를 걸어, 매핑된 필드의 과반이 안 채워지면
+   * 앵커 소스처럼 아무것도 보내지 않아야 한다.
+   */
+  it("매핑된 필드의 절반도 안 채워지면 위치 인덱스 소스도 보내지 않는다", async () => {
+    const h = mount(
+      imwebForm([
+        { label: "이름", html: `<input value="">` },
+        { label: "이메일", html: `<input value="">` },
+        { label: "연락처", html: `<input value="">` },
+        // 4개 중 1개만 채워짐 — 무관한 클릭(쿠키 동의 등)이 우연히 이 상태를 캡처한 상황.
+        { label: "동의", html: `<label><input type="checkbox" checked>개인정보 수집 동의</label>` },
+      ]),
+      buildScript(LEGACY_MAPPINGS),
+    );
+    await h.submitAndLeave();
+
+    expect(h.sent).toHaveLength(0);
+  });
+
+  /**
+   * 운영자가 '필드' 탭에서 필수를 켜면(§ FieldMapping.isRequired), 과반 어림값 대신
+   * 그 필드들이 정확히 다 채워졌는지를 본다 — "이름이 비어있는데 저장되는 게 말이 안
+   * 된다" 는 요건은 정확한 목록으로 풀어야 한다.
+   */
+  it("필수로 지정한 필드가 하나라도 비어있으면 나머지가 다 채워져도 보내지 않는다", async () => {
+    const h = mount(
+      imwebForm([
+        // 이름·이메일·연락처는 채워져 과반(3/4)은 넘지만, 필수인 이메일이 비어있다.
+        { label: "이름", html: `<input value="홍길동">` },
+        { label: "이메일", html: `<input value="">` },
+        { label: "연락처", html: `<input value="01012345678">` },
+        { label: "동의", html: `<label><input type="checkbox" checked>개인정보 수집 동의</label>` },
+      ]),
+      buildScript(LEGACY_MAPPINGS.map((f) => (f.key === "name" || f.key === "email" ? { ...f, required: true } : f))),
+    );
+    await h.submitAndLeave();
+
+    expect(h.sent).toHaveLength(0);
+  });
+
+  it("필수 필드가 전부 채워지면 나머지 선택 필드가 비어있어도 보낸다", async () => {
+    const h = mount(
+      imwebForm([
+        { label: "이름", html: `<input value="홍길동">` },
+        { label: "이메일", html: `<input value="hong@example.com">` },
+        { label: "연락처", html: `<input value="">` },
+        { label: "동의", html: `<input value="">` },
+      ]),
+      buildScript(LEGACY_MAPPINGS.map((f) => (f.key === "name" || f.key === "email" ? { ...f, required: true } : f))),
+    );
+    await h.submitAndLeave();
+
+    expect(h.sent[0]?.data).toEqual({ name: "홍길동", email: "hong@example.com", phone: "", agree: "" });
+  });
+
   /** 발견(discoveredFields)의 출처 — 이 값이 바뀌면 운영자 화면의 필드 목록이 통째로 바뀐다. */
   it("필드 메타를 `.form-group` 에서 뽑아 함께 보낸다", async () => {
     const h = mount(FILLED, buildScript(LEGACY_MAPPINGS));
@@ -253,6 +311,35 @@ describe("대행전시 경로 — 앵커로 지목해 읽는다", () => {
       // 체크박스는 감싼 라벨 텍스트로 — 아임웹 경로와 같은 규칙이다.
       purpose: "제품 구매",
     });
+  });
+
+  /**
+   * select 는 el.value 가 아니라 선택된 option 의 화면 글자를 써야 한다(실물 확인:
+   * edtechkorea.or.kr 의 "소속분류" <select><option value="in14">Elementary School</option>
+   * — 라이브 레코드에 "in14" 같은 내부 코드가 쌓이던 버그).
+   * 라디오·체크박스는 이미 label 텍스트를 쓴다 — select 만 다른 경로였다.
+   */
+  it("select 는 코드가 아니라 선택된 글자를 읽는다", async () => {
+    const withSelect = `<form>
+      <div class="field">
+        <label class="field-label"><span>소속분류</span></label>
+        <div class="input-area f_select">
+          <select name="mod3809_in1">
+            <option value="">==Choose==</option>
+            <option value="in14">Elementary School</option>
+            <option value="in15" selected>Middle School</option>
+          </select>
+        </div>
+      </div>
+      <button id="go">확인</button>
+    </form>`;
+    const h = mount(
+      withSelect,
+      buildScript([{ index: 0, key: "org_type", label: "소속분류", matchBy: "name", matchValue: "mod3809_in1" }], ["/fairVst2.do"]),
+      "https://edtechkorea.or.kr/fairVst2.do",
+    );
+    await h.submitAndLeave();
+    expect(h.sent[0]?.data).toEqual({ org_type: "Middle School" });
   });
 
   it("id 앵커는 감싼 요소 안의 입력을 찾는다", async () => {

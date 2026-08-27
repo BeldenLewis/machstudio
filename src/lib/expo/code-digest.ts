@@ -1,0 +1,64 @@
+/**
+ * 붙여넣은 코드의 **지문**.
+ *
+ * ── 왜 필요한가 ───────────────────────────────────────────────────────
+ * 미리보기에서 "외부 코드 실행" 을 한 번 고르면, 그 허가가 **그때 본 그 코드에만**
+ * 적용돼야 한다. 지문이 없으면 운영자가 코드를 바꾼 뒤에도 옛 허가가 그대로 남아
+ * 확인하지 않은 스크립트가 도는 상태로 발행까지 갈 수 있다.
+ *
+ * 그래서 서버가 지금 페이지의 지문을 계산하고, 요청의 `codeDigest` 가 **정확히** 같을
+ * 때만 실행을 허용한다. 낡았거나 없으면 자리표만 보여 준다.
+ *
+ * 허가를 **저장하지 않는다** — 세션 한 번의 판단이다.
+ */
+import { createHash } from "node:crypto";
+import { normalizeExpoPage } from "@/lib/expo/config";
+import { hasContent } from "@/lib/expo/model";
+import type { ExpoSection } from "@/lib/expo/types";
+
+/**
+ * 구획 순서와 코드 내용만 본다. 그 밖의 편집(제목·배경 노브)은 실행되는 것을 바꾸지
+ * 않으므로 지문도 바뀌지 않아야 한다 — 안 그러면 운영자가 제목 한 글자를 고칠 때마다
+ * 다시 "실행" 을 눌러야 한다.
+ */
+export function expoCustomCodeDigest(sections: readonly ExpoSection[]): string {
+  const parts: string[] = [];
+  for (const section of sections) {
+    if (section.type !== "custom-code") continue;
+    const code = typeof section.content.code === "string" ? section.content.code : "";
+    // sid 를 함께 넣어 구획 순서 변경도 지문에 반영된다.
+    // 구분자는 **이스케이프로 적는다.** 날 제어문자를 소스에 그대로 두면 git 이 이 파일을
+    // 바이너리로 보고 diff 를 아예 안 보여 준다 — 남의 코드를 실행할지 정하는 파일에서
+    // 변경이 눈에 안 보이는 건 그 자체가 위험이다(실측: git numstat 이 `-  -`).
+    parts.push(`${section.sid}\u0000${code}`);
+  }
+  // 코드 구획이 하나도 없으면 지문도 없다 — 허가할 대상이 없다.
+  if (parts.length === 0) return "";
+  return createHash("sha256").update(parts.join("\u0001")).digest("base64url").slice(0, 32);
+}
+
+/**
+ * 저장된 한 벌(초안이든 발행본이든)을 미리보기로 그렸을 때의 지문.
+ *
+ * **미리보기가 실제로 그리는 것과 같은 목록**에서 뽑아야 한다. 미리보기 라우트와 편집기가
+ * 각자 계산하면 필터가 한쪽만 바뀌는 날 지문이 어긋나고, 운영자에게는 "실행을 눌렀는데
+ * 자리표만 나온다" 로 보인다 — 왜 그런지 화면에는 아무 단서가 없다.
+ *
+ * 그래서 두 곳이 이 함수 하나를 부른다(`app/hp/[token]/route.ts`,
+ * `app/api/expo/pages/[pageId]/route.ts`).
+ */
+export function expoPreviewCodeDigest(raw: unknown): string {
+  return expoCustomCodeDigest(previewSections(raw));
+}
+
+/**
+ * 미리보기에 그려지는 구획들.
+ *
+ * `liveAt`·`embedEnabled` 는 보지 않는다 — 아직 안 켠 것을 보려고 여는 화면이다.
+ * 하지만 **`enabled` 는 본다.** 그게 "이 페이지에 포함하는가" 이고, 공개 로더도 같은
+ * 기준으로 거른다(`renderableSections`). 여기서만 보여 주면 꺼 놓은 구획이 미리보기에는
+ * 있고 발행본에는 없다 — 미리보기가 거짓말을 한다.
+ */
+export function previewSections(raw: unknown): ExpoSection[] {
+  return normalizeExpoPage(raw).sections.filter((s) => s.enabled && hasContent(s));
+}

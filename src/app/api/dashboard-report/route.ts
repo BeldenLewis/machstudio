@@ -4,6 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import type { RealtimeReportData } from "@/app/(app)/dashboard/RealtimeReport";
 import { normalizeUtmKey } from "@/lib/attribution-normalize";
+import { getGa4ActiveUsers, getGa4ActiveUsersByDay } from "@/lib/ga4";
+import {
+  equivalentPreviousCutoff,
+  eventDday,
+  resolveCollectEventPair,
+} from "@/lib/collect-event-comparison";
 
 // 결과 캐싱 (egress 절감): 동일 조건 조회를 짧게 캐시해 반복 DB 트래픽 제거.
 // 서버리스 인스턴스 단위 캐시 — 같은 인스턴스에 도달하는 반복/동시 조회에 효과.
@@ -395,6 +401,17 @@ function cleanUtmValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+interface YearOverYear {
+  compareSourceName: string;
+  compareTotal: number;
+  progressPercent: number | null;
+  daysUntilEvent: number | null;
+  pace: null | {
+    lastYearCountAtSameOffset: number;
+    paceRatio: number | null;
+  };
+}
+
 function buildHeatmapFromRows(rows: Array<{ dow: number; hour: number; count: number }>) {
   const dayLabels = ["월", "화", "수", "목", "금", "토", "일"];
   const matrix: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0));
@@ -558,6 +575,29 @@ function getKstDateKey(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * GA4 일별 방문자 행("YYYYMMDD" 키, 방문 0인 날은 행 자체가 없음)을 조회 구간의
+ * 매일에 맞춰 0으로 채운 연속 배열로 편다 — 요약 카드 미니 추이선(Sparkline)이
+ * cumulativeTrend 와 같은 "구간 전체를 빠짐없이" 규칙을 따르게 한다.
+ */
+export function buildGa4DailyTrend(rows: Array<{ date: string; count: number }> | null, from: Date, to: Date): number[] | null {
+  if (!rows) return null;
+  const byDate = new Map<string, number>();
+  for (const row of rows) {
+    if (row.date.length !== 8) continue;
+    const key = `${row.date.slice(0, 4)}-${row.date.slice(4, 6)}-${row.date.slice(6, 8)}`;
+    byDate.set(key, row.count);
+  }
+  const points: number[] = [];
+  let cursor = getKstDayStart(from);
+  const end = getKstDayStart(to);
+  while (cursor.getTime() <= end.getTime()) {
+    points.push(byDate.get(getKstDateKey(cursor)) ?? 0);
+    cursor = new Date(cursor.getTime() + DAY_MS);
+  }
+  return points;
+}
+
 interface UtmTrendRecord {
   createdAt: Date;
   utmSource: string | null;
@@ -675,7 +715,35 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
   const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId } });
   if (!project) return { error: "프로젝트 없음" as const };
 
-  const cacheKey = JSON.stringify({ workspaceId, projectId, filters, from: options.from, to: options.to });
+  const sourceCatalog = await prisma.collectSource.findMany({
+    where: { workspaceId, projectId, deletedAt: null },
+    select: {
+      id: true,
+      name: true,
+      isActive: true,
+      formConfig: true,
+      venueConfig: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+  const requestedSourceId = filters?.sourceId && filters.sourceId !== "all" ? filters.sourceId : null;
+  const eventPair = resolveCollectEventPair(sourceCatalog, requestedSourceId);
+  // 프로젝트 전체를 세면 2025·2026 행사가 한 누적으로 합쳐진다. 상세는 URL 소스, 요약은
+  // 현재 활성 행사 하나를 기준으로 고정한다. 활성 소스가 없으면 전체로 되돌리지 않고 0건이다.
+  const effectiveFilters: ReportFilters = {
+    ...filters,
+    sourceId: eventPair.current?.source.id ?? "__no_active_collect_source__",
+  };
+
+  const cacheKey = JSON.stringify({
+    workspaceId,
+    projectId,
+    filters: effectiveFilters,
+    previousSourceId: eventPair.previous?.source.id ?? null,
+    from: options.from,
+    to: options.to,
+  });
   const cachedHit = REPORT_CACHE.get(cacheKey);
   if (cachedHit && Date.now() - cachedHit.at < REPORT_CACHE_TTL_MS) {
     return { data: cachedHit.data };
@@ -688,8 +756,21 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
   const yesterdayStart = new Date(todayStart.getTime() - DAY_MS);
   const span = Math.max(to.getTime() - from.getTime(), DAY_MS);
   const previousFrom = new Date(from.getTime() - span);
+  const hasPaceComparison = Boolean(eventPair.current?.eventStart && eventPair.previous?.eventStart);
+  const previousPaceCutoff = hasPaceComparison
+    ? equivalentPreviousCutoff(eventPair.current!.eventStart!, eventPair.previous!.eventStart!, now)
+    : null;
+  const previousEventRangeFrom = hasPaceComparison
+    ? equivalentPreviousCutoff(eventPair.current!.eventStart!, eventPair.previous!.eventStart!, from)
+    : null;
+  const previousEventRangeTo = hasPaceComparison
+    ? equivalentPreviousCutoff(eventPair.current!.eventStart!, eventPair.previous!.eventStart!, to)
+    : null;
 
-  const baseParams = { workspaceId, projectId, filters };
+  const baseParams = { workspaceId, projectId, filters: effectiveFilters };
+  const previousFilters: ReportFilters | null = eventPair.previous
+    ? { ...filters, sourceId: eventPair.previous.source.id }
+    : null;
   const rangeWhere = buildWhere({ ...baseParams, from, to });
   const rangeRawWhere = buildRawWhere({ ...baseParams, from, to });
   const utmCols = getUtmColumns(filters);
@@ -701,19 +782,28 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
     where: {
       workspaceId,
       projectId,
-      ...(filters?.sourceId && filters.sourceId !== "all" ? { id: filters.sourceId } : {}),
+      id: effectiveFilters.sourceId ?? "__no_active_collect_source__",
     },
     select: { id: true, fieldMappings: { select: { key: true, label: true } } },
   });
   const compositionKeys = resolveCompositionKeys(sourceFields);
 
-  const [yesterdayCount, todayCount, cumulativeCount, rangeCount, previousRangeCount, cumulativeBeforeRange, heatmapRecords, utmGroups, heatmapRows, cumulativeDailyRows, utmTrendRows] = await Promise.all([
+  const [yesterdayCount, todayCount, cumulativeCount, rangeCount, previousRangeCount, cumulativeBeforeRange, previousTotalCount, previousPaceCount, previousRangeMatchedCount, heatmapRecords, utmGroups, heatmapRows, cumulativeDailyRows, utmTrendRows] = await Promise.all([
     prisma.collectRecord.count({ where: buildWhere({ ...baseParams, from: yesterdayStart, lt: todayStart }) }),
     prisma.collectRecord.count({ where: buildWhere({ ...baseParams, from: todayStart, to: now }) }),
     prisma.collectRecord.count({ where: buildWhere(baseParams) }),
     prisma.collectRecord.count({ where: rangeWhere }),
     prisma.collectRecord.count({ where: buildWhere({ ...baseParams, from: previousFrom, lt: from }) }),
     prisma.collectRecord.count({ where: buildWhere({ ...baseParams, lt: from }) }),
+    previousFilters
+      ? prisma.collectRecord.count({ where: buildWhere({ workspaceId, projectId, filters: previousFilters }) })
+      : Promise.resolve(null),
+    previousFilters && previousPaceCutoff
+      ? prisma.collectRecord.count({ where: buildWhere({ workspaceId, projectId, filters: previousFilters, to: previousPaceCutoff }) })
+      : Promise.resolve(null),
+    previousFilters && previousEventRangeFrom && previousEventRangeTo
+      ? prisma.collectRecord.count({ where: buildWhere({ workspaceId, projectId, filters: previousFilters, from: previousEventRangeFrom, to: previousEventRangeTo }) })
+      : Promise.resolve(null),
     // composition / emailDomainTop / dedup 용 — data JSON 전체 대신 집계에 필요한 필드만 추출(egress 절감).
     // 매칭되는 필드가 없으면 빈 배열. jsonb_build_object 로 부분 data 객체를 재구성 → 기존 메모리 로직 그대로 동작.
     (() => {
@@ -874,6 +964,62 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
   const utmBySourceMedium = aggregateUtm((row) => [row.source, row.medium].filter(Boolean).join(" / "));
 
   const rangeChange = previousRangeCount > 0 ? ((rangeCount - previousRangeCount) / previousRangeCount) * 100 : null;
+  const previousPaceChange = previousPaceCount !== null && previousPaceCount > 0
+    ? ((cumulativeCount - previousPaceCount) / previousPaceCount) * 100
+    : null;
+  const previousRangeChange = previousRangeMatchedCount !== null && previousRangeMatchedCount > 0
+    ? ((rangeCount - previousRangeMatchedCount) / previousRangeMatchedCount) * 100
+    : null;
+
+  // GA4 퍼널 — 사전등록 폼 자체엔 방문 추적이 없어서(collect-script.ts는 제출만 잡음), 이미 설치된
+  // GA4에서 방문자 수를 끌어온다. 속성 미설정이거나 조회 실패면 퍼널 전체를 숨긴다(부분 데이터로 오해 방지).
+  const funnel = project.ga4PropertyId
+    ? await (async () => {
+        const propertyId = project.ga4PropertyId!;
+        const pagePathPrefix = project.ga4RegistrationPagePath || null;
+        const [
+          homepageVisitors,
+          previousHomepageVisitors,
+          registrationPageVisitors,
+          previousRegistrationPageVisitors,
+          homepageVisitorsDailyRows,
+          registrationPageVisitorsDailyRows,
+        ] = await Promise.all([
+          getGa4ActiveUsers({ propertyId, from, to }),
+          getGa4ActiveUsers({ propertyId, from: previousFrom, to: from }),
+          pagePathPrefix ? getGa4ActiveUsers({ propertyId, pagePathPrefix, from, to }) : Promise.resolve(null),
+          pagePathPrefix ? getGa4ActiveUsers({ propertyId, pagePathPrefix, from: previousFrom, to: from }) : Promise.resolve(null),
+          getGa4ActiveUsersByDay({ propertyId, from, to }),
+          pagePathPrefix ? getGa4ActiveUsersByDay({ propertyId, pagePathPrefix, from, to }) : Promise.resolve(null),
+        ]);
+        if (homepageVisitors === null) return null;
+        const homepageVisitorsChange =
+          previousHomepageVisitors && previousHomepageVisitors > 0
+            ? ((homepageVisitors - previousHomepageVisitors) / previousHomepageVisitors) * 100
+            : null;
+        const registrationPageVisitorsChange =
+          registrationPageVisitors !== null && previousRegistrationPageVisitors && previousRegistrationPageVisitors > 0
+            ? ((registrationPageVisitors - previousRegistrationPageVisitors) / previousRegistrationPageVisitors) * 100
+            : null;
+        return {
+          homepageVisitors,
+          homepageVisitorsChange,
+          homepageVisitorsDaily: buildGa4DailyTrend(homepageVisitorsDailyRows, from, to),
+          registrationPageVisitors,
+          registrationPageVisitorsChange,
+          registrationPageVisitorsDaily: pagePathPrefix ? buildGa4DailyTrend(registrationPageVisitorsDailyRows, from, to) : null,
+          registrants: rangeCount,
+          homepageToPageRate:
+            registrationPageVisitors !== null && homepageVisitors > 0
+              ? (registrationPageVisitors / homepageVisitors) * 100
+              : null,
+          pageToRegistrantRate:
+            registrationPageVisitors !== null && registrationPageVisitors > 0
+              ? (rangeCount / registrationPageVisitors) * 100
+              : null,
+        };
+      })()
+    : null;
 
   // Anomaly detection
   const cumulativeTrend = buildCumulativeTrendFromRows(cumulativeDailyRows, from, to, cumulativeBeforeRange);
@@ -900,9 +1046,26 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
     }
   }
 
+  const daysUntilEvent = eventPair.current?.eventStart ? eventDday(eventPair.current.eventStart, now) : null;
+  const yearOverYear: YearOverYear | null = eventPair.previous ? {
+    compareSourceName: eventPair.previous.source.name,
+    compareTotal: previousTotalCount ?? 0,
+    progressPercent: previousTotalCount && previousTotalCount > 0
+      ? (cumulativeCount / previousTotalCount) * 100
+      : null,
+    daysUntilEvent,
+    pace: previousPaceCount !== null
+      ? {
+          lastYearCountAtSameOffset: previousPaceCount,
+          paceRatio: previousPaceCount > 0 ? (cumulativeCount / previousPaceCount) * 100 : null,
+        }
+      : null,
+  } : null;
+
   const payload: RealtimeReportData = {
     generatedAt: now.toISOString(),
-    project: { id: project.id, name: project.name },
+    project: { id: project.id, name: eventPair.current?.source.name ?? project.name },
+    yearOverYear,
     performance: {
       yesterdayCount,
       todayCount,
@@ -910,7 +1073,37 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
       rangeCount,
       previousRangeCount,
       rangeChange,
+      currentSource: eventPair.current ? {
+        id: eventPair.current.source.id,
+        name: eventPair.current.source.name,
+        eventYear: eventPair.current.eventYear,
+      } : null,
+      previousYear: eventPair.previous ? {
+        sourceId: eventPair.previous.source.id,
+        sourceName: eventPair.previous.source.name,
+        eventYear: eventPair.previous.eventYear,
+        totalCount: previousTotalCount ?? 0,
+        paceCount: previousPaceCount,
+        paceChange: previousPaceChange,
+        rangeCount: previousRangeMatchedCount,
+        rangeChange: previousRangeChange,
+        dDay: eventPair.current?.eventStart ? eventDday(eventPair.current.eventStart, now) : null,
+      } : null,
     },
+    /**
+     * 이 리포트가 **어느 기간을 센 것인지**.
+     *
+     * 요약 대시보드는 주간 보고에 캡처해서 붙이는 화면이다. 기간이 안 적혀 있으면 그 캡처는
+     * 일주일 뒤에 "이게 언제 것이지", "+102% 는 무엇 대비지" 를 답할 수 없다 —
+     * 숫자만 있고 근거가 없는 이미지가 된다. 계산에 쓴 범위를 그대로 실어 보낸다.
+     */
+    range: {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      previousFrom: previousFrom.toISOString(),
+      previousTo: from.toISOString(),
+    },
+    funnel,
     composition,
     emailDomainTop,
     emailDomainTotal,

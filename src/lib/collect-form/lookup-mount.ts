@@ -9,11 +9,13 @@
  * 조용히 고장 나면 현장 문의가 그대로 늘어난다.
  */
 import { h, clearNode } from "@/lib/dom/h";
-import { COLLECT_FORM_CSS } from "./css";
+import { ensureFormStyles } from "./css";
 import { onAccentColor } from "@/lib/competition-render";
+import { COUNTRY_DIALS, flagEmoji, isKnownCountry } from "@/lib/collect-country";
 import type { CollectFormConfig } from "@/lib/collect-form-config";
+import { visitorBadgeCssVars } from "@/lib/collect-badge";
+import { downloadTicketImage } from "./ticket-image";
 
-const STYLE_ID = "msf-css";
 
 const COPY = {
   title: "Find my QR",
@@ -46,6 +48,8 @@ export interface MountLookupOptions {
   sourceId: string;
   /** 미리보기 — 조회를 실제로 보내지 않고 표본 결과를 그린다. */
   preview?: boolean;
+  /** 스타일을 넣을 루트. 안 주면 문서(지금까지와 같다). */
+  styleRoot?: Document | ShadowRoot;
 }
 
 export interface LookupHandle {
@@ -61,13 +65,7 @@ export interface LookupHandle {
  */
 const PREVIEW_REG_NO = "0000000000001";
 
-function ensureStyles(): void {
-  if (typeof document === "undefined" || document.getElementById(STYLE_ID)) return;
-  const style = document.createElement("style");
-  style.id = STYLE_ID;
-  style.textContent = COLLECT_FORM_CSS;
-  document.head.appendChild(style);
-}
+
 
 type DataLayerWindow = Window & { dataLayer?: unknown[] };
 function track(preview: boolean, event: string): void {
@@ -82,7 +80,7 @@ function track(preview: boolean, event: string): void {
 }
 
 export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
-  ensureStyles();
+  ensureFormStyles(opts.styleRoot);
   const { config, mount } = opts;
   const preview = opts.preview === true;
 
@@ -126,6 +124,24 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
     if (phoneInput.value !== digits) phoneInput.value = digits;
   });
 
+  /**
+   * 국가 선택 — 등록 폼(mount.ts)과 **같은 컨트롤**이다.
+   *
+   * 등록자가 기본 국가가 아닌 나라를 골라 등록했다면(§6.3) 저장된 번호는 그 나라 기준
+   * E.164 다. 조회 칸이 국가를 못 고르면 서버는 항상 `defaultCountry` 로 해석하는데,
+   * 그러면 자기 번호를 정확히 쳐도 못 찾는다 — 입력 화면과 확인 화면의 형식이 갈리는 것.
+   */
+  const phoneCountrySel = h("select", {
+    class: "msf-tel-cc", "data-msf-cc": "phone", "aria-label": `${COPY.phone} — country`,
+  }) as HTMLSelectElement;
+  for (const c of COUNTRY_DIALS) {
+    phoneCountrySel.appendChild(h("option", { value: c.code }, `${flagEmoji(c.code)} +${c.dial} ${c.name}`));
+  }
+  if (isKnownCountry(config.validation.defaultCountry)) {
+    phoneCountrySel.value = config.validation.defaultCountry.toUpperCase();
+  }
+  const phoneWrap = h("div", { class: "msf-tel" }, phoneCountrySel, phoneInput);
+
   const banner = h("div", { class: "msf-banner", role: "alert" });
   banner.style.display = "none";
   /**
@@ -144,10 +160,10 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
     banner.style.display = "none";
   }
 
-  function field(label: string, input: HTMLInputElement): HTMLElement {
+  function field(label: string, forId: string, content: HTMLElement): HTMLElement {
     return h("div", { class: "msf-field" },
-      h("label", { class: "msf-label", for: input.id }, label),
-      input,
+      h("label", { class: "msf-label", for: forId }, label),
+      content,
     );
   }
 
@@ -159,24 +175,6 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
    * 그래서 직접 받아서 blob 으로 저장한다(QR 라우트는 CORS 를 열어 두었다).
    * 그마저 막히면 새 탭으로 열어 준다 — 그때는 길게 눌러 저장하면 된다.
    */
-  async function saveQrImage(regNo: string): Promise<void> {
-    const url = `${opts.origin}/api/collect/qr/${encodeURIComponent(regNo)}`;
-    try {
-      const res = await fetch(url, { credentials: "omit" });
-      if (!res.ok) throw new Error("qr fetch failed");
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const a = h("a", { href: objectUrl, download: `ticket-${regNo}.png` }) as HTMLAnchorElement;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      // 즉시 해제하면 저장이 시작되기 전에 무효가 되는 브라우저가 있다.
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
-    } catch {
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
-  }
-
   function renderResult(view: {
     registrationNo: string;
     name: string;
@@ -197,7 +195,10 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
       general 인가 buyer 인가" 를 확인하려고 화면을 들여다봐야 했다. 입장 동선이 유형마다
       다르므로 이건 이름보다 먼저 눈에 들어와야 한다.
     */
-    if (view.visitorType) card.appendChild(h("div", { class: "msf-badge" }, view.visitorType));
+    if (view.visitorType) card.appendChild(h("div", {
+      class: "msf-badge",
+      style: visitorBadgeCssVars(view.visitorType),
+    }, view.visitorType));
     if (view.name) card.appendChild(h("div", { class: "msf-found-name" }, view.name));
 
     /*
@@ -208,16 +209,6 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
       ["Phone", view.maskedPhone],
       ["E-mail", view.maskedEmail],
     ].filter(([, value]) => !!value) as [string, string][];
-    if (rows.length > 0) {
-      card.appendChild(
-        h("dl", { class: "msf-idcheck" },
-          ...rows.flatMap(([label, value]) => [
-            h("dt", null, label),
-            h("dd", null, value),
-          ]),
-        ),
-      );
-    }
 
     if (view.showQr) {
       /**
@@ -233,6 +224,16 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
           }),
         ),
       );
+      if (rows.length > 0) {
+        card.appendChild(
+          h("dl", { class: "msf-idcheck" },
+            ...rows.flatMap(([label, value]) => [
+              h("dt", null, label),
+              h("dd", null, value),
+            ]),
+          ),
+        );
+      }
       card.appendChild(h("div", { class: "msf-regno" }, view.registrationNo));
       card.appendChild(h("div", { class: "msf-regno-label" }, COPY.regNoLabel));
 
@@ -240,7 +241,16 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
         const save = h("button", {
           type: "button",
           class: "msf-save",
-          onclick: () => { void saveQrImage(view.registrationNo); },
+          onclick: () => { void downloadTicketImage({
+            eventName: config.legal.eventName,
+            registrationNo: view.registrationNo,
+            qrUrl: `${opts.origin}/api/collect/qr/${encodeURIComponent(view.registrationNo)}`,
+            name: view.name,
+            visitorType: view.visitorType,
+            maskedEmail: view.maskedEmail,
+            maskedPhone: view.maskedPhone,
+            accentColor: config.theme.accentColor,
+          }).catch(() => window.alert("We couldn't save the ticket image. Please take a screenshot instead.")); },
         }, COPY.saveImage);
         card.appendChild(save);
         card.appendChild(h("div", { class: "msf-save-hint" }, COPY.saveHint));
@@ -336,7 +346,7 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "omit",
-        body: JSON.stringify({ email, phone }),
+        body: JSON.stringify({ email, phone, phoneCountry: usePhone ? phoneCountrySel.value : "" }),
       });
       if (res.status === 429) { showBanner(COPY.tooMany); return; }
       const data = (await res.json().catch(() => null)) as
@@ -382,8 +392,8 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
 
     stack.appendChild(h("div", { class: "msf-state-title" }, COPY.title));
     stack.appendChild(h("div", { class: "msf-hint" }, needBoth ? COPY.needBoth : COPY.desc));
-    if (useEmail) stack.appendChild(field(COPY.email, emailInput));
-    if (usePhone) stack.appendChild(field(COPY.phone, phoneInput));
+    if (useEmail) stack.appendChild(field(COPY.email, emailInput.id, emailInput));
+    if (usePhone) stack.appendChild(field(COPY.phone, phoneInput.id, phoneWrap));
     stack.appendChild(submitBtn);
     stack.appendChild(banner);
     stack.appendChild(resultHost);

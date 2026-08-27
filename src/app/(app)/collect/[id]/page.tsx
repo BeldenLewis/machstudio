@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { use } from "react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import {
@@ -11,6 +11,7 @@ import {
   ChevronLeft, ChevronRight, Search, Filter, Activity, Shield,
   RefreshCcw, Bell, Webhook, KeyRound, Eraser, AlertTriangle, ShieldAlert,
   MoreHorizontal, Link2, Wrench, HardDriveDownload, Columns3, MapPin, X, Layers,
+  Eye, EyeOff, BarChart3,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -18,6 +19,7 @@ import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/contexts/workspace";
 import ActiveToggle from "@/app/(app)/collect/_components/ActiveToggle";
 import FormBuilderTab from "./FormBuilderTab";
+import InfoTab, { type VenueInfo } from "./InfoTab";
 import { tabsFor, type Tab } from "./tabs";
 import dynamic from "next/dynamic";
 const ImportModal = dynamic(() => import("./ImportModal"), { ssr: false });
@@ -30,8 +32,19 @@ import GdprModal from "./GdprModal";
 import RetentionPolicyEditor from "./RetentionPolicyEditor";
 import DateRangeField from "@/components/DateRangeField";
 import { formatKst, formatKstDateTime } from "@/lib/datetime";
+import ProjectSummaryCard from "@/app/(app)/dashboard/ProjectSummaryCard";
+import { useWorkspaceChannelColors } from "@/components/ui/use-workspace-channel-colors";
+import type { RealtimeReportData } from "@/app/(app)/dashboard/RealtimeReport";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
+
+const GA4_MANUAL_ENTRY = "__manual__";
+
+interface Ga4PropertyOption {
+  propertyId: string;
+  displayName: string;
+  accountDisplayName: string;
+}
 
 type SortKind = "createdAt" | "field" | "utmSource" | "utmMedium";
 interface SortState {
@@ -48,6 +61,8 @@ interface FieldMapping {
   type: string;
   isRequired: boolean;
   sortOrder: number;
+  /** 수집 데이터 표(목록)에서 이 열을 숨긴다 — 값은 계속 수집되고 상세·CSV엔 그대로 나온다. */
+  hidden: boolean;
 }
 
 interface DiscoveredField {
@@ -77,6 +92,8 @@ interface CollectSource {
   formPagePatterns: string[];
   dedupKeyFields: string[];
   fieldGroupSelector: string;
+  /** 일자·장소·관람시간·키컬러·하이라이트 영상·포스터 — InfoTab.tsx VenueInfo 와 같은 모양. */
+  venueConfig: VenueInfo | null;
   fieldMappings: FieldMapping[];
   discoveredFields: DiscoveredField[] | null;
   _count: { records: number };
@@ -156,6 +173,20 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   const [source, setSource] = useState<CollectSource | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("records");
+  // 이 소스만의 요약 카드 — 프로젝트에 소스가 여럿이면 프로젝트 합계와 다른 숫자다.
+  const [sourceReport, setSourceReport] = useState<RealtimeReportData | null>(null);
+  const [sourceReportLoading, setSourceReportLoading] = useState(false);
+  // 도넛 차트 채널 색 — 워크스페이스 단위 설정이라 소스가 아니라 워크스페이스 ID로 조회한다.
+  const { channelColors, setChannelColorOverride } = useWorkspaceChannelColors(source?.workspaceId);
+
+  // GA4 분석 연동 — 소스가 아니라 "프로젝트" 단위 설정이지만(§데이터 관리 탭 참고),
+  // 데이터를 다루는 이 화면에서 바로 고칠 수 있어야 접근성이 있다.
+  const [ga4PropertyId, setGa4PropertyId] = useState("");
+  const [ga4RegistrationPagePath, setGa4RegistrationPagePath] = useState("");
+  const [ga4Properties, setGa4Properties] = useState<Ga4PropertyOption[] | null>(null);
+  const [ga4ManualEntryChoice, setGa4ManualEntryChoice] = useState<boolean | null>(null);
+  const [ga4Loading, setGa4Loading] = useState(false);
+  const [ga4Saving, setGa4Saving] = useState(false);
 
   const [records, setRecords] = useState<CollectRecord[]>([]);
   const [recordsTotal, setRecordsTotal] = useState(0); // 필터 적용된 서버 카운트 (현재 조회 조건 기준)
@@ -250,6 +281,76 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       setIsLoading(false);
     }
   }, [id]);
+
+  // 소스 단위 요약 — generateDashboardReport 가 sourceId 필터를 지원해 이 소스만의 숫자를 받는다.
+  const fetchSourceReport = useCallback(async (workspaceId: string, projectId: string, sourceId: string) => {
+    setSourceReportLoading(true);
+    try {
+      const res = await fetch("/api/dashboard-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId, projectId, filters: { sourceId } }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok) setSourceReport(data);
+    } catch (error) {
+      console.error("[collect-source-summary] failed", error);
+    } finally {
+      setSourceReportLoading(false);
+    }
+  }, []);
+
+  const fetchGa4Settings = useCallback(async (projectId: string) => {
+    setGa4Loading(true);
+    try {
+      const [projectRes, propsRes] = await Promise.all([
+        fetch(`/api/projects/${projectId}`),
+        fetch(`/api/ga4-properties`),
+      ]);
+      const projectData = await projectRes.json().catch(() => ({}));
+      if (projectRes.ok && projectData.project) {
+        setGa4PropertyId(projectData.project.ga4PropertyId ?? "");
+        setGa4RegistrationPagePath(projectData.project.ga4RegistrationPagePath ?? "");
+      }
+      const propsData = await propsRes.json().catch(() => ({}));
+      setGa4Properties(propsRes.ok && Array.isArray(propsData.properties) ? propsData.properties : null);
+    } finally {
+      setGa4Loading(false);
+    }
+  }, []);
+
+  const handleSaveGa4 = async () => {
+    if (!source) return;
+    setGa4Saving(true);
+    try {
+      const res = await fetch(`/api/projects/${source.projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ga4PropertyId, ga4RegistrationPagePath }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast.error(d.error ?? "저장 실패");
+        return;
+      }
+      toast.success("분석 연동 설정을 저장했어요");
+    } finally {
+      setGa4Saving(false);
+    }
+  };
+
+  // 목록 조회 실패, 또는 저장된 값이 목록에 없으면(오래된 값/권한 변경) 잃어버리지 않게 수동 입력이 기본값 —
+  // 사용자가 셀렉트에서 직접 고른 적 있으면(ga4ManualEntryChoice) 그 선택이 항상 우선한다.
+  const ga4ManualEntry = useMemo(() => {
+    if (ga4ManualEntryChoice !== null) return ga4ManualEntryChoice;
+    if (ga4Properties === null) return true;
+    return !!ga4PropertyId && !ga4Properties.some((p) => p.propertyId === ga4PropertyId);
+  }, [ga4ManualEntryChoice, ga4Properties, ga4PropertyId]);
+
+  const ga4SelectValue = useMemo(() => {
+    if (ga4Properties === null || ga4ManualEntry) return GA4_MANUAL_ENTRY;
+    return ga4PropertyId || "";
+  }, [ga4Properties, ga4ManualEntry, ga4PropertyId]);
 
   // 현재 검색/필터/정렬 상태를 records API 쿼리스트링으로 직렬화 (페이지네이션 제외)
   const buildFilterQuery = useCallback(() => {
@@ -451,11 +552,17 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
   // 탭별 최초 1회 fetch 최적화 (탭 재방문 시 불필요한 재요청 방지)
   const hasFetchedScriptRef = useRef(false);
   const hasFetchedActivityRef = useRef(false);
+  const hasFetchedGa4Ref = useRef(false);
   // 전체 선택 모드를 fetchRecords 의존성에서 제외하기 위한 ref 미러
   const selectAllMatchingRef = useRef(selectAllMatching);
   useEffect(() => { selectAllMatchingRef.current = selectAllMatching; }, [selectAllMatching]);
 
   useEffect(() => { fetchSource(); }, [fetchSource]);
+
+  useEffect(() => {
+    if (!source) return;
+    void fetchSourceReport(source.workspaceId, source.projectId, source.id);
+  }, [source?.id, source?.workspaceId, source?.projectId, fetchSourceReport]);
   // 52,000건 capture 설치 경로와 localhost 경고는 현재 host를 함께 보여야 해 이번 범위에서 보존한다.
   // eslint-disable-next-line no-restricted-syntax
   useEffect(() => { setBrowserOrigin(window.location.origin); }, []);
@@ -504,6 +611,12 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       fetchActivity();
     }
   }, [tab, fetchActivity]);
+  useEffect(() => {
+    if (tab === "data-mgmt" && !hasFetchedGa4Ref.current && source) {
+      hasFetchedGa4Ref.current = true;
+      fetchGa4Settings(source.projectId);
+    }
+  }, [tab, source, fetchGa4Settings]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -807,6 +920,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       type: f.type || "text",
       isRequired: false,
       sortOrder: i,
+      hidden: false,
     }));
     setFields(applied);
     toast.success("감지된 필드가 적용됐어요. 저장 버튼을 눌러 확정하세요");
@@ -829,6 +943,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
         type: f.type || "text",
         isRequired: false,
         sortOrder: i,
+        hidden: false,
       }));
       setFields(applied);
       // 새 형식이면 감지에 실제로 쓰인 선택자도 같이 받아 온다 — 운영자가 CSS를 몰라도 된다.
@@ -865,6 +980,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       type: "text",
       isRequired: false,
       sortOrder: f.length,
+      hidden: false,
     }]);
   };
 
@@ -1028,9 +1144,33 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
 
+          {/* 기본 정보 탭 */}
+          {tab === "info" && (
+            <InfoTab
+              sourceId={source.id}
+              initial={source.venueConfig ?? {}}
+              onSaved={(venueConfig) => setSource((current) => current ? { ...current, venueConfig } : current)}
+            />
+          )}
+
           {/* 수집 데이터 탭 */}
           {tab === "records" && (
             <div>
+              {sourceReport ? (
+                <div className="mb-4">
+                  <ProjectSummaryCard
+                    data={sourceReport}
+                    title={source.name}
+                    channelColors={channelColors}
+                    onChannelColorChange={setChannelColorOverride}
+                  />
+                </div>
+              ) : sourceReportLoading ? (
+                <div className="mb-4 flex h-32 items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
+                  요약을 불러오는 중...
+                </div>
+              ) : null}
+
               <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                 <p className="text-sm text-muted-foreground">
                   {hasActiveFilter
@@ -1060,7 +1200,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                   </motion.button>
                   <motion.button
                     whileTap={{ scale: 0.92 }} transition={spring}
-                    onClick={fetchRecords}
+                    onClick={() => { fetchRecords(); void fetchSourceReport(source.workspaceId, source.projectId, source.id); }}
                     className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
@@ -1155,8 +1295,8 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                           >
                             <Wand2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                             <div>
-                              <div className="font-medium">중복 정리</div>
-                              <div className="text-muted-foreground text-[11px]">중복 레코드 제거</div>
+                              <div className="font-medium">데이터 정리</div>
+                              <div className="text-muted-foreground text-[11px]">중복·빈 레코드 제거</div>
                             </div>
                           </button>
                           <div className="border-t border-border" />
@@ -1332,7 +1472,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                             등록번호
                           </th>
                         )}
-                        {source.fieldMappings.map((f) => {
+                        {source.fieldMappings.filter((f) => !f.hidden).map((f) => {
                           const colWidth = f.type === "email" ? "max-w-[240px]"
                             : (f.type === "select" || f.type === "checkbox") ? "max-w-[140px]"
                             : "max-w-[200px]";
@@ -1393,7 +1533,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                               {record.registrationNo ?? "-"}
                             </td>
                           )}
-                          {source.fieldMappings.map((f) => {
+                          {source.fieldMappings.filter((f) => !f.hidden).map((f) => {
                             const colWidth = f.type === "email" ? "max-w-[240px]"
                               : (f.type === "select" || f.type === "checkbox") ? "max-w-[80px]"
                               : "max-w-[200px]";
@@ -1514,14 +1654,16 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <h3 className="text-sm font-medium">필드 매핑</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">인덱스는 아래 &ldquo;필드 묶음 선택자&rdquo;로 찾은 순서(0부터)예요</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      인덱스는 아래 &ldquo;필드 묶음 선택자&rdquo;로 찾은 순서(0부터)예요 · 눈 아이콘으로 수집 데이터 표에 보일지 정해요(값은 계속 수집돼요) · &ldquo;필수&rdquo;를 하나라도 켜면, 그 필드들이 전부 채워진 제출만 저장돼요
+                    </p>
                   </div>
                 </div>
 
                 <Reorder.Group axis="y" values={fields} onReorder={setFields} className="space-y-2">
                   {fields.map((field, idx) => (
                     <Reorder.Item key={field.id} value={field}>
-                      <div className="flex items-center gap-2 p-3 rounded-xl border border-border bg-background">
+                      <div className={`flex items-center gap-2 p-3 rounded-xl border border-border bg-background transition-opacity ${field.hidden ? "opacity-50" : ""}`}>
                         <GripVertical className="w-4 h-4 text-muted-foreground/40 cursor-grab shrink-0" />
                         <div className="w-10 shrink-0">
                           <input type="number" min={0} value={field.index}
@@ -1542,6 +1684,23 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
                           <option value="checkbox">체크박스</option>
                           <option value="radio">라디오</option>
                         </select>
+                        <label
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-border text-xs text-muted-foreground shrink-0 cursor-pointer hover:bg-secondary transition-colors"
+                          title="이 필드가 비어있으면 그 제출 자체를 저장하지 않아요 (수집 스크립트가 전송 전에 걸러요)"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={field.isRequired}
+                            onChange={(e) => updateField(idx, { isRequired: e.target.checked })}
+                            className="w-3.5 h-3.5 accent-violet-500"
+                          />
+                          필수
+                        </label>
+                        <button onClick={() => updateField(idx, { hidden: !field.hidden })}
+                          title={field.hidden ? "수집 데이터 표에서 숨김 — 클릭해서 보이기" : "수집 데이터 표에 보임 — 클릭해서 숨기기"}
+                          className={`p-1 rounded-lg transition-colors shrink-0 ${field.hidden ? "text-muted-foreground hover:text-foreground hover:bg-secondary" : "text-violet-500 hover:bg-violet-500/10"}`}>
+                          {field.hidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
                         <button onClick={() => removeField(idx)}
                           className="p-1 rounded-lg hover:bg-red-500/10 hover:text-red-500 transition-colors text-muted-foreground shrink-0">
                           <Trash2 className="w-3.5 h-3.5" />
@@ -2135,6 +2294,110 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
           {/* 데이터 관리 탭 */}
           {tab === "data-mgmt" && (
             <div className="space-y-4 max-w-2xl">
+              {/* 분석 연동 (GA4) — 이 소스가 아니라 프로젝트 전체에 적용되는 설정이라 아래 안내에서 밝힌다 */}
+              <div className="p-4 rounded-2xl border border-border bg-background space-y-3">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-violet-500" />
+                  <h3 className="text-sm font-medium">분석 연동 (GA4)</h3>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  이미 설치된 GA4에서 홈페이지·사전등록 페이지 방문자 수를 가져와 요약 카드 퍼널에 표시해요.
+                  이 프로젝트 전체에 적용되는 설정이에요 — 이 프로젝트에 다른 수집 소스가 있다면 거기도 함께 바뀌어요.
+                </p>
+                {ga4Loading ? (
+                  <div className="flex items-center justify-center h-20">
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-medium text-muted-foreground">GA4 속성</span>
+                      {ga4Properties !== null && ga4Properties.length > 0 ? (
+                        <select
+                          value={ga4SelectValue}
+                          onChange={(e) => {
+                            if (e.target.value === GA4_MANUAL_ENTRY) {
+                              setGa4ManualEntryChoice(true);
+                            } else {
+                              setGa4ManualEntryChoice(false);
+                              setGa4PropertyId(e.target.value);
+                            }
+                          }}
+                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm outline-none transition-colors focus:border-violet-400"
+                        >
+                          <option value="" disabled>속성을 선택하세요</option>
+                          {ga4PropertyId && !ga4Properties.some((p) => p.propertyId === ga4PropertyId) && (
+                            <option value={ga4PropertyId}>현재 값: {ga4PropertyId} (목록에 없음)</option>
+                          )}
+                          {Object.entries(
+                            ga4Properties.reduce<Record<string, Ga4PropertyOption[]>>((groups, p) => {
+                              (groups[p.accountDisplayName] ??= []).push(p);
+                              return groups;
+                            }, {}),
+                          ).map(([account, props]) => (
+                            <optgroup key={account} label={account}>
+                              {props.map((p) => (
+                                <option key={p.propertyId} value={p.propertyId}>
+                                  {p.displayName} ({p.propertyId})
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                          <option value={GA4_MANUAL_ENTRY}>직접 입력...</option>
+                        </select>
+                      ) : (
+                        <>
+                          <input
+                            type="text"
+                            value={ga4PropertyId}
+                            onChange={(e) => setGa4PropertyId(e.target.value)}
+                            placeholder="예: 123456789"
+                            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm outline-none transition-colors focus:border-violet-400"
+                          />
+                          {ga4Properties === null && (
+                            <span className="block text-[11px] text-muted-foreground">
+                              접근 가능한 속성 목록을 불러오지 못해 직접 입력해야 해요.
+                            </span>
+                          )}
+                        </>
+                      )}
+                      {ga4Properties !== null && ga4Properties.length > 0 && ga4ManualEntry && (
+                        <input
+                          type="text"
+                          value={ga4PropertyId}
+                          onChange={(e) => setGa4PropertyId(e.target.value)}
+                          placeholder="예: 123456789"
+                          className="mt-1.5 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm outline-none transition-colors focus:border-violet-400"
+                        />
+                      )}
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-medium text-muted-foreground">사전등록 페이지 경로 (선택)</span>
+                      <input
+                        type="text"
+                        value={ga4RegistrationPagePath}
+                        onChange={(e) => setGa4RegistrationPagePath(e.target.value)}
+                        placeholder="예: /Pre-registration"
+                        className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm outline-none transition-colors focus:border-violet-400"
+                      />
+                      <span className="block text-[11px] text-muted-foreground">
+                        비워두면 사전등록 페이지 방문자는 표시하지 않아요.
+                      </span>
+                    </label>
+                    <motion.button
+                      whileHover={{ y: -1 }}
+                      whileTap={{ scale: 0.96 }}
+                      transition={spring}
+                      onClick={handleSaveGa4}
+                      disabled={ga4Saving}
+                      className="px-3 py-1.5 rounded-lg bg-violet-500 text-xs font-medium text-white transition-colors hover:bg-violet-600 disabled:opacity-50 w-fit"
+                    >
+                      {ga4Saving ? "저장 중..." : "저장"}
+                    </motion.button>
+                  </>
+                )}
+              </div>
+
               {/* 백업 */}
               <div className="p-4 rounded-2xl border border-red-500/30 bg-background space-y-3">
                 <div className="flex items-center gap-2">

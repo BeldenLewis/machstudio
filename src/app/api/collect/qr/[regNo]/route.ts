@@ -44,6 +44,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ regN
   }
 
   const png = await qrPngBuffer(value);
+  const download = new URL(request.url).searchParams.get("download") === "1";
 
   return new NextResponse(new Uint8Array(png), {
     headers: {
@@ -57,6 +58,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ regN
        */
       "Cache-Control": "private, max-age=86400, immutable",
       "Access-Control-Allow-Origin": "*",
+      ...(download ? { "Content-Disposition": `attachment; filename="ticket-${value}.png"` } : {}),
     },
   });
 }

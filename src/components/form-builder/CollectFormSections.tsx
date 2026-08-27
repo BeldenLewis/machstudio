@@ -14,6 +14,7 @@ import { ColorField, BRAND_PRESETS } from "@/components/ui/ColorField";
 import { FIELD_CLS, FINISH, R, UrlField } from "@/components/ui/primitives";
 import { kstDateTimeLocalInput, kstDateTimeLocalToIso } from "@/lib/datetime";
 import { isSupportedCountry } from "@/lib/collect-phone";
+import { COUNTRY_DIALS, flagEmoji } from "@/lib/collect-country";
 import {
   DEFAULT_LOCALE,
   localize,
@@ -85,6 +86,14 @@ export function CollectFormSections({
   const { profile: orgProfile } = useWorkspaceLegalProfile(workspaceId);
   const org = useMemo(() => resolveOrgProfile(orgProfile, config.legal.country), [orgProfile, config.legal.country]);
   const legalLocale = config.legal.country === "kr" ? "ko" : "en";
+  const confirmationEmail = config.confirmationEmail;
+  const hasEmailField = config.fields.some((field) => field.enabled && field.type === "email");
+  const replyToBad = confirmationEmail.replyTo !== ""
+    && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(confirmationEmail.replyTo);
+  const hasEmailEventInfo = ev.eventDates.length > 0
+    || Boolean(localize(ev.venue, DEFAULT_LOCALE))
+    || ev.openingHours.length > 0
+    || ev.extraRows.some((row) => Boolean(localize(row.label, DEFAULT_LOCALE) && localize(row.value, DEFAULT_LOCALE)));
 
   const setEvent = (next: Partial<typeof ev>) => patch({ eventInfo: { ...ev, ...next } });
   const setWindow = (next: Partial<typeof win>) =>
@@ -346,15 +355,26 @@ export function CollectFormSections({
       {/* ── 검증 ─────────────────────────────────────────────────── */}
       <Block title="검증" desc="입력 시점에 강제해요 — 안내 문구가 아니라 규칙입니다.">
         <Row label="연락처 기본 국가" hint="국가번호 없이 입력한 번호를 이 나라 기준으로 읽어요.">
-          <input
-            value={config.validation.defaultCountry}
-            onChange={(e) => patch({ validation: { ...config.validation, defaultCountry: e.target.value.toUpperCase().slice(0, 2) } })}
-            placeholder="US"
-            className={`${FIELD_CLS} font-mono ${countryBad ? "text-red-600 dark:text-red-400" : ""}`}
-          />
+          {/* 예전엔 2글자 코드를 직접 타이핑하게 했었다 — "UK"(존재 안 함, 영국은 GB) 같은
+              오타가 그대로 저장돼 그 폼의 전화가 전부 무효 처리됐다. 실제 방문자 화면의 국가
+              선택(mount.ts)과 같은 목록에서 고르게 하면 애초에 없는 코드를 못 넣는다. */}
+          <select
+            value={countryBad ? "" : config.validation.defaultCountry}
+            onChange={(e) => patch({ validation: { ...config.validation, defaultCountry: e.target.value } })}
+            className={`${FIELD_CLS} ${countryBad ? "text-red-600 dark:text-red-400" : ""}`}
+          >
+            {countryBad && (
+              <option value="" disabled>
+                {config.validation.defaultCountry} — 없는 국가 코드
+              </option>
+            )}
+            {COUNTRY_DIALS.map((c) => (
+              <option key={c.code} value={c.code}>
+                {flagEmoji(c.code)} {c.name} (+{c.dial})
+              </option>
+            ))}
+          </select>
         </Row>
-        {/* "UK" 는 존재하지 않는 코드다(영국은 GB) — 이걸 넣으면 그 폼의 전화가 전부 무효가
-            되는데 화면엔 이유가 안 뜬다. 그래서 저장 전에 여기서 잡는다. */}
         {countryBad && (
           <p className="flex items-start gap-1.5 text-[11px] text-red-600 dark:text-red-400">
             <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
@@ -449,6 +469,96 @@ export function CollectFormSections({
           />
           완료 화면에 QR·등록번호 보여주기
         </label>
+      </Block>
+
+      {/* ── 자동 확인 메일 ───────────────────────────────────────── */}
+      <Block
+        title="자동 확인 메일"
+        desc="등록이 저장된 뒤 QR·등록번호가 담긴 메일을 보내요. API 키와 발신 주소는 Vercel에서 관리합니다."
+        right={(
+          <Switch
+            checked={confirmationEmail.enabled}
+            onChange={(enabled) => patch({ confirmationEmail: { ...confirmationEmail, enabled } })}
+            label="자동 확인 메일 사용"
+          />
+        )}
+      >
+        {confirmationEmail.enabled ? (
+          <>
+            {!hasEmailField && (
+              <p className="flex items-start gap-1.5 text-[11px] text-amber-600">
+                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                표시 중인 이메일 항목이 없어 메일을 보낼 수 없어요. 등록 항목에 이메일을 추가하세요.
+              </p>
+            )}
+            <Row label="메일 제목" hint="비워 두면 ‘등록이 완료되었습니다 — 행사명’으로 보내요.">
+              <input
+                value={localize(confirmationEmail.subject, DEFAULT_LOCALE)}
+                onChange={(e) => patch({ confirmationEmail: { ...confirmationEmail, subject: toLocalized(e.target.value) } })}
+                placeholder="Registration confirmed — Korea Expo LA"
+                className={FIELD_CLS}
+              />
+            </Row>
+            <Row label="첫 문장" hint="비워 두면 ‘You're registered’가 표시돼요.">
+              <input
+                value={localize(confirmationEmail.heading, DEFAULT_LOCALE)}
+                onChange={(e) => patch({ confirmationEmail: { ...confirmationEmail, heading: toLocalized(e.target.value) } })}
+                placeholder="You're registered"
+                className={FIELD_CLS}
+              />
+            </Row>
+            <Row label="안내 문구" hint="줄바꿈도 이메일에 그대로 보여요.">
+              <textarea
+                value={localize(confirmationEmail.body, DEFAULT_LOCALE)}
+                onChange={(e) => patch({ confirmationEmail: { ...confirmationEmail, body: toLocalized(e.target.value) } })}
+                placeholder="Your pre-registration is complete. Please show this QR code at the venue."
+                rows={4}
+                className={`${FIELD_CLS} resize-y leading-relaxed`}
+              />
+            </Row>
+            <Row label="답장 받을 이메일" hint="선택 사항이에요. 비우면 Reply-To를 따로 지정하지 않아요.">
+              <input
+                type="email"
+                value={confirmationEmail.replyTo}
+                onChange={(e) => patch({ confirmationEmail: { ...confirmationEmail, replyTo: e.target.value.trim() } })}
+                placeholder="info@k-expo.org"
+                className={`${FIELD_CLS} ${replyToBad ? "text-red-600 dark:text-red-400" : ""}`}
+              />
+              {replyToBad && <span className="mt-1 block text-[11px] text-red-600 dark:text-red-400">이메일 형식을 확인하세요.</span>}
+            </Row>
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <Switch
+                  checked={confirmationEmail.showQr}
+                  onChange={(showQr) => patch({ confirmationEmail: { ...confirmationEmail, showQr } })}
+                  label="이메일에 QR 표시"
+                />
+                QR 코드 표시
+              </label>
+              <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <Switch
+                  checked={confirmationEmail.includeEventInfo}
+                  onChange={(includeEventInfo) => patch({ confirmationEmail: { ...confirmationEmail, includeEventInfo } })}
+                  label="이메일에 행사 정보 표시"
+                />
+                일정·장소 표시
+              </label>
+            </div>
+            {confirmationEmail.includeEventInfo && !hasEmailEventInfo && (
+              <p className="flex items-start gap-1.5 text-[11px] text-amber-600">
+                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                일정·장소 표시는 켜져 있지만 표시할 값이 없어요. 위의 행사 개요에 개최일, 장소 또는 운영시간을 입력하세요.
+              </p>
+            )}
+            <p className="text-[11px] leading-relaxed text-muted-foreground/70">
+              발신 주소는 서버의 <code className="font-mono">EMAIL_FROM</code>을 사용해요. 이메일에만 넣을 추가 안내는 안내 블록의 위치를 ‘이메일’로 선택하세요.
+            </p>
+          </>
+        ) : (
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            지금은 등록만 저장하고 참가자에게 메일을 보내지 않아요.
+          </p>
+        )}
       </Block>
 
       {/* ── 등록 확인 ─────────────────────────────────────────────── */}

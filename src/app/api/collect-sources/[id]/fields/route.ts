@@ -40,6 +40,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     index: number; key: string; label: string;
     type?: string; isRequired?: boolean; sortOrder?: number;
     matchBy?: string | null; matchValue?: string | null;
+    hidden?: boolean;
   };
 
   await prisma.$transaction([
@@ -58,6 +59,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           // undefined = 보내지 않음 → 보존. null = 명시적 해제.
           matchBy: f.matchBy !== undefined ? f.matchBy : (kept?.matchBy ?? null),
           matchValue: f.matchValue !== undefined ? f.matchValue : (kept?.matchValue ?? null),
+          // hidden 은 편집기가 항상 현재 값을 들고 있는 화면 상태라(앵커와 달리 별도 API로
+          // 세팅되지 않음) 이월할 필요 없이 그대로 받는다.
+          hidden: f.hidden ?? false,
         };
       }),
     }),

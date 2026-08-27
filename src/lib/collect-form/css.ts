@@ -27,7 +27,9 @@ export const COLLECT_FORM_CSS = `
   /* 호스트 상속 차단 — 상속되는 속성만 모아 다시 못 박는다 */
   all:initial;
   display:block; box-sizing:border-box;
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  /* 홈페이지 Shadow 안에서는 --msx-font(Pretendard 별칭)를 물려받고,
+     단독 /f 에서는 그 변수가 없어 **지금까지의 스택 그대로**다. */
+  font-family:var(--msx-font,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Apple SD Gothic Neo","Malgun Gothic",sans-serif);
   font-size:15px; line-height:1.5; color:var(--msf-fg);
   text-align:left; letter-spacing:normal; word-break:break-word;
   /* 520px 은 호스트가 좁은 칸(사이드바 등)에 넣을 때 기준이었는데, 폼을 페이지 본문
@@ -114,15 +116,40 @@ export const COLLECT_FORM_CSS = `
 .msf-chip input{position:absolute;width:1px;height:1px;opacity:0;margin:0}
 .msf-chip:has(input:focus-visible),.msf-chip.is-focus{outline:2px solid var(--msf-accent);outline-offset:2px}
 
+/* 한 번에 펼쳐 보고 고르는 단일 선택. 손가락 터치를 위해 모든 항목을 44px 이상으로 두고,
+   선택 상태는 색과 안쪽 점을 같이 써서 색상만으로 구분하지 않는다. */
+.msf-radio-group{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.msf-radio-option{
+  display:flex !important;align-items:center;gap:10px;min-width:0;min-height:48px;
+  padding:10px 12px !important;border:1px solid var(--msf-line) !important;border-radius:var(--msf-radius) !important;
+  background:var(--msf-bg);color:var(--msf-fg);font-size:14px;line-height:1.35;cursor:pointer;
+  transition:border-color .15s ease,background .15s ease,box-shadow .15s ease;
+}
+.msf-radio-option:hover{border-color:var(--msf-accent) !important}
+.msf-radio-option[data-on="1"]{border-color:var(--msf-accent) !important;background:color-mix(in srgb,var(--msf-accent) 8%,var(--msf-bg));box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.msf-radio-option input{position:absolute;width:1px;height:1px;opacity:0;margin:0}
+.msf-radio-mark{display:grid !important;place-items:center;flex:0 0 18px;width:18px;height:18px;border:2px solid var(--msf-line);border-radius:999px;background:var(--msf-bg)}
+.msf-radio-option[data-on="1"] .msf-radio-mark{border:5px solid var(--msf-accent)}
+.msf-radio-option:has(input:focus-visible),.msf-radio-option.is-focus{outline:2px solid var(--msf-accent);outline-offset:2px}
+@media (max-width:440px){.msf-radio-group{grid-template-columns:1fr}}
+
 /* 체크박스 한 줄 */
-.msf-check{display:flex;align-items:flex-start;gap:9px;font-size:13px;cursor:pointer;min-height:24px}
-.msf-check input{width:18px;height:18px;margin:2px 0 0;flex:0 0 auto;accent-color:var(--msf-accent);cursor:pointer}
+.msf-check{
+  display:flex !important;align-items:center !important;gap:10px !important;
+  min-height:24px;font-size:13px;line-height:1.45;cursor:pointer
+}
+.msf-check input{
+  display:block !important;width:18px !important;height:18px !important;min-width:18px !important;
+  margin:0 !important;padding:0 !important;flex:0 0 18px !important;
+  accent-color:var(--msf-accent);cursor:pointer
+}
+.msf-check span{display:block !important;min-width:0;line-height:1.45 !important}
 
 /* 동의 항목 한 줄 — 체크박스 라벨(가변 폭)과 "Details" 버튼(고정 폭)을 한 줄에 둔다.
    Details 가 라벨 아래 혼자 떨어져 있으면 그 항목과 상관없는 것처럼 보인다. */
-.msf-consent-row{display:flex;align-items:flex-start;gap:10px}
+.msf-consent-row{display:flex !important;align-items:center !important;gap:12px !important}
 .msf-consent-row .msf-check{flex:1;min-width:0}
-.msf-consent-row .msf-more{flex:0 0 auto;margin-top:1px}
+.msf-consent-row .msf-more{flex:0 0 auto;margin:0 !important}
 
 /* ── 안내 블록 ─────────────────────────────── */
 .msf-notice{background:var(--msf-soft);border-radius:var(--msf-radius);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
@@ -160,14 +187,23 @@ export const COLLECT_FORM_CSS = `
 .msf-state-title{font-size:16px;font-weight:700}
 .msf-state-body{font-size:13px;color:var(--msf-muted);margin-top:6px}
 
-.msf-done{text-align:center;background:var(--msf-soft);border-radius:var(--msf-radius);padding:26px 20px}
+.msf-done{
+  display:flex !important;flex-direction:column !important;align-items:center !important;
+  width:100% !important;text-align:center;background:var(--msf-soft);border-radius:var(--msf-radius);padding:26px 20px
+}
 .msf-done-title{font-size:17px;font-weight:700}
 /**
  * 등록번호는 **현장에서 눈으로 읽고 손으로 친다**(설계 §9.1·§12).
- * 등폭 글꼴 + 넓은 자간이라야 0/O, 1/l 을 헷갈리지 않는다.
+ * 넓은 자간과 **자릿수가 고르게 서는 숫자**라야 불러 주고 받아 적기 좋다.
+ *
+ * 홈페이지 안에서는 --msx-font(Pretendard)를 물려받고 tabular-nums 로 자릿수를 세운다.
+ * 단독 /f 에서는 그 변수가 없어 **지금까지의 등폭 글꼴 그대로**다 — 9/1 오픈을 앞둔
+ * 화면의 생김새를 바꾸지 않는다.
  */
 .msf-regno{
-  margin-top:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  margin-top:12px;
+  font-family:var(--msx-font,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);
+  font-variant-numeric:tabular-nums;
   font-size:19px;font-weight:700;letter-spacing:.14em;
 }
 .msf-regno-label{font-size:11px;color:var(--msf-muted);margin-top:4px;letter-spacing:normal}
@@ -180,7 +216,8 @@ export const COLLECT_FORM_CSS = `
  * 사라진 QR 은 현장에서 줄을 만든다.
  */
 .msf-qr{
-  display:inline-block;margin:14px auto 0;
+  display:block !important;width:220px !important;min-width:220px !important;
+  margin:14px auto 0 !important;
   background:#ffffff !important;padding:10px !important;border-radius:12px !important;
 }
 /**
@@ -200,32 +237,46 @@ export const COLLECT_FORM_CSS = `
 
 /* ── 등록 확인(Find My QR) ──────────────────── */
 .msf-lookup{display:flex;flex-direction:column;gap:14px}
-.msf-found{text-align:center;background:var(--msf-soft);border-radius:var(--msf-radius);padding:22px 20px}
+.msf-found{
+  display:flex !important;flex-direction:column !important;align-items:center !important;
+  width:100% !important;text-align:center;background:var(--msf-soft);border-radius:var(--msf-radius);padding:22px 20px
+}
 .msf-found-name{font-size:18px;font-weight:800}
 .msf-found-type{font-size:12px;color:var(--msf-muted);margin-top:2px}
 
 /* 참관객 유형 배지 — 유형마다 입장 동선이 다르다. 이름보다 먼저 눈에 들어와야 한다.
    키컬러를 그대로 칠하지 않고 옅게 깐다: QR 카드가 주인공이라 배지가 그걸 이기면 안 된다. */
 .msf-badge{
-  display:inline-block;margin-bottom:10px;padding:6px 16px;border-radius:999px;
-  font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--msf-accent);background:color-mix(in srgb, var(--msf-accent) 12%, #fff);
-  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--msf-accent) 28%, transparent);
+  display:inline-flex !important;align-items:center;justify-content:center;min-width:112px;
+  margin:0 0 10px !important;padding:8px 18px !important;border-radius:999px;
+  font-size:14px;font-weight:900;line-height:1;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--msf-badge-fg,var(--msf-accent-fg)) !important;
+  background:var(--msf-badge-bg,var(--msf-accent)) !important;
+  -webkit-text-fill-color:var(--msf-badge-fg,var(--msf-accent-fg)) !important;
+  box-shadow:0 4px 12px color-mix(in srgb, var(--msf-badge-bg,var(--msf-accent)) 24%, transparent);
 }
 
-/* 본인 확인 줄 — 가려진 연락처(collect-lookup 의 maskEmail/maskPhone). */
+/* 본인 확인 줄 — 가려진 연락처(collect-lookup 의 maskEmail/maskPhone).
+   inline-grid인 이유: 열을 auto 1fr로 두면 라벨-값이 카드 폭 끝까지 벌어진다(dd가
+   text-align:right로 오른쪽 끝에 붙어서). auto auto로 두 열 다 내용 크기에 맞추고
+   inline-grid로 두면, 부모 .msf-found의 text-align:center가 이 블록 자체를 카드
+   가운데로 보내면서 라벨·값은 서로 가깝게 붙는다. */
 .msf-idcheck{
-  display:grid;grid-template-columns:auto 1fr;gap:6px 16px;
-  margin:14px 0 0;padding:12px 14px;border-radius:var(--msf-radius);
+  display:grid !important;grid-template-columns:auto minmax(0,1fr);gap:6px 16px;
+  width:min(100%,360px) !important;min-width:0 !important;
+  margin:14px auto 0 !important;padding:12px 14px !important;border-radius:var(--msf-radius);
   background:var(--msf-bg);text-align:left;font-size:13px;
 }
-.msf-idcheck dt{color:var(--msf-muted)}
-.msf-idcheck dd{margin:0;text-align:right;font-weight:700;word-break:break-all}
+.msf-idcheck dt{display:block !important;color:var(--msf-muted)}
+.msf-idcheck dd{display:block !important;min-width:0;margin:0 !important;text-align:right;font-weight:700;word-break:break-all}
 
 /* QR 저장 — 캡처가 안 되는 기기(일부 사내폰·키오스크)가 있어 파일로도 준다. */
 .msf-save{
   display:block;width:100%;margin-top:16px;padding:14px 18px;border:0;border-radius:var(--msf-radius);
-  background:var(--msf-accent);color:var(--msf-accent-fg);font:inherit;font-weight:800;cursor:pointer;
+  background:var(--msf-accent) !important;color:var(--msf-accent-fg) !important;
+  -webkit-text-fill-color:var(--msf-accent-fg) !important;
+  font:inherit;font-weight:800;cursor:pointer;
+  text-align:center;text-decoration:none !important;
 }
 .msf-save:hover{filter:brightness(1.08)}
 .msf-save-hint{margin-top:8px;font-size:11px;color:var(--msf-muted)}
@@ -253,4 +304,61 @@ export const COLLECT_FORM_CSS = `
 @media (prefers-reduced-motion:reduce){
   .msf *{transition:none !important;animation:none !important}
 }
+
+/* ── 동의 전문 팝업 ────────────────────────── */
+/* document.body 에 새 루트로 붙는다(대회 폼 mc-overlay 와 같은 패턴, mount.ts openTermsPopup
+   주석 참고) — .msf 리셋을 다시 받아야 해서 클래스에 msf 를 같이 건다. 뒤에 오는 규칙이라
+   특이도가 같아도 .msf 의 display:block/max-width:640px 를 순서로 이긴다. */
+.msf-overlay{
+  position:fixed;inset:0;z-index:2147483000;max-width:none;margin:0;
+  display:flex;align-items:center;justify-content:center;padding:16px;
+  background:rgba(0,0,0,.55);
+}
+.msf-terms{
+  width:100%;max-width:480px;max-height:calc(100dvh - 32px);
+  display:flex;flex-direction:column;overflow:hidden;
+  background:var(--msf-bg);border-radius:var(--msf-radius);
+  box-shadow:0 24px 64px rgba(0,0,0,.32);
+}
+.msf-terms-head{font-size:15px;font-weight:700;padding:16px 18px;border-bottom:1px solid var(--msf-line)}
+.msf-terms-body{padding:18px;overflow-y:auto;font-size:13px;line-height:1.7;color:var(--msf-muted);white-space:pre-wrap}
+.msf-terms-actions{display:flex;gap:8px;padding:14px 18px;border-top:1px solid var(--msf-line)}
+.msf-terms-actions button{
+  flex:1;font:inherit;font-size:14px;font-weight:700;cursor:pointer;
+  padding:11px !important;border-radius:calc(var(--msf-radius) - 2px) !important;border:0 !important;
+}
+.msf-terms-close{background:var(--msf-soft) !important;color:var(--msf-fg) !important}
+.msf-terms-agree{background:var(--msf-accent) !important;color:var(--msf-accent-fg) !important}
 `;
+
+/** 문서든 ShadowRoot 든 **한 벌만** 넣는다. */
+export const COLLECT_FORM_STYLE_ID = "msf-css";
+
+/**
+ * 스타일을 그 루트에 설치한다.
+ *
+ * 단독 `/f` 는 문서 head 에 넣는다(지금까지와 같다). 홈페이지 섹션은 **그 ShadowRoot 안**에
+ * 넣는다 — 문서 head 에 넣으면 Shadow 안까지 닿지 않아 폼이 스타일 없이 그려지고,
+ * 동시에 파트너 사이트의 전역 스타일을 우리가 늘리는 셈이 된다.
+ */
+export function ensureFormStyles(root?: Document | ShadowRoot): void {
+  const target = root ?? (typeof document !== "undefined" ? document : null);
+  if (!target) return;
+
+  if (target.nodeType === 9) {
+    const doc = target as Document;
+    if (doc.getElementById(COLLECT_FORM_STYLE_ID)) return;
+    const style = doc.createElement("style");
+    style.id = COLLECT_FORM_STYLE_ID;
+    style.textContent = COLLECT_FORM_CSS;
+    doc.head.appendChild(style);
+    return;
+  }
+
+  const shadow = target as ShadowRoot;
+  if (shadow.querySelector("#" + COLLECT_FORM_STYLE_ID)) return;
+  const style = shadow.ownerDocument.createElement("style");
+  style.id = COLLECT_FORM_STYLE_ID;
+  style.textContent = COLLECT_FORM_CSS;
+  shadow.appendChild(style);
+}

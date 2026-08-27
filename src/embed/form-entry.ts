@@ -17,6 +17,9 @@
 import { mountCollectForm, type CollectFormHandle } from "@/lib/collect-form/mount";
 import { mountCollectLookup, type LookupHandle } from "@/lib/collect-form/lookup-mount";
 import { normalizeCollectForm } from "@/lib/collect-form-config";
+import {
+  getFormTarget, isPreviewMode, unregisterFormTarget, type FormTargetRecord,
+} from "@/lib/collect-form/target-registry";
 
 export interface FormBootConfig {
   sourceId: string;
@@ -35,6 +38,15 @@ export interface FormBootConfig {
   view?: "form" | "check";
 }
 
+/**
+ * 지정 자리에 붙는 경로.
+ *
+ * 홈페이지 섹션의 마운트 지점은 Shadow 안이라 `document.querySelector` 로 보이지 않는다.
+ * 그래서 홈페이지 런타임이 **먼저 자리를 예약하고**, 스크립트 태그에 열쇠를 실어 보낸다.
+ * 열쇠가 없으면 아래 탐색 경로를 그대로 탄다 — 단독 /f 는 아무것도 달라지지 않는다.
+ */
+type TargetMount = { record: FormTargetRecord; key: string };
+
 interface Instance {
   handle: CollectFormHandle | LookupHandle | null;
   mount: HTMLElement | null;
@@ -42,6 +54,8 @@ interface Instance {
   observer: MutationObserver | null;
   remounts: number;
   remountWindowStart: number;
+  /** 지정 자리로 붙은 경우에만 채워진다. 문서 탐색 경로에서는 null 이다. */
+  target: TargetMount | null;
 }
 
 type Registry = Record<string, Instance>;
@@ -118,14 +132,18 @@ function unhideWidget(mount: HTMLElement): void {
 
 function render(inst: Instance): void {
   const view = inst.cfg.view === "check" ? "check" : "form";
-  const mount = findMount(inst.cfg.sourceId, view);
+
+  // 지정 자리가 있으면 탐색하지 않는다 — 그 자리는 이미 예약된 것이다.
+  const record = inst.target?.record ?? null;
+  const mount = record ? record.container : findMount(inst.cfg.sourceId, view);
   if (!mount) {
     warn("마운트 지점을 찾지 못했습니다: " + inst.cfg.sourceId);
     return;
   }
-  mount.setAttribute("data-mach-form-claimed", inst.cfg.sourceId);
+  if (!record) mount.setAttribute("data-mach-form-claimed", inst.cfg.sourceId);
   inst.mount = mount;
-  unhideWidget(mount);
+  // 아임웹 위젯 처리는 문서에 직접 붙은 경우에만 뜻이 있다.
+  if (!record) unhideWidget(mount);
 
   if (!inst.cfg.active) {
     // 비활성 소스는 **조용히 아무것도 그리지 않는다**(설계 §17). 방문자에게 오류를 보이면
@@ -136,14 +154,25 @@ function render(inst: Instance): void {
 
   inst.handle?.destroy();
   const config = normalizeCollectForm(inst.cfg.formConfig);
+  /**
+   * **부작용 판정은 예약 정보에서만 온다.** payload 에 실린 값을 믿으면 미리보기 화면에서
+   * 실제 등록이 저장된다 — payload 는 캐시된 스크립트에 실려 오고 그 스크립트는 라이브와
+   * 같은 파일이다.
+   */
+  const preview = record ? isPreviewMode(record.mode) : false;
+  const styleRoot = record?.styleRoot;
   inst.handle = view === "check"
-    ? mountCollectLookup({ mount, config, origin: inst.cfg.origin, sourceId: inst.cfg.sourceId })
+    ? mountCollectLookup({ mount, config, origin: inst.cfg.origin, sourceId: inst.cfg.sourceId, preview, styleRoot })
     : mountCollectForm({
         mount,
         config,
         origin: inst.cfg.origin,
         sourceId: inst.cfg.sourceId,
         serverNow: inst.cfg.serverNow,
+        preview,
+        styleRoot,
+        // 예약이 자리를 함께 줬으면 전문 팝업이 거기로 간다. 안 줬으면 document.body.
+        overlay: record?.overlay,
         /**
          * 라우트가 SWR 을 짧게(60초) 잡아 두므로 남는 지연은 작고, 런타임에도 5분 넘게
          * 과거인 serverNow 를 버리는 가드가 있다. 스크립트 태그로는 응답 헤더(Age)를
@@ -162,6 +191,8 @@ function render(inst: Instance): void {
  */
 function watchForRerender(inst: Instance): void {
   if (typeof MutationObserver === "undefined") return;
+  // 지정 자리는 자기 루트의 생존만 본다 — 문서 재렌더와 무관하다.
+  if (inst.target) return watchTargetLifetime(inst);
   const target = inst.mount?.parentElement;
   if (!target) return;
 
@@ -187,16 +218,95 @@ function watchForRerender(inst: Instance): void {
   inst.observer = observer;
 }
 
-export function boot(cfg: FormBootConfig): void {
+/**
+ * 지정 자리의 **생존**만 본다.
+ *
+ * 문서 기준(`document.contains`)으로 보면 안 된다. 우리 폼은 Shadow 안에 있어서
+ * `document.contains(root)` 는 **항상 false** 다 — 그대로 두면 호스트가 무엇을 하든
+ * 재마운트가 끝없이 돌고, 타이핑 중인 입력이 계속 날아가며, 재마운트 한도만 헛되이 태운다.
+ *
+ * 그리고 여기서는 **다시 붙이지 않는다.** 자리가 사라졌다는 것은 홈페이지 섹션이 정리됐다는
+ * 뜻이고, 다시 그리는 것은 그쪽의 일이다(새 자리를 예약하고 다시 부른다).
+ * 여기서 할 일은 한 번 정리하는 것뿐이다.
+ */
+function watchTargetLifetime(inst: Instance): void {
+  const target = inst.target;
+  if (!target) return;
+
+  let done = false;
+  const cleanup = () => {
+    if (done) return;
+    done = true;
+    inst.observer?.disconnect();
+    inst.observer = null;
+    inst.handle?.destroy();
+    inst.handle = null;
+    unregisterFormTarget(target.key);
+    delete registry()[target.key];
+  };
+
+  // 예약한 쪽이 먼저 끊어 주면 그걸 따른다 — 가장 정확한 신호다.
+  target.record.disposeSignal?.addEventListener("abort", cleanup, { once: true });
+
+  if (typeof MutationObserver === "undefined") return;
+  const parent = target.record.container.parentNode;
+  if (!parent) return;
+  const observer = new MutationObserver(() => {
+    if (target.record.container.isConnected) return;
+    cleanup();
+  });
+  observer.observe(parent, { childList: true });
+  inst.observer = observer;
+}
+
+/**
+ * 예약된 자리에 붙인다. 홈페이지 런타임이 쓰는 진입점이다.
+ * `boot` 도 열쇠가 있으면 여기로 온다 — 경로가 하나다.
+ */
+export function bootInto(cfg: FormBootConfig, record: FormTargetRecord, key: string): void {
+  start(cfg, key, { record, key });
+}
+
+export function boot(cfg: FormBootConfig, bootScript?: HTMLScriptElement | null): void {
   try {
-    const reg = registry();
+    /**
+     * `document.currentScript` 는 **동기 실행 중에만** 값이 있다. 아래 어디서든 await 나
+     * setTimeout 을 한 번 거치면 null 이 된다 — 그래서 제일 먼저 읽는다.
+     */
+    const script = bootScript ?? (typeof document !== "undefined"
+      ? (document.currentScript as HTMLScriptElement | null)
+      : null);
+    const targetKey = script?.dataset?.msFormTarget;
+
+    if (targetKey) {
+      const record = getFormTarget(targetKey);
+      if (!record) {
+        // 이미 정리된 자리다. 문서 탐색으로 **떨어지지 않는다** — 홈페이지용 폼이 엉뚱한
+        // 자리에 붙으면 미리보기 폼이 라이브 자리에 앉는 일이 생긴다.
+        warn("예약된 자리를 찾지 못했습니다: " + targetKey);
+        return;
+      }
+      bootInto(cfg, record, targetKey);
+      return;
+    }
+
     // 같은 소스라도 폼과 등록 확인은 별개 인스턴스다 — 한 키를 쓰면 나중에 부트된 쪽이
     // 앞의 것을 destroy 해 버린다(둘 다 붙은 페이지가 기본 구성이다).
-    const key = cfg.sourceId + ":" + (cfg.view === "check" ? "check" : "form");
+    start(cfg, cfg.sourceId + ":" + (cfg.view === "check" ? "check" : "form"), null);
+  } catch (e) {
+    // 호스트 페이지를 절대 깨뜨리지 않는다.
+    warn("부트 실패", e);
+  }
+}
+
+function start(cfg: FormBootConfig, key: string, target: TargetMount | null): void {
+  try {
+    const reg = registry();
     const prev = reg[key];
     if (prev) {
       // 재진입은 조기 return 이 아니라 재마운트 — 호스트 재렌더 후 스크립트가 다시 돌 수 있다.
       prev.cfg = cfg;
+      prev.target = target;
       render(prev);
       return;
     }
@@ -207,17 +317,19 @@ export function boot(cfg: FormBootConfig): void {
       observer: null,
       remounts: 0,
       remountWindowStart: Date.now(),
+      target,
     };
     reg[key] = inst;
 
-    const start = () => {
+    const run = () => {
       render(inst);
       watchForRerender(inst);
     };
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", start, { once: true });
+    // 지정 자리는 이미 만들어져 있다 — 문서 로딩을 기다릴 이유가 없다.
+    if (!target && document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", run, { once: true });
     } else {
-      start();
+      run();
     }
   } catch (e) {
     // 호스트 페이지를 절대 깨뜨리지 않는다.

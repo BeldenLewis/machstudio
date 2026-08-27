@@ -7,36 +7,15 @@
  * 이 문자열을 그대로 서빙한다. 라우트만 열어도 동작해야 하므로 런타임에 번들러를 돌리지 않는다.
  * predev/prebuild 에서 재생성되며, 소스가 바뀌었는데 생성물이 낡으면 해시로 드러난다.
  */
+import { competitionSourceHash } from "./runtime-hash.mjs";
 import { build } from "esbuild";
-import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(root, "src/generated/competition-runtime.ts");
 
-/** 입력 소스 트리 해시 — esbuild 버전이 올라가도 무관하게 stale 을 판정한다. */
-function sourceHash() {
-  const files = [
-    join(root, "src/embed/competition-entry.ts"),
-    join(root, "src/lib/competition-render.ts"),
-    join(root, "src/lib/competition-config.ts"),
-    join(root, "src/lib/competition-status.ts"),
-    join(root, "src/lib/notice/mount.ts"),
-    join(root, "src/lib/notice/css.ts"),
-    join(root, "src/lib/notice/shell-css.ts"),
-    join(root, "src/lib/notice/build-model.ts"),
-    join(root, "src/lib/notice/view-hero.ts"),
-    join(root, "src/lib/notice/view-sections.ts"),
-    join(root, "src/lib/notice/config.ts"),
-  ];
-  const hash = createHash("sha256");
-  // 줄바꿈을 통일해서 넣는다 — Windows 체크아웃은 CRLF 라 그대로 해시하면
-  // 리눅스(CI)와 값이 갈리고, 생성물이 매번 바뀐 것처럼 보인다.
-  for (const f of files) hash.update(readFileSync(f, "utf8").split("\r\n").join("\n"));
-  return "sha256:" + hash.digest("hex").slice(0, 32);
-}
 
 const result = await build({
   entryPoints: [join(root, "src/embed/competition-entry.ts")],
@@ -58,7 +37,7 @@ writeFileSync(
   OUT,
   `// 자동 생성 — 직접 고치지 마세요. \`node scripts/build-competition-runtime.mjs\` 로 재생성됩니다.\n` +
     `// 소스: src/embed/competition-entry.ts + src/lib/competition-*.ts\n\n` +
-    `export const COMPETITION_RUNTIME_SRC_HASH = ${JSON.stringify(sourceHash())};\n\n` +
+    `export const COMPETITION_RUNTIME_SRC_HASH = ${JSON.stringify(competitionSourceHash(root))};\n\n` +
     `export const COMPETITION_RUNTIME_JS = ${JSON.stringify(js)};\n`,
 );
 

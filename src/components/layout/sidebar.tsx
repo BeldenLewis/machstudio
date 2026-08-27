@@ -5,8 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  LayoutDashboard, BarChart3, LogOut,
-  ChevronDown, Plus, FolderOpen, Check, Loader2, Settings2, Settings, Database, Video, Link2, Pencil, Trash2, ShieldCheck, Menu, Trophy,
+  LayoutDashboard, LayoutGrid, BarChart3, LogOut,
+  ChevronDown, Plus, FolderOpen, Check, Loader2, Settings2, Settings, Database, Video, Link2, Pencil, Trash2, ShieldCheck, Menu, Trophy, Globe,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useWorkspace } from "@/contexts/workspace";
@@ -21,14 +21,44 @@ import NotificationPrefsModal from "@/components/settings/NotificationPrefsModal
 import { ApiTokenIcon, NotificationSettingsIcon } from "@/components/settings/settings-icons";
 import { isSuperAdminEmail } from "@/lib/super-admin";
 
-const navItems = [
+/**
+ * `capability` 가 붙은 항목은 **서버가 준비됐다고 답할 때만** 그린다.
+ *
+ * 준비되지 않은 항목을 회색으로 두거나 눌리는 빈 항목으로 남기지 않는다 — 눌렀는데
+ * 아무 일도 안 일어나는 메뉴는 고장으로 읽히고, 아직 공개 전인 기능의 존재를 알릴
+ * 이유도 없다. **아예 없다.**
+ */
+export interface NavItem {
+  href: string;
+  icon: typeof LayoutDashboard;
+  label: string;
+  capability?: "expoHomepage";
+}
+
+export const navItems: NavItem[] = [
   { href: "/dashboard", icon: LayoutDashboard, label: "대시보드" },
   { href: "/collect", icon: Database, label: "사전등록" },
   { href: "/analytics", icon: BarChart3, label: "광고 성과" },
   { href: "/utm-builder", icon: Link2, label: "UTM 빌더" },
   { href: "/webinar", icon: Video, label: "웨비나" },
   { href: "/competition", icon: Trophy, label: "대회" },
+  { href: "/homepage", icon: Globe, label: "홈페이지", capability: "expoHomepage" },
 ];
+
+/**
+ * 준비되지 않은 기능의 항목은 **배열에서 빠진다.**
+ *
+ * 그려 놓고 `disabled` 로 두면 눌렀는데 아무 일도 안 일어나는 메뉴가 되고, 그건
+ * 고장으로 읽힌다. 그리고 아직 공개 전인 기능의 존재를 브라우저에 알릴 이유도 없다.
+ *
+ * 판정값은 **서버가 prop 으로 내려 준다** — 이 파일은 준비 상태를 스스로 조회하지 않는다.
+ */
+export function filterNavItems(
+  items: readonly NavItem[],
+  flags: { expoHomepageEnabled: boolean },
+): NavItem[] {
+  return items.filter((item) => item.capability !== "expoHomepage" || flags.expoHomepageEnabled);
+}
 
 function Dropdown({
   open, onClose, children,
@@ -60,7 +90,15 @@ function Dropdown({
   );
 }
 
-export function Sidebar() {
+export interface SidebarProps {
+  /**
+   * 홈페이지 메뉴를 그릴지. **서버가 요청 시점에 판정해 내려 준다**(`(app)/layout.tsx`).
+   * 클라이언트가 스스로 조회하지 않는다.
+   */
+  expoHomepageEnabled?: boolean;
+}
+
+export function Sidebar({ expoHomepageEnabled = false }: SidebarProps = {}) {
   const pathname = usePathname();
   const router = useRouter();
   const confirm = useConfirm();
@@ -69,6 +107,11 @@ export function Sidebar() {
     workspace, workspaces, projects, currentProject,
     setCurrentProject, switchWorkspace, refreshProjects, isLoading,
   } = useWorkspace();
+
+  const visibleNavItems = useMemo(
+    () => filterNavItems(navItems, { expoHomepageEnabled }),
+    [expoHomepageEnabled],
+  );
 
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
   const [wsSettingsOpen, setWsSettingsOpen] = useState(false);
@@ -501,7 +544,7 @@ export function Sidebar() {
       {/* 네비게이션 */}
 
       <nav className="flex-1 px-3 py-1 space-y-0.5 overflow-y-auto">
-        {navItems.map(({ href, icon: Icon, label }) => {
+        {visibleNavItems.map(({ href, icon: Icon, label }) => {
           const isActive = pathname === href || pathname.startsWith(href + "/");
           return (
             <motion.div key={href} whileTap={{ scale: 0.96 }} className="relative">
@@ -546,6 +589,17 @@ export function Sidebar() {
             관리자
           </Link>
         )}
+        <Link
+          href="/summary-dashboard"
+          className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors ${
+            pathname === "/summary-dashboard"
+              ? "bg-violet-500/10 text-violet-500 font-medium"
+              : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+          }`}
+        >
+          <LayoutGrid className="w-4 h-4" />
+          요약 대시보드
+        </Link>
         <div className="flex items-center gap-1">
           <NotificationPanel />
           <ThemeToggle />
