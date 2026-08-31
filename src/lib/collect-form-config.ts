@@ -159,6 +159,8 @@ export interface CollectConsentItem {
   label: Localized;
   /** "자세히" 팝업 본문. 줄바꿈 보존. */
   body: Localized;
+  /** 본문을 일반 텍스트 또는 안전하게 제한된 HTML로 표시한다. */
+  bodyFormat: "text" | "html";
   /**
    * 기본 체크. **기본값 false 다**(설계 §7).
    * 필수 동의는 어차피 체크해야 제출되므로 사전 체크의 실익이 없고, GDPR 관할(파리)에서는
@@ -413,6 +415,7 @@ function normalizeConsentItem(raw: unknown, locale: string, fallback: CollectCon
     enabled: r.enabled === undefined ? fallback.enabled : r.enabled !== false,
     label: toLocalized(r.label, locale),
     body: toLocalized(r.body, locale),
+    bodyFormat: r.bodyFormat === "html" ? "html" : "text",
     // 명시적으로 true 일 때만 사전 체크한다 — 기본은 항상 미체크(설계 §7).
     defaultChecked: r.defaultChecked === true,
   };

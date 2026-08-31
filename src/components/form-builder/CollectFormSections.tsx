@@ -293,7 +293,7 @@ export function CollectFormSections({
           addLabel="안내 추가"
           makeItem={() => ({
             id: crypto.randomUUID().slice(0, 8), enabled: true, placement: "above-consent",
-            title: {}, body: {}, mode: "notice", collapsible: false,
+            title: {}, body: {}, bodyFormat: "text", mode: "notice", collapsible: false,
           })}
           emptyState={<p className="rounded-xl bg-secondary/40 p-4 text-center text-[11px] text-muted-foreground">안내가 없어요</p>}
           renderRow={({ item, handle, removeButton, patch: patchRow }) => (
