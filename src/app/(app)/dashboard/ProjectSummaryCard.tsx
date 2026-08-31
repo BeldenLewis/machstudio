@@ -102,7 +102,7 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
       */}
       <div className="mt-4 flex min-w-0 flex-nowrap items-stretch gap-3 overflow-x-auto pb-1 print:mt-1.5 print:grid print:grid-cols-[minmax(0,2.1fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_minmax(0,0.7fr)] print:gap-1.5 print:overflow-visible print:pb-0">
         {/* overflow-hidden 을 안 둔다 — 도넛 옆 범례가 폭이 좁아 아래로 줄바꿈될 수 있는데, 잘라내면 범례가 통째로 사라진다. */}
-        <div className="min-w-[430px] flex-[1.15_1_0%] print:min-w-0">
+        <div className="min-w-[210px] flex-[1.15_1_0%] print:min-w-0">
           <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground print:mb-1 print:text-[9px]">
             <Route className="h-3.5 w-3.5 print:h-2.5 print:w-2.5" />
             유입경로
