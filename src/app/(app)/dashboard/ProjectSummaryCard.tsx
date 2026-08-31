@@ -92,7 +92,8 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
         칸이 비지만(구멍) 그게 트랙이 어긋나 겹치는 것보다 훨씬 안전하다.
       */}
       <div className="mt-4 flex min-w-0 flex-nowrap items-stretch gap-3 overflow-x-auto pb-1 print:mt-1.5 print:grid print:grid-cols-5 print:gap-1.5 print:overflow-visible print:pb-0">
-        <div className="min-w-[210px] flex-[1.15_1_0%] print:min-w-0 print:overflow-hidden">
+        {/* overflow-hidden 을 안 둔다 — 도넛 옆 범례가 폭이 좁아 아래로 줄바꿈될 수 있는데, 잘라내면 범례가 통째로 사라진다. */}
+        <div className="min-w-[210px] flex-[1.15_1_0%] print:min-w-0">
           <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground print:mb-1 print:text-[9px]">
             <Route className="h-3.5 w-3.5 print:h-2.5 print:w-2.5" />
             유입경로
@@ -127,7 +128,7 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
                 </p>
                 {stage.daily && stage.daily.length >= 2 && (
                   <div className="mt-auto min-w-0 overflow-hidden pt-3 print:mx-2 print:mt-1 print:rounded-md print:bg-secondary/40 print:pt-1">
-                    <Sparkline points={stage.daily} printHeight={16} />
+                    <Sparkline points={stage.daily} />
                   </div>
                 )}
               </div>
@@ -152,7 +153,7 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
           <ComparisonRows weekly={data.performance.rangeChange} yearly={previousYear?.rangeChange ?? null} />
           {trend.length >= 2 && (
             <div className="mt-auto min-w-0 overflow-hidden pt-3 print:mx-2 print:mt-1 print:rounded-md print:bg-secondary/40 print:pt-1">
-              <Sparkline points={trend} printHeight={16} />
+              <Sparkline points={trend} />
             </div>
           )}
         </div>
