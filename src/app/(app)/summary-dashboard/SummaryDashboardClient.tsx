@@ -71,10 +71,10 @@ export default function SummaryDashboardClient() {
   return (
     <div className="summary-dashboard-print space-y-4 p-4 sm:p-6 lg:p-8 print:space-y-2 print:p-0">
       {/*
-        세로 A4 유지. 도넛/스파크라인은 더 이상 CSS display 토글로 화면·인쇄 마크업을
-        같이 심어두지 않는다 — usePrintMode() 로 JS 에서 아예 다른 마크업을 렌더링한다
-        (인쇄 미리보기가 화면용 recharts 도넛을 그대로 보여준 문제가 반복돼 CSS 캐스케이드에
-        기대는 걸 그만뒀다). 여기 남은 건 페이지 크기/여백뿐이다.
+        세로 A4 유지. 도넛/스파크라인은 화면·인쇄가 같은 recharts 컴포넌트를 쓰고 크기만
+        print: 로 줄인다 — 인쇄용으로 별도 마크업을 갈아 끼우는 방식(CSS 토글, JS 분기 둘 다)은
+        인쇄 미리보기가 전환을 반영하지 않아 반복적으로 실패했다. 갈아 끼울 게 없으면
+        어긋날 수도 없다. 여기 남은 건 페이지 크기/여백뿐이다.
       */}
       <style>{`
         @media print {

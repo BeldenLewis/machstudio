@@ -3,57 +3,27 @@
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
 import { useId } from "react";
 import { useChartColors } from "@/components/ui/use-chart-colors";
-import { usePrintMode } from "@/components/ui/use-print-mode";
 
 interface SparklineProps {
   points: number[];
-  height?: number;
-  printHeight?: number;
 }
 
-/** 지표 카드에 붙는 미니 추이선 — 축/격자/툴팁 없이 형태만 보여준다. */
-export default function Sparkline({ points, height = 28, printHeight }: SparklineProps) {
+/**
+ * 지표 카드에 붙는 미니 추이선 — 축/격자/툴팁 없이 형태만 보여준다.
+ * 화면·인쇄가 같은 recharts 컴포넌트를 쓴다 — 크기만 print: 클래스로 줄인다.
+ * 예전엔 인쇄용으로 별도 SVG 꺾은선을 JS 분기로 그렸는데, 같은 데이터인데도
+ * 화면과 인쇄에서 곡선 모양이 달라 보인다는 리포트가 있었다(재현 없이 유지보수
+ * 부담만 남는 이중 구현) — 하나로 합쳐 애초에 다르게 보일 여지를 없앤다.
+ */
+export default function Sparkline({ points }: SparklineProps) {
   const colors = useChartColors();
   const gradientId = useId().replace(/:/g, "");
-  const isPrinting = usePrintMode();
   if (points.length < 2) return null;
-
-  if (isPrinting) {
-    const min = Math.min(...points);
-    const max = Math.max(...points);
-    const range = max - min || 1;
-    const printPoints = points
-      .map((count, index) => {
-        const x = 2 + (index / (points.length - 1)) * 96;
-        const y = 20 - ((count - min) / range) * 16;
-        return `${x.toFixed(2)},${y.toFixed(2)}`;
-      })
-      .join(" ");
-
-    return (
-      <svg
-        aria-hidden="true"
-        style={{ width: 80, height: printHeight ?? 16, margin: "0 auto", overflow: "hidden" }}
-        viewBox="0 0 100 24"
-        preserveAspectRatio="none"
-      >
-        <polyline
-          points={printPoints}
-          fill="none"
-          stroke={colors.viewers}
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
-    );
-  }
 
   const data = points.map((count, i) => ({ i, count }));
 
   return (
-    <div className="w-full min-w-0 overflow-hidden" style={{ height }}>
+    <div className="h-7 w-full min-w-0 overflow-hidden print:h-4">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 2, right: 0, bottom: 2, left: 0 }}>
           <defs>

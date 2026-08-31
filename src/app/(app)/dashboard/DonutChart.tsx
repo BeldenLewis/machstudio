@@ -2,7 +2,6 @@
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { useChartColors, resolveChannelColor } from "@/components/ui/use-chart-colors";
-import { usePrintMode } from "@/components/ui/use-print-mode";
 import { formatNumber } from "./RealtimeReport";
 
 const OTHER_COLOR_LIGHT = "#a3a3a3";
@@ -31,20 +30,10 @@ interface DonutChartProps {
 
 export default function DonutChart({ data, maxSlices = 5, channelColors, onColorChange }: DonutChartProps) {
   const colors = useChartColors();
-  /**
-   * CSS `print:` display 토글은 인쇄 미리보기에서 화면용 recharts 도넛(고정 140px)이
-   * 그대로 새어나오는 걸 반복해서 재현했다 — @media print 캐스케이드에 기대지 않고
-   * 실제 렌더링할 마크업 자체를 JS 로 나눈다. 인쇄 시엔 화면용 마크업이 DOM에 아예 없다.
-   */
-  const isPrinting = usePrintMode();
 
   if (!data.length) {
-    return isPrinting ? (
-      <div className="flex min-h-[60px] w-full min-w-0 items-center justify-center rounded-lg border border-dashed border-border p-1 text-center text-[7px] leading-tight text-muted-foreground">
-        유입경로 데이터가 아직 없습니다.
-      </div>
-    ) : (
-      <div className="flex h-[180px] min-w-0 items-center justify-center rounded-2xl border border-dashed border-border p-2 text-center text-sm text-muted-foreground">
+    return (
+      <div className="flex h-[180px] min-w-0 items-center justify-center rounded-2xl border border-dashed border-border p-2 text-center text-sm text-muted-foreground print:h-auto print:min-h-[60px] print:rounded-lg print:p-1 print:text-[7px] print:leading-tight">
         유입경로 데이터가 아직 없습니다.
       </div>
     );
@@ -65,36 +54,21 @@ export default function DonutChart({ data, maxSlices = 5, channelColors, onColor
     }),
     ...(restCount > 0 ? [{ label: "기타", count: restCount, color: OTHER_COLOR_LIGHT }] : []),
   ];
-  if (isPrinting) {
-    /*
-      인쇄 칸은 폭이 140px 안팎이라 원형+세로 범례(SVG)는 라벨이 잘리거나 링이 깨져
-      보였다(사용자 리포트) — 폭에 좌우되지 않는 가로 막대(각 조각을 %폭으로 나눔)로
-      바꾸고, 범례는 줄바꿈 가능한 태그 형태로 둬 칸을 넘지 않고 아래로 자연히 쌓이게 한다.
-      SVG 기하 계산이 아니라 % 너비/flex-wrap 뿐이라 어떤 폭에서도 넘치지 않는다.
-    */
-    return (
-      <div className="flex w-full min-w-0 flex-col gap-1 overflow-hidden">
-        <div className="flex h-2 w-full min-w-0 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
-          {slices.map((slice) => (
-            <span key={slice.label} style={{ width: `${(slice.count / total) * 100}%`, backgroundColor: slice.color }} className="h-full" />
-          ))}
-        </div>
-        <ul className="flex w-full min-w-0 flex-wrap gap-x-1.5 gap-y-0.5 overflow-hidden text-[6.5px] leading-tight">
-          {slices.map((slice) => (
-            <li key={slice.label} className="flex max-w-full items-center gap-0.5">
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
-              <span className="max-w-[42px] truncate text-muted-foreground">{slice.label}</span>
-              <span className="shrink-0 font-medium tabular-nums">{Math.round((slice.count / total) * 100)}%</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
-
+  /*
+    화면·인쇄가 서로 다른 마크업을 렌더링하도록 JS(usePrintMode)로 나눴다가 계속
+    실패했다 — 인쇄 미리보기가 그 전환을 반영하지 않고 화면용 마크업을 그대로
+    보여줘 범례가 통째로 잘려 나갔다(사용자 리포트). @media print CSS 는 이 페이지
+    다른 곳(그리드 5칸, 폰트 크기 등)에서 매번 확실히 먹혔으므로, 컴포넌트를 하나만
+    남기고 크기만 print: 클래스로 줄인다 — 갈아 끼울 게 없으니 어긋날 수도 없다.
+    도넛+범례 줄이 화면에서는 flex-wrap 으로 좁을 때 범례를 아래로 접지만, 인쇄에서는
+    print:flex-nowrap 으로 항상 도넛 옆에 붙인다 — 인쇄 칸 폭이 빠듯할 때 줄바꿈
+    계산에 맡기면 범례 자체가 통째로 안 그려지는 문제가 있었다(부모 grid 열도
+    유입경로 칸만 1.6fr 로 넓히고, 다섯 칸 전부 minmax(0, ...) 로 감싸 다른 칸이
+    자기 콘텐츠 최소 폭으로 이 칸의 몫을 빼앗지 못하게 한다 — ProjectSummaryCard 참고).
+  */
   return (
-    <div className="flex max-w-xs items-center gap-4">
-      <div className="h-[140px] w-[140px] shrink-0">
+    <div className="flex max-w-xs flex-wrap items-center gap-4 print:max-w-none print:flex-nowrap print:gap-1.5">
+      <div className="h-[140px] w-[140px] shrink-0 print:h-12 print:w-12">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie data={slices} dataKey="count" nameKey="label" innerRadius="62%" outerRadius="100%" paddingAngle={slices.length > 1 ? 2 : 0} stroke="var(--background)" strokeWidth={2}>
@@ -115,17 +89,17 @@ function DonutLegend({ slices, total, onColorChange }: {
   onColorChange?: (label: string, hex: string) => void;
 }) {
   return (
-    <ul className="min-w-0 space-y-1.5">
+    <ul className="min-w-0 flex-1 space-y-1.5 print:space-y-0.5">
       {slices.map((slice) => {
         const editable = !!onColorChange && slice.label !== "기타";
         return (
-          <li key={slice.label} className="flex min-w-0 items-center gap-2 text-xs">
+          <li key={slice.label} className="flex min-w-0 items-center gap-2 text-xs print:gap-1 print:text-[7px]">
             {editable ? (
-              <label className="relative h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full ring-offset-1 ring-offset-background transition-shadow hover:ring-2 hover:ring-violet-400" style={{ backgroundColor: slice.color }} title={`${slice.label} 색 바꾸기`}>
+              <label className="relative h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full ring-offset-1 ring-offset-background transition-shadow hover:ring-2 hover:ring-violet-400 print:h-1.5 print:w-1.5" style={{ backgroundColor: slice.color }} title={`${slice.label} 색 바꾸기`}>
                 <input type="color" value={toColorInputValue(slice.color)} onChange={(e) => onColorChange?.(slice.label, e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label={`${slice.label} 색 바꾸기`} />
               </label>
             ) : (
-              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
+              <span className="h-2 w-2 shrink-0 rounded-full print:h-1.5 print:w-1.5" style={{ backgroundColor: slice.color }} />
             )}
             <span className="min-w-0 flex-1 truncate text-muted-foreground">{slice.label}</span>
             <span className="shrink-0 font-medium tabular-nums">{Math.round((slice.count / total) * 100)}%</span>
