@@ -384,7 +384,8 @@ function normalizeField(raw: unknown, index: number, locale: string): CollectFie
     enabled: r.enabled !== false,
     options,
     ...normalizeChoiceExtras(r, options.length),
-    showOnTicket: r.showOnTicket === true,
+    // 기존 QR 표시 토글 값은 더 이상 사용하지 않는다.
+    showOnTicket: false,
   };
 }
 
@@ -741,6 +742,30 @@ export function visibleFields(config: CollectFormConfig, values: Record<string, 
 export function canonicalBranchValue(config: CollectFormConfig, chosen: string): string {
   if (!config.branch.enabled || !chosen) return chosen;
   return resolveBranchGroup(config, chosen)?.value ?? chosen;
+}
+
+const COMPANION_FIELD_PATTERNS = [
+  /companion/i,
+  /accompany(?:ing|ied)?/i,
+  /동반\s*(?:자|인원|아동|어린이)?\s*(?:수|인원)?/,
+];
+
+/** 동반자 수 문항을 자동으로 찾아 1명 이상일 때만 티켓용 표시 값을 만든다. */
+export function companionTicketExtras(
+  config: CollectFormConfig,
+  data: Record<string, unknown>,
+): Array<{ label: string; value: string }> {
+  const field = config.fields.find((candidate) =>
+    [candidate.key, ...Object.values(candidate.label)]
+      .map(String)
+      .some((value) => COMPANION_FIELD_PATTERNS.some((pattern) => pattern.test(value))),
+  );
+  if (!field) return [];
+
+  const raw = data[field.key];
+  const count = typeof raw === "number" ? raw : Number.parseInt(String(raw ?? "").trim(), 10);
+  if (!Number.isFinite(count) || count < 1) return [];
+  return [{ label: "Companions", value: String(Math.floor(count)) }];
 }
 
 /**

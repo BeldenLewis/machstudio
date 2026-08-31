@@ -9,7 +9,7 @@
  */
 import { toE164, isSupportedCountry } from "@/lib/collect-phone";
 import { isValidCollectEmail, normalizeEmail } from "@/lib/collect-submit";
-import { localize, type CollectFormConfig, type Localized } from "@/lib/collect-form-config";
+import { companionTicketExtras, type CollectFormConfig, type Localized } from "@/lib/collect-form-config";
 
 /** 조회 입력 — 설정에 따라 둘 중 하나만 쓰일 수도 있다. */
 export interface LookupInput {
@@ -230,10 +230,7 @@ export function buildTicketView(
   };
 
   // showOnTicket 을 켠 항목만, 값이 있을 때만 — 빈 값을 그대로 보내면 화면에 빈 줄이 생긴다.
-  const extras = config.fields
-    .filter((f) => f.showOnTicket)
-    .map((f) => ({ label: localize(f.label) || f.key, value: str(data[f.key]) }))
-    .filter((e) => e.value !== "");
+  const extras = companionTicketExtras(config, data);
 
   return {
     registrationNo: record.registrationNo,

@@ -126,12 +126,6 @@ export function CollectFieldCard({
         <label className="flex shrink-0 select-none items-center gap-1 text-[11px] text-muted-foreground">
           표시<Switch checked={field.enabled} onChange={(v) => patch({ enabled: v })} label={`${labelText || "항목"} 표시`} />
         </label>
-        <label
-          className="flex shrink-0 select-none items-center gap-1 text-[11px] text-muted-foreground"
-          title="체크인 QR·완료 화면에도 이 답을 보여줍니다 (예: 동반 인원 수)"
-        >
-          QR<Switch checked={field.showOnTicket === true} onChange={(v) => patch({ showOnTicket: v })} label={`${labelText || "항목"} QR 화면에 표시`} />
-        </label>
         {removeButton({ label: `${labelText || "항목"} 삭제` }) ?? <span className="w-8 shrink-0" />}
       </div>
 

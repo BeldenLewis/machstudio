@@ -60,11 +60,12 @@ describe("buildCollectConfirmationEmail", () => {
       sourceName: "Expo",
       locale: "en",
       registrationNo: "1234567890123",
-      data: { companions: "2", notes: "" },
+      data: { companions: "2", notes: "should stay private" },
     });
     expect(result.html).toContain("Companions</strong>2");
     // 값이 비어 있으면(§공통 "빈 껍데기 노출 금지") 라벨도 같이 안 나간다.
     expect(result.html).not.toContain("Notes");
+    expect(result.html).not.toContain("should stay private");
   });
 
   it("행사 개요 공개 표시가 꺼져 있어도 이메일 토글이 켜져 있으면 일정·장소를 표시한다", () => {

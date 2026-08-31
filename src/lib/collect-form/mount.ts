@@ -18,6 +18,7 @@ import {
   DEFAULT_LOCALE,
   REGISTRATION_STATUSES,
   canonicalBranchValue,
+  companionTicketExtras,
   localize,
   noticeValueKey,
   resolveRegistrationStatus,
@@ -1181,10 +1182,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
       return field ? text(values[field.key]) : "";
     };
     // 운영자가 항목별로 켠 값만(예: 동반 인원 수) — collect-lookup.buildTicketView 와 같은 규칙.
-    const extras = config.fields
-      .filter((field) => field.showOnTicket)
-      .map((field) => ({ label: t(field.label) || field.key, value: text(values[field.key]) }))
-      .filter((e) => e.value !== "");
+    const extras = companionTicketExtras(config, values);
     return {
       name,
       visitorType: config.branch.enabled ? text(values[config.branch.fieldKey]) : "",

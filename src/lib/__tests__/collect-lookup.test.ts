@@ -202,10 +202,17 @@ describe("티켓 화면", () => {
     });
     const view = buildTicketView(withExtra, {
       registrationNo: record.registrationNo,
-      data: { ...record.data, companions: "2", notes: "" },
+      data: { ...record.data, companions: "2", notes: "should stay private" },
     })!;
     // 안 켠 항목(company)은 안 나가고, 켠 항목 중 값이 빈 것(notes)도 안 나간다.
     expect(view.extras).toEqual([{ label: "Companions", value: "2" }]);
+    expect(JSON.stringify(view)).not.toContain("should stay private");
+  });
+
+  it("동반자 수가 0이거나 비어 있으면 표시하지 않는다", () => {
+    const config = normalizeCollectForm({ fields: [{ key: "companions", type: "number", label: "Companions" }] });
+    expect(buildTicketView(config, { registrationNo: record.registrationNo, data: { companions: "0" } })?.extras).toEqual([]);
+    expect(buildTicketView(config, { registrationNo: record.registrationNo, data: {} })?.extras).toEqual([]);
   });
 
   it("등록번호가 없으면 화면을 만들지 않는다", () => {
