@@ -1,6 +1,6 @@
 "use client";
 
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Cell, Pie, PieChart, Tooltip } from "recharts";
 import { useChartColors, resolveChannelColor } from "@/components/ui/use-chart-colors";
 import { formatNumber } from "./RealtimeReport";
 
@@ -65,18 +65,35 @@ export default function DonutChart({ data, maxSlices = 5, channelColors, onColor
     계산에 맡기면 범례 자체가 통째로 안 그려지는 문제가 있었다(부모 grid 열도
     유입경로 칸만 1.6fr 로 넓히고, 다섯 칸 전부 minmax(0, ...) 로 감싸 다른 칸이
     자기 콘텐츠 최소 폭으로 이 칸의 몫을 빼앗지 못하게 한다 — ProjectSummaryCard 참고).
+
+    도넛 크기 자체도 같은 부류의 함정이 있었다: ResponsiveContainer(width="100%")는
+    ResizeObserver 로 컨테이너 픽셀 크기를 재서 <svg> 크기를 JS 로 정하는데, 브라우저
+    인쇄 미리보기는 이 리사이즈 관찰이 제때 안 돌아 화면 크기(140px)로 그린 도넛을
+    인쇄에서도 그대로 유지해버렸다(범례를 다 덮어버림 — 사용자 스크린샷). 그래서
+    ResponsiveContainer 를 버리고 PieChart 를 항상 고정 140x140 으로 그린 뒤, 인쇄에서는
+    순수 CSS transform:scale() 로 시각적으로만 축소한다 — JS 계산이 필요 없으니
+    인쇄 렌더링 타이밍과 무관하게 항상 맞다. 바깥 div(overflow-hidden)가 축소된
+    도넛 밖으로 남는 원래 140px 여백을 잘라내 실제 차지 폭을 48px 로 만든다.
+
+    도넛과 범례를 인쇄에서도 "옆으로" 나란히 두면(print:flex-nowrap) 범례 폭이
+    "칸 폭 - 도넛 48px"로 정해진다 — 5칸짜리 인쇄 그리드에서 유입경로 칸 자체가
+    좁을 때 이 뺄셈이 범례 폭을 다시 0 근처로 밀어넣어 라벨이 잘리다 못해
+    도넛 위로 겹쳐 보이는 문제가 반복됐다(사용자 스크린샷: 퍼센트만 남고 라벨이
+    도넛에 겹침). 인쇄에서는 도넛을 위로, 범례를 그 아래 전체 폭으로 쌓아
+    (print:flex-col) 범례가 칸 폭을 통째로 쓰게 한다 — 도넛 폭을 빼는 계산 자체를
+    없애 다시 어긋날 여지를 지운다.
   */
   return (
-    <div className="flex max-w-xs flex-wrap items-center gap-4 print:max-w-none print:flex-nowrap print:gap-1.5">
-      <div className="h-[140px] w-[140px] shrink-0 print:h-12 print:w-12">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
+    <div className="flex max-w-xs flex-wrap items-center gap-4 print:max-w-none print:flex-col print:items-stretch print:gap-1">
+      <div className="h-[140px] w-[140px] shrink-0 overflow-hidden print:mx-auto print:h-12 print:w-12">
+        <div className="h-[140px] w-[140px] origin-top-left print:scale-[0.343]">
+          <PieChart width={140} height={140}>
             <Pie data={slices} dataKey="count" nameKey="label" innerRadius="62%" outerRadius="100%" paddingAngle={slices.length > 1 ? 2 : 0} stroke="var(--background)" strokeWidth={2}>
               {slices.map((slice) => <Cell key={slice.label} fill={slice.color} />)}
             </Pie>
             <Tooltip formatter={(value, name) => [`${formatNumber(Number(value) || 0)}건`, name]} contentStyle={{ borderRadius: 12, border: "1px solid var(--border)", fontSize: 12 }} />
           </PieChart>
-        </ResponsiveContainer>
+        </div>
       </div>
       <DonutLegend slices={slices} total={total} onColorChange={onColorChange} />
     </div>
