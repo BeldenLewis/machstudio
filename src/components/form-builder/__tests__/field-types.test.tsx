@@ -44,7 +44,7 @@ describe("항목 형식 표 — 두 빌더의 단일 출처", () => {
 });
 
 describe("RegTypeMenu", () => {
-  it("여섯 형식을 라벨·설명과 함께 그린다", () => {
+  it("모든 형식을 라벨·설명과 함께 그린다", () => {
     renderMenu("text");
     const text = container.textContent ?? "";
     for (const t of REG_TYPE_ORDER) {
