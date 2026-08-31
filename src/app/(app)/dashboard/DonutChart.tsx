@@ -60,12 +60,15 @@ export default function DonutChart({ data, maxSlices = 5, channelColors, onColor
     보여줘 범례가 통째로 잘려 나갔다(사용자 리포트). @media print CSS 는 이 페이지
     다른 곳(그리드 5칸, 폰트 크기 등)에서 매번 확실히 먹혔으므로, 컴포넌트를 하나만
     남기고 크기만 print: 클래스로 줄인다 — 갈아 끼울 게 없으니 어긋날 수도 없다.
-    범례는 세로 목록(각 줄 = 채널 하나)이라 폭이 아무리 좁아져도 truncate 될 뿐
-    통째로 사라지지 않는다.
+    도넛+범례 줄이 화면에서는 flex-wrap 으로 좁을 때 범례를 아래로 접지만, 인쇄에서는
+    print:flex-nowrap 으로 항상 도넛 옆에 붙인다 — 인쇄 칸 폭이 빠듯할 때 줄바꿈
+    계산에 맡기면 범례 자체가 통째로 안 그려지는 문제가 있었다(부모 grid 열도
+    유입경로 칸만 1.6fr 로 넓히고, 다섯 칸 전부 minmax(0, ...) 로 감싸 다른 칸이
+    자기 콘텐츠 최소 폭으로 이 칸의 몫을 빼앗지 못하게 한다 — ProjectSummaryCard 참고).
   */
   return (
-    <div className="flex max-w-xs flex-wrap items-center gap-4 print:max-w-none print:gap-1.5">
-      <div className="h-[140px] w-[140px] shrink-0 print:h-14 print:w-14">
+    <div className="flex max-w-xs flex-wrap items-center gap-4 print:max-w-none print:flex-nowrap print:gap-1.5">
+      <div className="h-[140px] w-[140px] shrink-0 print:h-12 print:w-12">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie data={slices} dataKey="count" nameKey="label" innerRadius="62%" outerRadius="100%" paddingAngle={slices.length > 1 ? 2 : 0} stroke="var(--background)" strokeWidth={2}>
@@ -86,7 +89,7 @@ function DonutLegend({ slices, total, onColorChange }: {
   onColorChange?: (label: string, hex: string) => void;
 }) {
   return (
-    <ul className="min-w-0 space-y-1.5 print:space-y-0.5">
+    <ul className="min-w-0 flex-1 space-y-1.5 print:space-y-0.5">
       {slices.map((slice) => {
         const editable = !!onColorChange && slice.label !== "기타";
         return (
