@@ -69,7 +69,20 @@ export default function SummaryDashboardClient() {
   }
 
   return (
-    <div className="space-y-4 p-4 sm:p-6 lg:p-8 print:p-3 print:space-y-2">
+    <div className="summary-dashboard-print space-y-4 p-4 sm:p-6 lg:p-8 print:space-y-2 print:p-0">
+      {/*
+        세로 A4 유지. 도넛/스파크라인은 더 이상 CSS display 토글로 화면·인쇄 마크업을
+        같이 심어두지 않는다 — usePrintMode() 로 JS 에서 아예 다른 마크업을 렌더링한다
+        (인쇄 미리보기가 화면용 recharts 도넛을 그대로 보여준 문제가 반복돼 CSS 캐스케이드에
+        기대는 걸 그만뒀다). 여기 남은 건 페이지 크기/여백뿐이다.
+      */}
+      <style>{`
+        @media print {
+          @page { size: A4 portrait; margin: 10mm; }
+          /* 넓은 화면(>=1024px)에서 인쇄하면 lg:ml-64 사이드바 여백이 인쇄에도 남을 수 있다 — 항상 0으로 고정한다. */
+          main { margin: 0 !important; }
+        }
+      `}</style>
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between print:hidden">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold">요약 대시보드</h1>
