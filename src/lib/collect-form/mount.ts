@@ -11,6 +11,7 @@
  * DOM 은 `h()` 로만 만든다(innerHTML 금지 — src/lib/__tests__/embed-runtime.test.ts 가 강제).
  */
 import { h, clearNode } from "@/lib/dom/h";
+import { safeRichTextFragment } from "@/lib/dom/safe-rich-text";
 import { onAccentColor } from "@/lib/competition-render";
 import { ensureFormStyles } from "./css";
 import {
@@ -177,12 +178,16 @@ function str(v: unknown): string {
 function openTermsPopup(
   title: string,
   body: string,
+  format: "text" | "html",
   onAgree: () => void,
   themeStyle: Record<string, string | null>,
   open?: FormOverlayOpener,
 ): () => void {
   const closeBtn = h("button", { type: "button", class: "msf-terms-close" }, COPY.close);
   const agreeBtn = h("button", { type: "button", class: "msf-terms-agree" }, COPY.agree);
+  const bodyEl = h("div", { class: "msf-terms-body" });
+  if (format === "html") bodyEl.appendChild(safeRichTextFragment(body));
+  else bodyEl.appendChild(document.createTextNode(body));
   const overlay = h(
     "div",
     { class: "msf msf-overlay", style: themeStyle },
@@ -190,7 +195,7 @@ function openTermsPopup(
       "div",
       { class: "msf-terms" },
       h("div", { class: "msf-terms-head" }, title),
-      h("div", { class: "msf-terms-body" }, body),
+      bodyEl,
       h("div", { class: "msf-terms-actions" }, closeBtn, agreeBtn),
     ),
   );
@@ -833,7 +838,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
       const btn = h("button", { type: "button", class: "msf-more" }, COPY.more);
       btn.addEventListener("click", () => {
         closeTerms?.();                       // 두 번 열지 않는다
-        closeTerms = openTermsPopup(labelText, body, () => {
+        closeTerms = openTermsPopup(labelText, body, item.bodyFormat, () => {
           cb.checked = true;
           onChange(true);
           clearIssue(issueKey);

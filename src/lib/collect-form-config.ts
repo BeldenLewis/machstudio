@@ -139,6 +139,8 @@ export interface CollectNotice {
   title: Localized;
   /** 줄바꿈을 보존해 표시한다(AGENTS.md). */
   body: Localized;
+  /** 본문을 일반 텍스트 또는 안전하게 제한된 HTML로 표시한다. */
+  bodyFormat: "text" | "html";
   mode: NoticeMode;
   /** 길면 접고 "자세히". */
   collapsible: boolean;
@@ -275,10 +277,10 @@ export const EMPTY_FORM_CONFIG: CollectFormConfig = {
   notices: [],
   validation: { defaultCountry: "US", onDuplicate: "block" },
   consent: {
-    privacy: { enabled: true, label: {}, body: {}, defaultChecked: false },
-    marketing: { enabled: false, label: {}, body: {}, defaultChecked: false },
+    privacy: { enabled: true, label: {}, body: {}, bodyFormat: "text", defaultChecked: false },
+    marketing: { enabled: false, label: {}, body: {}, bodyFormat: "text", defaultChecked: false },
     // 마케팅과 같은 이유로 기본 꺼짐 — 모든 행사가 제3자에게 정보를 제공하는 건 아니다.
-    thirdParty: { enabled: false, label: {}, body: {}, defaultChecked: false },
+    thirdParty: { enabled: false, label: {}, body: {}, bodyFormat: "text", defaultChecked: false },
   },
   completion: { redirectUrlTemplate: "", showQr: true },
   confirmationEmail: {
@@ -399,6 +401,7 @@ function normalizeNotice(raw: unknown, index: number, locale: string): CollectNo
     placement: NOTICE_PLACEMENTS.includes(placement) ? placement : "top",
     title: toLocalized(r.title, locale),
     body: toLocalized(r.body, locale),
+    bodyFormat: r.bodyFormat === "html" ? "html" : "text",
     mode: NOTICE_MODES.includes(mode) ? mode : "notice",
     collapsible: r.collapsible === true,
   };
