@@ -81,10 +81,10 @@ export default function DonutChart({ data, maxSlices = 5, channelColors, onColor
     올리는 쪽으로만 여유 폭을 확보한다.
   */
   return (
-    <div className="flex max-w-xs flex-wrap items-center gap-4 print:max-w-none print:flex-nowrap print:gap-1.5">
-      <div className="h-[140px] w-[140px] shrink-0 overflow-hidden print:h-12 print:w-12">
-        <div className="h-[140px] w-[140px] origin-top-left print:scale-[0.343]">
-          <PieChart width={140} height={140}>
+    <div className="flex flex-nowrap items-center gap-1 print:gap-1.5">
+      <div className="h-[300px] w-[300px] shrink-0 overflow-hidden print:h-12 print:w-12">
+        <div className="h-[300px] w-[300px] origin-top-left print:scale-[0.16]">
+          <PieChart width={300} height={300}>
             <Pie data={slices} dataKey="count" nameKey="label" innerRadius="62%" outerRadius="100%" paddingAngle={slices.length > 1 ? 2 : 0} stroke="var(--background)" strokeWidth={2}>
               {slices.map((slice) => <Cell key={slice.label} fill={slice.color} />)}
             </Pie>
@@ -103,11 +103,11 @@ function DonutLegend({ slices, total, onColorChange }: {
   onColorChange?: (label: string, hex: string) => void;
 }) {
   return (
-    <ul className="min-w-0 flex-1 space-y-1.5 print:space-y-0.5">
+    <ul className="min-w-0 flex-1 space-y-2 print:space-y-0.5">
       {slices.map((slice) => {
         const editable = !!onColorChange && slice.label !== "기타";
         return (
-          <li key={slice.label} className="flex min-w-0 items-center gap-2 text-xs print:gap-1 print:text-[7px]">
+          <li key={slice.label} className="flex min-w-0 items-center text-xs print:text-[7px]">
             {editable ? (
               <label className="relative h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full ring-offset-1 ring-offset-background transition-shadow hover:ring-2 hover:ring-violet-400 print:h-1.5 print:w-1.5" style={{ backgroundColor: slice.color }} title={`${slice.label} 색 바꾸기`}>
                 <input type="color" value={toColorInputValue(slice.color)} onChange={(e) => onColorChange?.(slice.label, e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label={`${slice.label} 색 바꾸기`} />
@@ -115,8 +115,8 @@ function DonutLegend({ slices, total, onColorChange }: {
             ) : (
               <span className="h-2 w-2 shrink-0 rounded-full print:h-1.5 print:w-1.5" style={{ backgroundColor: slice.color }} />
             )}
-            <span className="min-w-0 flex-1 truncate text-muted-foreground">{slice.label}</span>
-            <span className="shrink-0 font-medium tabular-nums">{Math.round((slice.count / total) * 100)}%</span>
+            <span className="ml-1.5 min-w-0 truncate text-muted-foreground print:ml-1">{slice.label}</span>
+            <span className="ml-5 shrink-0 font-medium tabular-nums print:ml-1">{Math.round((slice.count / total) * 100)}%</span>
           </li>
         );
       })}
