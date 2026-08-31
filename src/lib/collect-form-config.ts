@@ -752,16 +752,34 @@ const COMPANION_FIELD_PATTERNS = [
   /동반\s*(?:자|인원|아동|어린이)?\s*(?:수|인원)?/,
 ];
 
+const COMPANION_COUNT_PATTERNS = [
+  /how\s+many/i,
+  /(?:number|count)\s+of/i,
+  /companions?\s*(?:count|number)?$/i,
+  /(?:동반|아동|어린이).*(?:몇\s*명|인원\s*수|명\s*수|수)/,
+];
+
+function companionFieldScore(field: CollectField): number {
+  const candidates = [field.key, ...Object.values(field.label)].map(String);
+  if (!candidates.some((value) => COMPANION_FIELD_PATTERNS.some((pattern) => pattern.test(value)))) return -1;
+
+  // An explicit operator choice always wins. Otherwise prefer a question that asks for a count;
+  // prose such as an age option's "must be accompanied by a companion" must not become the count.
+  if (field.showOnTicket) return 3;
+  if (candidates.some((value) => COMPANION_COUNT_PATTERNS.some((pattern) => pattern.test(value)))) return 2;
+  if (field.type === "number") return 1;
+  return 0;
+}
+
 /** 동반자 수 문항을 자동으로 찾아 1명 이상일 때만 티켓용 표시 값을 만든다. */
 export function companionTicketExtras(
   config: CollectFormConfig,
   data: Record<string, unknown>,
 ): Array<{ label: string; value: string }> {
-  const field = config.fields.find((candidate) =>
-    [candidate.key, ...Object.values(candidate.label)]
-      .map(String)
-      .some((value) => COMPANION_FIELD_PATTERNS.some((pattern) => pattern.test(value))),
-  );
+  const field = config.fields
+    .map((candidate) => ({ candidate, score: companionFieldScore(candidate) }))
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score)[0]?.candidate;
   if (!field) return [];
 
   const raw = data[field.key];

@@ -116,6 +116,8 @@ export interface LookupView {
    */
   maskedEmail: string;
   maskedPhone: string;
+  /** 현장 확인용으로 티켓에 노출되는 동반 인원. 다른 제출 답변은 포함하지 않는다. */
+  extras: Array<{ label: string; value: string }>;
 }
 
 /**
@@ -196,6 +198,7 @@ export function buildLookupView(
     showQr: config.lookup.showQr,
     maskedEmail: maskEmail(pick("email")),
     maskedPhone: maskPhone(pick("tel")),
+    extras: base.extras,
   };
 }
 

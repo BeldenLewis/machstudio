@@ -117,7 +117,7 @@ describe("내보내는 정보", () => {
       expect(serialized).not.toContain(leak);
     }
     expect(Object.keys(view).sort()).toEqual([
-      "maskedEmail", "maskedPhone", "name", "registrationNo", "showQr", "visitorType",
+      "extras", "maskedEmail", "maskedPhone", "name", "registrationNo", "showQr", "visitorType",
     ]);
   });
 
@@ -213,6 +213,44 @@ describe("티켓 화면", () => {
     const config = normalizeCollectForm({ fields: [{ key: "companions", type: "number", label: "Companions" }] });
     expect(buildTicketView(config, { registrationNo: record.registrationNo, data: { companions: "0" } })?.extras).toEqual([]);
     expect(buildTicketView(config, { registrationNo: record.registrationNo, data: {} })?.extras).toEqual([]);
+  });
+
+  it("동반 안내가 들어간 나이 문항보다 실제 동반 인원 문항을 우선한다", () => {
+    const config = normalizeCollectForm({
+      fields: [
+        {
+          key: "age",
+          type: "radio",
+          label: "Age group (Children aged 0–15 must be accompanied by a companion.)",
+          options: ["16~24", "25~34"],
+        },
+        {
+          key: "field",
+          type: "text",
+          label: "How many children aged 0 to 15 are accompanying you?",
+        },
+      ],
+    });
+    const data = { age: "16~24", field: "4" };
+
+    expect(buildTicketView(config, { registrationNo: record.registrationNo, data })?.extras)
+      .toEqual([{ label: "Companions", value: "4" }]);
+    expect(buildLookupView(config, { registrationNo: record.registrationNo, data })?.extras)
+      .toEqual([{ label: "Companions", value: "4" }]);
+  });
+
+  it("동반 안내만 있는 나이 문항은 동반 인원으로 표시하지 않는다", () => {
+    const config = normalizeCollectForm({
+      fields: [{
+        key: "age",
+        type: "radio",
+        label: "Age group (Children aged 0–15 must be accompanied by a companion.)",
+        options: ["16~24", "25~34"],
+      }],
+    });
+
+    expect(buildTicketView(config, { registrationNo: record.registrationNo, data: { age: "16~24" } })?.extras)
+      .toEqual([]);
   });
 
   it("등록번호가 없으면 화면을 만들지 않는다", () => {
