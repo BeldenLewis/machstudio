@@ -244,6 +244,7 @@ function normalizeField(raw: unknown, index: number): CompetitionFormField | nul
         }
       : {}),
     ...(type === "checkbox" ? { emphasized: bool(f.emphasized) } : {}),
+    ...(type === "image" ? { isLogo: bool(f.isLogo) } : {}),
   };
 }
 
