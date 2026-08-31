@@ -33,6 +33,17 @@ import {
 import { isValidCollectEmail } from "@/lib/collect-email";
 import { COUNTRY_DIALS, flagEmoji, isKnownCountry } from "@/lib/collect-country";
 import { resolveRedirect } from "@/lib/collect-redirect";
+
+function safeHttpUrl(value: unknown): string {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
+  } catch {
+    return "";
+  }
+}
 // 로더가 심어 둔 first-touch UTM 을 그대로 쓴다 — 파트너 사이트를 먼저 거친 방문자의 정본이다.
 import { buildUtmEnvelope } from "@/lib/attribution-client";
 import { visitorBadgeCssVars } from "@/lib/collect-badge";
@@ -854,11 +865,16 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     const label = h("label", { class: "msf-check" }, cb, h("span", null, labelText));
 
     const body = t(item.body);
-    if (body) {
+    const linkUrl = safeHttpUrl(item.linkUrl);
+    if (item.bodyFormat === "link" && linkUrl) {
+      const link = h("a", { class: "msf-more", href: linkUrl, target: "_blank", rel: "noopener noreferrer" }, COPY.more);
+      link.addEventListener("click", (event) => event.stopPropagation());
+      wrap.appendChild(h("div", { class: "msf-consent-row" }, label, link));
+    } else if (body) {
       const btn = h("button", { type: "button", class: "msf-more" }, COPY.more);
       btn.addEventListener("click", () => {
         closeTerms?.();                       // 두 번 열지 않는다
-        closeTerms = openTermsPopup(labelText, body, item.bodyFormat, () => {
+        closeTerms = openTermsPopup(labelText, body, "text", () => {
           cb.checked = true;
           onChange(true);
           clearIssue(issueKey);

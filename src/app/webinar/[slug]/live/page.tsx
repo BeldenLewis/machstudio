@@ -1435,8 +1435,8 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
 
                       <div className="space-y-2 pt-1">
                         {([
-                          { kind: "privacy" as const, text: registrationForm.privacyText, body: registrationForm.privacyBody, checked: form.agreePrivacy, set: (v: boolean) => setForm((f) => ({ ...f, agreePrivacy: v })) },
-                          { kind: "marketing" as const, text: registrationForm.marketingText, body: registrationForm.marketingBody, checked: form.agreeMarketing, set: (v: boolean) => setForm((f) => ({ ...f, agreeMarketing: v })) },
+                          { kind: "privacy" as const, text: registrationForm.privacyText, body: registrationForm.privacyBody, mode: registrationForm.privacyBodyMode, linkUrl: safeHttpUrl(registrationForm.privacyLinkUrl), checked: form.agreePrivacy, set: (v: boolean) => setForm((f) => ({ ...f, agreePrivacy: v })) },
+                          { kind: "marketing" as const, text: registrationForm.marketingText, body: registrationForm.marketingBody, mode: registrationForm.marketingBodyMode, linkUrl: safeHttpUrl(registrationForm.marketingLinkUrl), checked: form.agreeMarketing, set: (v: boolean) => setForm((f) => ({ ...f, agreeMarketing: v })) },
                         ]).map((consent) => (
                           <label key={consent.kind} className="mw-check">
                             <input
@@ -1444,7 +1444,9 @@ export default function LivePage({ params }: { params: Promise<{ slug: string }>
                               checked={consent.checked}
                               onChange={(e) => consent.set(e.target.checked)}
                             />
-                            {consent.body ? (
+                            {consent.mode === "link" && consent.linkUrl ? (
+                              <a href={consent.linkUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-left underline decoration-from-font underline-offset-2 transition-opacity hover:opacity-90">{consent.text}</a>
+                            ) : consent.body ? (
                               // 본문이 설정돼 있으면 텍스트 클릭 = 약관 팝업 (체크 토글은 체크박스에서만)
                               <button
                                 type="button"

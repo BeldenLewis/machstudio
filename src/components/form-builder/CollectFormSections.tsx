@@ -418,7 +418,7 @@ export function CollectFormSections({
                 className="w-full bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/50"
               />
               <div className="flex w-fit rounded-lg bg-background p-0.5 shadow-sm" role="tablist" aria-label={`${meta.noun} 전문 입력 방식`}>
-                {(["text", "html"] as const).map((format) => {
+                {(["text", "link"] as const).map((format) => {
                   const active = item.bodyFormat === format;
                   return (
                     <button
@@ -429,23 +429,23 @@ export function CollectFormSections({
                       onClick={() => patch({ consent: { ...config.consent, [kind]: { ...item, bodyFormat: format } } })}
                       className={`rounded-md px-2.5 py-1 text-[10px] font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${active ? "bg-secondary text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                     >
-                      {format === "text" ? "텍스트" : "HTML"}
+                      {format === "text" ? "텍스트" : "링크"}
                     </button>
                   );
                 })}
               </div>
-              <ConsentBodyField
+              {item.bodyFormat === "link" ? <input type="url" value={item.linkUrl} onChange={(e) => patch({ consent: { ...config.consent, [kind]: { ...item, linkUrl: e.target.value } } })} placeholder="https://..." aria-label={`${kind} 링크`} className={FIELD_CLS} /> : <ConsentBodyField
                 value={localize(item.body, DEFAULT_LOCALE)}
                 org={org}
                 locale={legalLocale}
                 onSave={(next) => patch({ consent: { ...config.consent, [kind]: { ...item, body: toLocalized(next) } } })}
                 placeholder="'자세히' 팝업 전문 (선택) — 아래 '법률 문구 생성기'로 채울 수 있어요"
                 ariaLabel={`${kind} 전문`}
-              />
+              />}
               <p className="text-[10px] leading-relaxed text-muted-foreground/70">
-                {item.bodyFormat === "html"
-                  ? "HTML 태그를 실제 화면으로 표시해요. 문단, 제목, 목록, 표, 링크, 굵게·기울임을 지원하며 위험한 코드는 제거돼요."
-                  : "입력한 글과 줄바꿈을 그대로 표시해요. **굵게** 같은 Markdown 문법도 일반 글자로 보여요."}
+                {item.bodyFormat === "link"
+                  ? "동의 문구 옆 ‘자세히’를 누르면 새 창에서 열려요."
+                  : "입력한 글과 줄바꿈을 그대로 표시해요."}
               </p>
               <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <Switch

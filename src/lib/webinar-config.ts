@@ -90,6 +90,10 @@ export interface WebinarRegistrationFormConfig {
   /** 동의 문구 클릭 시 팝업으로 보여줄 약관 전문 — 비어 있으면 팝업 없음 */
   privacyBody: string;
   marketingBody: string;
+  privacyBodyMode: "text" | "link";
+  marketingBodyMode: "text" | "link";
+  privacyLinkUrl: string;
+  marketingLinkUrl: string;
   /** 폼 진입 시 동의 체크박스를 기본으로 체크해둘지 — 사용자가 직접 만지면 그 값이 우선한다 */
   privacyDefaultChecked: boolean;
   marketingDefaultChecked: boolean;
@@ -735,6 +739,10 @@ export function normalizeRegistrationForm(
     marketingText: typeof raw?.marketingText === "string" ? raw.marketingText : "[선택] 마케팅 정보 수신에 동의합니다",
     privacyBody: typeof raw?.privacyBody === "string" ? raw.privacyBody : "",
     marketingBody: typeof raw?.marketingBody === "string" ? raw.marketingBody : "",
+    privacyBodyMode: raw?.privacyBodyMode === "link" ? "link" : "text",
+    marketingBodyMode: raw?.marketingBodyMode === "link" ? "link" : "text",
+    privacyLinkUrl: typeof raw?.privacyLinkUrl === "string" ? raw.privacyLinkUrl : "",
+    marketingLinkUrl: typeof raw?.marketingLinkUrl === "string" ? raw.marketingLinkUrl : "",
     privacyDefaultChecked: raw?.privacyDefaultChecked === true,
     marketingDefaultChecked: raw?.marketingDefaultChecked === true,
     submitLabel: typeof raw?.submitLabel === "string" ? raw.submitLabel : "사전 등록하기",

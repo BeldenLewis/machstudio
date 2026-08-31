@@ -370,13 +370,18 @@ export function renderFormFieldsHtml(config: CompetitionConfig): string {
       )}"></div>`;
     });
 
+  const consentDetail = (kind: "privacy" | "marketing" | "thirdParty", text: string, body: string, mode: "text" | "link", linkUrl: string) => {
+    const href = safeUrl(linkUrl);
+    if (mode === "link" && href) return `<a class="mc-consent-link" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`;
+    return `<span${body ? ` class="mc-consent-link" data-mc-terms="${kind === "thirdParty" ? "third-party" : kind}"` : ""}>${escapeHtml(text)}</span>`;
+  };
   const consent = `
     <label class="mc-check"><input type="checkbox" data-mc-privacy${config.form.privacyDefaultChecked ? " checked" : ""}>
-      <span${config.form.privacyBody ? ' class="mc-consent-link" data-mc-terms="privacy"' : ""}>${escapeHtml(config.form.privacyText)}</span></label>
+      ${consentDetail("privacy", config.form.privacyText, config.form.privacyBody, config.form.privacyBodyMode, config.form.privacyLinkUrl)}</label>
     <label class="mc-check"><input type="checkbox" data-mc-marketing${config.form.marketingDefaultChecked ? " checked" : ""}>
-      <span${config.form.marketingBody ? ' class="mc-consent-link" data-mc-terms="marketing"' : ""}>${escapeHtml(config.form.marketingText)}</span></label>
+      ${consentDetail("marketing", config.form.marketingText, config.form.marketingBody, config.form.marketingBodyMode, config.form.marketingLinkUrl)}</label>
     ${config.form.thirdPartyEnabled ? `<label class="mc-check"><input type="checkbox" data-mc-third-party${config.form.thirdPartyDefaultChecked ? " checked" : ""}>
-      <span${config.form.thirdPartyBody ? ' class="mc-consent-link" data-mc-terms="third-party"' : ""}>${escapeHtml(config.form.thirdPartyText)}</span></label>` : ""}`;
+      ${consentDetail("thirdParty", config.form.thirdPartyText, config.form.thirdPartyBody, config.form.thirdPartyBodyMode, config.form.thirdPartyLinkUrl)}</label>` : ""}`;
 
   return `${parts.join("")}${consent}
     <input type="text" data-mc-hp tabindex="-1" autocomplete="off" aria-hidden="true"

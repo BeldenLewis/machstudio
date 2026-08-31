@@ -83,9 +83,13 @@ export interface CompetitionConfig {
     /** 동의 — 웨비나 등록 폼과 같은 계약(문구·전문·기본 체크). */
     privacyText: string;
     privacyBody: string;
+    privacyBodyMode: "text" | "link";
+    privacyLinkUrl: string;
     privacyDefaultChecked: boolean;
     marketingText: string;
     marketingBody: string;
+    marketingBodyMode: "text" | "link";
+    marketingLinkUrl: string;
     marketingDefaultChecked: boolean;
     /**
      * 제3자 제공 동의 — privacy/marketing과 달리 **꺼져 있을 수 있다.** 모든 대회가 참가자
@@ -94,6 +98,8 @@ export interface CompetitionConfig {
     thirdPartyEnabled: boolean;
     thirdPartyText: string;
     thirdPartyBody: string;
+    thirdPartyBodyMode: "text" | "link";
+    thirdPartyLinkUrl: string;
     thirdPartyDefaultChecked: boolean;
     successMessage: string;
   };
@@ -337,13 +343,19 @@ export function normalizeCompetitionConfig(
       submitLabel: str(formRaw.submitLabel),
       privacyText: str(formRaw.privacyText, "[필수] 개인정보 수집 및 이용에 동의합니다"),
       privacyBody: str(formRaw.privacyBody),
+      privacyBodyMode: formRaw.privacyBodyMode === "link" ? "link" : "text",
+      privacyLinkUrl: str(formRaw.privacyLinkUrl),
       privacyDefaultChecked: bool(formRaw.privacyDefaultChecked),
       marketingText: str(formRaw.marketingText, "[선택] 마케팅 정보 수신에 동의합니다"),
       marketingBody: str(formRaw.marketingBody),
+      marketingBodyMode: formRaw.marketingBodyMode === "link" ? "link" : "text",
+      marketingLinkUrl: str(formRaw.marketingLinkUrl),
       marketingDefaultChecked: bool(formRaw.marketingDefaultChecked),
       thirdPartyEnabled: bool(formRaw.thirdPartyEnabled),
       thirdPartyText: str(formRaw.thirdPartyText, "[선택] 개인정보 제3자 제공에 동의합니다"),
       thirdPartyBody: str(formRaw.thirdPartyBody),
+      thirdPartyBodyMode: formRaw.thirdPartyBodyMode === "link" ? "link" : "text",
+      thirdPartyLinkUrl: str(formRaw.thirdPartyLinkUrl),
       thirdPartyDefaultChecked: bool(formRaw.thirdPartyDefaultChecked),
       successMessage: str(formRaw.successMessage, "신청이 접수되었어요."),
     },
