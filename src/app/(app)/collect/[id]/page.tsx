@@ -1200,7 +1200,7 @@ export default function CollectDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       {/* 탭 */}
-      <div className="flex gap-1 border-b border-border overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="sticky top-0 z-10 flex gap-1 border-b border-border bg-background overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {tabsFor(source.mode).map(({ id: tabId, label, icon: Icon }) => {
           const isDanger = tabId === "data-mgmt";
           const activeColor = isDanger ? "border-red-500 text-red-500" : "border-violet-500 text-violet-500";
