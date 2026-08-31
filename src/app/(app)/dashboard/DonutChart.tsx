@@ -63,7 +63,7 @@ export default function DonutChart({ data, maxSlices = 5, channelColors, onColor
     도넛+범례 줄이 화면에서는 flex-wrap 으로 좁을 때 범례를 아래로 접지만, 인쇄에서는
     print:flex-nowrap 으로 항상 도넛 옆에 붙인다 — 인쇄 칸 폭이 빠듯할 때 줄바꿈
     계산에 맡기면 범례 자체가 통째로 안 그려지는 문제가 있었다(부모 grid 열도
-    유입경로 칸만 1.6fr 로 넓히고, 다섯 칸 전부 minmax(0, ...) 로 감싸 다른 칸이
+    유입경로 칸만 2.1fr 로 넓히고, 다섯 칸 전부 minmax(0, ...) 로 감싸 다른 칸이
     자기 콘텐츠 최소 폭으로 이 칸의 몫을 빼앗지 못하게 한다 — ProjectSummaryCard 참고).
 
     도넛 크기 자체도 같은 부류의 함정이 있었다: ResponsiveContainer(width="100%")는
@@ -75,17 +75,14 @@ export default function DonutChart({ data, maxSlices = 5, channelColors, onColor
     인쇄 렌더링 타이밍과 무관하게 항상 맞다. 바깥 div(overflow-hidden)가 축소된
     도넛 밖으로 남는 원래 140px 여백을 잘라내 실제 차지 폭을 48px 로 만든다.
 
-    도넛과 범례를 인쇄에서도 "옆으로" 나란히 두면(print:flex-nowrap) 범례 폭이
-    "칸 폭 - 도넛 48px"로 정해진다 — 5칸짜리 인쇄 그리드에서 유입경로 칸 자체가
-    좁을 때 이 뺄셈이 범례 폭을 다시 0 근처로 밀어넣어 라벨이 잘리다 못해
-    도넛 위로 겹쳐 보이는 문제가 반복됐다(사용자 스크린샷: 퍼센트만 남고 라벨이
-    도넛에 겹침). 인쇄에서는 도넛을 위로, 범례를 그 아래 전체 폭으로 쌓아
-    (print:flex-col) 범례가 칸 폭을 통째로 쓰게 한다 — 도넛 폭을 빼는 계산 자체를
-    없애 다시 어긋날 여지를 지운다.
+    배치(도넛이 왼쪽, 범례가 그 오른쪽)는 화면과 인쇄가 같아야 한다 — 범례가 잘리는
+    걸 고치겠다고 인쇄에서만 도넛을 위로 쌓는 시도를 했더니 화면 레이아웃과 달라져
+    사용자가 반려했다. 배치는 그대로 두고, 대신 위에서 언급한 유입경로 칸 fr 비율을
+    올리는 쪽으로만 여유 폭을 확보한다.
   */
   return (
-    <div className="flex max-w-xs flex-wrap items-center gap-4 print:max-w-none print:flex-col print:items-stretch print:gap-1">
-      <div className="h-[140px] w-[140px] shrink-0 overflow-hidden print:mx-auto print:h-12 print:w-12">
+    <div className="flex max-w-xs flex-wrap items-center gap-4 print:max-w-none print:flex-nowrap print:gap-1.5">
+      <div className="h-[140px] w-[140px] shrink-0 overflow-hidden print:h-12 print:w-12">
         <div className="h-[140px] w-[140px] origin-top-left print:scale-[0.343]">
           <PieChart width={140} height={140}>
             <Pie data={slices} dataKey="count" nameKey="label" innerRadius="62%" outerRadius="100%" paddingAngle={slices.length > 1 ? 2 : 0} stroke="var(--background)" strokeWidth={2}>
