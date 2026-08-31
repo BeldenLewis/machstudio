@@ -13,7 +13,7 @@
  *   multiple — 선택지 여러 개에서 **복수 선택**. 값은 고른 항목들을 합친 문자열이다.
  * 이름을 나누는 이유: 기존 checkbox 로 저장된 동의 필드가 이미 있어서 의미를 바꿀 수 없다.
  */
-export type WebinarFieldType = "text" | "email" | "tel" | "select" | "checkbox" | "multiple";
+export type WebinarFieldType = "text" | "email" | "tel" | "number" | "select" | "checkbox" | "multiple";
 
 export interface WebinarRegistrationField {
   id: string;
@@ -105,7 +105,7 @@ export interface WebinarRegistrationFormConfig {
 }
 
 /** 항목 형식의 단일 출처 — 사전등록 빌더(collect-form-config)도 이걸 import 한다. */
-export const FIELD_TYPES: readonly WebinarFieldType[] = ["text", "email", "tel", "select", "checkbox", "multiple"];
+export const FIELD_TYPES: readonly WebinarFieldType[] = ["text", "email", "tel", "number", "select", "checkbox", "multiple"];
 
 /**
  * 복수 선택 답변을 한 문자열로 합친다 / 되읽는다.

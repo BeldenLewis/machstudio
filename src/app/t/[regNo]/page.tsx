@@ -8,7 +8,8 @@
  * ── 왜 번호만으로 열리는가 ─────────────────────────────────────────────
  * 등록번호가 곧 티켓이기 때문이다. 13자리 난수 + 체크digit 이라 추측할 수 없고, 여기서
  * 보여 주는 것은 **이름·유형·번호·QR 뿐**이다(§10.2 와 같은 최소 노출 규칙). 연락처나
- * 다른 문항 답변은 넣지 않는다.
+ * 다른 문항 답변은 넣지 않는다 — 단, 운영자가 항목별로 `showOnTicket` 을 명시적으로 켠
+ * 값(예: 동반 인원 수처럼 현장에서 확인해야 하는 값)은 예외로 보여준다(view.extras).
  *
  * ── 문구가 영어인 이유 ────────────────────────────────────────────────
  * 이 화면은 등록 폼·완료 화면·등록 확인에서 이어지는 **같은 흐름의 마지막 칸**이고,
@@ -16,6 +17,7 @@
  * "Open my ticket page" 를 눌렀을 때 갑자기 읽을 수 없는 화면에 도착한다.
  * 다국어는 §11 에서 로케일 맵으로 한 번에 얹는다 — 그때 이 문구들도 같이 옮긴다.
  */
+import { Fragment } from "react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -170,7 +172,7 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
             />
           </div>
 
-          {(view.maskedPhone || view.maskedEmail) && (
+          {(view.maskedPhone || view.maskedEmail || view.extras.length > 0) && (
             <dl className="mx-auto mt-4 grid w-full max-w-[280px] grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 rounded-xl bg-neutral-100 px-4 py-3 text-left text-xs">
               {view.maskedPhone && (
                 <>
@@ -184,6 +186,13 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
                   <dd className="min-w-0 break-all text-right font-bold text-neutral-800">{view.maskedEmail}</dd>
                 </>
               )}
+              {/* 운영자가 항목별로 켠 값(예: 동반 인원 수) — §10.2 최소 노출의 명시적 예외. */}
+              {view.extras.map((extra) => (
+                <Fragment key={extra.label}>
+                  <dt className="font-medium text-neutral-500">{extra.label}</dt>
+                  <dd className="min-w-0 break-all text-right font-bold text-neutral-800">{extra.value}</dd>
+                </Fragment>
+              ))}
             </dl>
           )}
 
@@ -206,6 +215,7 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
             maskedEmail: view.maskedEmail,
             maskedPhone: view.maskedPhone,
             accentColor: config.theme.accentColor,
+            extras: view.extras,
           }} />
           <p className="mt-2 text-[11px] text-neutral-500">
             * If the button doesn&apos;t work, please take a screenshot.

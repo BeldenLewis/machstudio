@@ -179,11 +179,33 @@ describe("티켓 화면", () => {
     expect(buildTicketView(noQr, record)?.registrationNo).toBe("1234567890128");
   });
 
-  it("조회 화면과 같은 최소 노출 규칙을 쓴다", () => {
+  it("조회 화면과 같은 최소 노출 규칙을 쓴다 — extras 를 켠 항목이 없으면 빈 배열", () => {
     const view = buildTicketView(orConfig, record)!;
-    expect(Object.keys(view).sort()).toEqual(["maskedEmail", "maskedPhone", "name", "registrationNo", "visitorType"]);
+    expect(Object.keys(view).sort()).toEqual(["extras", "maskedEmail", "maskedPhone", "name", "registrationNo", "visitorType"]);
+    expect(view.extras).toEqual([]);
     expect(JSON.stringify(view)).not.toContain("Acme");
     expect(view.maskedEmail).not.toContain("jane@example.com");
+  });
+
+  /**
+   * showOnTicket 은 **명시적으로 켠 항목만** 예외로 노출한다(§10.2 의 유일한 구멍이라
+   * 기본값·필터링이 새면 안 된다) — 동반 인원 수처럼 현장에서 확인해야 하는 값이 그 예다.
+   */
+  it("showOnTicket 을 켠 항목만, 값이 있을 때만 extras 에 담는다", () => {
+    const withExtra = normalizeCollectForm({
+      ...base,
+      fields: [
+        { key: "company", type: "text", label: "Company", showOnTicket: false },
+        { key: "companions", type: "number", label: "Companions", showOnTicket: true },
+        { key: "notes", type: "text", label: "Notes", showOnTicket: true },
+      ],
+    });
+    const view = buildTicketView(withExtra, {
+      registrationNo: record.registrationNo,
+      data: { ...record.data, companions: "2", notes: "" },
+    })!;
+    // 안 켠 항목(company)은 안 나가고, 켠 항목 중 값이 빈 것(notes)도 안 나간다.
+    expect(view.extras).toEqual([{ label: "Companions", value: "2" }]);
   });
 
   it("등록번호가 없으면 화면을 만들지 않는다", () => {

@@ -70,6 +70,7 @@ const COPY = {
   required: "Required",
   invalidEmail: "Check the email format",
   invalidPhone: "This number isn't valid for the selected country",
+  invalidNumber: "Numbers only",
   unknownKey: "Not part of this form",
   tooMany: "Too many selected",
   notAnOption: "Not one of the options",
@@ -98,6 +99,7 @@ const ISSUE_COPY: Record<SubmissionIssue["code"], string> = {
   required: COPY.required,
   invalid_email: COPY.invalidEmail,
   invalid_phone: COPY.invalidPhone,
+  invalid_number: COPY.invalidNumber,
   unknown_key: COPY.unknownKey,
   too_many: COPY.tooMany,
   not_an_option: COPY.notAnOption,
@@ -657,6 +659,23 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
           markStarted();
           updateSubmitState();
         });
+      } else if (f.type === "number") {
+        // tel 과 같은 이유(AGENTS.md "입력은 소스에서 정규화") — 숫자 아닌 글자는 안내 문구가
+        // 아니라 타이핑 즉시 지워서 애초에 "이상한 내용"이 들어갈 자리를 없앤다.
+        input.inputMode = "numeric";
+        input.addEventListener("input", () => {
+          const digits = input.value.replace(/[^0-9]/g, "");
+          if (input.value !== digits) {
+            const atEnd = input.selectionStart === input.value.length;
+            input.value = digits;
+            if (atEnd) input.setSelectionRange(digits.length, digits.length);
+          }
+          values[f.key] = input.value;
+          clearIssue(f.key);
+          err.textContent = "";
+          markStarted();
+          updateSubmitState();
+        });
       } else {
         input.addEventListener("input", () => {
           values[f.key] = input.value;
@@ -1144,7 +1163,10 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     }, COPY.saveImage);
   }
 
-  function completionIdentity(): { name: string; visitorType: string; maskedEmail: string; maskedPhone: string } {
+  function completionIdentity(): {
+    name: string; visitorType: string; maskedEmail: string; maskedPhone: string;
+    extras: Array<{ label: string; value: string }>;
+  } {
     const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
     const namePattern = /^(first|last|given|family|full)[_-]?names?$|^names?$|^surnames?$|^(first|last|given|family)$/i;
     const name = config.fields
@@ -1158,11 +1180,17 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
       const field = config.fields.find((item) => item.type === type);
       return field ? text(values[field.key]) : "";
     };
+    // 운영자가 항목별로 켠 값만(예: 동반 인원 수) — collect-lookup.buildTicketView 와 같은 규칙.
+    const extras = config.fields
+      .filter((field) => field.showOnTicket)
+      .map((field) => ({ label: t(field.label) || field.key, value: text(values[field.key]) }))
+      .filter((e) => e.value !== "");
     return {
       name,
       visitorType: config.branch.enabled ? text(values[config.branch.fieldKey]) : "",
       maskedEmail: maskedEmail(valueFor("email")),
       maskedPhone: maskedPhone(valueFor("tel")),
+      extras,
     };
   }
 
@@ -1201,7 +1229,9 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
       const identityRows = [
         ["Phone", identity.maskedPhone],
         ["E-mail", identity.maskedEmail],
-      ].filter(([, value]) => Boolean(value));
+      ].filter(([, value]) => Boolean(value)) as Array<[string, string]>;
+      // 운영자가 켠 항목(예: 동반 인원 수)도 같은 줄 목록에 이어 붙인다.
+      for (const extra of identity.extras) identityRows.push([extra.label, extra.value]);
       stack.appendChild(
         h("div", { class: "msf-done" },
           h("div", { class: "msf-done-title" }, COPY.doneTitle),

@@ -87,6 +87,14 @@ export interface CollectField {
   maxSelect?: number;
   /** select·multiple 전용 — '기타(직접입력)'. 켜면 저장 값이 선택지 밖 자유 문장이 된다. */
   allowOther?: boolean;
+  /**
+   * 티켓 화면(`/t/{regNo}`)·완료 화면·QR 카드에도 이 항목의 답을 보여준다. 기본 꺼짐 —
+   * 두 화면은 "다른 문항 답변은 절대 넣지 않는다"는 최소 노출 원칙(§10.2)이 있어서,
+   * 노출은 운영자가 항목별로 명시적으로 켠 것만 예외로 둔다(예: 동반 인원 수 — 현장에서
+   * 인원을 확인해야 하는 값). 선택지·연락처처럼 이미 최소 노출 규칙에 걸려 있는 값을
+   * 굳이 다시 켜도 위험하지 않다 — 운영자 책임하에 켠 값이라 그대로 보여준다.
+   */
+  showOnTicket?: boolean;
 }
 
 /**
@@ -376,6 +384,7 @@ function normalizeField(raw: unknown, index: number, locale: string): CollectFie
     enabled: r.enabled !== false,
     options,
     ...normalizeChoiceExtras(r, options.length),
+    showOnTicket: r.showOnTicket === true,
   };
 }
 
@@ -432,6 +441,9 @@ function normalizeConsentItem(raw: unknown, locale: string, fallback: CollectCon
  * 느슨한 값("2026", "Dec 5")도 막는다 — Date.parse 는 그것들도 그럴싸한 시각으로 만들어
  * 오타 하나가 진짜 접수 창이 돼 버린다(의도는 null = 제한 없음이다).
  */
+/** 숫자 항목(type: "number") 검증 — 자릿수만, 부호·소수점 없음(런타임이 타이핑 시점에 이미 걸러낸다). */
+const NUMERIC_ONLY = /^[0-9]+$/;
+
 const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 /** datetime-local 이 내는 모양 — 오프셋이 없다. */
 const NAIVE_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
@@ -675,7 +687,7 @@ function isOnFormPlacement(placement: NoticePlacement): boolean {
 export interface SubmissionIssue {
   /** 어느 항목의 문제인가. 폼이 이 key 아래에 인라인으로 붙인다(AGENTS.md). */
   key: string;
-  code: "required" | "invalid_email" | "invalid_phone" | "unknown_key" | "too_many" | "not_an_option" | "consent_required";
+  code: "required" | "invalid_email" | "invalid_phone" | "invalid_number" | "unknown_key" | "too_many" | "not_an_option" | "consent_required";
 }
 
 /**
@@ -795,6 +807,10 @@ export function validateSubmission(
     const telCountry = deps.countryFor?.(f.key) || config.validation.defaultCountry;
     if (f.type === "tel" && !deps.isValidPhone(safeStr(raw).trim(), telCountry)) {
       issues.push({ key: f.key, code: "invalid_phone" });
+    }
+    // 숫자만 — 국가별 규칙이 없는 단순 자릿수 검증이라 tel 처럼 의존성을 주입받지 않고 여기서 바로 본다.
+    if (f.type === "number" && !NUMERIC_ONLY.test(safeStr(raw).trim())) {
+      issues.push({ key: f.key, code: "invalid_number" });
     }
     if (f.type === "multiple") {
       const arr = Array.isArray(raw) ? raw : [raw];
