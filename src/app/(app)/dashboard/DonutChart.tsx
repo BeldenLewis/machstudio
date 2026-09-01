@@ -63,7 +63,7 @@ export default function DonutChart({ data, maxSlices = 5, channelColors, onColor
     도넛+범례 줄이 화면에서는 flex-wrap 으로 좁을 때 범례를 아래로 접지만, 인쇄에서는
     print:flex-nowrap 으로 항상 도넛 옆에 붙인다 — 인쇄 칸 폭이 빠듯할 때 줄바꿈
     계산에 맡기면 범례 자체가 통째로 안 그려지는 문제가 있었다(부모 grid 열도
-    유입경로 칸만 1.3fr 로 넓히고, 다섯 칸 전부 minmax(0, ...) 로 감싸 다른 칸이
+    유입경로 칸만 1.35fr 로 넓히고, 다섯 칸 전부 minmax(0, ...) 로 감싸 다른 칸이
     자기 콘텐츠 최소 폭으로 이 칸의 몫을 빼앗지 못하게 한다 — ProjectSummaryCard 참고).
 
     도넛 크기 자체도 같은 부류의 함정이 있었다: ResponsiveContainer(width="100%")는
