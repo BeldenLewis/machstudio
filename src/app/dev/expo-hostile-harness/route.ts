@@ -90,9 +90,12 @@ body { display: flex !important; flex-direction: column !important; }
 /* ⑦ 쌓임·클리핑 */
 .partner-wrap { position: relative; z-index: 9999; overflow: hidden; contain: layout paint; }
 
-/* ⑧ 우리 내부 이름을 직접 노린다 — Shadow 경계 밖 규칙은 안으로 들어가면 안 된다.
-   마운트 컨테이너 자체를 display:none 하는 공격은 구조적으로 이길 수 없으므로 여기에는
-   넣지 않는다(expo-entry의 별도 0-size 진단 계약이 그 경우를 다룬다). */
+/* ⑧ 붙여넣은 자리와 내부 이름을 직접 노린다. 마운트 자리는 런타임의 인라인 리셋이,
+   Shadow 경계 안쪽 이름은 격리가 막아야 한다. */
+[data-mach-expo] {
+  display: none !important; opacity: 0 !important; visibility: hidden !important;
+  transform: translateY(80px) rotate(9deg) !important; filter: blur(4px) !important;
+}
 .msx-root, .msx-portal { display: none !important; opacity: 0 !important; }
 `;
 

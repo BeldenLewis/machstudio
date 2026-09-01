@@ -16,7 +16,7 @@
  * 눈에 보인다. 저장은 하지 않는다 — 어떤 요청도 나가지 않는다.
  */
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { notFound } from "next/navigation";
 import { SectionsEditor } from "@/components/expo/SectionEditor";
 import { ExpoPublishPanel } from "@/components/expo/ExpoPublishPanel";
@@ -25,6 +25,7 @@ import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import { attachExpoRowKeys, stripExpoRowKeys, findRowKeyLeak } from "@/lib/expo/row-key";
 import { normalizeExpoPage } from "@/lib/expo/config";
 import { FINISH, R, Segmented } from "@/components/ui/primitives";
+import type { ExpoEditorRequest } from "@/lib/expo/editor-dto";
 import type { ExpoSection } from "@/lib/expo/types";
 
 const SID = (n: number) => `${n}${n}${n}${n}${n}${n}${n}${n}-${n}${n}${n}${n}-4${n}${n}${n}-8${n}${n}${n}-${n}${n}${n}${n}${n}${n}${n}${n}${n}${n}${n}${n}`;
@@ -99,6 +100,46 @@ function Harness() {
   const [width, setWidth] = useState<"narrow" | "wide">("narrow");
   const [canEdit, setCanEdit] = useState(true);
   const [stage, setStage] = useState<"draft" | "published" | "live">("draft");
+  const [requestLog, setRequestLog] = useState<string[]>([]);
+  const request = useCallback<ExpoEditorRequest>(async (path, init) => {
+    const method = (init?.method ?? "GET").toUpperCase();
+    setRequestLog((current) => [...current, `${method} ${path}`]);
+
+    if (path.endsWith("/publish") && method === "POST") {
+      setStage("published");
+      return Response.json({ page: { id: "harness-page" } });
+    }
+    if (path.endsWith("/live") && method === "POST") {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { live?: boolean };
+      setStage(body.live ? "live" : "published");
+      return Response.json({ page: { id: "harness-page" } });
+    }
+    if (path.endsWith("/export") && method === "POST") {
+      return new Response("<!doctype html><title>sections harness export</title>", {
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "content-disposition": 'attachment; filename="mach-expo-sections-harness-page.html"',
+        },
+      });
+    }
+    if (path.endsWith("/revisions") && method === "GET") {
+      return Response.json({
+        revisions: [{
+          id: "revision-7",
+          sequence: 7,
+          codeDigest: "1234567890abcdef",
+          publishedBy: "harness-user",
+          publisher: { id: "harness-user", name: "브라우저 하니스", email: null },
+          createdAt: "2026-08-01T00:00:00.000Z",
+          summary: { preset: "memory-only", sectionCount: 5, campaignCount: 0, destinationCount: 0 },
+        }],
+      });
+    }
+    if (path.endsWith("/revisions/revision-7/rollback") && method === "POST") {
+      return Response.json({ revision: { sequence: 8 } });
+    }
+    return Response.json({ error: `unhandled in-memory request: ${method} ${path}` }, { status: 404 });
+  }, []);
 
   /** 저장될 뻔한 값 — 행 키를 떼고 서버 정규화까지 통과시킨 결과다. */
   const saved = useMemo(() => {
@@ -121,6 +162,10 @@ function Harness() {
           <p className="mt-1 text-xs text-muted-foreground">
             요청은 하나도 나가지 않아요. 오른쪽은 <b>저장될 뻔한 값</b>(행 키 제거 + 서버 정규화)입니다.
           </p>
+          <output data-testid="sections-request-count" className="mt-1 block text-[11px] text-muted-foreground">
+            requests:{requestLog.length}
+          </output>
+          <output data-testid="sections-request-log" className="sr-only">{requestLog.join("\n")}</output>
         </div>
         <Segmented
           label="편집 칸 폭"
@@ -195,6 +240,7 @@ function Harness() {
             hasPublished={stage !== "draft"}
             liveAt={stage === "live" ? "2026-08-01T00:00:00.000Z" : null}
             canPublish={canEdit}
+            request={request}
             onChanged={() => { /* 하니스는 서버를 안 부른다 */ }}
             readiness={{
               canPublish: true,

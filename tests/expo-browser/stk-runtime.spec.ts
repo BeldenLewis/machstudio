@@ -158,12 +158,25 @@ test("URL, anchor, download and Imweb modal destinations preserve their contract
 test("hostile CSS is contained and reinsertion/remount keep one healthy host", async ({ page }) => {
   const unexpected = await guardRuntimeNetwork(page);
   await page.goto("/dev/expo-hostile-harness");
+  const mountContainer = page.locator("[data-mach-expo]");
+  await expect(mountContainer).toBeVisible();
   await expect(runtime(page)).toHaveCount(1);
-  const hostileStyles = await runtime(page).evaluate((host) => {
+  const hostileStyles = await mountContainer.evaluate((container) => {
+    const host = container.querySelector("mach-expo-section") as HTMLElement | null;
+    if (!host) throw new Error("hostile harness did not mount the real runtime host");
     const root = (host as HTMLElement).shadowRoot?.querySelector<HTMLElement>(".msx-root");
     const section = (host as HTMLElement).shadowRoot?.querySelector<HTMLElement>(".msx-section");
     const ancestor = host.closest<HTMLElement>(".partner-wrap");
+    const containerStyle = getComputedStyle(container);
+    const containerBox = container.getBoundingClientRect();
     return {
+      containerDisplay: containerStyle.display,
+      containerOpacity: containerStyle.opacity,
+      containerVisibility: containerStyle.visibility,
+      containerTransform: containerStyle.transform,
+      containerFilter: containerStyle.filter,
+      containerWidth: containerBox.width,
+      containerHeight: containerBox.height,
       hostDisplay: getComputedStyle(host).display,
       hostOpacity: getComputedStyle(host).opacity,
       rootDisplay: root ? getComputedStyle(root).display : "missing",
@@ -171,7 +184,20 @@ test("hostile CSS is contained and reinsertion/remount keep one healthy host", a
       ancestorOpacity: ancestor ? getComputedStyle(ancestor).opacity : "missing",
     };
   });
-  expect(hostileStyles).toEqual({ hostDisplay: "block", hostOpacity: "1", rootDisplay: "block", sectionVisibility: "visible", ancestorOpacity: "1" });
+  expect(hostileStyles).toMatchObject({
+    containerDisplay: "block",
+    containerOpacity: "1",
+    containerVisibility: "visible",
+    containerTransform: "none",
+    containerFilter: "none",
+    hostDisplay: "block",
+    hostOpacity: "1",
+    rootDisplay: "block",
+    sectionVisibility: "visible",
+    ancestorOpacity: "1",
+  });
+  expect(hostileStyles.containerWidth).toBeGreaterThan(0);
+  expect(hostileStyles.containerHeight).toBeGreaterThan(0);
 
   await page.goto("/dev/expo-stk-runtime-harness");
   await page.getByRole("button", { name: "reinsert snippet" }).click();

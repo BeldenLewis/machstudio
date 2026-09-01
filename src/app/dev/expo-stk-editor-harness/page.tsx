@@ -118,6 +118,7 @@ type HarnessStore = {
   dto: ExpoPageEditorDto;
   published: ExpoPageConfigV2;
   saveCount: number;
+  lastSaveDelayMs: number | null;
   requestCount: number;
   conflictNext: boolean;
   exportIssueNext: boolean;
@@ -209,6 +210,7 @@ function EditorHarness() {
       dto: pageDto(config),
       published: structuredClone(config),
       saveCount: 0,
+      lastSaveDelayMs: null,
       requestCount: 0,
       conflictNext: false,
       exportIssueNext: false,
@@ -220,6 +222,12 @@ function EditorHarness() {
     };
   });
   const storeRef = useRef(store);
+  const harnessRootRef = useRef<HTMLDivElement | null>(null);
+  const pointerOutputRef = useRef<HTMLOutputElement | null>(null);
+  const earlySaveOutputRef = useRef<HTMLOutputElement | null>(null);
+  const settledSaveOutputRef = useRef<HTMLOutputElement | null>(null);
+  const lastEditAtRef = useRef<number | null>(null);
+  const saveCheckpointTimersRef = useRef<number[]>([]);
   const replaceStore = useCallback((next: HarnessStore) => {
     storeRef.current = next;
     setStore(next);
@@ -234,6 +242,9 @@ function EditorHarness() {
       if (pageId !== PAGE_ID) throw new Error("page-scope");
       const next = structuredClone(storeRef.current);
       next.saveCount += 1;
+      next.lastSaveDelayMs = lastEditAtRef.current === null
+        ? null
+        : Math.round(performance.now() - lastEditAtRef.current);
       if (next.conflictNext) {
         next.conflictNext = false;
         replaceStore(next);
@@ -319,11 +330,57 @@ function EditorHarness() {
     ? { canEdit: false, canPublish: false, canManageSite: false, canManageTemplates: false }
     : { canEdit: true, canPublish: true, canManageSite: true, canManageTemplates: true };
 
+  useEffect(() => {
+    const recordInput = (event: Event) => {
+      if (event.target instanceof Node && harnessRootRef.current?.contains(event.target)) {
+        lastEditAtRef.current = performance.now();
+        saveCheckpointTimersRef.current.forEach(window.clearTimeout);
+        if (earlySaveOutputRef.current) earlySaveOutputRef.current.textContent = "early-saves:pending";
+        if (settledSaveOutputRef.current) settledSaveOutputRef.current.textContent = "settled-saves:pending";
+        saveCheckpointTimersRef.current = [
+          window.setTimeout(() => {
+            if (earlySaveOutputRef.current) {
+              earlySaveOutputRef.current.textContent = `early-saves:${storeRef.current.saveCount}`;
+            }
+          }, 700),
+          window.setTimeout(() => {
+            if (settledSaveOutputRef.current) {
+              settledSaveOutputRef.current.textContent = `settled-saves:${storeRef.current.saveCount}`;
+            }
+          }, 1_400),
+        ];
+      }
+    };
+    const recordPointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && harnessRootRef.current?.contains(event.target) && pointerOutputRef.current) {
+        pointerOutputRef.current.textContent = `pointer:${event.pointerType}`;
+      }
+    };
+    const recordTouch = (event: TouchEvent) => {
+      if (event.target instanceof Node && harnessRootRef.current?.contains(event.target) && pointerOutputRef.current) {
+        pointerOutputRef.current.textContent = "pointer:touch";
+      }
+    };
+    document.addEventListener("input", recordInput, true);
+    document.addEventListener("pointerdown", recordPointer, true);
+    document.addEventListener("touchstart", recordTouch, true);
+    return () => {
+      document.removeEventListener("input", recordInput, true);
+      document.removeEventListener("pointerdown", recordPointer, true);
+      document.removeEventListener("touchstart", recordTouch, true);
+      saveCheckpointTimersRef.current.forEach(window.clearTimeout);
+    };
+  }, []);
+
   return (
-    <div className="min-h-screen bg-background p-3 sm:p-6">
+    <div ref={harnessRootRef} className="min-h-screen bg-background p-3 sm:p-6">
       <header className="mb-4 flex flex-wrap items-center gap-2">
         <h1 className="mr-auto text-sm font-semibold">STK DB-free editor harness</h1>
         <output data-testid="save-count" className="text-xs">saves:{store.saveCount}</output>
+        <output data-testid="last-save-delay" className="text-xs">delay:{store.lastSaveDelayMs ?? "none"}</output>
+        <output ref={earlySaveOutputRef} data-testid="early-save-count" className="text-xs">early-saves:pending</output>
+        <output ref={settledSaveOutputRef} data-testid="settled-save-count" className="text-xs">settled-saves:pending</output>
+        <output ref={pointerOutputRef} data-testid="last-pointer-type" className="text-xs">pointer:none</output>
         <output data-testid="request-count" className="text-xs">requests:{store.requestCount}</output>
         {!viewer ? <>
           <button type="button" data-testid="conflict-next" onClick={() => replaceStore({ ...storeRef.current, conflictNext: true })} className="rounded border px-2 py-1 text-xs">다음 저장 409</button>

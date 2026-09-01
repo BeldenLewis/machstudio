@@ -49,6 +49,42 @@ function warn(message: string, error?: unknown): void {
 }
 
 /**
+ * 붙여넣은 빈 `data-mach-expo*` 자리도 파트너 CSS의 직접 표적이 된다. Shadow host만
+ * 리셋하면 그 부모인 이 div의 opacity/visibility/transform이 그대로 전체 임베드를
+ * 숨긴다. 고정 폭·높이·좌표는 주장하지 않고, 파트너 레이아웃/숨김 규칙을 끊는 최소
+ * 블록 기준만 인라인 important로 복원한다. 기존의 관계없는 인라인 장식은 보존한다.
+ */
+const MOUNT_CONTAINER_RESET = [
+  ["display", "block"],
+  ["box-sizing", "border-box"],
+  ["margin", "0"],
+  ["padding", "0"],
+  ["overflow", "visible"],
+  ["visibility", "visible"],
+  ["opacity", "1"],
+  ["pointer-events", "auto"],
+  ["transform", "none"],
+  ["filter", "none"],
+  ["will-change", "auto"],
+  ["contain", "none"],
+  ["animation", "none"],
+  ["transition", "none"],
+  ["float", "none"],
+  ["direction", "ltr"],
+  ["unicode-bidi", "isolate"],
+] as const;
+
+function resetMountContainer(container: HTMLElement): void {
+  try {
+    for (const [property, value] of MOUNT_CONTAINER_RESET) {
+      container.style.setProperty(property, value, "important");
+    }
+  } catch (error) {
+    warn("마운트 자리 리셋 실패", error);
+  }
+}
+
+/**
  * 마운트 자리 찾기.
  *
  * 지정(`data-mach-expo="ID"`) → 무지정(`data-mach-expo`) → **스크립트 태그 자리**.
@@ -123,6 +159,7 @@ function render(instance: Instance, script: HTMLScriptElement | null): void {
     return;
   }
   container.setAttribute("data-mach-expo-claimed", instance.payload.sectionId ?? instance.payload.pageId);
+  resetMountContainer(container);
   unhideWidget(container);
 
   if (instance.warningTimer !== null) {
@@ -153,8 +190,9 @@ function render(instance: Instance, script: HTMLScriptElement | null): void {
  * Shadow 격리와 호스트 리셋이 막았다 — 전역 리셋·스크롤 리빌(opacity:0)·전역 transition·
  * transform/filter·타이포 상속·body flex·쌓임/클리핑·빈 div 숨김·CSS 변수 충돌까지.
  *
- * **딱 하나 못 막는 것이 남는다: 붙여넣은 자리 자체가 숨겨진 경우.** 우리는 그 안에 있으므로
- * 구조적으로 못 이긴다(`[data-mach-expo]{display:none}`, 접힌 아코디언, 숨은 탭, 템플릿 블록).
+ * **딱 하나 못 막는 것이 남는다: 붙여넣은 자리의 조상이 숨겨진 경우.** 마운트 자리 자체의
+ * 직접 opacity/visibility/display 공격은 위 인라인 리셋으로 끊지만, 우리는 숨은 조상 안에
+ * 있으므로 접힌 아코디언·숨은 탭·템플릿 블록은 구조적으로 못 이긴다.
  * 그때 화면에는 아무 일도 안 일어나고 **어디에도 단서가 없다** — "붙였는데 안 나와요" 의
  * 가장 흔한 정체다. 막을 수 없으면 최소한 **진단할 수 있게** 한다.
  *

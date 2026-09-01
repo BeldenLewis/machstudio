@@ -48,9 +48,9 @@ jobs:
 
   expo-browser:
     needs: verify
-    # Exact screenshot baselines are captured on Darwin; keep CI on the same
-    # platform while still exercising both Chromium and Playwright WebKit.
-    runs-on: macos-latest
+    # Baselines carry Playwright's `darwin` suffix. Pin the Darwin image so
+    # `macos-latest` upgrades cannot silently change screenshot rasterization.
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
@@ -59,6 +59,8 @@ jobs:
           node-version: 22
           cache: npm
 
+      # package-lock pins @playwright/test/playwright/playwright-core 1.51.1;
+      # npm ci and the local npx binary keep browser revisions in that lockstep.
       - run: npm ci
 
       # Next가 하니스 모듈만 컴파일해도 Prisma 타입 import를 해석할 수 있어야 한다.
