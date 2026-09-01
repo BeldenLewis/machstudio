@@ -91,6 +91,17 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
   const update = (next: Partial<typeof form>) => setForm((prev) => ({ ...prev, ...next }));
   const updateField = (id: string, next: Partial<CompetitionFormField>) =>
     setForm((prev) => ({ ...prev, fields: prev.fields.map((f) => (f.id === id ? { ...f, ...next } : f)) }));
+  // 로고는 한 폼에 하나만 — 여러 항목이 동시에 로고면 투표 카드가 어느 사진을 배지로
+  // 써야 할지 모호해진다. 켤 때 다른 image 항목의 isLogo 를 같이 끈다.
+  const setLogoField = (id: string, value: boolean) =>
+    setForm((prev) => ({
+      ...prev,
+      fields: prev.fields.map((f) => {
+        if (f.id === id) return { ...f, isLogo: value };
+        if (value && f.type === "image") return { ...f, isLogo: false };
+        return f;
+      }),
+    }));
 
   const move = (index: number, direction: -1 | 1) => {
     const target = index + direction;
@@ -185,6 +196,7 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                 language={language}
                 onMove={(direction) => move(index, direction)}
                 onUpdate={(patch) => updateField(field.id, patch)}
+                onSetLogo={(value) => setLogoField(field.id, value)}
                 onRemove={() => update({ fields: form.fields.filter((f) => f.id !== field.id) })}
               />
             </Reorder.Item>
@@ -208,6 +220,8 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
           {(["privacy", "marketing", "thirdParty"] as const).map((kind) => {
             const textKey = kind === "privacy" ? "privacyText" : kind === "marketing" ? "marketingText" : "thirdPartyText";
             const bodyKey = kind === "privacy" ? "privacyBody" : kind === "marketing" ? "marketingBody" : "thirdPartyBody";
+            const modeKey = kind === "privacy" ? "privacyBodyMode" : kind === "marketing" ? "marketingBodyMode" : "thirdPartyBodyMode";
+            const linkKey = kind === "privacy" ? "privacyLinkUrl" : kind === "marketing" ? "marketingLinkUrl" : "thirdPartyLinkUrl";
             const checkedKey = kind === "privacy" ? "privacyDefaultChecked" : kind === "marketing" ? "marketingDefaultChecked" : "thirdPartyDefaultChecked";
             const meta = CONSENT_KIND_META[kind];
             // privacy·marketing 은 항상 폼에 뜬다(끌 수 없다). 제3자 제공만 대회마다 있고 없고가
@@ -242,7 +256,10 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                   onChange={(e) => update({ [textKey]: e.target.value } as Partial<typeof form>)}
                   className={FIELD_CLS}
                 />
-                <ConsentBodyField
+                <div className="flex w-fit rounded-lg bg-secondary p-0.5 shadow-sm" role="tablist">
+                  {(["text", "link"] as const).map((mode) => <button key={mode} type="button" role="tab" aria-selected={form[modeKey] === mode} onClick={() => update({ [modeKey]: mode } as Partial<typeof form>)} className={`rounded-md px-2.5 py-1 text-[10px] font-semibold transition-colors ${form[modeKey] === mode ? "bg-background shadow-sm" : "text-muted-foreground"}`}>{mode === "text" ? "텍스트" : "링크"}</button>)}
+                </div>
+                {form[modeKey] === "link" ? <input type="url" value={form[linkKey]} onChange={(e) => update({ [linkKey]: e.target.value } as Partial<typeof form>)} placeholder="https://..." aria-label={`${kind} 링크`} className={FIELD_CLS} /> : <ConsentBodyField
                   value={form[bodyKey]}
                   org={org}
                   locale={legalLocale}
@@ -251,7 +268,7 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                   ariaLabel={`${kind} 전문`}
                   rows={3}
                   className={`${FIELD_CLS} h-auto resize-y py-2`}
-                />
+                />}
               </div>
             );
           })}
@@ -301,6 +318,7 @@ function CompetitionFieldRow({
   language,
   onMove,
   onUpdate,
+  onSetLogo,
   onRemove,
 }: {
   field: CompetitionFormField;
@@ -310,6 +328,7 @@ function CompetitionFieldRow({
   language: NoticeLanguage;
   onMove: (direction: -1 | 1) => void;
   onUpdate: (patch: Partial<CompetitionFormField>) => void;
+  onSetLogo: (value: boolean) => void;
   onRemove: () => void;
 }) {
   const Icon = TYPE_META[field.type]?.icon ?? AlignLeft;
@@ -427,17 +446,23 @@ function CompetitionFieldRow({
       )}
 
       {field.type === "image" && (
-        <div className="mt-2 flex items-center gap-2 pl-9 text-[11px] text-muted-foreground">
-          <span>최대 장수</span>
-          <input
-            type="number"
-            min={1}
-            max={10}
-            value={field.maxFiles ?? 3}
-            onChange={(e) => onUpdate({ maxFiles: Math.max(1, Number(e.target.value) || 1) })}
-            className={`${FIELD_CLS} h-8 w-16`}
-          />
-          <span>· 장당 4MB 이하 (요청 본문 상한 때문에 1장씩 올라가요)</span>
+        <div className="mt-2 space-y-2 pl-9">
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <span>최대 장수</span>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={field.maxFiles ?? 3}
+              onChange={(e) => onUpdate({ maxFiles: Math.max(1, Number(e.target.value) || 1) })}
+              className={`${FIELD_CLS} h-8 w-16`}
+            />
+            <span>· 장당 4MB 이하 (요청 본문 상한 때문에 1장씩 올라가요)</span>
+          </div>
+          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground" title="투표·결과 카드에서 대표 사진과 별도로 작은 배지로 노출해요 — 한 폼에 하나만 켤 수 있어요">
+            <Switch checked={field.isLogo ?? false} onChange={onSetLogo} label="팀 로고로 써요" />
+            팀 로고로 써요
+          </label>
         </div>
       )}
       {field.type === "youtube" && (

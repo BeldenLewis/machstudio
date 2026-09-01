@@ -233,7 +233,11 @@ function bindImageInputs(form: HTMLFormElement, payload: BootPayload): Map<strin
   form.querySelectorAll<HTMLInputElement>("[data-mc-image]").forEach((input) => {
     const key = input.getAttribute("data-mc-key") ?? "";
     const max = Number(input.getAttribute("data-mc-max") || 3);
-    const gallery = input.parentElement?.querySelector<HTMLElement>("[data-mc-files]");
+    const field = input.closest(".mc-field");
+    const gallery = field?.querySelector<HTMLElement>("[data-mc-files]");
+    // 버튼이 input.click() 을 직접 부른다 — <label> 위임에 기대지 않는다(위 CSS 주석 참고).
+    field?.querySelector<HTMLButtonElement>(`[data-mc-image-btn="${CSS.escape(key)}"]`)
+      ?.addEventListener("click", () => input.click());
     uploaded.set(key, []);
 
     input.addEventListener("change", async () => {
@@ -454,7 +458,11 @@ function bindSubmit(
     const data: Record<string, string | Record<string, string>[]> = {};
     for (const field of payload.config.form.fields) {
       if (!field.enabled) continue;
-      if (field.type === "image") continue;
+      if (field.type === "image") {
+        const count = (uploaded.get(field.key) ?? []).length;
+        if (field.required && count === 0) { show("error", t.fieldRequired(field.label)); return; }
+        continue;
+      }
 
       if (field.type === "repeater") {
         const rowsHost = form.querySelector<HTMLElement>(`[data-mc-rep-rows][data-mc-key="${CSS.escape(field.key)}"]`);
@@ -504,9 +512,10 @@ function bindSubmit(
       if (value) data[field.key] = value;
     }
 
-    const media = Array.from(uploaded.entries()).flatMap(([, urls]) =>
-      urls.map((url, i) => ({ kind: "image" as const, url, sortOrder: i })),
-    );
+    const media = Array.from(uploaded.entries()).flatMap(([key, urls]) => {
+      const isLogo = payload.config.form.fields.find((f) => f.key === key)?.isLogo === true;
+      return urls.map((url, i) => ({ kind: "image" as const, url, sortOrder: i, ...(isLogo ? { role: "logo" as const } : {}) }));
+    });
 
     if (payload.preview) {
       show("success", t.previewSubmitted);

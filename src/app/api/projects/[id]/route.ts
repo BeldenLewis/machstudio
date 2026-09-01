@@ -39,6 +39,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       workspaceId: true,
       deletedAt: true,
       ga4PropertyId: true,
+      ga4PreviousYearPropertyId: true,
       ga4RegistrationPagePath: true,
     },
   });
@@ -63,6 +64,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const name = nameProvided ? body.name.trim() : "";
   const description = body.description;
   const ga4PropertyId = body.ga4PropertyId;
+  const ga4PreviousYearPropertyId = body.ga4PreviousYearPropertyId;
   const ga4RegistrationPagePath = body.ga4RegistrationPagePath;
 
   if (nameProvided) {
@@ -83,6 +85,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }),
       ...(ga4PropertyId !== undefined && {
         ga4PropertyId: typeof ga4PropertyId === "string" && ga4PropertyId.trim() ? ga4PropertyId.trim() : null,
+      }),
+      ...(ga4PreviousYearPropertyId !== undefined && {
+        ga4PreviousYearPropertyId:
+          typeof ga4PreviousYearPropertyId === "string" && ga4PreviousYearPropertyId.trim()
+            ? ga4PreviousYearPropertyId.trim()
+            : null,
       }),
       ...(ga4RegistrationPagePath !== undefined && {
         ga4RegistrationPagePath:

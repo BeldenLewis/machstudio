@@ -72,13 +72,30 @@ export interface RealtimeReportData {
   funnel: {
     homepageVisitors: number;
     homepageVisitorsChange: number | null;
+    /** project.ga4PreviousYearPropertyId 가 있고 양쪽 소스에 행사 일자가 있어야만 값이 온다. */
+    homepageVisitorsYoyChange: number | null;
+    /** 요약 카드의 미니 추이선용 — 조회 구간(range.from~to) 매일의 방문자 수, 날짜순. */
+    homepageVisitorsDaily: number[] | null;
     registrationPageVisitors: number | null;
     registrationPageVisitorsChange: number | null;
+    registrationPageVisitorsYoyChange: number | null;
+    registrationPageVisitorsDaily: number[] | null;
     registrants: number;
     homepageToPageRate: number | null;
     pageToRegistrantRate: number | null;
   } | null;
   composition: Array<{
+    key: string;
+    label: string;
+    total: number;
+    items: Array<{ label: string; count: number; percent: number }>;
+  }>;
+  /**
+   * '필드' 탭 "통계" 토글이 켜진 필드마다 값 분포 카드 하나 — composition(고정 후보 4종)과
+   * 달리 프로젝트가 실제로 수집하는 필드 그대로다. 값이 하나도 없으면(전부 빈 값) 그
+   * 필드는 아예 빠진다 — dashboard-report route.ts computeFieldStats.
+   */
+  fieldStats: Array<{
     key: string;
     label: string;
     total: number;
@@ -337,11 +354,17 @@ function YearOverYearCard({ yoy, currentTotal }: { yoy: NonNullable<RealtimeRepo
 
 export function ChangeBadge({ rangeChange }: MetricChange) {
   if (rangeChange === null) {
-    return <span className="rounded-full bg-secondary px-2 py-1 text-xs text-muted-foreground">비교 준비 중</span>;
+    return (
+      <span className="rounded-full bg-secondary px-2 py-1 text-xs text-muted-foreground print:px-1.5 print:py-0.5 print:text-[9px]">
+        비교 준비 중
+      </span>
+    );
   }
   const positive = rangeChange >= 0;
   return (
-    <span className={`rounded-full px-2 py-1 text-xs font-medium ${positive ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-600"}`}>
+    <span
+      className={`rounded-full px-2 py-1 text-xs font-medium print:px-1.5 print:py-0.5 print:text-[9px] ${positive ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-600"}`}
+    >
       {formatPercent(rangeChange)}
     </span>
   );
@@ -895,6 +918,21 @@ export default function RealtimeReport({ data, loading, rangeLabel }: Props) {
 
         <UtmBreakdownSection data={data} />
       </div>
+
+      {data.fieldStats.length > 0 && (
+        <section className="rounded-[24px] border border-border bg-background p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <BarChart3 className="w-4 h-4 text-violet-500" />
+            <h3 className="text-sm font-semibold">필드별 통계</h3>
+          </div>
+          <p className="text-xs text-muted-foreground mb-4">
+            수집 소스의 &ldquo;필드&rdquo; 탭에서 &ldquo;통계&rdquo; 토글로 켜고 끌 수 있어요.
+          </p>
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {data.fieldStats.map((section) => <CompositionSection key={section.key} section={section} />)}
+          </div>
+        </section>
+      )}
 
       <EmailDomainSection items={data.emailDomainTop} total={data.emailDomainTotal} />
     </section>

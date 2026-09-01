@@ -65,3 +65,44 @@ export async function getGa4ActiveUsers(options: {
     return null;
   }
 }
+
+/**
+ * 요약 카드의 미니 추이선(Sparkline)용 — 홈페이지/사전등록 페이지 방문자를 날짜별로 쪼개서 받는다.
+ * GA4는 그 날 방문이 0이면 행 자체를 안 주므로, 빈 날짜를 채우는 건 호출부(날짜 범위를 아는 쪽) 몫이다.
+ * date는 GA4 표준 형식 그대로("YYYYMMDD", 8자리, 하이픈 없음) 돌려준다.
+ */
+export async function getGa4ActiveUsersByDay(options: {
+  propertyId: string;
+  pagePathPrefix?: string | null;
+  from: Date;
+  to: Date;
+}): Promise<Array<{ date: string; count: number }> | null> {
+  const client = getClient();
+  if (!client) return null;
+
+  try {
+    const [response] = await client.runReport({
+      property: `properties/${options.propertyId}`,
+      dateRanges: [{ startDate: toGa4Date(options.from), endDate: toGa4Date(options.to) }],
+      dimensions: [{ name: "date" }],
+      metrics: [{ name: "activeUsers" }],
+      ...(options.pagePathPrefix
+        ? {
+            dimensionFilter: {
+              filter: {
+                fieldName: "pagePath",
+                stringFilter: { matchType: "BEGINS_WITH", value: options.pagePathPrefix },
+              },
+            },
+          }
+        : {}),
+    });
+    return (response.rows ?? []).map((row) => ({
+      date: row.dimensionValues?.[0]?.value ?? "",
+      count: Number(row.metricValues?.[0]?.value) || 0,
+    }));
+  } catch (error) {
+    console.error("[ga4] runReport(일별) 실패", options.propertyId, error);
+    return null;
+  }
+}

@@ -10,8 +10,8 @@ import { collectColumnsFor, isBuilderSource } from "@/lib/collect-columns";
  */
 
 const CAPTURE_MAPPINGS = [
-  { id: "m1", index: 0, key: "name", label: "이름", type: "text", isRequired: true, sortOrder: 0 },
-  { id: "m2", index: 1, key: "email", label: "메일", type: "email", isRequired: true, sortOrder: 1 },
+  { id: "m1", index: 0, key: "name", label: "이름", type: "text", isRequired: true, showInDashboard: true, sortOrder: 0 },
+  { id: "m2", index: 1, key: "email", label: "메일", type: "email", isRequired: true, showInDashboard: true, sortOrder: 1 },
 ];
 
 const FORM_CONFIG = {

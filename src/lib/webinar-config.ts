@@ -13,7 +13,7 @@
  *   multiple — 선택지 여러 개에서 **복수 선택**. 값은 고른 항목들을 합친 문자열이다.
  * 이름을 나누는 이유: 기존 checkbox 로 저장된 동의 필드가 이미 있어서 의미를 바꿀 수 없다.
  */
-export type WebinarFieldType = "text" | "email" | "tel" | "select" | "checkbox" | "multiple";
+export type WebinarFieldType = "text" | "email" | "tel" | "number" | "select" | "checkbox" | "multiple";
 
 export interface WebinarRegistrationField {
   id: string;
@@ -90,6 +90,10 @@ export interface WebinarRegistrationFormConfig {
   /** 동의 문구 클릭 시 팝업으로 보여줄 약관 전문 — 비어 있으면 팝업 없음 */
   privacyBody: string;
   marketingBody: string;
+  privacyBodyMode: "text" | "link";
+  marketingBodyMode: "text" | "link";
+  privacyLinkUrl: string;
+  marketingLinkUrl: string;
   /** 폼 진입 시 동의 체크박스를 기본으로 체크해둘지 — 사용자가 직접 만지면 그 값이 우선한다 */
   privacyDefaultChecked: boolean;
   marketingDefaultChecked: boolean;
@@ -105,7 +109,7 @@ export interface WebinarRegistrationFormConfig {
 }
 
 /** 항목 형식의 단일 출처 — 사전등록 빌더(collect-form-config)도 이걸 import 한다. */
-export const FIELD_TYPES: readonly WebinarFieldType[] = ["text", "email", "tel", "select", "checkbox", "multiple"];
+export const FIELD_TYPES: readonly WebinarFieldType[] = ["text", "email", "tel", "number", "select", "checkbox", "multiple"];
 
 /**
  * 복수 선택 답변을 한 문자열로 합친다 / 되읽는다.
@@ -735,6 +739,10 @@ export function normalizeRegistrationForm(
     marketingText: typeof raw?.marketingText === "string" ? raw.marketingText : "[선택] 마케팅 정보 수신에 동의합니다",
     privacyBody: typeof raw?.privacyBody === "string" ? raw.privacyBody : "",
     marketingBody: typeof raw?.marketingBody === "string" ? raw.marketingBody : "",
+    privacyBodyMode: raw?.privacyBodyMode === "link" ? "link" : "text",
+    marketingBodyMode: raw?.marketingBodyMode === "link" ? "link" : "text",
+    privacyLinkUrl: typeof raw?.privacyLinkUrl === "string" ? raw.privacyLinkUrl : "",
+    marketingLinkUrl: typeof raw?.marketingLinkUrl === "string" ? raw.marketingLinkUrl : "",
     privacyDefaultChecked: raw?.privacyDefaultChecked === true,
     marketingDefaultChecked: raw?.marketingDefaultChecked === true,
     submitLabel: typeof raw?.submitLabel === "string" ? raw.submitLabel : "사전 등록하기",

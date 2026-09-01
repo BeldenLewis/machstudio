@@ -38,7 +38,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   type IncomingField = {
     index: number; key: string; label: string;
-    type?: string; isRequired?: boolean; sortOrder?: number;
+    type?: string; isRequired?: boolean; showInDashboard?: boolean; sortOrder?: number;
     matchBy?: string | null; matchValue?: string | null;
     hidden?: boolean;
   };
@@ -55,6 +55,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           label: f.label,
           type: f.type ?? "text",
           isRequired: f.isRequired ?? false,
+          showInDashboard: f.showInDashboard ?? true,
           sortOrder: f.sortOrder ?? f.index,
           // undefined = 보내지 않음 → 보존. null = 명시적 해제.
           matchBy: f.matchBy !== undefined ? f.matchBy : (kept?.matchBy ?? null),

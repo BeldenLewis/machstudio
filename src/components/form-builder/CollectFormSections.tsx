@@ -293,7 +293,7 @@ export function CollectFormSections({
           addLabel="안내 추가"
           makeItem={() => ({
             id: crypto.randomUUID().slice(0, 8), enabled: true, placement: "above-consent",
-            title: {}, body: {}, mode: "notice", collapsible: false,
+            title: {}, body: {}, bodyFormat: "text", mode: "notice", collapsible: false,
           })}
           emptyState={<p className="rounded-xl bg-secondary/40 p-4 text-center text-[11px] text-muted-foreground">안내가 없어요</p>}
           renderRow={({ item, handle, removeButton, patch: patchRow }) => (
@@ -417,14 +417,36 @@ export function CollectFormSections({
                 aria-label={`${kind} 문구`}
                 className="w-full bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/50"
               />
-              <ConsentBodyField
+              <div className="flex w-fit rounded-lg bg-background p-0.5 shadow-sm" role="tablist" aria-label={`${meta.noun} 전문 입력 방식`}>
+                {(["text", "link"] as const).map((format) => {
+                  const active = item.bodyFormat === format;
+                  return (
+                    <button
+                      key={format}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => patch({ consent: { ...config.consent, [kind]: { ...item, bodyFormat: format } } })}
+                      className={`rounded-md px-2.5 py-1 text-[10px] font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${active ? "bg-secondary text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                      {format === "text" ? "텍스트" : "링크"}
+                    </button>
+                  );
+                })}
+              </div>
+              {item.bodyFormat === "link" ? <input type="url" value={item.linkUrl} onChange={(e) => patch({ consent: { ...config.consent, [kind]: { ...item, linkUrl: e.target.value } } })} placeholder="https://..." aria-label={`${kind} 링크`} className={FIELD_CLS} /> : <ConsentBodyField
                 value={localize(item.body, DEFAULT_LOCALE)}
                 org={org}
                 locale={legalLocale}
                 onSave={(next) => patch({ consent: { ...config.consent, [kind]: { ...item, body: toLocalized(next) } } })}
                 placeholder="'자세히' 팝업 전문 (선택) — 아래 '법률 문구 생성기'로 채울 수 있어요"
                 ariaLabel={`${kind} 전문`}
-              />
+              />}
+              <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+                {item.bodyFormat === "link"
+                  ? "동의 문구 옆 ‘자세히’를 누르면 새 창에서 열려요."
+                  : "입력한 글과 줄바꿈을 그대로 표시해요."}
+              </p>
               <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <Switch
                   checked={item.defaultChecked}

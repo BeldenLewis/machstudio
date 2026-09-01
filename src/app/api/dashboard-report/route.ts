@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import type { RealtimeReportData } from "@/app/(app)/dashboard/RealtimeReport";
 import { normalizeUtmKey } from "@/lib/attribution-normalize";
-import { getGa4ActiveUsers } from "@/lib/ga4";
+import { getGa4ActiveUsers, getGa4ActiveUsersByDay } from "@/lib/ga4";
 import {
   equivalentPreviousCutoff,
   eventDday,
@@ -575,6 +575,29 @@ function getKstDateKey(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * GA4 일별 방문자 행("YYYYMMDD" 키, 방문 0인 날은 행 자체가 없음)을 조회 구간의
+ * 매일에 맞춰 0으로 채운 연속 배열로 편다 — 요약 카드 미니 추이선(Sparkline)이
+ * cumulativeTrend 와 같은 "구간 전체를 빠짐없이" 규칙을 따르게 한다.
+ */
+export function buildGa4DailyTrend(rows: Array<{ date: string; count: number }> | null, from: Date, to: Date): number[] | null {
+  if (!rows) return null;
+  const byDate = new Map<string, number>();
+  for (const row of rows) {
+    if (row.date.length !== 8) continue;
+    const key = `${row.date.slice(0, 4)}-${row.date.slice(4, 6)}-${row.date.slice(6, 8)}`;
+    byDate.set(key, row.count);
+  }
+  const points: number[] = [];
+  let cursor = getKstDayStart(from);
+  const end = getKstDayStart(to);
+  while (cursor.getTime() <= end.getTime()) {
+    points.push(byDate.get(getKstDateKey(cursor)) ?? 0);
+    cursor = new Date(cursor.getTime() + DAY_MS);
+  }
+  return points;
+}
+
 interface UtmTrendRecord {
   createdAt: Date;
   utmSource: string | null;
@@ -761,9 +784,21 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
       projectId,
       id: effectiveFilters.sourceId ?? "__no_active_collect_source__",
     },
-    select: { id: true, fieldMappings: { select: { key: true, label: true } } },
+    select: { id: true, fieldMappings: { select: { key: true, label: true, type: true, showInDashboard: true } } },
   });
-  const compositionKeys = resolveCompositionKeys(sourceFields);
+  /**
+   * 운영자가 '필드' 탭에서 "통계" 를 켠 필드 — 프로젝트마다 수집 필드가 다 다르므로,
+   * VISITOR_DIMENSIONS 같은 고정 후보 목록으로는 못 커버한다. 기본값이 true 라(스키마 주석)
+   * 새 필드는 자동으로 여기 잡히고, 운영자가 안 쓸 것만 끈다.
+   */
+  const dashboardFields = new Map<string, { label: string; type: string }>();
+  for (const src of sourceFields) {
+    for (const fm of src.fieldMappings) {
+      if (!fm.showInDashboard || dashboardFields.has(fm.key)) continue;
+      dashboardFields.set(fm.key, { label: fm.label || fm.key, type: fm.type });
+    }
+  }
+  const compositionKeys = Array.from(new Set([...resolveCompositionKeys(sourceFields), ...dashboardFields.keys()]));
 
   const [yesterdayCount, todayCount, cumulativeCount, rangeCount, previousRangeCount, cumulativeBeforeRange, previousTotalCount, previousPaceCount, previousRangeMatchedCount, heatmapRecords, utmGroups, heatmapRows, cumulativeDailyRows, utmTrendRows] = await Promise.all([
     prisma.collectRecord.count({ where: buildWhere({ ...baseParams, from: yesterdayStart, lt: todayStart }) }),
@@ -849,6 +884,30 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
     const items = topEntriesBySectionMax(counts, 5);
     return { key: dimension.key, label: dimension.label, items, total: Array.from(counts.values()).reduce((sum, count) => sum + count, 0) };
   }).filter((section) => section.items.length > 0).slice(0, 4);
+
+  /**
+   * 필드별 통계 — '필드' 탭 "통계" 토글이 켜진 필드마다 값 분포 카드 하나.
+   * composition 과 달리 후보 키워드로 추측하지 않는다 — FieldMapping.key 를 그대로 쓴다.
+   * 체크박스형(콤마로 이어붙인 다중 선택)도 splitValues 로 항목별로 갈라서 센다.
+   */
+  const fieldStats = Array.from(dashboardFields.entries()).map(([key, meta]) => {
+    const counts = new Map<string, number>();
+    for (const record of heatmapRecords as unknown as CompositionRecord[]) {
+      const data = record.data && typeof record.data === "object" && !Array.isArray(record.data)
+        ? (record.data as Record<string, unknown>)
+        : {};
+      for (const value of splitValues(data[key])) {
+        counts.set(value, (counts.get(value) ?? 0) + 1);
+      }
+    }
+    const items = topEntriesBySectionMax(counts, 8);
+    return {
+      key,
+      label: meta.label,
+      items,
+      total: Array.from(counts.values()).reduce((sum, count) => sum + count, 0),
+    };
+  }).filter((section) => section.items.length > 0);
 
   // Email domain TOP 10
   const emailDomainCounts = new Map<string, number>();
@@ -954,11 +1013,32 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
     ? await (async () => {
         const propertyId = project.ga4PropertyId!;
         const pagePathPrefix = project.ga4RegistrationPagePath || null;
-        const [homepageVisitors, previousHomepageVisitors, registrationPageVisitors, previousRegistrationPageVisitors] = await Promise.all([
+        // 작년 웹사이트는 대개 다른 GA4 속성이라(행사마다 새로 만듦) 프로젝트에 별도 저장된
+        // 속성 ID가 있어야만, 그리고 등록 쪽 "전년 동일 D구간"과 같은 전제(양쪽 소스 행사
+        // 일자 확인됨)를 만족할 때만 시도한다 — 못 만족하면 조용히 생략(부분 데이터로 오해 방지).
+        const previousYearPropertyId = hasPaceComparison ? project.ga4PreviousYearPropertyId : null;
+        const [
+          homepageVisitors,
+          previousHomepageVisitors,
+          registrationPageVisitors,
+          previousRegistrationPageVisitors,
+          homepageVisitorsDailyRows,
+          registrationPageVisitorsDailyRows,
+          previousYearHomepageVisitors,
+          previousYearRegistrationPageVisitors,
+        ] = await Promise.all([
           getGa4ActiveUsers({ propertyId, from, to }),
           getGa4ActiveUsers({ propertyId, from: previousFrom, to: from }),
           pagePathPrefix ? getGa4ActiveUsers({ propertyId, pagePathPrefix, from, to }) : Promise.resolve(null),
           pagePathPrefix ? getGa4ActiveUsers({ propertyId, pagePathPrefix, from: previousFrom, to: from }) : Promise.resolve(null),
+          getGa4ActiveUsersByDay({ propertyId, from, to }),
+          pagePathPrefix ? getGa4ActiveUsersByDay({ propertyId, pagePathPrefix, from, to }) : Promise.resolve(null),
+          previousYearPropertyId
+            ? getGa4ActiveUsers({ propertyId: previousYearPropertyId, from: previousEventRangeFrom!, to: previousEventRangeTo! })
+            : Promise.resolve(null),
+          previousYearPropertyId && pagePathPrefix
+            ? getGa4ActiveUsers({ propertyId: previousYearPropertyId, pagePathPrefix, from: previousEventRangeFrom!, to: previousEventRangeTo! })
+            : Promise.resolve(null),
         ]);
         if (homepageVisitors === null) return null;
         const homepageVisitorsChange =
@@ -969,11 +1049,23 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
           registrationPageVisitors !== null && previousRegistrationPageVisitors && previousRegistrationPageVisitors > 0
             ? ((registrationPageVisitors - previousRegistrationPageVisitors) / previousRegistrationPageVisitors) * 100
             : null;
+        const homepageVisitorsYoyChange =
+          previousYearHomepageVisitors && previousYearHomepageVisitors > 0
+            ? ((homepageVisitors - previousYearHomepageVisitors) / previousYearHomepageVisitors) * 100
+            : null;
+        const registrationPageVisitorsYoyChange =
+          registrationPageVisitors !== null && previousYearRegistrationPageVisitors && previousYearRegistrationPageVisitors > 0
+            ? ((registrationPageVisitors - previousYearRegistrationPageVisitors) / previousYearRegistrationPageVisitors) * 100
+            : null;
         return {
           homepageVisitors,
           homepageVisitorsChange,
+          homepageVisitorsYoyChange,
+          homepageVisitorsDaily: buildGa4DailyTrend(homepageVisitorsDailyRows, from, to),
           registrationPageVisitors,
           registrationPageVisitorsChange,
+          registrationPageVisitorsYoyChange,
+          registrationPageVisitorsDaily: pagePathPrefix ? buildGa4DailyTrend(registrationPageVisitorsDailyRows, from, to) : null,
           registrants: rangeCount,
           homepageToPageRate:
             registrationPageVisitors !== null && homepageVisitors > 0
@@ -1071,6 +1163,7 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
     },
     funnel,
     composition,
+    fieldStats,
     emailDomainTop,
     emailDomainTotal,
     dedup,

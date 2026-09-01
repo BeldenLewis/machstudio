@@ -65,10 +65,16 @@ export function buildCollectConfirmationEmail({
       </tr>`).join("")}</table>`
     : "";
 
-  const contactHtml = ticket && (ticket.maskedPhone || ticket.maskedEmail)
+  // Phone/E-mail 과 운영자가 showOnTicket 을 켠 항목(예: 동반 인원 수)을 같은 줄 목록으로 이어 붙인다
+  // — 티켓 화면·완료 화면과 같은 규칙(collect-lookup.buildTicketView 의 extras).
+  const contactRows: Array<[string, string]> = [];
+  if (ticket?.maskedPhone) contactRows.push(["Phone", ticket.maskedPhone]);
+  if (ticket?.maskedEmail) contactRows.push(["E-mail", ticket.maskedEmail]);
+  if (ticket) for (const extra of ticket.extras) contactRows.push([extra.label, extra.value]);
+
+  const contactHtml = contactRows.length
     ? `<div style="margin:18px auto 0;max-width:320px;padding:12px 16px;border-radius:12px;background:#ffffff;text-align:left;font-size:12px;line-height:1.8;color:#555;">
-        ${ticket.maskedPhone ? `<div><strong style="display:inline-block;width:58px;color:#333;">Phone</strong>${escapeHtml(ticket.maskedPhone)}</div>` : ""}
-        ${ticket.maskedEmail ? `<div><strong style="display:inline-block;width:58px;color:#333;">E-mail</strong>${escapeHtml(ticket.maskedEmail)}</div>` : ""}
+        ${contactRows.map(([label, value]) => `<div><strong style="display:inline-block;min-width:80px;color:#333;">${escapeHtml(label)}</strong>${escapeHtml(value)}</div>`).join("")}
       </div>`
     : "";
 

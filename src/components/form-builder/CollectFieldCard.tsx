@@ -151,11 +151,17 @@ export function CollectFieldCard({
         </div>
         {keyError && <p className="pb-1 text-[11px] text-red-600 dark:text-red-400">{keyError}</p>}
 
-        {(field.type === "text" || field.type === "email" || field.type === "tel") && (
+        {(field.type === "text" || field.type === "email" || field.type === "tel" || field.type === "number") && (
           <input
             value={localize(field.placeholder, DEFAULT_LOCALE)}
             onChange={(e) => patch({ placeholder: toLocalized(e.target.value) })}
-            placeholder={field.type === "tel" ? "입력 예시 (예: 2025550147)" : "입력 예시 — 응답 칸에 회색으로 (선택)"}
+            placeholder={
+              field.type === "tel"
+                ? "입력 예시 (예: 2025550147)"
+                : field.type === "number"
+                  ? "입력 예시 (예: 3)"
+                  : "입력 예시 — 응답 칸에 회색으로 (선택)"
+            }
             aria-label="입력 예시"
             className={`${FIELD_CLS} mt-1 text-[13px]`}
           />

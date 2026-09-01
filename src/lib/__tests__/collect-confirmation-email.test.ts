@@ -43,6 +43,31 @@ describe("buildCollectConfirmationEmail", () => {
     expect(result.html).not.toContain("app.example.com");
   });
 
+  /**
+   * showOnTicket 을 켠 항목(예: 동반 인원 수)이 확인 메일에도 티켓 화면·완료 화면과 같이
+   * 뜬다 — 세 자리 중 하나만 반영되면 "QR 은 봤는데 메일엔 없다"가 생긴다.
+   */
+  it("showOnTicket 을 켠 항목의 값을 Phone/E-mail 과 같은 자리에 넣는다", () => {
+    const config = normalizeCollectForm({
+      fields: [
+        { key: "companions", label: "Companions", type: "number", enabled: true, showOnTicket: true },
+        { key: "notes", label: "Notes", type: "text", enabled: true, showOnTicket: true },
+      ],
+      confirmationEmail: { enabled: true },
+    });
+    const result = buildCollectConfirmationEmail({
+      config,
+      sourceName: "Expo",
+      locale: "en",
+      registrationNo: "1234567890123",
+      data: { companions: "2", notes: "should stay private" },
+    });
+    expect(result.html).toContain("Companions</strong>2");
+    // 값이 비어 있으면(§공통 "빈 껍데기 노출 금지") 라벨도 같이 안 나간다.
+    expect(result.html).not.toContain("Notes");
+    expect(result.html).not.toContain("should stay private");
+  });
+
   it("행사 개요 공개 표시가 꺼져 있어도 이메일 토글이 켜져 있으면 일정·장소를 표시한다", () => {
     const config = normalizeCollectForm({
       eventInfo: { enabled: false, eventDates: ["2026-10-22"], venue: "Magic Box, LA" },

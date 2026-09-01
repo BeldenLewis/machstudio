@@ -45,6 +45,12 @@ export interface CompetitionFormField extends Omit<WebinarRegistrationField, "ty
   countExclude?: number;
   /** 눈에 띄게 강조 표시한다 — 참가자격 확인처럼 놓치면 안 되는 체크박스에 쓴다. */
   emphasized?: boolean;
+  /**
+   * image 전용 — 이 항목에 올린 사진을 팀 로고로 취급한다. 투표·결과 카드에서 대표 사진과
+   * 별도로 작은 배지로 노출한다. 한 폼에 최대 하나만 — 여러 개면 어느 로고를 써야 할지
+   * 모호해지므로 켤 때 다른 image 항목의 값은 자동으로 꺼진다(EntryFormTab 참고).
+   */
+  isLogo?: boolean;
 }
 
 /** 공고 페이지 블록. 대회 소개·참가 자격·신청 절차·일정·FAQ 를 구조로 표현한다. */
@@ -77,9 +83,13 @@ export interface CompetitionConfig {
     /** 동의 — 웨비나 등록 폼과 같은 계약(문구·전문·기본 체크). */
     privacyText: string;
     privacyBody: string;
+    privacyBodyMode: "text" | "link";
+    privacyLinkUrl: string;
     privacyDefaultChecked: boolean;
     marketingText: string;
     marketingBody: string;
+    marketingBodyMode: "text" | "link";
+    marketingLinkUrl: string;
     marketingDefaultChecked: boolean;
     /**
      * 제3자 제공 동의 — privacy/marketing과 달리 **꺼져 있을 수 있다.** 모든 대회가 참가자
@@ -88,6 +98,8 @@ export interface CompetitionConfig {
     thirdPartyEnabled: boolean;
     thirdPartyText: string;
     thirdPartyBody: string;
+    thirdPartyBodyMode: "text" | "link";
+    thirdPartyLinkUrl: string;
     thirdPartyDefaultChecked: boolean;
     successMessage: string;
   };
@@ -238,6 +250,7 @@ function normalizeField(raw: unknown, index: number): CompetitionFormField | nul
         }
       : {}),
     ...(type === "checkbox" ? { emphasized: bool(f.emphasized) } : {}),
+    ...(type === "image" ? { isLogo: bool(f.isLogo) } : {}),
   };
 }
 
@@ -331,13 +344,19 @@ export function normalizeCompetitionConfig(
       submitLabel: str(formRaw.submitLabel),
       privacyText: str(formRaw.privacyText, "[필수] 개인정보 수집 및 이용에 동의합니다"),
       privacyBody: str(formRaw.privacyBody),
+      privacyBodyMode: formRaw.privacyBodyMode === "link" ? "link" : "text",
+      privacyLinkUrl: str(formRaw.privacyLinkUrl),
       privacyDefaultChecked: bool(formRaw.privacyDefaultChecked),
       marketingText: str(formRaw.marketingText, "[선택] 마케팅 정보 수신에 동의합니다"),
       marketingBody: str(formRaw.marketingBody),
+      marketingBodyMode: formRaw.marketingBodyMode === "link" ? "link" : "text",
+      marketingLinkUrl: str(formRaw.marketingLinkUrl),
       marketingDefaultChecked: bool(formRaw.marketingDefaultChecked),
       thirdPartyEnabled: bool(formRaw.thirdPartyEnabled),
       thirdPartyText: str(formRaw.thirdPartyText, "[선택] 개인정보 제3자 제공에 동의합니다"),
       thirdPartyBody: str(formRaw.thirdPartyBody),
+      thirdPartyBodyMode: formRaw.thirdPartyBodyMode === "link" ? "link" : "text",
+      thirdPartyLinkUrl: str(formRaw.thirdPartyLinkUrl),
       thirdPartyDefaultChecked: bool(formRaw.thirdPartyDefaultChecked),
       successMessage: str(formRaw.successMessage, "신청이 접수되었어요."),
     },
@@ -441,7 +460,8 @@ export function youtubeThumbnailUrl(videoId: string): string {
 }
 
 export type CompetitionMediaItem =
-  | { kind: "image"; url: string; sortOrder: number }
+  /** role: "logo" — isLogo 항목에서 올린 사진. 종류는 여전히 image라 기존 갤러리에도 그대로 잡힌다. */
+  | { kind: "image"; url: string; sortOrder: number; role?: "logo" }
   | { kind: "youtube"; videoId: string; sortOrder: number };
 
 export function normalizeMedia(raw: unknown): CompetitionMediaItem[] {
@@ -452,7 +472,7 @@ export function normalizeMedia(raw: unknown): CompetitionMediaItem[] {
     const m = item as Record<string, unknown>;
     const sortOrder = typeof m.sortOrder === "number" ? m.sortOrder : index;
     if (m.kind === "image" && typeof m.url === "string" && m.url) {
-      out.push({ kind: "image", url: m.url, sortOrder });
+      out.push({ kind: "image", url: m.url, sortOrder, ...(m.role === "logo" ? { role: "logo" } : {}) });
     } else if (m.kind === "youtube" && typeof m.videoId === "string" && m.videoId) {
       out.push({ kind: "youtube", videoId: m.videoId, sortOrder });
     }
