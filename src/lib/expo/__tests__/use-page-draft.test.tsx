@@ -147,7 +147,7 @@ describe("one Expo page draft owner", () => {
     globalFetch.mockRestore();
   });
 
-  it("ignores a deferred save after the page transport epoch changes", async () => {
+  it("preserves a dirty draft when the replacement load resolves before the stale save", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const pending = deferred<Awaited<ReturnType<ExpoPageTransport["save"]>>>();
     const first = makeTransport(vi.fn(() => pending.promise));
@@ -174,7 +174,8 @@ describe("one Expo page draft owner", () => {
     pending.resolve({ kind: "saved", revision: 8 });
     await act(async () => {});
 
-    expect(screen.getByTestId("draft-meta")).toHaveTextContent("20:새 서버");
+    expect(screen.getByTestId("draft-meta")).toHaveTextContent("8:홈 오래됨");
+    expect(second.save).toHaveBeenCalledWith("page-1", expect.objectContaining({ draftRevision: 7 }));
     expect(first.load).toHaveBeenCalledTimes(1);
   });
 
@@ -236,6 +237,55 @@ describe("one Expo page draft owner", () => {
       draftRevision: 7,
     }));
     expect(screen.queryByText("다른 팀원이 먼저 저장했어요")).not.toBeInTheDocument();
+  });
+
+  it("does not install a late replacement load over the successfully retried draft", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const oldSave = deferred<Awaited<ReturnType<ExpoPageTransport["save"]>>>();
+    const replacementLoad = deferred<ExpoPageEditorDto>();
+    const first = makeTransport(vi.fn(() => oldSave.promise));
+    const nextSave = vi.fn()
+      .mockResolvedValueOnce({ kind: "saved", revision: 8 })
+      .mockResolvedValueOnce({ kind: "saved", revision: 9 });
+    const second = makeTransport(nextSave);
+    second.load
+      .mockImplementationOnce(() => replacementLoad.promise)
+      .mockResolvedValue({ ...page(), draftRevision: 8 });
+    const view = render(
+      <PageDraftWorkspace
+        siteId="site-1" pageId="page-1" permissions={permissions} transport={first.transport}
+        renderPreview={(state) => <output data-testid="draft-meta">{state.revision}:{state.page?.title}</output>}
+      />,
+    );
+    await act(async () => {});
+    await user.type(screen.getByLabelText("페이지 제목"), " 오래됨");
+    await act(async () => { await vi.advanceTimersByTimeAsync(900); });
+
+    view.rerender(
+      <PageDraftWorkspace
+        siteId="site-1" pageId="page-1" permissions={permissions} transport={second.transport}
+        renderPreview={(state) => <output data-testid="draft-meta">{state.revision}:{state.page?.title}</output>}
+      />,
+    );
+    await act(async () => {});
+    await act(async () => { oldSave.resolve({ kind: "saved", revision: 99 }); });
+    expect(second.save).toHaveBeenCalledWith("page-1", expect.objectContaining({ draftRevision: 7 }));
+    expect(screen.getByTestId("draft-meta")).toHaveTextContent("8:홈 오래됨");
+
+    await act(async () => {
+      replacementLoad.resolve({ ...page(), title: "뒤늦은 서버", draftRevision: 7 });
+    });
+    expect(screen.getByLabelText("페이지 제목")).toHaveValue("홈 오래됨");
+    expect(screen.getByTestId("draft-meta")).toHaveTextContent("8:홈 오래됨");
+
+    await user.type(screen.getByLabelText("페이지 제목"), " 계속");
+    await act(async () => { await vi.advanceTimersByTimeAsync(900); });
+    expect(second.save).toHaveBeenNthCalledWith(2, "page-1", expect.objectContaining({
+      title: "홈 오래됨 계속",
+      draftRevision: 8,
+    }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_800); });
+    expect(second.save).toHaveBeenCalledTimes(2);
   });
 
   it("does not continue a deferred save after unmount", async () => {

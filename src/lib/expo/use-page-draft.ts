@@ -69,9 +69,13 @@ export function useExpoPageDraft(
   );
   const epochRef = useRef(epoch);
   const mountedRef = useRef(false);
+  const activityWatermarkRef = useRef(0);
+  const editWatermarkRef = useRef(0);
+  const savedEditWatermarkRef = useRef(0);
+  const installedScopeRef = useRef<{ siteId: string; pageId: string } | null>(null);
   const [page, setPage] = useState<ExpoPageEditorDto | null>(null);
-  const [title, setTitle] = useState("");
-  const [imwebUrl, setImwebUrl] = useState("");
+  const [title, setTitleState] = useState("");
+  const [imwebUrl, setImwebUrlState] = useState("");
   const [config, setConfig] = useState<ExpoPageConfigV2>(EMPTY_CONFIG);
   const [selectedSid, setSelectedSid] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,9 +96,12 @@ export function useExpoPageDraft(
   const install = useCallback((loaded: ExpoPageEditorDto) => {
     if (loaded.id !== pageId || loaded.siteId !== siteId) throw new Error("page-scope");
     const next = editableDto(loaded);
+    activityWatermarkRef.current += 1;
+    savedEditWatermarkRef.current = editWatermarkRef.current;
+    installedScopeRef.current = { siteId, pageId };
     setPage(next);
-    setTitle(next.title);
-    setImwebUrl(next.imwebUrl ?? "");
+    setTitleState(next.title);
+    setImwebUrlState(next.imwebUrl ?? "");
     setConfig(next.draft);
     setRevision(next.draftRevision);
     setSelectedSid((current) =>
@@ -127,19 +134,28 @@ export function useExpoPageDraft(
   useEffect(() => {
     let active = true;
     const captured = epoch;
+    const activityAtStart = activityWatermarkRef.current;
+    const scope = installedScopeRef.current;
+    const protectsCurrentDraft = scope?.siteId === siteId && scope.pageId === pageId;
+    const dirtyAtStart = editWatermarkRef.current !== savedEditWatermarkRef.current;
     activeTransport.load(pageId).then((loaded) => {
-      if (active && isCurrent(captured)) install(loaded);
+      const changedWhileLoading = activityWatermarkRef.current !== activityAtStart
+        || editWatermarkRef.current !== savedEditWatermarkRef.current;
+      if (active && isCurrent(captured) && (!protectsCurrentDraft || (!dirtyAtStart && !changedWhileLoading))) {
+        install(loaded);
+      }
     }).catch(() => {
       if (active && isCurrent(captured)) setError("페이지를 불러오지 못했어요.");
     }).finally(() => {
       if (active && isCurrent(captured)) setLoading(false);
     });
     return () => { active = false; };
-  }, [activeTransport, epoch, install, isCurrent, pageId]);
+  }, [activeTransport, epoch, install, isCurrent, pageId, siteId]);
 
   const value = useMemo(() => ({ title, imwebUrl, config }), [title, imwebUrl, config]);
   const save = useCallback(async (next: typeof value, draftRevision: number) => {
     const captured = epoch;
+    const editWatermark = editWatermarkRef.current;
     const outcome = await activeTransport.save(pageId, {
       title: next.title,
       imwebUrl: next.imwebUrl,
@@ -148,6 +164,8 @@ export function useExpoPageDraft(
     });
     if (!isCurrent(captured)) return { kind: "stale" as const, retry: mountedRef.current };
     if (outcome.kind === "saved") {
+      activityWatermarkRef.current += 1;
+      savedEditWatermarkRef.current = editWatermark;
       setRevision(outcome.revision);
       setPage((current) => current ? {
         ...current,
@@ -177,9 +195,25 @@ export function useExpoPageDraft(
   });
   useReportAutosave(autosave.state, autosave.retry);
 
-  const updateConfig = useCallback((updater: (current: ExpoPageConfigV2) => ExpoPageConfigV2) => {
-    setConfig((current) => updater(current));
+  const markLocalEdit = useCallback(() => {
+    editWatermarkRef.current += 1;
+    activityWatermarkRef.current += 1;
   }, []);
+
+  const setTitle = useCallback((next: string) => {
+    markLocalEdit();
+    setTitleState(next);
+  }, [markLocalEdit]);
+
+  const setImwebUrl = useCallback((next: string) => {
+    markLocalEdit();
+    setImwebUrlState(next);
+  }, [markLocalEdit]);
+
+  const updateConfig = useCallback((updater: (current: ExpoPageConfigV2) => ExpoPageConfigV2) => {
+    markLocalEdit();
+    setConfig((current) => updater(current));
+  }, [markLocalEdit]);
 
   const reloadAfterConflict = useCallback(async () => { await loadRef.current(); }, []);
 
