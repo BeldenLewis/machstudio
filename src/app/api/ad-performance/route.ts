@@ -9,7 +9,7 @@ import { classifyResultBucket } from "@/lib/ad-parse";
 const MAX_IMPORT_ROWS = 20_000;
 const CREATE_CHUNK_SIZE = 1_000;
 
-type SourceType = "GOOGLE" | "META" | "MANUAL";
+type SourceType = "GOOGLE" | "META" | "TIKTOK" | "LINKEDIN" | "MANUAL";
 type DetailGroupBy = "campaign" | "adGroup";
 type DetailDateGranularity = "day" | "week" | "month";
 
@@ -19,7 +19,14 @@ const MAX_DETAIL_PAGE_SIZE = 100;
 interface ImportRowInput {
   sourceType?: SourceType;
   campaignName?: string;
+  campaignId?: string | null;
   adGroupName?: string | null;
+  adGroupId?: string | null;
+  adName?: string | null;
+  adId?: string | null;
+  creativeName?: string | null;
+  creativeId?: string | null;
+  thumbnailUrl?: string | null;
   reportDate?: string | null;
   reportStart?: string | null;
   reportEnd?: string | null;
@@ -144,6 +151,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const workspaceId = searchParams.get("workspaceId");
   const projectId = searchParams.get("projectId");
+  const folderId = searchParams.get("folderId");
   const sourceType = searchParams.get("sourceType");
   const campaignName = searchParams.get("campaignName")?.trim() || null;
   const adGroupName = searchParams.get("adGroupName")?.trim() || null;
@@ -161,6 +169,17 @@ export async function GET(request: Request) {
 
   const membership = await getMembership(workspaceId, user.id);
   if (!membership) return NextResponse.json({ error: "접근 권한 없음" }, { status: 403 });
+
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, workspaceId, deletedAt: null }, select: { id: true },
+  });
+  if (!project) return NextResponse.json({ error: "프로젝트를 찾을 수 없습니다." }, { status: 404 });
+  if (folderId) {
+    const folder = await prisma.adPerformanceFolder.findFirst({
+      where: { id: folderId, workspaceId, projectId }, select: { id: true },
+    });
+    if (!folder) return NextResponse.json({ error: "광고 성과 폴더를 찾을 수 없습니다." }, { status: 404 });
+  }
 
   const rangeWhere = from || to
     ? {
@@ -194,6 +213,7 @@ export async function GET(request: Request) {
   const where: Prisma.AdPerformanceRecordWhereInput = {
     workspaceId,
     projectId,
+    ...(folderId ? { folderId } : {}),
     ...sourceWhere,
     ...(campaignName ? { campaignName } : {}),
     ...(adGroupName ? { adGroupName } : {}),
@@ -204,6 +224,7 @@ export async function GET(request: Request) {
   const mediaSummaryWhere: Prisma.AdPerformanceRecordWhereInput = {
     workspaceId,
     projectId,
+    ...(folderId ? { folderId } : {}),
     ...rangeWhere,
   };
 
@@ -211,6 +232,7 @@ export async function GET(request: Request) {
   const campaignSummaryWhere: Prisma.AdPerformanceRecordWhereInput = {
     workspaceId,
     projectId,
+    ...(folderId ? { folderId } : {}),
     ...sourceWhere,
     ...rangeWhere,
   };
@@ -219,6 +241,7 @@ export async function GET(request: Request) {
   const adGroupSummaryWhere: Prisma.AdPerformanceRecordWhereInput = {
     workspaceId,
     projectId,
+    ...(folderId ? { folderId } : {}),
     ...sourceWhere,
     ...(campaignName ? { campaignName } : {}),
     ...rangeWhere,
@@ -267,7 +290,7 @@ export async function GET(request: Request) {
     }),
 
     prisma.adPerformanceImportBatch.findMany({
-      where: { workspaceId, projectId },
+      where: { workspaceId, projectId, ...(folderId ? { folderId } : {}) },
       orderBy: { createdAt: "desc" },
       take: 8,
       include: { _count: { select: { records: true } } },
@@ -445,6 +468,7 @@ export async function POST(request: Request) {
     const {
       workspaceId,
       projectId,
+      folderId,
       sourceType,
       sourceName,
       fileName,
@@ -454,6 +478,7 @@ export async function POST(request: Request) {
     } = body as {
       workspaceId?: string;
       projectId?: string;
+      folderId?: string;
       sourceType?: SourceType;
       sourceName?: string;
       fileName?: string;
@@ -479,6 +504,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "권한 없음" }, { status: 403 });
     }
 
+    if (folderId) {
+      const folder = await prisma.adPerformanceFolder.findFirst({
+        where: { id: folderId, workspaceId, projectId },
+        select: { id: true },
+      });
+      if (!folder) return NextResponse.json({ error: "광고 성과 폴더를 찾을 수 없습니다." }, { status: 404 });
+    }
+
     const batchStart = toDate(reportStart);
     const batchEnd = toDate(reportEnd);
     const sanitizedRows = rows
@@ -498,6 +531,7 @@ export async function POST(request: Request) {
           workspaceId,
           projectId,
           uploadedById: user.id,
+          folderId: folderId || null,
           sourceType,
           sourceName: sourceName?.trim() || null,
           fileName,
@@ -521,9 +555,17 @@ export async function POST(request: Request) {
               batchId: createdBatch.id,
               workspaceId,
               projectId,
+              folderId: folderId || null,
               sourceType,
+              campaignId: row.campaignId?.trim() || null,
               campaignName: row.campaignName,
+              adGroupId: row.adGroupId?.trim() || null,
               adGroupName: row.adGroupName?.trim() || null,
+              adId: row.adId?.trim() || null,
+              adName: row.adName?.trim() || null,
+              creativeId: row.creativeId?.trim() || null,
+              creativeName: row.creativeName?.trim() || null,
+              thumbnailUrl: row.thumbnailUrl?.trim() || null,
               reportDate: toDate(row.reportDate),
               reportStart: toDate(row.reportStart) ?? batchStart,
               reportEnd: toDate(row.reportEnd) ?? batchEnd,
