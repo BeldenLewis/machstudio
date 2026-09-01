@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { objectParticle } from "@/lib/korean";
 import type { ReadinessIssue } from "@/lib/expo/readiness";
+import { ExpoRevisionPanel } from "@/components/expo/ExpoRevisionPanel";
 
 /**
  * **밖으로 내보내는 자리.**
@@ -78,6 +79,7 @@ export function ExpoPublishPanel({
 }: ExpoPublishPanelProps) {
   const confirm = useConfirm();
   const [busy, setBusy] = useState<"publish" | "live" | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const live = Boolean(liveAt);
 
   /**
@@ -242,6 +244,29 @@ export function ExpoPublishPanel({
             ) : null}
           </>
         )}
+      </div>
+
+      {/* 발행은 매일 누르는 조작이고 이력은 확인할 때만 읽는다. 접어 두면 기존 조작의
+          네트워크 경로를 늘리지 않으면서 감사 기록은 바로 옆에서 열 수 있다. */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setHistoryOpen((open) => !open)}
+          aria-expanded={historyOpen}
+          className="text-[11px] font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground"
+        >
+          {historyOpen ? "발행 이력 닫기" : "발행 이력 보기"}
+        </button>
+        {historyOpen ? (
+          <div className="mt-2">
+            <ExpoRevisionPanel
+              pageId={pageId}
+              canPublish={canPublish}
+              // PageEditor 는 이 신호로 발행본 쪽 값만 다시 읽는다. draft 는 그대로 남는다.
+              onRolledBack={() => onChanged()}
+            />
+          </div>
+        ) : null}
       </div>
     </section>
   );
