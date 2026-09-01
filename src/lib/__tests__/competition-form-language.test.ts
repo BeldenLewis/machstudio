@@ -42,12 +42,12 @@ describe("신청 폼 문구 언어", () => {
    */
   it("이미지 항목의 '파일 선택' 버튼도 언어를 따른다 — 네이티브 라벨은 숨긴다", () => {
     const en = renderFormFieldsHtml(configFor("en"));
-    expect(en).toContain('<label class="mc-file-btn">Choose file');
+    expect(en).toContain('<button type="button" class="mc-file-btn" data-mc-image-btn="images">Choose file</button>');
     expect(en).toContain('class="mc-file-input"');
-    expect(hasHangul(en.split('class="mc-file-btn">')[1]?.split("</label>")[0] ?? "")).toBe(false);
+    expect(hasHangul(en.split('class="mc-file-btn"')[1]?.split("</button>")[0] ?? "")).toBe(false);
 
     const ko = renderFormFieldsHtml(configFor("ko"));
-    expect(ko).toContain('<label class="mc-file-btn">파일 선택');
+    expect(ko).toContain('class="mc-file-btn" data-mc-image-btn="images">파일 선택');
   });
 
   it("선택 항목의 기본 안내도 언어를 따른다", () => {

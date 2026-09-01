@@ -233,9 +233,11 @@ function bindImageInputs(form: HTMLFormElement, payload: BootPayload): Map<strin
   form.querySelectorAll<HTMLInputElement>("[data-mc-image]").forEach((input) => {
     const key = input.getAttribute("data-mc-key") ?? "";
     const max = Number(input.getAttribute("data-mc-max") || 3);
-    // input.parentElement 는 <label class="mc-file-btn"> 이고 .mc-files 는 그 형제라
-    // parentElement 기준 querySelector 로는 못 찾는다 — .mc-field 까지 올라가서 찾는다.
-    const gallery = input.closest(".mc-field")?.querySelector<HTMLElement>("[data-mc-files]");
+    const field = input.closest(".mc-field");
+    const gallery = field?.querySelector<HTMLElement>("[data-mc-files]");
+    // 버튼이 input.click() 을 직접 부른다 — <label> 위임에 기대지 않는다(위 CSS 주석 참고).
+    field?.querySelector<HTMLButtonElement>(`[data-mc-image-btn="${CSS.escape(key)}"]`)
+      ?.addEventListener("click", () => input.click());
     uploaded.set(key, []);
 
     input.addEventListener("change", async () => {
@@ -456,7 +458,11 @@ function bindSubmit(
     const data: Record<string, string | Record<string, string>[]> = {};
     for (const field of payload.config.form.fields) {
       if (!field.enabled) continue;
-      if (field.type === "image") continue;
+      if (field.type === "image") {
+        const count = (uploaded.get(field.key) ?? []).length;
+        if (field.required && count === 0) { show("error", t.fieldRequired(field.label)); return; }
+        continue;
+      }
 
       if (field.type === "repeater") {
         const rowsHost = form.querySelector<HTMLElement>(`[data-mc-rep-rows][data-mc-key="${CSS.escape(field.key)}"]`);

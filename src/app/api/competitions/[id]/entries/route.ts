@@ -137,6 +137,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   // 미디어 — 이미지 URL 은 업로드 라우트가 만든 것, 영상은 videoId 로 정규화해서 저장한다.
   const media: CompetitionMediaItem[] = normalizeMedia(body.media);
+
+  // 이미지 항목의 필수 체크 — media 는 어느 항목에서 올렸는지(key)를 들고 있지 않고
+  // role(logo 여부)만 구분한다. "팀 로고로 써요" 항목은 role:"logo" 유무로, 그 외
+  // 일반 이미지 항목은 role 이 없는 사진 유무로 본다(항목이 여러 개면 한 장만 있어도
+  // 통과하는 한계는 있지만, 지금까지 아예 검사하지 않던 것보다는 낫다).
+  for (const field of config.form.fields) {
+    if (field.type !== "image" || !field.required) continue;
+    const hasImage = field.isLogo
+      ? media.some((m) => m.kind === "image" && m.role === "logo")
+      : media.some((m) => m.kind === "image" && m.role !== "logo");
+    if (!hasImage) {
+      return NextResponse.json({ error: t.fieldRequired(field.label) }, { status: 400, headers: CORS_HEADERS });
+    }
+  }
+
   const youtubeField = config.form.fields.find((f) => f.type === "youtube");
   if (youtubeField) {
     const rawUrl = typeof incoming[youtubeField.key] === "string" ? (incoming[youtubeField.key] as string).trim() : "";

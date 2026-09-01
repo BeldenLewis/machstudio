@@ -124,14 +124,17 @@ export function buildCompetitionCss(theme: CompetitionTheme): string {
   border: 1.5px solid color-mix(in srgb, var(--mc-accent) 45%, transparent); }
 .mc-check-emph span { font-weight: 700; }
 .mc-consent-link { text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
-/* 파일 선택 버튼 — 네이티브 input 은 시각적으로만 숨긴다(display:none 이면 탭 순서에서도
-   빠져 키보드로 못 연다). 사전등록 폼의 .msf-chip 과 같은 숨김 기법. */
+/* 파일 선택 버튼 — 네이티브 input 은 화면 밖에 둔다(display:none 이면 탭 순서에서도 빠져
+   키보드로 못 연다). 클릭은 <label> 위임이 아니라 버튼이 JS 로 input.click() 을 직접
+   부른다 — iOS Safari 는 이렇게 극단적으로 축소된(clip 된) input 을 <label> 로 감싸면
+   탭해도 파일 선택창이 안 뜨는 경우가 있다(WebKit 파일 input 알려진 버그). 관리자용 로고
+   업로드(EntryLogoControl)도 처음부터 이 방식이라, 여기만 다른 방식을 쓰고 있었다. */
 .mc-file-input { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 .mc-file-btn { display:inline-flex; align-items:center; padding:10px 16px; font-size:13px; font-weight:600;
   border:1px solid rgba(120,120,128,.35); border-radius:10px; cursor:pointer; color:inherit; background:transparent;
   transition:border-color .15s ease,color .15s ease; }
 .mc-file-btn:hover { border-color: var(--mc-accent); color: var(--mc-accent); }
-.mc-file-btn:has(.mc-file-input:focus-visible) { outline:2px solid var(--mc-accent); outline-offset:2px; }
+.mc-file-btn:focus-visible { outline:2px solid var(--mc-accent); outline-offset:2px; }
 .mc-files { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
 .mc-thumb { position:relative; width:72px; height:72px; border-radius:10px; overflow:hidden; background:rgba(120,120,128,.12); }
 .mc-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
@@ -283,10 +286,10 @@ export function renderFormFieldsHtml(config: CompetitionConfig): string {
         // 네이티브 <input type=file> 의 "파일 선택" 버튼 라벨은 브라우저 UI 언어를 따른다
         // (페이지 언어와 무관) — 영문 폼에서도 한글로 남는다. 입력을 시각적으로 숨기고
         // 라벨을 우리 사전 문구로 직접 그린다(competition-strings.ts 참고).
+        // <label> 로 감싸지 않고 버튼 + input.click() 조합을 쓴다 — 위 CSS 주석 참고.
         return `<div class="mc-field">${label}
-          <label class="mc-file-btn">${escapeHtml(t.chooseFile)}
-            <input type="file" accept="image/jpeg,image/png,image/webp" multiple ${common} data-mc-image data-mc-max="${max}" class="mc-file-input">
-          </label>
+          <button type="button" class="mc-file-btn" data-mc-image-btn="${escapeHtml(field.key)}">${escapeHtml(t.chooseFile)}</button>
+          <input type="file" accept="image/jpeg,image/png,image/webp" multiple tabindex="-1" aria-hidden="true" ${common} data-mc-image data-mc-max="${max}" class="mc-file-input">
           <p class="mc-hint">${escapeHtml(t.imageHint(max))}</p>
           <div class="mc-files" data-mc-files></div></div>`;
       }
