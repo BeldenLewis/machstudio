@@ -89,8 +89,8 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
         인쇄 5칸: fr 비율·grid-flow-col·contents 로 트랙 수를 맞추던 방식은 칸 개수가
         4개/5개로 데이터마다 달라 트랙 계산이 어긋나기 쉬웠다 — 고정 5열로 바꿔 항상 폭
         계산이 같게 한다. 칸이 4개뿐이면 5번째 칸이 비지만(구멍) 그게 트랙이 어긋나
-        겹치는 것보다 훨씬 안전하다. 첫 열(유입경로)은 1.36fr, 방문 두 칸과
-        주간 사전등록은 0.78fr, 누적 사전등록은 0.9fr — 도넛+범례를
+        겹치는 것보다 훨씬 안전하다. 첫 열(유입경로)은 1.37fr, 방문 두 칸과
+        주간 사전등록은 0.77fr, 누적 사전등록은 0.91fr — 도넛+범례를
         인쇄에서 세로로 쌓아도(DonutChart 참고) 유입경로 칸 자체가 좁으면 범례 폭이
         빠듯해 라벨이 잘리므로, 나머지 네 칸(라벨·숫자만 있어 이미 충분히 압축됨)을 더
         줄여 유입경로 칸에 폭을 몰아준다. 다섯 칸 전부 minmax(0, ...) 로 감싸는 게
@@ -101,7 +101,7 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
         보임). minmax(0, Nfr) 는 콘텐츠 최소 폭을 0으로 고정해 다섯 칸이 항상 비율대로만
         나뉘게 한다.
       */}
-      <div className="mt-4 flex min-w-0 flex-nowrap items-stretch gap-3 overflow-x-auto pb-1 print:mt-1.5 print:grid print:grid-cols-[minmax(0,1.36fr)_minmax(0,0.78fr)_minmax(0,0.78fr)_minmax(0,0.78fr)_minmax(0,0.9fr)] print:gap-1 print:overflow-visible print:pb-0">
+      <div className="mt-4 flex min-w-0 flex-nowrap items-stretch gap-3 overflow-x-auto pb-1 print:mt-1.5 print:grid print:grid-cols-[minmax(0,1.37fr)_minmax(0,0.77fr)_minmax(0,0.77fr)_minmax(0,0.77fr)_minmax(0,0.91fr)] print:gap-1 print:overflow-visible print:pb-0">
         {/* overflow-hidden 을 안 둔다 — 도넛 옆 범례가 폭이 좁아 아래로 줄바꿈될 수 있는데, 잘라내면 범례가 통째로 사라진다. */}
         <div className="min-w-[210px] flex-[1.15_1_0%] print:min-w-0">
           <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground print:mb-1 print:text-[9px]">
