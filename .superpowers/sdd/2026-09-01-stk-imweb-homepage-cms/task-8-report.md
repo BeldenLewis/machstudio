@@ -4,7 +4,8 @@
 
 Complete.
 
-- Commit: `feat: add safe Expo media derivatives and crop` (this commit)
+- Feature commit: `a5d849362eaca82ebcc070aaa21b300a4a65e684` (`feat: add safe Expo media derivatives and crop`)
+- Fix round 1 commit: `fix: close Expo retained-media validation gaps` (this commit)
 - Base: `4e28c680de3bc2eaa5990c9c24fa51f67827c481`
 - Scope: Task 8 only; 37 files including this report.
 
@@ -28,6 +29,19 @@ Complete.
 - Typecheck: `npx tsc --noEmit -p tsconfig.json` passed.
 - Focused ESLint for all changed TypeScript/TSX/tests/scripts passed; the final cleanup change and regression also passed ESLint.
 - `git diff --check` passed; `src/lib/image-downscale.ts` has no diff.
+
+## Fix round 1 — Important findings
+
+- Exact RED: 5 files ran with 7 failures / 50 passes. The failures proved that `xml:base`, `animate`, and `set` bypassed SVG reference checks; a 12-byte `ftyp` passed; target-only CLI execution imported Supabase; the finalize route skipped target-verified public-bucket preparation; and the public bucket had no exact reread verifier.
+- Cleanup-order RED: 2 files ran with 3 failures / 23 passes. This fixed public-bucket preparation inside the finalizer so a settings failure still reaches quarantine `finally` cleanup and preparation occurs after byte validation but before the first public upload.
+- SVG now rejects `xml:base` plus SMIL URI-changing elements (`animate`, `animateColor`, `animateMotion`, `animateTransform`, `set`, and `discard`), including the supplied fragment-plus-external regression.
+- The target-verified admin returned by quarantine setup is used to create/update/reread exact public `webinar-assets` settings, including the SVG MIME ceiling, before either public original or derivative upload. A preparation failure creates no public object and still removes owned quarantine.
+- MP4 now requires at least the full 16-byte ordinary `ftyp` layout, a printable four-byte major brand, and a compatible-brand area aligned to four bytes. Extended-size `ftyp` is explicitly rejected.
+- `--check-target` returns before dynamically importing `@supabase/supabase-js`. Its regression installs an import-blocking loader and throwing `fetch`, proving both no client import and no network attempt.
+- Fix round 1 final required media/route/UI suite: 10 files / 116 tests passed.
+- Fix round 1 runtime/hash boundary: 5 files / 126 tests passed after regenerating with no generated diff.
+- Fix round 1 DB-free full suite: 186 files / 2,328 tests passed.
+- Fix round 1 typecheck and focused ESLint passed; final diff checks passed.
 
 ## Dependency
 

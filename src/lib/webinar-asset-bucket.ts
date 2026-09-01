@@ -25,30 +25,60 @@ export const ASSET_BUCKET_MIME_TYPES = [
  * validateSpeakerPhoto/validateSessionLogo 의 4MB 이고, 그 4MB 는 Vercel 요청 본문
  * 상한 4.5MB 아래로 맞춘 값이다(webinar-speaker-photo.ts 주석 참고).
  */
-const ASSET_BUCKET_SIZE_LIMIT = "50MB";
+const ASSET_BUCKET_SIZE_LIMIT = 50 * 1024 * 1024;
+
+type AssetBucketAdmin = {
+  storage: {
+    getBucket(id: string): Promise<{ data: unknown; error: { message?: string } | null }>;
+    createBucket(id: string, options: { public: boolean; fileSizeLimit: number; allowedMimeTypes: string[] }): Promise<{ data: unknown; error: { message?: string } | null }>;
+    updateBucket(id: string, options: { public: boolean; fileSizeLimit: number; allowedMimeTypes: string[] }): Promise<{ data: unknown; error: { message?: string } | null }>;
+  };
+};
+
+const assetBucketOptions = () => ({
+  public: true,
+  fileSizeLimit: ASSET_BUCKET_SIZE_LIMIT,
+  allowedMimeTypes: [...ASSET_BUCKET_MIME_TYPES],
+});
+
+const recordOf = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" ? value as Record<string, unknown> : {};
+
+function assetBucketSettingsMatch(value: unknown): boolean {
+  const bucket = recordOf(value);
+  const allowed = bucket.allowed_mime_types ?? bucket.allowedMimeTypes;
+  const actual = Array.isArray(allowed) ? allowed.filter((item): item is string => typeof item === "string").sort() : [];
+  const expected = [...ASSET_BUCKET_MIME_TYPES].sort();
+  return bucket.public === true
+    && Number(bucket.file_size_limit ?? bucket.fileSizeLimit) === ASSET_BUCKET_SIZE_LIMIT
+    && actual.length === expected.length
+    && actual.every((item, index) => item === expected[index]);
+}
 
 /**
  * 버킷을 만들거나 설정을 맞춘다. 멱등 — 이미 맞춰져 있어도 무해하다.
  * updateBucket 을 계속 호출하는 이유: 버킷이 예전 설정(이미지 전용·5MB)으로 만들어진
  * 배포가 있어서, 생성 시점 설정만 믿으면 동영상·새 MIME 이 영구히 막힌다.
  */
-export async function ensureAssetBucket() {
-  const admin = createAdminClient();
-  const options = {
-    public: true,
-    fileSizeLimit: ASSET_BUCKET_SIZE_LIMIT,
-    allowedMimeTypes: ASSET_BUCKET_MIME_TYPES,
-  };
-
+export async function ensureAssetBucketWithAdmin(admin: AssetBucketAdmin): Promise<AssetBucketAdmin> {
+  const options = assetBucketOptions();
   const { error: bucketError } = await admin.storage.getBucket(ASSET_BUCKET);
   if (bucketError) {
     const { error } = await admin.storage.createBucket(ASSET_BUCKET, options);
     // 동시에 처음 올린 두 요청 중 하나는 "이미 있다" 응답을 받을 수 있다.
-    if (error && !/already exists/i.test(error.message)) throw error;
-    return admin;
+    if (error && !/already exists/i.test(error.message ?? "")) throw error;
   }
-
   const { error } = await admin.storage.updateBucket(ASSET_BUCKET, options);
   if (error) throw error;
+  const verified = await admin.storage.getBucket(ASSET_BUCKET);
+  if (verified.error || !assetBucketSettingsMatch(verified.data)) {
+    throw new Error("공개 미디어 버킷 설정 검증에 실패했어요");
+  }
+  return admin;
+}
+
+export async function ensureAssetBucket() {
+  const admin = createAdminClient();
+  await ensureAssetBucketWithAdmin(admin as unknown as AssetBucketAdmin);
   return admin;
 }

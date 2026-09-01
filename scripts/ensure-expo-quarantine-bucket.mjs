@@ -1,5 +1,3 @@
-import { createClient } from "@supabase/supabase-js";
-
 const BUCKET = "expo-quarantine";
 const OPTIONS = {
   public: false,
@@ -56,6 +54,8 @@ async function main() {
     process.stdout.write(`target ok: ${target.projectRef}\n`);
     return;
   }
+  // Target-only validation must not even load the Supabase client module.
+  const { createClient } = await import("@supabase/supabase-js");
   const serviceKey = required("SUPABASE_SERVICE_ROLE_KEY");
   const admin = createClient(target.url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   if (mode === "--apply") {

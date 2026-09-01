@@ -35,7 +35,18 @@ describe("Expo quarantine target", () => {
 
   it("--check-target is network-free and never prints URL, password, or service key", () => {
     const serviceKey = "never-print-service-key";
-    const result = spawnSync(process.execPath, [path.join(process.cwd(), "scripts/ensure-expo-quarantine-bucket.mjs"), "--check-target"], {
+    const loader = `data:text/javascript,${encodeURIComponent(`
+      export async function resolve(specifier, context, nextResolve) {
+        if (specifier === "@supabase/supabase-js") throw new Error("supabase import attempted");
+        return nextResolve(specifier, context);
+      }
+    `)}`;
+    const noFetch = `data:text/javascript,${encodeURIComponent('globalThis.fetch=()=>{throw new Error("network attempted")};')}`;
+    const result = spawnSync(process.execPath, [
+      "--experimental-loader", loader,
+      "--import", noFetch,
+      path.join(process.cwd(), "scripts/ensure-expo-quarantine-bucket.mjs"), "--check-target",
+    ], {
       cwd: process.cwd(), encoding: "utf8",
       env: { ...process.env, ...goodEnv, SUPABASE_SERVICE_ROLE_KEY: serviceKey },
     });

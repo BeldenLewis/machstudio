@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const guardExpoRoute = vi.fn();
 const findSite = vi.fn();
 const ensureExpoQuarantineBucket = vi.fn();
+const ensureAssetBucketWithAdmin = vi.fn();
 const createMediaUploadSession = vi.fn();
 const createExpoFinalizeStorage = vi.fn();
 const finalizeExpoUpload = vi.fn();
@@ -14,6 +15,7 @@ vi.mock("@/lib/expo/route-guard", async () => {
 });
 vi.mock("@/lib/prisma", () => ({ prisma: { expoSite: { findFirst: findSite } } }));
 vi.mock("@/lib/expo/quarantine-bucket", () => ({ ensureExpoQuarantineBucket }));
+vi.mock("@/lib/webinar-asset-bucket", () => ({ ensureAssetBucketWithAdmin }));
 vi.mock("@/lib/expo/media-upload-session", async () => {
   const actual = await vi.importActual<typeof import("@/lib/expo/media-upload-session")>("@/lib/expo/media-upload-session");
   return { ...actual, createMediaUploadSession, createExpoFinalizeStorage, finalizeExpoUpload };
@@ -34,6 +36,7 @@ beforeEach(() => {
   guardExpoRoute.mockResolvedValue({ ok: true, ctx: ctx() });
   findSite.mockResolvedValue({ id: "site1", workspaceId: "ws1", projectId: "project1" });
   ensureExpoQuarantineBucket.mockResolvedValue({ storage: {} });
+  ensureAssetBucketWithAdmin.mockResolvedValue({ storage: {} });
   createMediaUploadSession.mockResolvedValue({
     path: "ws1/expo-quarantine/site1/user1/random.png", token: "one-use", signedUrl: "https://abc.supabase.co/storage/upload/sign/x",
   });
@@ -60,12 +63,32 @@ describe("POST /media/finalize", () => {
     }));
   });
 
+  it("provisions and verifies the public bucket with the target-verified admin before public upload", async () => {
+    const order: string[] = [];
+    const verifiedAdmin = { storage: { verified: true } };
+    ensureExpoQuarantineBucket.mockImplementation(async () => { order.push("target+quarantine"); return verifiedAdmin; });
+    ensureAssetBucketWithAdmin.mockImplementation(async (admin) => { order.push("public-bucket"); expect(admin).toBe(verifiedAdmin); return admin; });
+    createExpoFinalizeStorage.mockImplementation((admin) => { order.push("storage-adapter"); expect(admin).toBe(verifiedAdmin); return {}; });
+    finalizeExpoUpload.mockImplementation(async (_storage, input) => {
+      order.push("finalize");
+      await input.ensurePublicBucket();
+      order.push("public-upload");
+      return { kind: "image", url: "https://cdn.test/a.webp", originalUrl: "https://cdn.test/a.svg", mimeType: "image/webp", bytes: 10 };
+    });
+
+    const { POST } = await import("@/app/api/expo/[siteId]/media/finalize/route");
+    const res = await POST(finalizeRequest(), { params: Promise.resolve({ siteId: "site1" }) });
+    expect(res.status).toBe(201);
+    expect(order).toEqual(["target+quarantine", "storage-adapter", "finalize", "public-bucket", "public-upload"]);
+  });
+
   it("rejects VIEWER before admin/storage construction", async () => {
     guardExpoRoute.mockResolvedValue({ ok: true, ctx: ctx("VIEWER") });
     const { POST } = await import("@/app/api/expo/[siteId]/media/finalize/route");
     const res = await POST(finalizeRequest(), { params: Promise.resolve({ siteId: "site1" }) });
     expect(res.status).toBe(403);
     expect(ensureExpoQuarantineBucket).not.toHaveBeenCalled();
+    expect(ensureAssetBucketWithAdmin).not.toHaveBeenCalled();
     expect(finalizeExpoUpload).not.toHaveBeenCalled();
   });
 });

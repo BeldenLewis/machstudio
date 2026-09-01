@@ -5,6 +5,7 @@ import { deriveExpoPermissions } from "@/lib/expo/permissions";
 import { authFailure, guardExpoRoute, readJsonBody } from "@/lib/expo/route-guard";
 import { ensureExpoQuarantineBucket } from "@/lib/expo/quarantine-bucket";
 import { createExpoFinalizeStorage, finalizeExpoUpload } from "@/lib/expo/media-upload-session";
+import { ensureAssetBucketWithAdmin } from "@/lib/webinar-asset-bucket";
 
 export async function POST(request: Request, { params }: { params: Promise<{ siteId: string }> }) {
   const guarded = await guardExpoRoute(request, { write: true });
@@ -37,6 +38,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ sit
       userId: guarded.ctx.userId,
       path,
       declaredType,
+      ensurePublicBucket: () => ensureAssetBucketWithAdmin(admin as never),
     });
     return NextResponse.json(result, { status: 201 });
   } catch (error) {

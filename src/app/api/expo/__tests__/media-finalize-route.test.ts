@@ -1,11 +1,11 @@
 // @vitest-environment node
 import sharp from "sharp";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   assertOwnedQuarantinePath, createQuarantinePath, finalizeExpoUpload, normalizeStorageKey,
   type ExpoFinalizeStorage,
 } from "@/lib/expo/media-upload-session";
-import { ASSET_BUCKET_MIME_TYPES } from "@/lib/webinar-asset-bucket";
+import { ASSET_BUCKET, ASSET_BUCKET_MIME_TYPES, ensureAssetBucketWithAdmin } from "@/lib/webinar-asset-bucket";
 
 const png = async (width = 20, height = 10) => new Uint8Array(await sharp({
   create: { width, height, channels: 4, background: { r: 10, g: 20, b: 30, alpha: 0.5 } },
@@ -30,6 +30,7 @@ const input = {
   workspaceId: "ws1", siteId: "site1", userId: "user1",
   path: "ws1/expo-quarantine/site1/user1/one.png", declaredType: "image/png",
   randomUUID: () => "00000000-0000-4000-8000-000000000001",
+  ensurePublicBucket: async () => undefined,
 };
 
 describe("quarantine key ownership", () => {
@@ -55,6 +56,23 @@ describe("finalize Expo media", () => {
     expect(ASSET_BUCKET_MIME_TYPES).toContain("image/svg+xml");
   });
 
+  it("repairs and rereads the exact public bucket settings before an SVG original can upload", async () => {
+    const legacy = { id: ASSET_BUCKET, public: true, file_size_limit: 50 * 1024 * 1024, allowed_mime_types: ["image/png"] };
+    const repaired = { id: ASSET_BUCKET, public: true, file_size_limit: 50 * 1024 * 1024, allowed_mime_types: [...ASSET_BUCKET_MIME_TYPES] };
+    const getBucket = vi.fn().mockResolvedValueOnce({ data: legacy, error: null }).mockResolvedValueOnce({ data: repaired, error: null });
+    const updateBucket = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const admin = { storage: { getBucket, createBucket: vi.fn(), updateBucket } };
+    await expect(ensureAssetBucketWithAdmin(admin)).resolves.toBe(admin);
+    expect(updateBucket).toHaveBeenCalledWith(ASSET_BUCKET, expect.objectContaining({
+      public: true,
+      allowedMimeTypes: expect.arrayContaining(["image/svg+xml"]),
+    }));
+    expect(getBucket).toHaveBeenCalledTimes(2);
+
+    getBucket.mockReset().mockResolvedValue({ data: legacy, error: null });
+    await expect(ensureAssetBucketWithAdmin(admin)).rejects.toThrow(/설정/);
+  });
+
   it("verifies metadata before download and creates immutable original + derivative under the owning site", async () => {
     const order: string[] = [];
     const body = await png(1600, 900);
@@ -63,9 +81,14 @@ describe("finalize Expo media", () => {
       async downloadQuarantine() { order.push("download"); return body; },
       async uploadPublic(path) { order.push(`upload:${path}`); calls.uploads.push(path); return { error: null }; },
     });
-    const result = await finalizeExpoUpload(value, input);
+    const result = await finalizeExpoUpload(value, {
+      ...input,
+      ensurePublicBucket: async () => { order.push("public-bucket"); },
+    });
     expect(order[0]).toBe("info");
     expect(order[1]).toBe("download");
+    expect(order[2]).toBe("public-bucket");
+    expect(order[3]).toMatch(/^upload:/);
     expect(calls.uploads).toHaveLength(2);
     expect(calls.uploads.every((path) => path.startsWith("ws1/expo/site1/"))).toBe(true);
     expect(calls.uploads[0]).toContain("original-");
@@ -82,6 +105,16 @@ describe("finalize Expo media", () => {
     });
     await expect(finalizeExpoUpload(value, input)).rejects.toThrow(/크/);
     expect(calls.download).toBe(0);
+    expect(calls.uploads).toEqual([]);
+    expect(calls.removedQ).toEqual([input.path]);
+  });
+
+  it("cleans quarantine when target-verified public bucket preparation fails before upload", async () => {
+    const { value, calls } = storage();
+    await expect(finalizeExpoUpload(value, {
+      ...input,
+      ensurePublicBucket: async () => { throw new Error("public settings differ"); },
+    })).rejects.toThrow(/public settings/);
     expect(calls.uploads).toEqual([]);
     expect(calls.removedQ).toEqual([input.path]);
   });

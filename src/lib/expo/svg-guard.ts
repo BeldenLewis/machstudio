@@ -4,7 +4,11 @@ export type SvgInspection =
   | { ok: true; width?: number; height?: number }
   | { ok: false; reason: string };
 
-const BLOCKED_ELEMENTS = new Set(["script", "foreignobject", "iframe", "object", "embed"]);
+const BLOCKED_ELEMENTS = new Set([
+  "script", "foreignobject", "iframe", "object", "embed",
+  // SMIL can rewrite href and other URI-bearing attributes after validation.
+  "animate", "animatecolor", "animatemotion", "animatetransform", "set", "discard",
+]);
 const BLOCKED_CSS = /@import\b|@font-face\b|expression\s*\(|javascript\s*:/i;
 const URL_FUNCTION = /url\(\s*([^)]+?)\s*\)/gi;
 
@@ -66,6 +70,7 @@ export function inspectSvg(bytes: Uint8Array): SvgInspection {
       const qualified = attribute.name.toLowerCase();
       const value = attribute.value.trim();
       if (attrName.startsWith("on")) return { ok: false, reason: "event-attribute" };
+      if (qualified === "xml:base") return { ok: false, reason: "external-reference" };
       if (attrName === "href" || qualified === "xlink:href") {
         if (!/^#[A-Za-z_][A-Za-z0-9_.:-]*$/.test(value)) return { ok: false, reason: "external-reference" };
       }

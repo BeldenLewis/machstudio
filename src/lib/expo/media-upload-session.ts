@@ -220,6 +220,7 @@ export async function finalizeExpoUpload(
     userId: string;
     path: string;
     declaredType: string;
+    ensurePublicBucket: () => Promise<unknown>;
     randomUUID?: () => string;
   },
 ): Promise<ExpoMediaUploadResult> {
@@ -241,6 +242,7 @@ export async function finalizeExpoUpload(
     if (type === "video/mp4") {
       const inspected = inspectMp4({ declaredType: type, bytes });
       if (!inspected.ok) throw new Error(`MP4를 안전하게 처리할 수 없어요 (${inspected.reason})`);
+      await input.ensurePublicBucket();
       const originalKey = normalizeStorageKey(`${sitePrefix}/original-${uuid()}.mp4`);
       const uploaded = await storage.uploadPublic(originalKey, bytes, {
         contentType: type, cacheControl: "31536000, immutable", upsert: false,
@@ -256,6 +258,7 @@ export async function finalizeExpoUpload(
     const processed = type === "image/svg+xml"
       ? await processExpoSvg(bytes)
       : await processExpoRaster({ bytes, declaredType: type });
+    await input.ensurePublicBucket();
     const originalKey = normalizeStorageKey(`${sitePrefix}/original-${uuid()}.${processed.original.extension}`);
     const optimizedKey = normalizeStorageKey(`${sitePrefix}/optimized-${uuid()}.${processed.optimized.extension}`);
     const originalUpload = await storage.uploadPublic(originalKey, processed.original.bytes, {

@@ -18,6 +18,9 @@ describe("SVG upload safety", () => {
     '<svg xmlns="http://www.w3.org/2000/svg"><path style="width:expression(alert(1))"/></svg>',
     '<svg xmlns="http://www.w3.org/2000/svg"><path style="background:javascript:alert(1)"/></svg>',
     '<svg xmlns="http://www.w3.org/2000/svg"><path fill="url(https://evil.example/x.svg#p)"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" xml:base="https://evil.example/"><use href="#icon"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><animate attributeName="href" values="#icon;https://evil.example/x.svg#icon"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><set attributeName="href" to="https://evil.example/x.svg#icon"/></svg>',
     '<!DOCTYPE svg><svg xmlns="http://www.w3.org/2000/svg"></svg>',
     '<?xml-stylesheet href="https://evil.example/x.css"?><svg xmlns="http://www.w3.org/2000/svg"/>',
   ])("rejects executable SVG", (source) => {

@@ -22,6 +22,21 @@ describe("MP4 upload safety", () => {
     expect(inspectMp4({ declaredType: "video/mp4", bytes: new Uint8Array(11) })).toMatchObject({ ok: false });
   });
 
+  it("requires the complete ftyp major brand/minor version and aligned compatible brands", () => {
+    const twelveBytes = new Uint8Array([0, 0, 0, 12, ...Buffer.from("ftypisom")]);
+    expect(inspectMp4({ declaredType: "video/mp4", bytes: twelveBytes })).toMatchObject({ ok: false });
+
+    const misaligned = new Uint8Array(18);
+    misaligned.set([0, 0, 0, 18, ...Buffer.from("ftypisom"), 0, 0, 0, 0]);
+    expect(inspectMp4({ declaredType: "video/mp4", bytes: misaligned })).toMatchObject({ ok: false });
+  });
+
+  it("explicitly rejects an extended-size ftyp box", () => {
+    const extended = new Uint8Array(24);
+    extended.set([0, 0, 0, 1, ...Buffer.from("ftyp"), 0, 0, 0, 0, 0, 0, 0, 24, ...Buffer.from("isom")]);
+    expect(inspectMp4({ declaredType: "video/mp4", bytes: extended })).toMatchObject({ ok: false });
+  });
+
   it("uses the exact 50MiB source limit", () => {
     expect(EXPO_VIDEO_RULES).toEqual({ sourceBytes: 50 * 1024 * 1024, mimeType: "video/mp4" });
     const oversized = new Uint8Array(EXPO_VIDEO_RULES.sourceBytes + 1);
