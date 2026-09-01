@@ -44,23 +44,67 @@ const clone = (value) => structuredClone(value);
 const record = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 const localizedText = (value) => Object.values(record(value)).find((entry) => typeof entry === "string") ?? "";
 const sorted = (values) => [...new Set(values)].sort((a, b) => a.localeCompare(b));
+
+function ipv4Parts(host) {
+  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!match) return null;
+  const parts = match.slice(1).map(Number);
+  return parts.every((part) => part >= 0 && part <= 255) ? parts : null;
+}
+
+function isPrivateIpv4(parts) {
+  const [a, b, c] = parts;
+  return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254)
+    || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)
+    || (a === 100 && b >= 64 && b <= 127) || (a === 192 && b === 0 && c <= 2)
+    || (a === 198 && (b === 18 || b === 19)) || (a === 198 && b === 51 && c === 100)
+    || (a === 203 && b === 0 && c === 113) || a >= 224;
+}
+
+function ipv6Words(host) {
+  const halves = host.split("::");
+  if (halves.length > 2) return null;
+  const parseHalf = (half) => {
+    if (!half) return [];
+    const tokens = half.split(":");
+    const words = [];
+    for (const [index, token] of tokens.entries()) {
+      if (token.includes(".")) {
+        if (index !== tokens.length - 1) return null;
+        const parts = ipv4Parts(token);
+        if (!parts) return null;
+        words.push((parts[0] << 8) | parts[1], (parts[2] << 8) | parts[3]);
+      } else {
+        if (!/^[0-9a-f]{1,4}$/i.test(token)) return null;
+        words.push(Number.parseInt(token, 16));
+      }
+    }
+    return words;
+  };
+  const left = parseHalf(halves[0]);
+  const right = parseHalf(halves[1] ?? "");
+  if (!left || !right) return null;
+  if (halves.length === 1) return left.length === 8 ? left : null;
+  if (left.length + right.length >= 8) return null;
+  return [...left, ...Array(8 - left.length - right.length).fill(0), ...right];
+}
+
 function isPrivateHostname(hostname) {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
   if (!host || ["localhost", "ip6-localhost", "ip6-loopback"].includes(host)
     || host.endsWith(".local") || host.endsWith(".internal") || host.endsWith(".localhost")) return true;
-  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-  if (match) {
-    const [, aRaw, bRaw, cRaw, dRaw] = match;
-    const parts = [aRaw, bRaw, cRaw, dRaw].map(Number);
-    if (parts.some((part) => part < 0 || part > 255)) return true;
-    const [a, b] = parts;
-    if (a === 0 || a === 10 || a === 127 || (a === 169 && b === 254)
-      || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)
-      || (a === 100 && b >= 64 && b <= 127) || a >= 224) return true;
-  }
+  const ipv4 = ipv4Parts(host);
+  if (ipv4) return isPrivateIpv4(ipv4);
   if (host.includes(":")) {
-    if (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80")) return true;
-    if (host.startsWith("::ffff:")) return isPrivateHostname(host.slice("::ffff:".length));
+    const words = ipv6Words(host);
+    if (!words) return true;
+    const [first, second] = words;
+    if (words.every((word) => word === 0) || words.slice(0, 7).every((word) => word === 0) && words[7] === 1) return true;
+    if ((first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80 || (first & 0xffc0) === 0xfec0
+      || (first & 0xff00) === 0xff00 || (first === 0x2001 && second === 0x0db8)) return true;
+    if (words.slice(0, 5).every((word) => word === 0) && words[5] === 0xffff) {
+      return isPrivateIpv4([words[6] >> 8, words[6] & 0xff, words[7] >> 8, words[7] & 0xff]);
+    }
   }
   return false;
 }
@@ -194,6 +238,17 @@ function auditSource(document) {
   const refs = referenceInventory(config);
   if (!same(refs.destinations, DESTINATION_IDS)) errors.push("unexpected destination references");
   if (!same(refs.campaigns, CAMPAIGN_IDS)) errors.push("unexpected campaign references");
+  if (config.settings !== undefined) {
+    const settings = record(config.settings);
+    const destinationIds = Array.isArray(settings.destinations) ? settings.destinations.map((item) => item?.id) : [];
+    const campaignIds = Array.isArray(settings.campaigns) ? settings.campaigns.map((item) => item?.id) : [];
+    if (!same(destinationIds, DESTINATION_IDS)) errors.push("unexpected settings destination ids");
+    if (!same(campaignIds, CAMPAIGN_IDS)) errors.push("unexpected settings campaign ids");
+    const destinationSet = new Set(destinationIds);
+    const campaignSet = new Set(campaignIds);
+    for (const id of refs.destinations) if (!destinationSet.has(id)) errors.push(`broken destination reference: ${id}`);
+    for (const id of refs.campaigns) if (!campaignSet.has(id)) errors.push(`broken campaign reference: ${id}`);
+  }
   return sorted(errors);
 }
 
@@ -271,7 +326,27 @@ function scheduleValue(value, key) {
   }
   if (key === "event") {
     if (candidate.edition !== 2027) throw new Error("unsafe schedule value: event.edition");
-    return clone(candidate);
+    let facts;
+    if (candidate.facts !== undefined) {
+      if (!candidate.facts || typeof candidate.facts !== "object" || Array.isArray(candidate.facts)) {
+        throw new Error("unsafe event facts");
+      }
+      const source = candidate.facts;
+      const allowed = ["companies", "sessions", "booths"];
+      if (Object.keys(source).some((fact) => !allowed.includes(fact))) throw new Error("unsafe unknown event fact");
+      facts = Object.fromEntries(allowed
+        .filter((fact) => source[fact] !== undefined)
+        .map((fact) => {
+          if (!Number.isInteger(source[fact]) || source[fact] < 0) throw new Error(`unsafe event fact: ${fact}`);
+          return [fact, source[fact]];
+        }));
+    }
+    return {
+      edition: candidate.edition,
+      startsAt: candidate.startsAt,
+      endsAt: candidate.endsAt,
+      ...(facts && Object.keys(facts).length ? { facts } : {}),
+    };
   }
   return { startsAt: candidate.startsAt, endsAt: candidate.endsAt };
 }

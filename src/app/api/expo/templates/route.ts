@@ -23,7 +23,7 @@ import {
 } from "@/lib/expo/template-service";
 import { EXPO_LIMITS } from "@/lib/expo/registry";
 import { validateTemplateSnapshot } from "@/lib/expo/request";
-import { builtInExpoPresets } from "@/lib/expo/presets";
+import { builtInExpoPresets, isBuiltInExpoPresetId } from "@/lib/expo/presets";
 
 export async function GET(request: Request) {
   const guard = await guardExpoRoute(request);
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
         builtIn: true,
         canManage: false,
       })),
-      ...templates.map((t) => {
+      ...templates.filter((template) => !isBuiltInExpoPresetId(template.id)).map((t) => {
       const snap = (t.snapshot ?? {}) as { contentMode?: string; pages?: unknown[] };
       return {
         id: t.id,

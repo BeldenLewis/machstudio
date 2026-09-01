@@ -4,7 +4,8 @@
 
 Complete.
 
-- Commit: `feat: add the STK homepage preset` (this report is included in that commit).
+- Feature commit: `5081f5f` (`feat: add the STK homepage preset`).
+- Fix round 1 commit: `fix: close STK preset input and built-in read gaps` (this report update is included in that commit).
 - Base: `c906304af40fc9e1f5e268739c1733e6e1053865`.
 - Scope: Task 10 only; 16 files including this report.
 - No plan, spec, ledger, source attachment, generated runtime, or unrelated file was edited.
@@ -69,3 +70,15 @@ Complete.
 - Independent re-review found no remaining Critical or Important issue.
 - The preset is deliberately not publish-ready until operators provide all required maps, confirm Hero video rights, and verify sponsor identities/logos. Readiness reports the missing operational fields rather than inventing them.
 - No live scrape/browse, network, DB, Supabase, Storage, development server, deployment, feature-flag, or Imweb action was performed.
+
+## Fix round 1
+
+- Scope: four reviewed Important findings only; 6 existing Task 10 files including this report. No plan, spec, ledger, source data, or unrelated file changed.
+- Exact RED: 2 files ran with 5 failures / 42 passes. The failures proved a forged reserved-id DB row appeared twice in the list and returned 200 from detail GET, `fe81::1` bypassed the private URL guard, arbitrary event fields crossed materialization, and negative facts were accepted.
+- Template reads now filter every reserved built-in id from DB list results. Detail GET authenticates first, then returns not-found for a reserved id before template DB lookup; regressions prove no forged read or DB mutation.
+- The importer expands normalized IPv6 into eight words, applies full CIDR masks for ULA/link-local/site-local/multicast ranges, and unwraps normalized IPv4-mapped addresses before applying the IPv4 private/reserved ranges. Regressions cover `fe81::1` and `::ffff:127.0.0.1`.
+- A materialized config must contain the exact 16 destination and 2 campaign setting ids, and every section reference must resolve to those targets. Regressions cover destination deletion and campaign-id replacement.
+- Event materialization constructs only `edition`, `startsAt`, `endsAt`, and the optional allowlisted `companies`/`sessions`/`booths` facts. Unknown top-level fields are stripped; unknown, negative, or non-integer facts exit 1.
+- Final focused preset/template/importer suites: 5 files / 97 tests passed. Default dry-run remained exit 2 with sorted missing inventories 43 assets / 16 destinations / 3 schedules and zero writes.
+- Final DB-free full suite: 189 files / 2,390 tests passed. Typecheck, focused ESLint, and `git diff --check` passed. Independent fix-diff review found no remaining Critical or Important issue.
+- No materialization occurred outside test-managed temporary paths. No network, DB, Supabase, Storage, development server, deployment, or Imweb action was performed.

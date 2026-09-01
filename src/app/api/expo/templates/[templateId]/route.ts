@@ -32,6 +32,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ temp
   const guard = await guardExpoRoute(request);
   if (!guard.ok) return guard.response;
 
+  if (isBuiltInExpoPresetId(templateId)) return authFailure({ kind: "not-found" });
+
   const row = await load(templateId);
   const owned = requireOwnedTemplate(row, guard.ctx.userId, guard.ctx.memberWorkspaceIds);
   if (!owned.ok) return authFailure(owned.failure);

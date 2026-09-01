@@ -154,6 +154,8 @@ describe("STK source importer", () => {
       "https://127.0.0.1/asset.webp",
       "https://localhost/asset.webp",
       "https://[fd00::1]/asset.webp",
+      "https://[fe81::1]/asset.webp",
+      "https://[::ffff:127.0.0.1]/asset.webp",
     ]) {
       const dir = tempDir();
       const assets = path.join(dir, "assets.json");
@@ -198,7 +200,13 @@ describe("STK source importer", () => {
     ]));
     const destinations = Object.fromEntries(missing.missingDestinations.map((key) => [key, `https://example.com/${key}`]));
     const schedules = {
-      event: { edition: 2027, startsAt: "2027-06-23T00:00:00+09:00", endsAt: "2027-06-26T00:00:00+09:00" },
+      event: {
+        edition: 2027,
+        startsAt: "2027-06-23T00:00:00+09:00",
+        endsAt: "2027-06-26T00:00:00+09:00",
+        facts: { companies: 400, sessions: 30, booths: 700 },
+        arbitrary: "must-not-cross-the-boundary",
+      },
       "campaign.exhibitor-recruitment": { startsAt: "2026-09-01T00:00:00+09:00", endsAt: "2027-06-23T00:00:00+09:00" },
       "campaign.visitor-registration": { startsAt: "2027-01-01T00:00:00+09:00", endsAt: "2027-06-23T00:00:00+09:00" },
     };
@@ -219,5 +227,48 @@ describe("STK source importer", () => {
     expect(written.config.sections).toHaveLength(6);
     expect(written.config.settings.destinations).toHaveLength(missing.missingDestinations.length);
     expect(written.config.settings.campaigns).toHaveLength(2);
+    expect(written.config.settings.event).toEqual({
+      edition: 2027,
+      startsAt: "2027-06-23T00:00:00+09:00",
+      endsAt: "2027-06-26T00:00:00+09:00",
+      facts: { companies: 400, sessions: 30, booths: 700 },
+    });
+
+    const missingDestination = structuredClone(written);
+    missingDestination.config.settings.destinations = missingDestination.config.settings.destinations
+      .filter((destination: { id: string }) => destination.id !== "booth-inquiry");
+    expect(auditStkHomeV1Source(missingDestination)).toEqual(expect.arrayContaining([
+      "broken destination reference: booth-inquiry",
+      "unexpected settings destination ids",
+    ]));
+
+    const changedCampaign = structuredClone(written);
+    changedCampaign.config.settings.campaigns[0].id = "replacement-campaign";
+    expect(auditStkHomeV1Source(changedCampaign)).toEqual(expect.arrayContaining([
+      "broken campaign reference: exhibitor-recruitment",
+      "unexpected settings campaign ids",
+    ]));
+  });
+
+  it("rejects negative, non-integer, and unknown event facts", () => {
+    for (const facts of [
+      { companies: -1 },
+      { sessions: 1.5 },
+      { attendees: 100 },
+    ]) {
+      const dir = tempDir();
+      const schedules = path.join(dir, "schedules.json");
+      writeFileSync(schedules, JSON.stringify({
+        event: {
+          edition: 2027,
+          startsAt: "2027-06-23T00:00:00+09:00",
+          endsAt: "2027-06-26T00:00:00+09:00",
+          facts,
+        },
+      }));
+      const result = run(["--dry-run", `--schedule-map=${schedules}`]);
+      expect(result.status, JSON.stringify(facts)).toBe(1);
+      expect(JSON.parse(result.stderr).errors[0]).toMatch(/fact/i);
+    }
   });
 });

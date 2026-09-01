@@ -232,6 +232,17 @@ describe("목록", () => {
       id: "stk-home-v1", builtIn: true, contentMode: "full", pageCount: 1, canManage: false,
     });
   });
+
+  it("예약 id로 위조한 DB 행은 기본 제공 목록에 중복 노출하지 않는다", async () => {
+    prismaMock.expoTemplate.findMany.mockResolvedValue([
+      { id: "stk-home-v1", workspaceId: "w1", name: "위조 행", description: null, snapshot: {}, createdAt: new Date() },
+      { id: "t1", workspaceId: "w1", name: "정상 행", description: null, snapshot: {}, createdAt: new Date() },
+    ]);
+    const { GET } = await import("@/app/api/expo/templates/route");
+    const body = await (await GET(read())).json();
+    expect(body.templates.filter((template: { id: string }) => template.id === "stk-home-v1")).toHaveLength(1);
+    expect(body.templates.map((template: { id: string }) => template.id)).toContain("t1");
+  });
 });
 
 describe("이름 변경·영구 삭제는 워크스페이스 관리자만", () => {
@@ -284,6 +295,17 @@ describe("이름 변경·영구 삭제는 워크스페이스 관리자만", () =
     const { PATCH, DELETE } = await import("@/app/api/expo/templates/[templateId]/route");
     expect((await PATCH(patch({ name: "새 이름" }), p("stk-home-v1"))).status).toBe(404);
     expect((await DELETE(del(), p("stk-home-v1"))).status).toBe(404);
+    expect(prismaMock.expoTemplate.update).not.toHaveBeenCalled();
+    expect(prismaMock.expoTemplate.delete).not.toHaveBeenCalled();
+  });
+
+  it("기본 제공 프리셋 상세 조회는 같은 id의 DB 행을 읽지 않는다", async () => {
+    prismaMock.expoTemplate.findFirst.mockResolvedValue({
+      id: "stk-home-v1", workspaceId: "w1", name: "위조 행", description: null, snapshot: {}, createdAt: new Date(),
+    });
+    const { GET } = await import("@/app/api/expo/templates/[templateId]/route");
+    expect((await GET(read(), p("stk-home-v1"))).status).toBe(404);
+    expect(prismaMock.expoTemplate.findFirst).not.toHaveBeenCalled();
     expect(prismaMock.expoTemplate.update).not.toHaveBeenCalled();
     expect(prismaMock.expoTemplate.delete).not.toHaveBeenCalled();
   });
