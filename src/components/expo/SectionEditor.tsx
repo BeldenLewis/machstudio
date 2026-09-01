@@ -2,15 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Plus } from "lucide-react";
-import { Chip, FINISH, R, Segmented } from "@/components/ui/primitives";
+import { Chip, FieldSelect, FINISH, R, Segmented } from "@/components/ui/primitives";
 import { Switch } from "@/components/ui/switch";
 import { EditableList, ROW_KEY } from "@/components/ui/editable-list";
 import { SlotField, type LinkTarget } from "@/components/expo/SlotField";
+import { ExpoMediaUploadField } from "@/components/expo/fields/ExpoMediaUploadField";
+import { ImageCropField } from "@/components/expo/fields/ImageCropField";
 import { objectParticle, topicParticle } from "@/lib/korean";
 import { newSection } from "@/lib/expo/config";
 import { hasContent, slotHasContent } from "@/lib/expo/model";
 import { EXPO_LIMITS, EXPO_SECTIONS, sectionDef } from "@/lib/expo/registry";
 import type { ExpoSection, SlotDef } from "@/lib/expo/types";
+import type { ExpoImageValue, ExpoVideoValue, ImageCrop } from "@/lib/expo/sections/types";
 
 /**
  * 구획 편집 — **한 카드 = 한 구획, 값은 그 자리에서 바로 고쳐진다.**
@@ -346,6 +349,22 @@ function SectionCard({
 
       {/* ── 값 ───────────────────────────────────────────────────── */}
       <div className={`space-y-2.5 ${section.enabled ? "" : "opacity-60"}`}>
+        {section.type === "campaign-hero" ? (
+          <CampaignHeroMediaEditor
+            siteId={siteId}
+            value={section.content.video}
+            disabled={!canEdit}
+            onChange={(video) => setSlot("video", video)}
+          />
+        ) : null}
+        {section.type === "speaker-carousel" ? (
+          <SpeakerMediaEditor
+            siteId={siteId}
+            speakers={section.content.speakers}
+            disabled={!canEdit}
+            onChange={(speakers) => setSlot("speakers", speakers)}
+          />
+        ) : null}
         {def.slots.map((slot) =>
           slot.kind === "list" ? (
             <ListSlot
@@ -413,6 +432,80 @@ function SectionCard({
           </span>
         </label>
       </div>
+    </div>
+  );
+}
+
+/** Hero 영상의 권리 확인은 업로드와 떨어뜨리지 않는다. 새 영상은 항상 미확인에서 시작한다. */
+function CampaignHeroMediaEditor({
+  siteId, value, disabled, onChange,
+}: {
+  siteId: string;
+  value: unknown;
+  disabled?: boolean;
+  onChange(value: ExpoVideoValue | undefined): void;
+}) {
+  const video = value && typeof value === "object" && (value as { kind?: unknown }).kind === "video"
+    ? value as ExpoVideoValue
+    : undefined;
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs font-medium text-muted-foreground">Hero 영상</p>
+      <ExpoMediaUploadField siteId={siteId} kind="video" value={video} disabled={disabled} onChange={(next) => onChange(next?.kind === "video" ? next : undefined)} />
+      {video ? (
+        <label className="block text-[11px] font-medium text-muted-foreground">
+          영상 사용 권리
+          <FieldSelect
+            aria-label="Hero 영상 사용 권리"
+            value={video.rightsStatus}
+            disabled={disabled}
+            onChange={(event) => onChange({ ...video, rightsStatus: event.target.value as ExpoVideoValue["rightsStatus"] })}
+          >
+            <option value="unconfirmed">아직 확인하지 않음</option>
+            <option value="confirmed">사용 권리 확인함</option>
+          </FieldSelect>
+        </label>
+      ) : null}
+    </div>
+  );
+}
+
+function SpeakerMediaEditor({
+  siteId, speakers, disabled, onChange,
+}: {
+  siteId: string;
+  speakers: unknown;
+  disabled?: boolean;
+  onChange(value: Array<Record<string, unknown>>): void;
+}) {
+  const rows = Array.isArray(speakers)
+    ? speakers.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object" && !Array.isArray(row))
+    : [];
+  if (rows.length === 0) return null;
+  const patchRow = (index: number, patch: Record<string, unknown>) =>
+    onChange(rows.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row));
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium text-muted-foreground">연사 이미지와 자르기</p>
+      {rows.map((row, index) => {
+        const image = row.image && typeof row.image === "object" && (row.image as { kind?: unknown }).kind === "image"
+          ? row.image as ExpoImageValue
+          : undefined;
+        const rawCrop = row.crop && typeof row.crop === "object" ? row.crop as Partial<ImageCrop> : {};
+        const crop: ImageCrop = {
+          fit: rawCrop.fit === "contain" ? "contain" : "cover",
+          x: typeof rawCrop.x === "number" ? rawCrop.x : 50,
+          y: typeof rawCrop.y === "number" ? rawCrop.y : 50,
+          scale: typeof rawCrop.scale === "number" ? rawCrop.scale : 1,
+        };
+        return (
+          <div key={typeof row.id === "string" ? row.id : index} className={`${R.surface} ${FINISH.s2} space-y-2 bg-background/40 p-2`}>
+            <p className="text-[11px] font-medium">연사 {index + 1}</p>
+            <ExpoMediaUploadField siteId={siteId} kind="image" value={image} disabled={disabled} onChange={(next) => patchRow(index, { image: next?.kind === "image" ? next : undefined })} />
+            {image ? <ImageCropField image={image} value={crop} disabled={disabled} onChange={(next) => patchRow(index, { crop: next })} /> : null}
+          </div>
+        );
+      })}
     </div>
   );
 }

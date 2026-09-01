@@ -27,6 +27,16 @@ export interface ImageCrop {
   scale: number;
 }
 
+/** 관리자 미리보기와 공개 runtime이 공유하는 crop CSS 정식. */
+export function imageCropStyle(value: ImageCrop) {
+  return {
+    objectFit: value.fit,
+    objectPosition: `${value.x}% ${value.y}%`,
+    transform: `scale(${value.scale})`,
+    transformOrigin: `${value.x}% ${value.y}%`,
+  } as const;
+}
+
 export type CtaVariant = "primary" | "secondary" | "outline" | "solid";
 
 export interface CtaPlacement {

@@ -229,6 +229,20 @@ describe("슬롯 값 정규화", () => {
   });
 
   /** W1 미디어는 이미지만이다 — 영상·YouTube 는 W2. */
+  it("안전 업로드의 originalUrl·MIME·크기·대체 의미를 보존한다", () => {
+    const out = page([{
+      sid: uid(1), type: "kv", variant: "column",
+      content: { title: "t", media: {
+        kind: "image", url: "https://cdn.test/optimized.webp", originalUrl: "https://cdn.test/original.png",
+        mimeType: "image/webp", width: 1400, height: 800, alt: "전시", decorative: false,
+      } },
+    }]);
+    expect(out.sections[0].content.media).toEqual({
+      kind: "image", url: "https://cdn.test/optimized.webp", originalUrl: "https://cdn.test/original.png",
+      mimeType: "image/webp", width: 1400, height: 800, alt: "전시", decorative: false,
+    });
+  });
+
   it("이미지가 아닌 미디어는 버린다", () => {
     const out = page([{
       sid: uid(1), type: "kv", variant: "column",

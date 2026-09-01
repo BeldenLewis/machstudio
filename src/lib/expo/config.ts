@@ -98,8 +98,17 @@ function normalizeSlot(def: SlotDef, raw: unknown): unknown {
       if (m.kind !== "image") return undefined;
       const url = safeHttpUrl(m.url);
       if (!url) return undefined;
+      const originalUrl = safeHttpUrl(m.originalUrl);
+      const mimeType = ["image/jpeg", "image/png", "image/webp"].includes(str(m.mimeType)) ? str(m.mimeType) : "";
+      const width = typeof m.width === "number" && Number.isFinite(m.width) && m.width > 0 ? m.width : undefined;
+      const height = typeof m.height === "number" && Number.isFinite(m.height) && m.height > 0 ? m.height : undefined;
       const alt = str(m.alt).slice(0, EXPO_LIMITS.textChars);
-      return alt ? { kind: "image", url, alt } : { kind: "image", url };
+      return {
+        kind: "image", url,
+        ...(originalUrl ? { originalUrl } : {}), ...(mimeType ? { mimeType } : {}),
+        ...(width ? { width } : {}), ...(height ? { height } : {}),
+        ...(alt ? { alt } : {}), ...(typeof m.decorative === "boolean" ? { decorative: m.decorative } : {}),
+      };
     }
 
     case "link": {

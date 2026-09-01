@@ -61,14 +61,14 @@ export function authFailure(failure: ExpoAuthFailure) {
  */
 export async function guardExpoRoute(
   request: Request,
-  { write = false }: { write?: boolean } = {},
+  { write = false, contentTypes }: { write?: boolean; contentTypes?: readonly string[] } = {},
 ): Promise<{ ok: true; ctx: ExpoRouteContext } | { ok: false; response: NextResponse }> {
   const caps = await getExpoCapabilities({ probe: probeExpoSchema });
   if (!caps.admin) return { ok: false, response: closed() };
 
   if (write) {
     const origin = getPublicAppOrigin();
-    const guard = guardWriteOrigin(request, origin ? [origin] : []);
+    const guard = guardWriteOrigin(request, origin ? [origin] : [], contentTypes);
     if (!guard.ok && guard.failure) {
       return {
         ok: false,

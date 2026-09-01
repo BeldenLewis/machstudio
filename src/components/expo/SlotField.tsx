@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { ImagePlus, Link2, Loader2, X } from "lucide-react";
+import { useId } from "react";
+import { Link2 } from "lucide-react";
 import { Field, FieldArea, FieldSelect, FINISH, R, UrlField } from "@/components/ui/primitives";
 import { safeHttpUrl } from "@/lib/webinar-config";
 import { EXPO_LIMITS } from "@/lib/expo/registry";
 import type { SlotDef } from "@/lib/expo/types";
+import { ExpoMediaUploadField } from "@/components/expo/fields/ExpoMediaUploadField";
+import type { ExpoImageValue } from "@/lib/expo/sections/types";
 
 /**
  * 슬롯 한 칸의 편집 컨트롤 — **카탈로그가 위젯을 고른다.**
@@ -139,9 +141,13 @@ export function SlotField({
 
       case "media":
         return (
-          <MediaField
-            id={id} label={def.label} value={value} onChange={onChange}
-            disabled={disabled} siteId={siteId}
+          <ExpoMediaUploadField
+            siteId={siteId}
+            kind="image"
+            label={def.label}
+            value={asDict(value).kind === "image" ? value as ExpoImageValue : undefined}
+            onChange={onChange}
+            disabled={disabled}
           />
         );
 
@@ -242,151 +248,6 @@ function LinkField({
           isValidHttpUrl={(v) => Boolean(safeHttpUrl(v))}
         />
       )}
-    </div>
-  );
-}
-
-/**
- * 이미지 — **올리기와 주소 붙여넣기 둘 다** 받는다.
- *
- * 올린 것만 받으면 이미 다른 곳에 있는 이미지를 다시 올려야 하고, 주소만 받으면 그 호스트가
- * 지우는 날 전시 홈페이지의 사진이 사라진다. 둘 다 두고, 밖에서 가져온 것은 템플릿으로 저장할
- * 때 체크리스트가 알려 준다(`template-service.ts`).
- */
-function MediaField({
-  id, label, value, onChange, disabled, siteId,
-}: {
-  id: string; label: string; value: unknown;
-  onChange: (v: unknown) => void; disabled?: boolean; siteId: string;
-}) {
-  const media = asDict(value);
-  const url = typeof media.url === "string" ? media.url : "";
-  const alt = typeof media.alt === "string" ? media.alt : "";
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  // W1 은 이미지만이라 kind 가 항상 "image" 다. 정규화가 다른 kind 를 통째로 버리므로
-  // 여기서 빠뜨리면 값이 조용히 사라진다(`config.ts` 의 case "media").
-  const write = (next: { url?: string; alt?: string }) =>
-    onChange({ kind: "image", url, alt, ...next });
-
-  /**
-   * 업로드는 **몇 초를 산다.** 그 사이 사용자는 같은 구획의 다른 칸을 계속 고칠 수 있다.
-   *
-   * 클릭 시점의 `onChange` 를 그대로 들고 있으면, 그것이 붙잡은 `section.content` 를
-   * 통째로 펼쳐 쓰는 바람에(SectionEditor 의 setSlot) **올리는 동안 친 글이 전부 그때
-   * 값으로 롤백되고 그대로 자동저장된다.** 응답이 성공이라 아무 경고도 없다.
-   *
-   * 그래서 응답이 왔을 때는 **그 순간의** onChange·alt 를 읽는다. ref 갱신은 렌더가
-   * 아니라 효과에서 한다(react-hooks 규칙).
-   */
-  const latest = useRef({ alt, onChange });
-  useEffect(() => { latest.current = { alt, onChange }; }, [alt, onChange]);
-
-  const upload = useCallback(async (file: File) => {
-    setUploading(true);
-    setUploadError(null);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch(`/api/expo/${encodeURIComponent(siteId)}/media`, {
-        method: "POST",
-        body: form,
-      });
-      const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-      if (!res.ok || !body.url) {
-        // 거절 사유를 그 자리에 보여 준다 — 토스트로 던지면 어느 칸인지 모른다.
-        setUploadError(body.error ?? "올리지 못했어요.");
-        return;
-      }
-      latest.current.onChange({ kind: "image", url: body.url, alt: latest.current.alt });
-    } catch {
-      setUploadError("올리지 못했어요. 연결을 확인해 주세요.");
-    } finally {
-      setUploading(false);
-    }
-    // siteId 만 의존한다 — 나머지는 위 ref 로 읽으므로 업로드 중 렌더에 흔들리지 않는다.
-  }, [siteId]);
-
-  return (
-    <div className="space-y-1.5">
-      {url ? (
-        <div className={`${R.surface} ${FINISH.s2} flex items-center gap-2 bg-secondary p-2`}>
-          {/* 미리보기는 작게 — 이 칸의 주인공은 값이지 이미지가 아니다.
-              next/image 를 쓰지 않는다: 주소가 임의 호스트라 remotePatterns 로 못 묶는다. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={url} alt="" className={`h-10 w-14 shrink-0 object-cover ${R.control} ${FINISH.hairlineOut}`} />
-          <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{url}</span>
-          {!disabled ? (
-            <button
-              type="button"
-              aria-label={`${label} 지우기`}
-              title={`${label} 지우기`}
-              onClick={() => write({ url: "" })}
-              className={`grid h-9 w-9 shrink-0 place-items-center ${R.control} text-muted-foreground transition-colors hover:bg-background hover:text-foreground`}
-            >
-              <X className="h-4 w-4" aria-hidden />
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
-      <div className="flex items-start gap-1.5">
-        {/* 폭은 래퍼가 갖는다 — FIELD_CLS 가 w-full 을 소유해서 입력에 폭 클래스를 덧붙이면
-            아무 효과가 없다(primitives.tsx 의 FIELD_CLS 주석). */}
-        <div className="min-w-0 flex-1">
-          <UrlField
-            id={id}
-            label={`${label} 주소`}
-            value={url}
-            onChange={(next) => write({ url: next })}
-            placeholder="이미지 주소를 붙여넣거나 올리세요"
-            disabled={disabled || uploading}
-            isValidHttpUrl={(v) => Boolean(safeHttpUrl(v))}
-          />
-        </div>
-        {!disabled ? (
-          <>
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                // 같은 파일을 다시 골라도 change 가 나게 비운다.
-                event.target.value = "";
-                if (file) void upload(file);
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              disabled={uploading}
-              className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 ${R.control} ${FINISH.control} bg-secondary px-3 text-xs font-medium transition-colors hover:bg-secondary/70 disabled:opacity-60`}
-            >
-              {uploading
-                ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                : <ImagePlus className="h-3.5 w-3.5" aria-hidden />}
-              올리기
-            </button>
-          </>
-        ) : null}
-      </div>
-
-      {uploadError ? (
-        <p className="text-[11px] leading-relaxed text-[var(--destructive)]">{uploadError}</p>
-      ) : null}
-
-      <Field
-        aria-label={`${label} 대체 텍스트`}
-        value={alt}
-        placeholder="대체 텍스트 — 화면을 못 보는 방문자에게 읽어 줍니다"
-        onChange={(event) => write({ alt: event.target.value })}
-        disabled={disabled}
-        maxLength={EXPO_LIMITS.textChars}
-      />
     </div>
   );
 }

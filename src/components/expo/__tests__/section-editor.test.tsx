@@ -204,7 +204,10 @@ describe("이미지 슬롯", () => {
     expect(latest[0].content.media).toMatchObject({ kind: "image", url: "https://cdn.example.com/a.jpg" });
     // 정규화를 통과해도 살아남는가 — 이게 진짜 확인해야 할 것이다.
     const saved = normalizeExpoPage({ sections: stripExpoRowKeys(latest) }).sections[0];
-    expect(saved.content.media).toEqual({ kind: "image", url: "https://cdn.example.com/a.jpg" });
+    expect(saved.content.media).toEqual({
+      kind: "image", url: "https://cdn.example.com/a.jpg",
+      originalUrl: "https://cdn.example.com/a.jpg", decorative: false,
+    });
   });
 
   it("대체 텍스트만 적고 주소가 없으면 정규화가 버린다는 것을 화면이 숨기지 않는다", async () => {
@@ -333,12 +336,31 @@ describe("카탈로그에 없는 타입", () => {
 describe("이미지를 올리는 동안", () => {
   /** 응답을 테스트가 원할 때 풀 수 있는 업로드. */
   function deferredUpload() {
-    let release: ((url: string) => void) | null = null;
-    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => {
-      release = (url) => resolve({ ok: true, status: 201, json: async () => ({ url }) } as Response);
-    }));
+    let releaseSession: (() => void) | null = null;
+    let finalUrl = "";
+    const sessionWait = new Promise<void>((resolve) => { releaseSession = resolve; });
+    const fetchMock = vi.fn(async (target: string | URL | Request) => {
+      const url = String(target);
+      if (url.endsWith("/media/session")) {
+        await sessionWait;
+        return { ok: true, status: 201, json: async () => ({
+          path: "ws/expo-quarantine/site/user/a.jpg", signedUrl: "https://storage.example.com/signed", token: "one-use",
+        }) } as Response;
+      }
+      if (url === "https://storage.example.com/signed") return { ok: true, status: 200 } as Response;
+      return { ok: true, status: 201, json: async () => ({
+        kind: "image", url: finalUrl, originalUrl: `${finalUrl}?original=1`,
+        mimeType: "image/webp", width: 1200, height: 800, bytes: 100,
+      }) } as Response;
+    });
     vi.stubGlobal("fetch", fetchMock);
-    return { release: (url: string) => release!(url) };
+    return {
+      release: async (url: string) => {
+        finalUrl = url;
+        releaseSession!();
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+      },
+    };
   }
 
   it("같은 구획의 다른 칸에 친 글을 되돌리지 않는다", async () => {
@@ -358,7 +380,7 @@ describe("이미지를 올리는 동안", () => {
     expect((latest[0].content.heading as Record<string, string>).ko).toBe("빛의 시간");
 
     // 응답 도착.
-    await act(async () => { upload.release("https://cdn.example.com/a.jpg"); });
+    await act(async () => { await upload.release("https://cdn.example.com/a.jpg"); });
 
     expect(latest[0].content.media).toMatchObject({ url: "https://cdn.example.com/a.jpg" });
     // 여기가 핵심 — 올리는 동안 친 글이 살아 있어야 한다.
@@ -378,7 +400,7 @@ describe("이미지를 올리는 동안", () => {
     });
 
     await type(field<HTMLInputElement>('input[aria-label="이미지 대체 텍스트"]'), "전시 전경");
-    await act(async () => { upload.release("https://cdn.example.com/a.jpg"); });
+    await act(async () => { await upload.release("https://cdn.example.com/a.jpg"); });
 
     expect(latest[0].content.media).toMatchObject({
       kind: "image", url: "https://cdn.example.com/a.jpg", alt: "전시 전경",

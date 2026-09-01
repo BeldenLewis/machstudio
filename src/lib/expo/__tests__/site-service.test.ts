@@ -190,6 +190,16 @@ describe("쓰기 출처 가드 — 인증보다 먼저", () => {
     expect(guardWriteOrigin(req({ "sec-fetch-site": "same-origin", "content-type": "application/json" })).ok).toBe(true);
   });
 
+  it("명시적으로 허용한 legacy multipart만 같은 출처에서 통과", () => {
+    const multipart = req({ "sec-fetch-site": "same-origin", "content-type": "multipart/form-data; boundary=x" });
+    expect(guardWriteOrigin(multipart).ok).toBe(false);
+    expect(guardWriteOrigin(multipart, [], ["multipart/form-data"]).ok).toBe(true);
+    expect(guardWriteOrigin(
+      req({ "sec-fetch-site": "cross-site", "content-type": "multipart/form-data; boundary=x" }),
+      [], ["multipart/form-data"],
+    ).ok).toBe(false);
+  });
+
   /**
    * 쿠키는 브라우저가 자동으로 붙는다. 다른 사이트가 로그인한 운영자의 브라우저를 시켜
    * 우리 API 를 부르면 그 요청도 인증을 통과한다 — 발행·공개 스위치를 다루는 API 라

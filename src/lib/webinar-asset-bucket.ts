@@ -16,7 +16,8 @@ export const ASSET_BUCKET = "webinar-assets";
 
 /** 버킷에 올라갈 수 있는 전체 MIME. 종류별 제한은 각 validate 함수가 따로 본다(여기가 상한선). */
 export const ASSET_BUCKET_MIME_TYPES = [
-  ...new Set([...SESSION_IMAGE_MIME_TYPES, ...LANDING_MEDIA_MIME_TYPES]),
+  // Expo만 구조 검증을 끝낸 SVG 원본을 보존한다. 웨비나 라우트의 자체 allowlist는 SVG를 계속 거절한다.
+  ...new Set([...SESSION_IMAGE_MIME_TYPES, ...LANDING_MEDIA_MIME_TYPES, "image/svg+xml"]),
 ];
 
 /**

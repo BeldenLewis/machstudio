@@ -27,7 +27,7 @@ import { collectPluginMediaUrls, rewritePluginMediaUrls } from "@/lib/expo/plugi
 import type { SlotDef } from "@/lib/expo/types";
 
 /** 복사해 갈 수 있는 확장자. 업로드 라우트가 만드는 것과 같은 집합이다. */
-export const EXPO_MEDIA_EXTENSIONS = ["jpg", "jpeg", "png", "webp"] as const;
+export const EXPO_MEDIA_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "svg", "mp4"] as const;
 
 const obj = (v: unknown): Record<string, unknown> =>
   v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -136,10 +136,18 @@ function walkMedia(
     if (value === undefined) continue;
     if (slot.kind === "media") {
       const m = obj(value);
-      const url = str(m.url);
-      if (!url) continue;
-      const next = visit(url);
-      if (next !== undefined) out[slot.key] = { ...m, url: next };
+      let changed = false;
+      const nextMedia = { ...m };
+      for (const key of ["url", "originalUrl"] as const) {
+        const url = str(m[key]);
+        if (!url) continue;
+        const next = visit(url);
+        if (next !== undefined) {
+          nextMedia[key] = next;
+          changed = true;
+        }
+      }
+      if (changed) out[slot.key] = nextMedia;
     } else if (slot.kind === "list" && Array.isArray(value) && slot.itemSlots) {
       out[slot.key] = value.map((row) => walkMedia(slot.itemSlots!, obj(row), visit));
     }

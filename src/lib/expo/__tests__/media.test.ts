@@ -155,6 +155,25 @@ const sections = (): MediaCarrier[] => [
 ];
 
 describe("미디어 주소 수집", () => {
+  it("legacy media 슬롯도 url과 originalUrl을 각각 걷고 치환한다", () => {
+    const derivative = url("ws1/expo/site1/optimized-a.webp");
+    const original = url("ws1/expo/site1/original-a.png");
+    const source: MediaCarrier[] = [{
+      type: "kv",
+      content: { media: { kind: "image", url: derivative, originalUrl: original, alt: "전경" } },
+    }];
+    expect(collectExpoMediaUrls(source)).toEqual([derivative, original]);
+    const rewritten = rewriteExpoMediaUrls(source, new Map([
+      [derivative, url("ws1/expo-templates/tpl1/optimized-new.webp")],
+      [original, url("ws1/expo-templates/tpl1/original-new.png")],
+    ]));
+    expect(rewritten[0].content?.media).toMatchObject({
+      url: url("ws1/expo-templates/tpl1/optimized-new.webp"),
+      originalUrl: url("ws1/expo-templates/tpl1/original-new.png"),
+      alt: "전경",
+    });
+  });
+
   it("plugin nested image/video의 url·originalUrl·poster를 걷는다", () => {
     textblockPlugin.normalize = (content) => content as Record<string, unknown>;
     const pluginSections: MediaCarrier[] = [{
@@ -309,14 +328,21 @@ describe("소유한 미디어만 새 접두사로 복사한다", () => {
     expect(result.notCopied.map((n) => n.reason)).toEqual(["foreign-owner", "foreign-owner"]);
   });
 
-  it("모르는 확장자는 손대지 않는다", async () => {
+  it("PNG·SVG·MP4와 원본 주소까지 복사하고 모르는 확장자는 손대지 않는다", async () => {
     const { storage, calls } = fakeStorage();
     const result = await copyExpoMedia(storage, {
-      urls: [url("ws1/expo/site1/a.svg"), url("ws1/expo/site1/noext")],
+      urls: [
+        url("ws1/expo/site1/a.png"), url("ws1/expo/site1/a.svg"),
+        url("ws1/expo/site1/a.mp4"), url("ws1/expo/site1/noext"),
+      ],
       sourcePrefix: SITE, destPrefix: TEMPLATE, newObjectName: sequentialNames(),
     });
-    expect(calls.copy).toEqual([]);
-    expect(result.notCopied.map((n) => n.reason)).toEqual(["unsupported-format", "unsupported-format"]);
+    expect(calls.copy.map((call) => call[1])).toEqual([
+      "ws1/expo-templates/tpl1/new1.png",
+      "ws1/expo-templates/tpl1/new2.svg",
+      "ws1/expo-templates/tpl1/new3.mp4",
+    ]);
+    expect(result.notCopied.map((n) => n.reason)).toEqual(["unsupported-format"]);
   });
 
   it("접두사 모양이 이상하면 아무것도 복사하지 않는다", async () => {
