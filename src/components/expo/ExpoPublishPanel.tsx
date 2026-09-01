@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Check, Copy, Loader2 } from "lucide-react";
+import { Check, Copy, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Chip, FINISH, R } from "@/components/ui/primitives";
 import { Switch } from "@/components/ui/switch";
@@ -78,7 +78,8 @@ export function ExpoPublishPanel({
   readiness, snippets, canPublish, saveBlocked, onChanged, launchLocked = false, request,
 }: ExpoPublishPanelProps) {
   const confirm = useConfirm();
-  const [busy, setBusy] = useState<"publish" | "live" | null>(null);
+  const [busy, setBusy] = useState<"publish" | "live" | `export:${string}` | null>(null);
+  const [exportIssues, setExportIssues] = useState<Record<string, DisplayIssue[]>>({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const live = Boolean(liveAt);
   const fallbackRequest = useCallback((path: string, init?: RequestInit) => window.fetch(path, init), []);
@@ -166,6 +167,46 @@ export function ExpoPublishPanel({
     if (done) toast.success(next ? "공개했어요." : "공개를 껐어요.");
   }, [confirm, call, pageId]);
 
+  const downloadHtml = useCallback(async (scope: { type: "page" } | { type: "section"; sid: string }) => {
+    const key = scope.type === "page" ? "page" : scope.sid;
+    setBusy(`export:${key}`);
+    setExportIssues((current) => ({ ...current, [key]: [] }));
+    let objectUrl: string | null = null;
+    try {
+      const res = await requester(`/api/expo/pages/${encodeURIComponent(pageId)}/export`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(scope.type === "page" ? { scope: "page" } : { scope: "section", sid: scope.sid }),
+      });
+      if (!res.ok) {
+        const failed = await res.json().catch(() => ({})) as { error?: string; issues?: DisplayIssue[] };
+        const issues = failed.issues?.length ? failed.issues : [{ code: "standalone-export-failed", message: failed.error ?? "백업 HTML을 만들 수 없어요." }];
+        const affected = issues.filter((entry) => !entry.sid || entry.sid === key || key === "page");
+        setExportIssues((current) => ({ ...current, [key]: affected.length ? affected : issues }));
+        toast.error(issues[0].message);
+        return;
+      }
+      const blob = await res.blob();
+      objectUrl = URL.createObjectURL(blob);
+      const match = res.headers.get("content-disposition")?.match(/filename="([\x20-\x21\x23-\x7e]+)"/i);
+      const filename = match?.[1] ?? "mach-expo-standalone.html";
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      anchor.hidden = true;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    } catch {
+      const issues = [{ code: "standalone-export-failed", message: "백업 HTML을 만들 수 없어요. 연결을 확인해 주세요." }];
+      setExportIssues((current) => ({ ...current, [key]: issues }));
+      toast.error(issues[0].message);
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      setBusy(null);
+    }
+  }, [pageId, requester]);
+
   return (
     <section className={`${R.panel} ${FINISH.s1} space-y-3 bg-card p-3`} aria-labelledby="expo-publish-heading">
       <div className="flex items-center justify-between gap-2">
@@ -202,6 +243,39 @@ export function ExpoPublishPanel({
           </p>
         ) : null}
       </div>
+
+      {/* 서버·인증 없이 다시 열 수 있는 복구 사본. 캠페인은 이 클릭 시각으로 굳힌다. */}
+      {canPublish ? (
+        <div className={`${R.surface} ${FINISH.s2} space-y-2 bg-secondary p-2.5`}>
+          <div>
+            <h3 className="text-[11px] font-medium">백업 HTML</h3>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+              백업 HTML의 캠페인 상태는 다운로드 시점으로 고정됩니다. 일정이 바뀌면 다시 다운로드하세요.
+            </p>
+          </div>
+          <ExportButton
+            label="전체"
+            busy={busy === "export:page"}
+            disabled={!hasPublished || busy !== null}
+            onClick={() => void downloadHtml({ type: "page" })}
+          />
+          <Reasons issues={exportIssues.page ?? []} />
+          {snippets.ok ? snippets.sections.map((section) => (
+            <div key={`export:${section.sid}`} className="space-y-1">
+              <ExportButton
+                label={section.label}
+                busy={busy === `export:${section.sid}`}
+                disabled={!hasPublished || busy !== null}
+                onClick={() => void downloadHtml({ type: "section", sid: section.sid })}
+              />
+              <Reasons issues={exportIssues[section.sid] ?? []} />
+            </div>
+          )) : null}
+          {!hasPublished ? (
+            <p className="text-[11px] leading-relaxed text-muted-foreground">먼저 페이지를 발행해 주세요.</p>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* ── 공개 스위치 ──────────────────────────────────────────── */}
       {canPublish ? (
@@ -284,6 +358,22 @@ export function ExpoPublishPanel({
         ) : null}
       </div>
     </section>
+  );
+}
+
+function ExportButton({
+  label, busy, disabled, onClick,
+}: { label: string; busy: boolean; disabled: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex min-h-8 w-full items-center justify-center gap-1.5 ${R.control} bg-background px-2 text-[11px] font-medium text-foreground transition-colors hover:bg-background/70 disabled:opacity-50`}
+    >
+      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Download className="h-3.5 w-3.5" aria-hidden />}
+      {label} HTML 다운로드
+    </button>
   );
 }
 

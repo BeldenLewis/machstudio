@@ -30,7 +30,7 @@ const PAGE_ID = "pg1";
 let host: HTMLDivElement;
 let root: Root;
 let posts: Array<{ url: string; body: unknown }> = [];
-let nextResponse: { ok: boolean; status: number; body: unknown } = { ok: true, status: 200, body: {} };
+let nextResponse: { ok: boolean; status: number; body: unknown; contentType?: string; disposition?: string } = { ok: true, status: 200, body: {} };
 const onChanged = vi.fn();
 
 const READY = { canPublish: true, canGoLive: true, publishIssues: [], liveIssues: [], notes: [] };
@@ -55,6 +55,13 @@ function stubFetch() {
       ok: nextResponse.ok,
       status: nextResponse.status,
       json: async () => nextResponse.body,
+      blob: async () => new Blob([typeof nextResponse.body === "string" ? nextResponse.body : JSON.stringify(nextResponse.body)], {
+        type: nextResponse.contentType ?? "application/json",
+      }),
+      headers: new Headers({
+        ...(nextResponse.contentType ? { "content-type": nextResponse.contentType } : {}),
+        ...(nextResponse.disposition ? { "content-disposition": nextResponse.disposition } : {}),
+      }),
     } as Response;
   }));
 }
@@ -283,6 +290,75 @@ describe("권한", () => {
     expect(host.querySelector('button[role="switch"]')).toBeNull();
     // 코드는 그대로 볼 수 있다 — 붙이는 일에 발행 권한이 필요하지는 않다.
     expect(host.querySelector('button[aria-label="페이지 통짜 코드 복사"]')).toBeTruthy();
+  });
+});
+
+describe("백업 HTML", () => {
+  beforeEach(() => {
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:standalone"),
+      revokeObjectURL: vi.fn(),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    nextResponse = {
+      ok: true,
+      status: 200,
+      body: "<!doctype html>",
+      contentType: "text/html; charset=utf-8",
+      disposition: 'attachment; filename="mach-expo-page-pg1-r7.html"',
+    };
+  });
+
+  it("campaign freeze warning and whole-page download are adjacent", async () => {
+    await render({ hasPublished: true });
+    expect(host.textContent).toContain("백업 HTML의 캠페인 상태는 다운로드 시점으로 고정됩니다. 일정이 바뀌면 다시 다운로드하세요.");
+    await click(panelButton("전체 HTML 다운로드"));
+    expect(posts.at(-1)).toEqual({ url: "/api/expo/pages/pg1/export", body: { scope: "page" } });
+    expect(URL.createObjectURL).toHaveBeenCalled();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:standalone");
+  });
+
+  it("offers a download for each eligible section", async () => {
+    await render({
+      hasPublished: true,
+      snippets: {
+        ok: true,
+        page: SNIPPETS.page,
+        sections: [{
+          sid: "s1", label: "키비주얼", snippet: { code: "<script></script>", src: "https://x/h/pg1/s1" }, issues: [],
+        }],
+      },
+    });
+    await click(panelButton("키비주얼 HTML 다운로드"));
+    expect(posts.at(-1)).toEqual({ url: "/api/expo/pages/pg1/export", body: { scope: "section", sid: "s1" } });
+  });
+
+  it("shows structured export errors beside the affected scope", async () => {
+    nextResponse = {
+      ok: false,
+      status: 422,
+      body: { issues: [{ path: "scope.sid", sid: "s1", code: "standalone-unsupported", message: "이 구획은 백업 HTML로 내보낼 수 없어요." }] },
+    };
+    await render({
+      hasPublished: true,
+      snippets: {
+        ok: true,
+        page: SNIPPETS.page,
+        sections: [{ sid: "s1", label: "폼", snippet: { code: "", src: "" }, issues: [] }],
+      },
+    });
+    await click(panelButton("폼 HTML 다운로드"));
+    expect(host.textContent).toContain("이 구획은 백업 HTML로 내보낼 수 없어요.");
+    expect(toastError).toHaveBeenCalledWith("이 구획은 백업 HTML로 내보낼 수 없어요.");
+  });
+
+  it("does not render backup controls without publish permission or a published snapshot", async () => {
+    await render({ canPublish: false, hasPublished: true });
+    expect(panelButton("전체 HTML 다운로드")).toBeUndefined();
+    await act(async () => { root.unmount(); });
+    host.remove();
+    await render({ hasPublished: false });
+    expect(panelButton("전체 HTML 다운로드")?.disabled).toBe(true);
   });
 });
 

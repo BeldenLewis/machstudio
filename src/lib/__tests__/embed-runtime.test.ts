@@ -4,13 +4,14 @@ import { describe, expect, it } from "vitest";
 import { LANDING_RUNTIME_SRC_HASH } from "@/generated/landing-runtime";
 import { FORM_RUNTIME_JS, FORM_RUNTIME_SRC_HASH } from "@/generated/form-runtime";
 import { EXPO_RUNTIME_JS, EXPO_RUNTIME_SRC_HASH } from "@/generated/expo-runtime";
+import { EXPO_STANDALONE_RUNTIME_JS, EXPO_STANDALONE_RUNTIME_SRC_HASH } from "@/generated/expo-standalone-runtime";
 import { COMPETITION_RUNTIME_SRC_HASH } from "@/generated/competition-runtime";
 import { COMPETITION_VOTE_RUNTIME_SRC_HASH } from "@/generated/competition-vote-runtime";
 import { COMPETITION_RESULT_RUNTIME_SRC_HASH } from "@/generated/competition-result-runtime";
 import { COLLECT_FORM_CSS } from "@/lib/collect-form/css";
 import {
   competitionResultSourceHash, competitionSourceHash, competitionVoteSourceHash,
-  expoSourceHash, formSourceHash, landingSourceHash,
+  expoSourceHash, formSourceHash, landingSourceHash, standaloneExpoSourceHash,
 } from "../../../scripts/runtime-hash.mjs";
 
 const ROOT = resolve(__dirname, "../../..");
@@ -42,6 +43,10 @@ describe("임베드 번들이 소스와 동기화돼 있다", () => {
     expect(EXPO_RUNTIME_SRC_HASH).toBe(expoSourceHash(ROOT));
   });
 
+  it("홈페이지 standalone 런타임", () => {
+    expect(EXPO_STANDALONE_RUNTIME_SRC_HASH).toBe(standaloneExpoSourceHash(ROOT));
+  });
+
   /**
    * 대회 3종은 **오래도록 이 검사가 없었다.** 각자 빌드 스크립트 안에 손으로 적은 목록이
    * 있었고, 그중 둘은 커밋된 해시가 이미 소스와 어긋나 있었다 — `npm run dev` 를 돌릴
@@ -61,6 +66,24 @@ describe("임베드 번들이 소스와 동기화돼 있다", () => {
 
   it("대회 결과 런타임", () => {
     expect(COMPETITION_RESULT_RUNTIME_SRC_HASH).toBe(competitionResultSourceHash(ROOT));
+  });
+});
+
+describe("홈페이지 standalone 번들 정적 검사", () => {
+  it("Mach 네트워크·preview·form·font·stored-code 실행 경로를 포함하지 않는다", () => {
+    for (const needle of [
+      "reportExpoSeen", "/api/", "/hp/", "FontFace", "@font-face", "allowCustomCode", "parentOrigin", "previewToken",
+    ]) {
+      expect(`${needle}: ${EXPO_STANDALONE_RUNTIME_JS.includes(needle)}`).toBe(`${needle}: false`);
+    }
+    expect(EXPO_STANDALONE_RUNTIME_JS).not.toMatch(/fetch\s*\(/);
+    expect(EXPO_STANDALONE_RUNTIME_JS).not.toContain("new Function(");
+    expect(EXPO_STANDALONE_RUNTIME_JS).not.toMatch(/\beval\s*\(/);
+  });
+
+  it("script breakout과 브라우저 process 참조가 없다", () => {
+    expect(EXPO_STANDALONE_RUNTIME_JS).not.toContain("</script");
+    expect(EXPO_STANDALONE_RUNTIME_JS).not.toContain("process.env");
   });
 });
 

@@ -16,7 +16,7 @@ const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
  * 사람 눈으로 잡을 수 있는 종류가 아니다.
  */
 describe("임베드 빌드 연결", () => {
-  it("여섯 생성물이 모두 집합 스크립트에 있다", () => {
+  it("일곱 생성물이 모두 집합 스크립트에 있다", () => {
     const aggregate = pkg.scripts["build:embed-runtimes"];
     for (const script of [
       "build-landing-runtime.mjs",
@@ -25,6 +25,7 @@ describe("임베드 빌드 연결", () => {
       "build-competition-result-runtime.mjs",
       "build-form-runtime.mjs",
       "build-expo-runtime.mjs",
+      "build-expo-standalone-runtime.mjs",
     ]) {
       expect(`${script}: ${aggregate.includes(script)}`).toBe(`${script}: true`);
     }
@@ -61,6 +62,14 @@ describe("임베드 빌드 연결", () => {
   /** 라우트가 스크립트 본문으로 내려보내므로 이 두 리터럴은 빌드 단계에서 막는다. */
   it("홈페이지 번들 빌드가 위험한 리터럴을 스스로 막는다", () => {
     const source = readFileSync(join(ROOT, "scripts/build-expo-runtime.mjs"), "utf8");
+    expect(source).toContain("</script");
+    expect(source).toContain("process.env");
+    expect(source).toContain("throw new Error");
+  });
+
+  it("standalone 번들도 생성물 해시와 위험한 리터럴을 검사한다", () => {
+    const source = readFileSync(join(ROOT, "scripts/build-expo-standalone-runtime.mjs"), "utf8");
+    expect(source).toContain("standaloneExpoSourceHash");
     expect(source).toContain("</script");
     expect(source).toContain("process.env");
     expect(source).toContain("throw new Error");

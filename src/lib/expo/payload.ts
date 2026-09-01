@@ -16,6 +16,7 @@ import { resolveDestinations } from "@/lib/expo/destination";
 import { sectionDef } from "@/lib/expo/registry";
 import { resolvePluginContent } from "@/lib/expo/plugin-content";
 import type { ExpoPageConfigV2, ExpoSection, ExpoEventConfig, ResolvedCampaignState, ResolvedDestination, SlotDef } from "@/lib/expo/types";
+import type { PayloadSection } from "@/lib/expo/view-sections";
 
 /** 내부 참조를 풀 때 필요한 최소 정보 — 레코드를 통째로 받지 않는다. */
 export interface LinkTarget {
@@ -45,7 +46,7 @@ export interface ResolvedPayload {
   event?: ExpoEventConfig;
   campaigns: ResolvedCampaignState[];
   destinations: ResolvedDestination[];
-  sections: Array<Record<string, unknown>>;
+  sections: Array<PayloadSection & Record<string, unknown>>;
   issues: PayloadIssue[];
 }
 

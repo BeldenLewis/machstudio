@@ -189,6 +189,18 @@ export interface SectionRenderResult {
   dispose?(): void;
 }
 
+/** Mach 서버 없이 파일 하나에서 도는 복구용 런타임의 닫힌 payload. */
+export interface StandaloneExpoRuntimePayload {
+  pageId: string;
+  sectionId?: string | null;
+  theme: ExpoTheme;
+  sections: PayloadSection[];
+  locale: string;
+  campaigns: ResolvedCampaignState[];
+  destinations: ResolvedDestination[];
+  mode: "standalone";
+}
+
 export type SectionRenderer = (
   section: PayloadSection,
   context: SectionRenderContext,

@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   competitionResultSourceFiles, competitionSourceFiles, competitionVoteSourceFiles,
-  expoSourceFiles, formSourceFiles, landingSourceFiles,
+  expoSourceFiles, formSourceFiles, landingSourceFiles, standaloneExpoSourceFiles,
 } from "../../../scripts/runtime-hash.mjs";
 
 /**
@@ -54,6 +54,14 @@ describe("소스 목록 ↔ 실제 번들 입력", () => {
   it("홈페이지 런타임", async () => {
     const actual = await bundleInputs("src/embed/expo-entry.ts");
     expect(expoSourceFiles(ROOT)).toEqual(actual);
+  }, 30_000);
+
+  it("홈페이지 standalone 런타임", async () => {
+    const actual = await bundleInputs("src/embed/expo-standalone-entry.ts");
+    expect(standaloneExpoSourceFiles(ROOT)).toEqual(actual);
+    for (const forbidden of ["seen.ts", "preview-bridge.ts", "font.ts", "form-bridge.ts", "custom-code.ts"]) {
+      expect(actual.some((file) => file.endsWith(`/src/lib/expo/${forbidden}`))).toBe(false);
+    }
   }, 30_000);
 
   /**
