@@ -8,10 +8,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { guardExpoRoute, readJsonBody, authFailure } from "@/lib/expo/route-guard";
-import { requireMembership } from "@/lib/expo/auth";
+import { requireProjectAccess } from "@/lib/expo/auth";
 import { normalizeExpoTheme, EXPO_DEFAULT_THEME } from "@/lib/expo/config";
 import { homePageDefaults } from "@/lib/expo/model";
-import { deriveExpoPermissions } from "@/lib/expo/permissions";
+import { canAccessExpoProject, deriveExpoPermissions } from "@/lib/expo/permissions";
 import { isExpoPublicEmbedReleaseEnabled } from "@/lib/expo/capability";
 import { randomUUID } from "node:crypto";
 
@@ -39,14 +39,14 @@ export async function GET(request: Request) {
    * 사이트에서 유도할 수 없으므로, 전시를 지정한 경우 그 프로젝트의 소속에서 뽑는다.
    * 전시를 안 지정했으면(워크스페이스 전체 보기) 만들기 대상이 정해지지 않았으므로 닫는다.
    */
-  let projectPermissions = deriveExpoPermissions(null);
+  let projectPermissions = deriveExpoPermissions(null, null);
   if (projectId) {
     const project = await prisma.project.findUnique({
       where: { id: projectId },
       select: { workspaceId: true },
     });
-    if (project && guard.ctx.memberWorkspaceIds.includes(project.workspaceId)) {
-      projectPermissions = deriveExpoPermissions(guard.ctx.workspaceRole(project.workspaceId));
+    if (project && canAccessExpoProject(guard.ctx.workspaceRole(project.workspaceId), guard.ctx.projectRole(projectId))) {
+      projectPermissions = deriveExpoPermissions(guard.ctx.workspaceRole(project.workspaceId), guard.ctx.projectRole(projectId));
     }
   }
 
@@ -59,10 +59,12 @@ export async function GET(request: Request) {
    * 버튼이 켜진다.
    */
   return NextResponse.json({
-    sites: sites.map((s) => ({
+    sites: sites.filter((s) => canAccessExpoProject(
+      guard.ctx.workspaceRole(s.workspaceId), guard.ctx.projectRole(s.projectId),
+    )).map((s) => ({
       id: s.id, name: s.name, projectId: s.projectId, siteUrl: s.siteUrl,
       updatedAt: s.updatedAt, pageCount: s._count.pages,
-      permissions: deriveExpoPermissions(guard.ctx.workspaceRole(s.workspaceId)),
+      permissions: deriveExpoPermissions(guard.ctx.workspaceRole(s.workspaceId), guard.ctx.projectRole(s.projectId)),
     })),
     // 이 전시에 새로 만들 수 있는가 — 목록이 비어 있을 때 쓰는 값이다.
     permissions: projectPermissions,
@@ -91,8 +93,11 @@ export async function POST(request: Request) {
   });
   if (!project) return authFailure({ kind: "not-found" });
 
-  const member = requireMembership(guard.ctx.userId, guard.ctx.memberWorkspaceIds, project.workspaceId);
-  if (!member.ok) return authFailure(member.failure);
+  const access = requireProjectAccess(guard.ctx.workspaceRole(project.workspaceId), guard.ctx.projectRole(project.id));
+  if (!access.ok) return authFailure(access.failure);
+  if (!deriveExpoPermissions(guard.ctx.workspaceRole(project.workspaceId), guard.ctx.projectRole(project.id)).canEdit) {
+    return authFailure({ kind: "forbidden" });
+  }
 
   const home = homePageDefaults("ko");
   const site = await prisma.expoSite.create({

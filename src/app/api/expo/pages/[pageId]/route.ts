@@ -7,7 +7,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { guardExpoRoute, readJsonBody, authFailure, fieldErrors } from "@/lib/expo/route-guard";
-import { requireOwnedPage, requireWorkspaceAdmin } from "@/lib/expo/auth";
+import { requireOwnedPage, requireProjectAccess } from "@/lib/expo/auth";
+import { deriveExpoPermissions } from "@/lib/expo/permissions";
 import { validatePageDraft } from "@/lib/expo/request";
 import { changedSourceRefs, sourceScopeWhere } from "@/lib/expo/source-scope";
 import { newlyEmbedEnabled } from "@/lib/expo/release-gate";
@@ -41,6 +42,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ page
 
   const { page, owned } = await ownedPage(pageId, guard.ctx);
   if (!owned.ok) return authFailure(owned.failure);
+  const access = requireProjectAccess(guard.ctx.workspaceRole(owned.value.site.workspaceId), guard.ctx.projectRole(owned.value.site.projectId));
+  if (!access.ok) return authFailure(access.failure);
 
   return NextResponse.json({
     page: {
@@ -115,6 +118,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ pa
 
   const { page, owned } = await ownedPage(pageId, guard.ctx);
   if (!owned.ok) return authFailure(owned.failure);
+  const access = requireProjectAccess(guard.ctx.workspaceRole(owned.value.site.workspaceId), guard.ctx.projectRole(owned.value.site.projectId));
+  if (!access.ok) return authFailure(access.failure);
+  if (!deriveExpoPermissions(guard.ctx.workspaceRole(owned.value.site.workspaceId), guard.ctx.projectRole(owned.value.site.projectId)).canEdit) {
+    return authFailure({ kind: "forbidden" });
+  }
 
   const parsed = await readJsonBody(request);
   if (!parsed.ok) return parsed.response;
@@ -225,10 +233,13 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ p
 
   const { page, owned } = await ownedPage(pageId, guard.ctx);
   if (!owned.ok) return authFailure(owned.failure);
+  const access = requireProjectAccess(guard.ctx.workspaceRole(owned.value.site.workspaceId), guard.ctx.projectRole(owned.value.site.projectId));
+  if (!access.ok) return authFailure(access.failure);
 
   // 페이지 삭제도 `canManageSite` 다(`permissions.ts`).
-  const admin = requireWorkspaceAdmin(guard.ctx.userId, guard.ctx.workspaceRole(owned.value.site.workspaceId));
-  if (!admin.ok) return authFailure(admin.failure);
+  if (!deriveExpoPermissions(guard.ctx.workspaceRole(owned.value.site.workspaceId), guard.ctx.projectRole(owned.value.site.projectId)).canManageSite) {
+    return authFailure({ kind: "forbidden" });
+  }
 
   const prepared = prepareDeletePage(page!);
   if (!prepared.ok) {

@@ -8,15 +8,13 @@
  *
  * 그래서 멤버십 행을 그대로 직렬화하지 않는다. 네 개의 boolean 만 나간다.
  *
- * ── 지금의 축소 ───────────────────────────────────────────────────────
- * 설계의 진리표는 `ProjectMember` 행(VIEWER|EDITOR|ADMIN)까지 본다. 그 배선은 아직
- * 없어서(별건), 여기서는 **워크스페이스 역할만** 본다:
- *   OWNER·ADMIN → 유효 프로젝트 ADMIN (전부 허용)
- *   MEMBER      → 유효 EDITOR (초안 편집만)
- * 이건 설계보다 **좁은** 쪽이다 — 명시적 프로젝트 ADMIN 이 있어야 할 사람이 발행을
- * 못 하는 것은 불편이고, 그 반대는 사고다. 좁은 쪽으로 틀린다.
+ * ── 역할 매트릭스 ─────────────────────────────────────────────────────
+ * 워크스페이스 OWNER·ADMIN 은 모든 프로젝트를 관리한다. WORKSPACE MEMBER 는
+ * `ProjectMember` 행(VIEWER|EDITOR|ADMIN)이 있어야 그 프로젝트를 볼 수 있고,
+ * VIEWER 는 읽기만, EDITOR 는 편집·발행, 프로젝트 ADMIN 은 사이트 관리까지 한다.
+ * 워크스페이스 전역 템플릿 관리는 계속 OWNER·ADMIN 전용이다.
  */
-import type { WorkspaceRole } from "@/lib/expo/auth";
+import type { ProjectRole, WorkspaceRole } from "@/lib/expo/auth";
 
 export interface ExpoPermissions {
   /** 초안 편집·페이지 생성·업로드·템플릿 저장·이 프로젝트로 복제. */
@@ -36,14 +34,27 @@ const NONE: ExpoPermissions = {
   canManageTemplates: false,
 };
 
-export function deriveExpoPermissions(role: WorkspaceRole | null): ExpoPermissions {
-  // 멤버가 아니면 아무것도 아니다. 호출부의 소유권 판정이 이미 404 로 막았어야 한다.
-  if (!role) return NONE;
-  if (role === "OWNER" || role === "ADMIN") {
+export function canAccessExpoProject(
+  workspaceRole: WorkspaceRole | null,
+  projectRole: ProjectRole | null,
+): boolean {
+  return workspaceRole === "OWNER" || workspaceRole === "ADMIN" ||
+    (workspaceRole === "MEMBER" && projectRole !== null);
+}
+
+export function deriveExpoPermissions(
+  workspaceRole: WorkspaceRole | null,
+  projectRole: ProjectRole | null = null,
+): ExpoPermissions {
+  if (workspaceRole === "OWNER" || workspaceRole === "ADMIN") {
     return { canEdit: true, canPublish: true, canManageSite: true, canManageTemplates: true };
   }
-  // MEMBER — 초안은 고칠 수 있고, 밖으로 내보내는 것과 지우는 것은 못 한다.
-  return { canEdit: true, canPublish: false, canManageSite: false, canManageTemplates: false };
+  if (workspaceRole !== "MEMBER") return NONE;
+  switch (projectRole) {
+    case "ADMIN": return { canEdit: true, canPublish: true, canManageSite: true, canManageTemplates: false };
+    case "EDITOR": return { canEdit: true, canPublish: true, canManageSite: false, canManageTemplates: false };
+    default: return NONE;
+  }
 }
 
 /**

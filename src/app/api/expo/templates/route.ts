@@ -14,7 +14,8 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { guardExpoRoute, readJsonBody, authFailure, fieldErrors, asJson } from "@/lib/expo/route-guard";
-import { requireOwnedSite } from "@/lib/expo/auth";
+import { requireOwnedSite, requireProjectAccess } from "@/lib/expo/auth";
+import { deriveExpoPermissions } from "@/lib/expo/permissions";
 import { copyExpoMedia, expoSitePrefix, expoTemplatePrefix } from "@/lib/expo/media";
 import { createExpoStorage } from "@/lib/expo/storage";
 import {
@@ -69,6 +70,11 @@ export async function POST(request: Request) {
   });
   const owned = requireOwnedSite(site, guard.ctx.userId, guard.ctx.memberWorkspaceIds);
   if (!owned.ok) return authFailure(owned.failure);
+  const access = requireProjectAccess(guard.ctx.workspaceRole(owned.value.workspaceId), guard.ctx.projectRole(owned.value.projectId));
+  if (!access.ok) return authFailure(access.failure);
+  if (!deriveExpoPermissions(guard.ctx.workspaceRole(owned.value.workspaceId), guard.ctx.projectRole(owned.value.projectId)).canEdit) {
+    return authFailure({ kind: "forbidden" });
+  }
 
   const pages = await prisma.expoPage.findMany({
     where: { siteId: owned.value.id, deletedAt: null },

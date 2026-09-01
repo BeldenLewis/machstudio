@@ -7,7 +7,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { guardExpoRoute, readJsonBody, authFailure } from "@/lib/expo/route-guard";
-import { requireOwnedSite, requireSameProjectSource, requireWorkspaceAdmin } from "@/lib/expo/auth";
+import { requireOwnedSite, requireProjectAccess, requireSameProjectSource } from "@/lib/expo/auth";
+import { deriveExpoPermissions } from "@/lib/expo/permissions";
 import { normalizeExpoTheme } from "@/lib/expo/config";
 import { normalizeHexColor } from "@/lib/color";
 import { pageSummary } from "@/lib/expo/site-service";
@@ -25,6 +26,10 @@ async function loadOwned(siteId: string, ctx: { userId: string; memberWorkspaceI
   return { site, owned: requireOwnedSite(site, ctx.userId, ctx.memberWorkspaceIds) };
 }
 
+function permissions(ctx: { workspaceRole(id: string): "OWNER" | "ADMIN" | "MEMBER" | null; projectRole(id: string): "VIEWER" | "EDITOR" | "ADMIN" | null }, site: { workspaceId: string; projectId: string }) {
+  return deriveExpoPermissions(ctx.workspaceRole(site.workspaceId), ctx.projectRole(site.projectId));
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ siteId: string }> }) {
   const { siteId } = await params;
   const guard = await guardExpoRoute(request);
@@ -32,6 +37,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ site
 
   const { site, owned } = await loadOwned(siteId, guard.ctx);
   if (!owned.ok) return authFailure(owned.failure);
+  const access = requireProjectAccess(guard.ctx.workspaceRole(owned.value.workspaceId), guard.ctx.projectRole(owned.value.projectId));
+  if (!access.ok) return authFailure(access.failure);
 
   // 페이지는 **요약만** 싣는다 — draft 50개를 목록에 담으면 응답이 수 MB 가 된다.
   const pages = await prisma.expoPage.findMany({
@@ -79,6 +86,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ si
 
   const { site, owned } = await loadOwned(siteId, guard.ctx);
   if (!owned.ok) return authFailure(owned.failure);
+  const access = requireProjectAccess(guard.ctx.workspaceRole(owned.value.workspaceId), guard.ctx.projectRole(owned.value.projectId));
+  if (!access.ok) return authFailure(access.failure);
+  if (!permissions(guard.ctx, owned.value).canEdit) return authFailure({ kind: "forbidden" });
 
   const parsed = await readJsonBody(request);
   if (!parsed.ok) return parsed.response;
@@ -102,8 +112,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ si
    * 그리고 **보낸 칸만** 바꾼다. 빠뜨린 칸까지 기본값으로 채우면 부분 저장이 나머지를 지운다.
    */
   if (body.theme !== undefined) {
-    const admin = requireWorkspaceAdmin(guard.ctx.userId, guard.ctx.workspaceRole(owned.value.workspaceId));
-    if (!admin.ok) return authFailure(admin.failure);
+    if (!permissions(guard.ctx, owned.value).canEdit) return authFailure({ kind: "forbidden" });
 
     const raw = body.theme && typeof body.theme === "object" && !Array.isArray(body.theme)
       ? (body.theme as Record<string, unknown>)
@@ -166,10 +175,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ s
 
   const { site, owned } = await loadOwned(siteId, guard.ctx);
   if (!owned.ok) return authFailure(owned.failure);
+  const access = requireProjectAccess(guard.ctx.workspaceRole(owned.value.workspaceId), guard.ctx.projectRole(owned.value.projectId));
+  if (!access.ok) return authFailure(access.failure);
 
   // 사이트 삭제는 `canManageSite` 다 — 화면이 MEMBER 에게 숨기는 버튼이므로 라우트도 막는다.
-  const admin = requireWorkspaceAdmin(guard.ctx.userId, guard.ctx.workspaceRole(owned.value.workspaceId));
-  if (!admin.ok) return authFailure(admin.failure);
+  if (!permissions(guard.ctx, owned.value).canManageSite) return authFailure({ kind: "forbidden" });
 
   // 소프트 삭제 — 되돌릴 수 있어야 한다. 공개 로더는 deletedAt 을 보고 즉시 404 를 낸다.
   await prisma.expoSite.update({ where: { id: site!.id }, data: { deletedAt: new Date() } });

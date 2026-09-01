@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const prismaMock = {
   workspaceMember: { findMany: vi.fn() },
+  projectMember: { findMany: vi.fn() },
   expoSite: { findFirst: vi.fn(), create: vi.fn() },
   expoPage: { findMany: vi.fn(), create: vi.fn() },
   expoTemplate: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
@@ -88,6 +89,7 @@ beforeEach(() => {
   probe.mockResolvedValue(true);
   getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
   prismaMock.workspaceMember.findMany.mockResolvedValue([{ workspaceId: "w1", role: "ADMIN" }]);
+  prismaMock.projectMember.findMany.mockResolvedValue([]);
   prismaMock.expoSite.findFirst.mockResolvedValue({
     id: "site1", workspaceId: "w1", projectId: "proj1", theme: { accent: "#123456" }, siteUrl: null,
   });
@@ -162,6 +164,13 @@ describe("사이트를 템플릿으로 저장", () => {
     });
     const res = await post({ siteId: "site9", name: "x" });
     expect(res.status).toBe(404);
+    expect(prismaMock.expoTemplate.create).not.toHaveBeenCalled();
+  });
+
+  it("배정되지 않은 MEMBER 는 자기 워크스페이스 사이트도 템플릿으로 저장할 수 없다", async () => {
+    prismaMock.workspaceMember.findMany.mockResolvedValue([{ workspaceId: "w1", role: "MEMBER" }]);
+    prismaMock.projectMember.findMany.mockResolvedValue([]);
+    expect((await post({ siteId: "site1", name: "x" })).status).toBe(404);
     expect(prismaMock.expoTemplate.create).not.toHaveBeenCalled();
   });
 });
@@ -370,9 +379,17 @@ describe("템플릿에서 새 사이트를 만든다", () => {
   it("남의 워크스페이스 전시로는 만들 수 없다", async () => {
     prismaMock.project.findUnique.mockResolvedValue({ id: "proj9", workspaceId: "w9" });
     const res = await instantiate({ projectId: "proj9", name: "새 전시" });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
     expect(storageMock.copy).not.toHaveBeenCalled();
+  });
+
+  it("배정되지 않은 MEMBER 는 목적지 프로젝트를 추측할 수 없다", async () => {
+    prismaMock.workspaceMember.findMany.mockResolvedValue([{ workspaceId: "w1", role: "MEMBER" }]);
+    prismaMock.projectMember.findMany.mockResolvedValue([]);
+    const res = await instantiate({ projectId: "proj2", name: "새 전시" });
+    expect(res.status).toBe(404);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 
   it("남의 워크스페이스 템플릿은 없는 것으로 답한다", async () => {

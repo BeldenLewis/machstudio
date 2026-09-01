@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   messageFor, requireExpoAdmin, requireMembership, requireOwnedPage,
-  requireOwnedSite, requireOwnedTemplate, requireSameProjectSource, requireSameSite,
+  requireOwnedSite, requireOwnedTemplate, requireProjectAccess, requireSameProjectSource, requireSameSite,
   statusFor, type OwnedSite,
 } from "@/lib/expo/auth";
 
@@ -77,6 +77,18 @@ describe("자원 소유 — 남의 것은 404", () => {
   it("템플릿은 워크스페이스 소유를 따른다", () => {
     expect(requireOwnedTemplate({ id: "t1", workspaceId: "w1" }, "u1", mine).ok).toBe(true);
     expect(requireOwnedTemplate({ id: "t1", workspaceId: "남의것" }, "u1", mine).ok).toBe(false);
+  });
+});
+
+describe("프로젝트 배정", () => {
+  it("배정되지 않은 워크스페이스 MEMBER 는 존재를 알 수 없다", () => {
+    const result = requireProjectAccess("MEMBER", null);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.failure.kind).toBe("not-found");
+  });
+
+  it("프로젝트 VIEWER 는 읽기 접근을 받는다", () => {
+    expect(requireProjectAccess("MEMBER", "VIEWER").ok).toBe(true);
   });
 });
 

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
-import { requireOwnedSite } from "@/lib/expo/auth";
+import { requireOwnedSite, requireProjectAccess, type ProjectRole } from "@/lib/expo/auth";
 import { deriveExpoPermissions } from "@/lib/expo/permissions";
 import { isExpoPublicEmbedReleaseEnabled } from "@/lib/expo/capability";
 import { getPublicAppOrigin } from "@/lib/app-url";
@@ -44,13 +44,19 @@ export default async function HomepageDetailPage({
   if (!owned.ok) notFound();
 
   const role = memberships.find((m) => m.workspaceId === owned.value.workspaceId)?.role as WorkspaceRole | undefined;
+  const projectMembership = await prisma.projectMember.findUnique({
+    where: { userId_projectId: { userId: user.id, projectId: owned.value.projectId } },
+    select: { role: true },
+  });
+  const projectRole = projectMembership?.role as ProjectRole | undefined;
+  if (!requireProjectAccess(role ?? null, projectRole ?? null).ok) notFound();
 
   return (
     <ExpoSiteEditor
       siteId={owned.value.id}
       projectId={owned.value.projectId}
       siteName={site!.name}
-      permissions={deriveExpoPermissions(role ?? null)}
+      permissions={deriveExpoPermissions(role ?? null, projectRole ?? null)}
       release={{ publicEmbedEnabled: isExpoPublicEmbedReleaseEnabled() }}
       /**
        * 미리보기 통로가 쓰는 오리진. **서버가 정한 값**을 내려보낸다 —

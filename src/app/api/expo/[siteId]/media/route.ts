@@ -17,8 +17,9 @@ import { ensureAssetBucket, ASSET_BUCKET } from "@/lib/webinar-asset-bucket";
 import { downscaleUpload, extensionForContentType } from "@/lib/image-downscale";
 import { getExpoCapabilities } from "@/lib/expo/capability";
 import { probeExpoSchema } from "@/lib/expo/schema-probe";
-import { requireOwnedSite } from "@/lib/expo/auth";
+import { requireOwnedSite, requireProjectAccess, type ProjectRole, type WorkspaceRole } from "@/lib/expo/auth";
 import { authFailure } from "@/lib/expo/route-guard";
+import { deriveExpoPermissions } from "@/lib/expo/permissions";
 import {
   checkDecodedMetadata, checkDownscaled, checkUploadCandidate,
   EXPO_IMAGE_LIMITS, EXPO_IMAGE_MESSAGES, expoObjectPrefix, type ImageRejection,
@@ -43,15 +44,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ sit
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return authFailure({ kind: "unauthenticated" });
 
-  const memberships = await prisma.workspaceMember.findMany({
-    where: { userId: user.id }, select: { workspaceId: true },
-  });
+  const [memberships, projectMemberships] = await Promise.all([
+    prisma.workspaceMember.findMany({ where: { userId: user.id }, select: { workspaceId: true, role: true } }),
+    prisma.projectMember.findMany({
+      where: { userId: user.id, project: { workspace: { members: { some: { userId: user.id } } } } },
+      select: { projectId: true, role: true },
+    }),
+  ]);
   const siteRow = await prisma.expoSite.findFirst({
     where: { id: siteId, deletedAt: null },
     select: { id: true, workspaceId: true, projectId: true },
   });
   const owned = requireOwnedSite(siteRow, user.id, memberships.map((m) => m.workspaceId));
   if (!owned.ok) return authFailure(owned.failure);
+  const workspaceRole = memberships.find((m) => m.workspaceId === owned.value.workspaceId)?.role as WorkspaceRole | undefined;
+  const projectRole = projectMemberships.find((m) => m.projectId === owned.value.projectId)?.role as ProjectRole | undefined;
+  const access = requireProjectAccess(workspaceRole ?? null, projectRole ?? null);
+  if (!access.ok) return authFailure(access.failure);
+  if (!deriveExpoPermissions(workspaceRole ?? null, projectRole ?? null).canEdit) {
+    return authFailure({ kind: "forbidden" });
+  }
 
   const form = await request.formData().catch(() => null);
   const file = form?.get("file");

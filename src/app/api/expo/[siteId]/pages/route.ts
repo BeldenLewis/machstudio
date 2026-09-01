@@ -7,7 +7,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { guardExpoRoute, readJsonBody, authFailure } from "@/lib/expo/route-guard";
-import { requireOwnedSite } from "@/lib/expo/auth";
+import { requireOwnedSite, requireProjectAccess } from "@/lib/expo/auth";
+import { deriveExpoPermissions } from "@/lib/expo/permissions";
 import { prepareNewPage, prepareReorder, serviceMessage, serviceStatus } from "@/lib/expo/site-service";
 
 async function ownedSite(siteId: string, ctx: { userId: string; memberWorkspaceIds: string[] }) {
@@ -31,6 +32,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ sit
 
   const owned = await ownedSite(siteId, guard.ctx);
   if (!owned.ok) return authFailure(owned.failure);
+  const access = requireProjectAccess(guard.ctx.workspaceRole(owned.value.workspaceId), guard.ctx.projectRole(owned.value.projectId));
+  if (!access.ok) return authFailure(access.failure);
+  if (!deriveExpoPermissions(guard.ctx.workspaceRole(owned.value.workspaceId), guard.ctx.projectRole(owned.value.projectId)).canEdit) {
+    return authFailure({ kind: "forbidden" });
+  }
 
   const parsed = await readJsonBody(request);
   if (!parsed.ok) return parsed.response;
@@ -62,6 +68,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ si
 
   const owned = await ownedSite(siteId, guard.ctx);
   if (!owned.ok) return authFailure(owned.failure);
+  const access = requireProjectAccess(guard.ctx.workspaceRole(owned.value.workspaceId), guard.ctx.projectRole(owned.value.projectId));
+  if (!access.ok) return authFailure(access.failure);
+  if (!deriveExpoPermissions(guard.ctx.workspaceRole(owned.value.workspaceId), guard.ctx.projectRole(owned.value.projectId)).canEdit) {
+    return authFailure({ kind: "forbidden" });
+  }
 
   const parsed = await readJsonBody(request);
   if (!parsed.ok) return parsed.response;

@@ -15,7 +15,8 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { guardExpoRoute, readJsonBody, authFailure, fieldErrors, asJson } from "@/lib/expo/route-guard";
-import { requireMembership, requireOwnedTemplate } from "@/lib/expo/auth";
+import { requireOwnedTemplate, requireProjectAccess } from "@/lib/expo/auth";
+import { deriveExpoPermissions } from "@/lib/expo/permissions";
 import { copyExpoMedia, expoSitePrefix, expoTemplatePrefix } from "@/lib/expo/media";
 import { createExpoStorage } from "@/lib/expo/storage";
 import { applyMediaToPages, planTemplateInstantiate, reconnectChecklist } from "@/lib/expo/template-service";
@@ -48,8 +49,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ tem
   });
   if (!project) return authFailure({ kind: "not-found" });
 
-  const member = requireMembership(guard.ctx.userId, guard.ctx.memberWorkspaceIds, project.workspaceId);
-  if (!member.ok) return authFailure(member.failure);
+  const access = requireProjectAccess(guard.ctx.workspaceRole(project.workspaceId), guard.ctx.projectRole(project.id));
+  if (!access.ok) return authFailure(access.failure);
+  if (!deriveExpoPermissions(guard.ctx.workspaceRole(project.workspaceId), guard.ctx.projectRole(project.id)).canEdit) {
+    return authFailure({ kind: "forbidden" });
+  }
 
   let plan;
   try {

@@ -16,7 +16,7 @@ import { EXPO_LIMITS } from "@/lib/expo/registry";
 import { getExpoCapabilities, type ExpoCapabilities } from "@/lib/expo/capability";
 import { probeExpoSchema } from "@/lib/expo/schema-probe";
 import { guardWriteOrigin, originGuardMessage, originGuardStatus } from "@/lib/expo/origin";
-import { messageFor, statusFor, type ExpoAuthFailure, type WorkspaceRole } from "@/lib/expo/auth";
+import { messageFor, statusFor, type ExpoAuthFailure, type ProjectRole, type WorkspaceRole } from "@/lib/expo/auth";
 import { getPublicAppOrigin } from "@/lib/app-url";
 import type { Prisma } from "@/generated/prisma";
 
@@ -37,6 +37,8 @@ export interface ExpoRouteContext {
    * 워크스페이스 전역 자원(템플릿)의 이름 변경·영구 삭제가 이걸 본다.
    */
   workspaceRole: (workspaceId: string) => WorkspaceRole | null;
+  /** Project assignments are loaded only from projects in the caller's workspaces. */
+  projectRole: (projectId: string) => ProjectRole | null;
 }
 
 /**
@@ -82,11 +84,17 @@ export async function guardExpoRoute(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, response: authFailure({ kind: "unauthenticated" }) };
 
-  const memberships = await prisma.workspaceMember.findMany({
+  const membershipsPromise = prisma.workspaceMember.findMany({
     where: { userId: user.id },
     select: { workspaceId: true, role: true },
   });
+  const projectMembershipsPromise = prisma.projectMember.findMany({
+    where: { userId: user.id, project: { workspace: { members: { some: { userId: user.id } } } } },
+    select: { projectId: true, role: true },
+  });
+  const [memberships, projectMemberships] = await Promise.all([membershipsPromise, projectMembershipsPromise]);
   const roles = new Map(memberships.map((m) => [m.workspaceId, m.role as WorkspaceRole]));
+  const projectRoles = new Map(projectMemberships.map((m) => [m.projectId, m.role as ProjectRole]));
 
   return {
     ok: true,
@@ -95,6 +103,7 @@ export async function guardExpoRoute(
       userId: user.id,
       memberWorkspaceIds: memberships.map((m) => m.workspaceId),
       workspaceRole: (workspaceId) => roles.get(workspaceId) ?? null,
+      projectRole: (projectId) => projectRoles.get(projectId) ?? null,
     },
   };
 }
