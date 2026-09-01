@@ -84,15 +84,24 @@ function stubFetch() {
       if (init?.method === "PATCH") {
         const body = JSON.parse(String(init.body ?? "{}"));
         // 이름 바꾸기는 자동저장이 아니다 — 트리가 따로 보낸다. 같이 세면 저장 횟수가 거짓말한다.
-        if (typeof body.title === "string") {
+        if (typeof body.title === "string" && body.draft === undefined) {
           listTitle = body.title;
           return ok({ page: { id: PAGE_ID, title: body.title } });
         }
+        if (typeof body.title === "string") listTitle = body.title;
         patchCount += 1;
         if (rejectNext) {
           const payload = rejectNext;
           return { ok: false, status: 422, json: async () => payload } as Response;
         }
+        pageBody = {
+          ...pageBody,
+          title: typeof body.title === "string" ? body.title : pageBody.title,
+          imwebUrl: body.imwebUrl ?? pageBody.imwebUrl,
+          draft: body.draft ?? pageBody.draft,
+          draftRevision: nextSave.draftRevision,
+          codeDigest: nextSave.codeDigest,
+        };
         return ok({ page: { id: PAGE_ID, ...nextSave } });
       }
       // 발행·공개는 상세 조회가 아니다 — 같이 세면 "다시 읽었는가" 를 못 본다.
@@ -189,9 +198,10 @@ beforeEach(() => {
   permissions = { canEdit: true, canPublish: true, canManageSite: true, canManageTemplates: true };
   nextSave = { draftRevision: 8, codeDigest: "" };
   pageBody = {
-    id: PAGE_ID, slug: "home", title: "홈", imwebUrl: null,
-    draft: { sections: [] }, draftRevision: 7,
-    hasPublished: false, liveAt: null,
+    id: PAGE_ID, siteId: "s1", slug: "home", title: "홈", imwebUrl: null,
+    draft: { schemaVersion: 2, sections: [] }, draftRevision: 7,
+    hasPublished: false, publishedAt: null, liveAt: null,
+    updatedAt: "2026-09-01T00:00:00.000Z",
     codeDigest: "", publishedCodeDigest: "",
     readiness: {
       canPublish: true, canGoLive: false,
@@ -635,18 +645,18 @@ describe("페이지 이름", () => {
 
   async function rename(next: string) {
     const input = [...host.querySelectorAll("input")]
-      .find((el) => (el.getAttribute("aria-label") ?? "").endsWith(" 이름"));
+      .find((el) => el.getAttribute("aria-label") === "페이지 제목");
     if (!input) throw new Error("이름 칸이 없다");
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
     await act(async () => {
       setter.call(input, next);
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    // 트리의 이름 디바운스(600ms) + 목록 다시 읽기.
+    // 공유 페이지 초안의 900ms 자동저장 + 목록 다시 읽기.
     await act(async () => { await vi.advanceTimersByTimeAsync(900); });
   }
 
-  it("트리에서 고친 이름이 발행 패널에 바로 따라온다", async () => {
+  it("공유 초안에서 고친 이름이 발행 패널에 바로 따라온다", async () => {
     vi.useFakeTimers();
     await render();
     expect(switchName()).toContain("홈");
@@ -657,11 +667,11 @@ describe("페이지 이름", () => {
     expect(switchName()).not.toContain("홈 아임웹에");
   });
 
-  /** 이름을 고쳐도 자동저장이 도는 것은 아니다 — 트리가 자기 요청으로 따로 저장한다. */
-  it("이름 바꾸기가 가운데 칸의 자동저장을 돌리지 않는다", async () => {
+  /** 제목도 같은 CAS 초안의 일부라 한 번의 자동저장에 함께 나간다. */
+  it("이름 바꾸기가 공유 초안 자동저장을 한 번만 돌린다", async () => {
     vi.useFakeTimers();
     await render();
     await rename("첫 화면");
-    expect(patchCount).toBe(0);
+    expect(patchCount).toBe(1);
   });
 });

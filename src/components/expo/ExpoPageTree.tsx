@@ -49,6 +49,8 @@ export interface ExpoPageTreeProps {
   pages: ExpoPageRow[];
   selectedId: string | null;
   canEdit: boolean;
+  /** 페이지 제목은 공유 초안 훅에서만 고칠 때 false. */
+  canRename?: boolean;
   /** 삭제는 `canManageSite` 다 — 서버도 역할까지 본다. */
   canManageSite: boolean;
   onSelect: (pageId: string) => void;
@@ -73,7 +75,8 @@ const STATE_DOT: Record<ExpoPageState, string> = {
 };
 
 export function ExpoPageTree({
-  siteId, pages, selectedId, canEdit, canManageSite, onSelect, onAdd, onReload, onPendingChange,
+  siteId, pages, selectedId, canEdit, canRename = canEdit, canManageSite,
+  onSelect, onAdd, onReload, onPendingChange,
 }: ExpoPageTreeProps) {
   const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
@@ -261,7 +264,7 @@ export function ExpoPageTree({
                 */}
               {item.isHome ? <span className="block h-9 w-9 shrink-0" aria-hidden /> : handle}
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATE_DOT[state]}`} aria-hidden />
-              {canEdit ? (
+              {canRename ? (
                 /* 0클릭 — 누르고 바로 친다. 포커스가 곧 선택이라 키보드로도 같은 흐름이다. */
                 <input
                   value={drafts[item.id] ?? item.title}

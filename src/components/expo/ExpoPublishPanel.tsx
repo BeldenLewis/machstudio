@@ -9,6 +9,19 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { objectParticle } from "@/lib/korean";
 import type { ReadinessIssue } from "@/lib/expo/readiness";
 import { ExpoRevisionPanel } from "@/components/expo/ExpoRevisionPanel";
+import type {
+  ExpoEditorRequest,
+  ExpoReadinessView,
+  ExpoSnippetView,
+  ExpoSnippetsView,
+} from "@/lib/expo/editor-dto";
+
+export type {
+  ExpoReadinessView,
+  ExpoSnippetView,
+  ExpoSectionSnippetView,
+  ExpoSnippetsView,
+} from "@/lib/expo/editor-dto";
 
 /**
  * **밖으로 내보내는 자리.**
@@ -27,30 +40,6 @@ import { ExpoRevisionPanel } from "@/components/expo/ExpoRevisionPanel";
  *  · 공개 켜기 — 파트너 사이트로 나가는 순간이라 항상 확인. **끄기는 확인 없이 즉시** —
  *    되돌리기를 막으면 안 된다(공개 라우트도 같은 규칙이다).
  */
-
-export interface ExpoSnippetView {
-  code: string;
-  src: string;
-}
-
-export interface ExpoSectionSnippetView {
-  sid: string;
-  label: string;
-  snippet: ExpoSnippetView;
-  issues: ReadinessIssue[];
-}
-
-export type ExpoSnippetsView =
-  | { ok: true; page: ExpoSnippetView; sections: ExpoSectionSnippetView[] }
-  | { ok: false; message: string };
-
-export interface ExpoReadinessView {
-  canPublish: boolean;
-  canGoLive: boolean;
-  publishIssues: ReadinessIssue[];
-  liveIssues: ReadinessIssue[];
-  notes: ReadinessIssue[];
-}
 
 export interface ExpoPublishPanelProps {
   pageId: string;
@@ -71,16 +60,20 @@ export interface ExpoPublishPanelProps {
   launchLocked?: boolean;
   /** 발행·공개가 끝나면 부른다 — 화면이 서버 상태를 다시 읽는다. */
   onChanged: () => void;
+  /** 테스트/하니스는 같은 요청 라우터를 모든 내보내기 작업에 주입한다. */
+  request?: ExpoEditorRequest;
 }
 
 export function ExpoPublishPanel({
   pageId, pageTitle, hasPublished, liveAt, readiness, snippets, canPublish, saveBlocked, onChanged,
-  launchLocked = false,
+  launchLocked = false, request,
 }: ExpoPublishPanelProps) {
   const confirm = useConfirm();
   const [busy, setBusy] = useState<"publish" | "live" | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const live = Boolean(liveAt);
+  const fallbackRequest = useCallback((path: string, init?: RequestInit) => window.fetch(path, init), []);
+  const requester = request ?? fallbackRequest;
 
   /**
    * **바뀐 게 없으면 누를 것도 없다.**
@@ -102,7 +95,7 @@ export function ExpoPublishPanel({
   ) => {
     setBusy(kind);
     try {
-      const res = await fetch(path, {
+      const res = await requester(path, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body ?? {}),
@@ -121,7 +114,7 @@ export function ExpoPublishPanel({
     } finally {
       setBusy(null);
     }
-  }, [onChanged]);
+  }, [onChanged, requester]);
 
   const publish = useCallback(async () => {
     if (live) {
@@ -262,6 +255,7 @@ export function ExpoPublishPanel({
             <ExpoRevisionPanel
               pageId={pageId}
               canPublish={canPublish}
+              request={request}
               // PageEditor 는 이 신호로 발행본 쪽 값만 다시 읽는다. draft 는 그대로 남는다.
               onRolledBack={() => onChanged()}
             />

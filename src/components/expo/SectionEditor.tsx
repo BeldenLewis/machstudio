@@ -87,10 +87,15 @@ export interface SectionsEditorProps {
    * state 를 바꾸게 되고, 그건 연쇄 렌더를 부른다(react-hooks 규칙).
    */
   focusedSid?: string | null;
+  /** 선택된 한 구획만 조립할 때 카탈로그/목록 제목을 감춘다. */
+  showCatalog?: boolean;
+  showHeading?: boolean;
+  reorderable?: boolean;
 }
 
 export function SectionsEditor({
   sections, onChange, canEdit, embedLocked = false, siteId, sources, pages, locale, focusedSid,
+  showCatalog = true, showHeading = true, reorderable = true,
 }: SectionsEditorProps) {
   /**
    * 삭제 유예(5초) 중인 구획 — **화면에서만** 사라진 것들이다. 배열에는 그대로 있다.
@@ -119,9 +124,11 @@ export function SectionsEditor({
   useEffect(() => {
     if (!focusedSid) return;
     // 못 찾으면(그 사이 지웠다) 아무 일도 하지 않는다.
-    rootRef.current
-      ?.querySelector<HTMLElement>(`[data-expo-sid="${CSS.escape(focusedSid)}"]`)
-      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const target = rootRef.current
+      ?.querySelector<HTMLElement>(`[data-expo-sid="${CSS.escape(focusedSid)}"]`);
+    if (typeof target?.scrollIntoView === "function") {
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
   }, [focusedSid]);
 
   /**
@@ -141,13 +148,13 @@ export function SectionsEditor({
 
   return (
     <section aria-labelledby="expo-sections-heading" ref={rootRef}>
-      <div className="flex items-baseline justify-between gap-2">
+      {showHeading ? <div className="flex items-baseline justify-between gap-2">
         <h2 id="expo-sections-heading" className="text-sm font-semibold">구획</h2>
         {/* 유예로 사라진 것은 빼고 센다 — 안 그러면 5초 동안 화면의 카드 수와 어긋난다. */}
         <span className="text-[11px] text-muted-foreground">
           {sections.length - pendingRemove.size}/{EXPO_LIMITS.sectionsPerPage}
         </span>
-      </div>
+      </div> : <h2 id="expo-sections-heading" className="sr-only">선택한 구획</h2>}
 
       <div className="mt-2">
         <EditableList<ExpoSection>
@@ -156,7 +163,8 @@ export function SectionsEditor({
           items={sections}
           onChange={commit}
           rowKey={(section) => section.sid}
-          reorderable
+          reorderable={canEdit && reorderable}
+          removable={() => canEdit}
           rowChrome="bare"
           maxRows={EXPO_LIMITS.sectionsPerPage}
           autoFocusNewRow
@@ -180,7 +188,7 @@ export function SectionsEditor({
             />
           )}
           renderAdd={({ add, atMax }) =>
-            !canEdit ? null : atMax ? (
+            !showCatalog || !canEdit ? null : atMax ? (
               <p className="text-[11px] text-muted-foreground">
                 한 페이지에 구획은 {EXPO_LIMITS.sectionsPerPage}개까지예요.
               </p>
@@ -195,6 +203,42 @@ export function SectionsEditor({
         />
       </div>
     </section>
+  );
+}
+
+export interface SelectedSectionEditorProps {
+  section: ExpoSection;
+  onChange(next: ExpoSection): void;
+  onRemove(): void;
+  canEdit: boolean;
+  embedLocked?: boolean;
+  siteId: string;
+  sources?: readonly { id: string; name: string; isActive: boolean }[];
+  pages?: readonly LinkTarget[];
+  locale: string;
+}
+
+/**
+ * 기존 구획 편집기를 선택된 sid 한 장에 조립한다. 값 state는 만들지 않고 부모 초안을 바로 고친다.
+ */
+export function SelectedSectionEditor({
+  section, onChange, onRemove, canEdit, embedLocked, siteId, sources, pages, locale,
+}: SelectedSectionEditorProps) {
+  return (
+    <SectionsEditor
+      sections={[section]}
+      onChange={(next) => next[0] ? onChange(next[0]) : onRemove()}
+      canEdit={canEdit}
+      embedLocked={embedLocked}
+      siteId={siteId}
+      sources={sources}
+      pages={pages}
+      locale={locale}
+      focusedSid={section.sid}
+      showCatalog={false}
+      showHeading={false}
+      reorderable={false}
+    />
   );
 }
 

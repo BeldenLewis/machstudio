@@ -34,7 +34,7 @@ export type { AutosaveState };
 /** 서버 응답을 이 세 가지로 좁혀서 받는다 — 훅이 HTTP 를 알 필요는 없다. */
 export type ExpoSaveOutcome =
   /** 저장됨. `revision` 은 서버가 올린 새 번호다. */
-  | { kind: "saved"; revision: number }
+  | { kind: "saved"; revision: number; codeDigest?: string }
   /** 그 사이 다른 곳에서 저장했다. `revision` 은 서버의 현재 번호. */
   | { kind: "conflict"; revision: number }
   /** 네트워크·5xx. 재시도해도 되는 실패다. */

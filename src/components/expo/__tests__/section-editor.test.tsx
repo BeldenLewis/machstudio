@@ -142,9 +142,11 @@ describe("구획 추가", () => {
       .toEqual(latest.map((s) => s.type));
   });
 
-  it("뷰어에게는 카탈로그를 보여주지 않는다", async () => {
-    await render([], false);
+  it("뷰어에게는 카탈로그·정렬·삭제 컨트롤을 보여주지 않는다", async () => {
+    await render([newSection("textblock")], false);
     expect(buttonByText("본문")).toBeUndefined();
+    expect(host.querySelector('button[aria-label*="순서 변경"]')).toBeNull();
+    expect(host.querySelector('button[aria-label*="구획 삭제"]')).toBeNull();
   });
 });
 
