@@ -20,6 +20,14 @@ import { deriveExpoCapabilities, EXPO_SCHEMA_CAPABILITY_VERSION } from "@/lib/ex
 describe("deriveExpoCapabilities — 판정 표", () => {
   const V = EXPO_SCHEMA_CAPABILITY_VERSION;
 
+  it("리비전 스키마 전의 플래그는 준비 조회가 성공해도 닫힌다", () => {
+    expect(deriveExpoCapabilities({
+      schemaFlag: "20260821-v1",
+      publicFlag: "on",
+      schemaProbeReady: true,
+    })).toEqual({ admin: false, preview: false, publicEmbed: false });
+  });
+
   it("전부 갖춰야 공개 임베드까지 열린다", () => {
     expect(deriveExpoCapabilities({ schemaFlag: V, publicFlag: "on", schemaProbeReady: true }))
       .toEqual({ admin: true, preview: true, publicEmbed: true });

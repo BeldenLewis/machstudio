@@ -27,7 +27,7 @@ vi.mock("@/lib/ratelimit", () => ({
 }));
 vi.mock("@/lib/expo/schema-probe", () => ({ probeExpoSchema: () => probe() }));
 
-const SCHEMA_VERSION = "20260821-v1";
+const SCHEMA_VERSION = "20260901-v2";
 const CANONICAL = "https://machstudio.example.com";
 const SID = "11111111-1111-1111-1111-111111111111";
 

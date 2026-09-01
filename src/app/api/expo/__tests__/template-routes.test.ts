@@ -37,7 +37,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { g
 vi.mock("@/lib/expo/schema-probe", () => ({ probeExpoSchema: () => probe() }));
 vi.mock("@/lib/expo/storage", () => ({ createExpoStorage: () => storageMock }));
 
-const SCHEMA_VERSION = "20260821-v1";
+const SCHEMA_VERSION = "20260901-v2";
 const SID_KV = "11111111-1111-1111-1111-111111111111";
 const SID_FORM = "22222222-2222-2222-2222-222222222222";
 const HERO = `${BASE}w1/expo/site1/hero.jpg`;

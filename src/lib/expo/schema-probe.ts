@@ -20,7 +20,7 @@
 import { prisma } from "@/lib/prisma";
 import { EXPO_SCHEMA_CAPABILITY_VERSION } from "@/lib/expo/capability";
 
-const EXPECTED_TABLES = ["ExpoSite", "ExpoPage", "ExpoTemplate"] as const;
+const EXPECTED_TABLES = ["ExpoSite", "ExpoPage", "ExpoTemplate", "ExpoPageRevision"] as const;
 
 /** 성공·실패 판정을 이 시간 동안 재사용한다(예외는 캐시되지 않는다 — 아래 참고). */
 const TTL_MS = 30_000;
@@ -28,7 +28,7 @@ const TTL_MS = 30_000;
 let cached: { at: number; ready: boolean; version: string } | null = null;
 
 /**
- * 세 테이블이 있고 RLS 가 켜져 있는가.
+ * 네 테이블이 있고 RLS 가 켜져 있는가.
  *
  * RLS 까지 보는 이유: 테이블만 만들고 RLS 를 빠뜨리면 Data API 로 노출될 수 있다.
  * 마이그레이션이 통째로 적용됐는지를 한 번에 확인하려면 그 표식이 필요하다.
@@ -46,7 +46,7 @@ export async function probeExpoSchema(): Promise<boolean> {
       JOIN pg_namespace n ON n.oid = c.relnamespace
      WHERE n.nspname = 'public'
        AND c.relkind = 'r'
-       AND c.relname IN ('ExpoSite', 'ExpoPage', 'ExpoTemplate')
+       AND c.relname IN ('ExpoSite', 'ExpoPage', 'ExpoTemplate', 'ExpoPageRevision')
   `;
 
   const found = new Map(rows.map((r) => [r.relname, r.relrowsecurity]));

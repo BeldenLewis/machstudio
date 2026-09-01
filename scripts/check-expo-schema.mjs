@@ -1,26 +1,8 @@
-/**
- * 홈페이지 스키마의 **적용 전·후 확인**.
- *
- *   node scripts/check-expo-schema.mjs --expect=absent   # 적용 전 (깨끗한가)
- *   node scripts/check-expo-schema.mjs --expect=ready    # 적용 후 (전부 들어갔나)
- *
- * `DATABASE_URL` 을 쓴다(`node --env-file=.env.local`). 세션 URL 이든 풀러든 읽기만 한다.
- *
- * ── 왜 테이블 존재만 보지 않나 ────────────────────────────────────────
- * 마이그레이션은 테이블·인덱스·외래키·RLS·권한 회수까지 한 트랜잭션이다. 테이블만
- * 확인하면 **어중간하게 적용된 상태를 준비됨으로 오판**한다. 특히 RLS 를 빠뜨리면
- * Supabase Data API 로 초안이 그대로 노출된다 — 그게 이 검사가 있는 이유다.
- *
- * ── 부분 유니크 인덱스 10개를 함께 센다 ───────────────────────────────
- * 이 저장소에는 스키마로 표현할 수 없는 부분 유니크 인덱스가 10개 있고, `prisma db push`
- * 가 그것들을 **지운다**. 스키마 작업 전후로 이 숫자가 그대로인지 보는 것이 그 사고의
- * 유일한 조기 경보다.
- */
-import { PrismaClient, Prisma } from "../src/generated/prisma/index.js";
-import { PrismaPg } from "@prisma/adapter-pg";
-
-const TABLES = ["ExpoSite", "ExpoPage", "ExpoTemplate"];
-const INDEXES = [
+/** `--describe` exits before loading Prisma or its PostgreSQL adapter. */
+const V1_TABLES = ["ExpoSite", "ExpoPage", "ExpoTemplate"];
+const REVISION_TABLE = "ExpoPageRevision";
+const TABLES = [...V1_TABLES, REVISION_TABLE];
+const V1_INDEXES = [
   "ExpoSite_previewToken_key",
   "ExpoSite_projectId_idx",
   "ExpoSite_workspaceId_idx",
@@ -28,7 +10,8 @@ const INDEXES = [
   "ExpoPage_siteId_sortOrder_idx",
   "ExpoTemplate_workspaceId_createdAt_idx",
 ];
-const FKS = [
+const REVISION_INDEXES = ["ExpoPageRevision_pageId_sequence_key", "ExpoPageRevision_pageId_createdAt_idx"];
+const V1_FKS = [
   "ExpoSite_workspaceId_fkey",
   "ExpoSite_projectId_fkey",
   "ExpoSite_collectSourceId_fkey",
@@ -36,17 +19,40 @@ const FKS = [
   "ExpoPage_parentId_fkey",
   "ExpoTemplate_workspaceId_fkey",
 ];
-/** Data API 롤. 이 테이블에는 권한이 하나도 없어야 한다. */
+const REVISION_FKS = ["ExpoPageRevision_pageId_fkey"];
 const DATA_API_ROLES = ["anon", "authenticated", "service_role"];
-/** 스키마로 표현할 수 없어 db push 가 지우는 인덱스들 — 이 숫자가 기준선이다. */
 const PARTIAL_UNIQUE_BASELINE = 10;
 
-const expect = (process.argv.find((a) => a.startsWith("--expect=")) ?? "").split("=")[1];
-if (expect !== "ready" && expect !== "absent") {
-  console.error("사용법: node scripts/check-expo-schema.mjs --expect=ready|absent");
+const description = {
+  modes: {
+    absent: { absentTables: TABLES },
+    v1: { requiredTables: V1_TABLES, absentTables: [REVISION_TABLE] },
+    ready: { requiredTables: TABLES },
+  },
+  tables: TABLES,
+  indexes: [...V1_INDEXES, ...REVISION_INDEXES],
+  foreignKeys: [...V1_FKS, ...REVISION_FKS],
+  partialUniqueBaseline: PARTIAL_UNIQUE_BASELINE,
+};
+
+if (process.argv.includes("--describe")) {
+  console.log(JSON.stringify(description));
+  process.exit(0);
+}
+
+const expectMode = (process.argv.find((arg) => arg.startsWith("--expect=")) ?? "").split("=")[1];
+if (expectMode !== "ready" && expectMode !== "v1" && expectMode !== "absent") {
+  console.error("사용법: node scripts/check-expo-schema.mjs --expect=absent|v1|ready");
   process.exit(2);
 }
 
+const requiredTables = expectMode === "ready" ? TABLES : V1_TABLES;
+const absentTables = expectMode === "absent" ? TABLES : expectMode === "v1" ? [REVISION_TABLE] : [];
+const requiredIndexes = expectMode === "ready" ? [...V1_INDEXES, ...REVISION_INDEXES] : V1_INDEXES;
+const requiredFks = expectMode === "ready" ? [...V1_FKS, ...REVISION_FKS] : V1_FKS;
+
+const { PrismaClient, Prisma } = await import("../src/generated/prisma/index.js");
+const { PrismaPg } = await import("@prisma/adapter-pg");
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL, max: 1 }),
 });
@@ -59,88 +65,64 @@ try {
     SELECT c.relname, c.relrowsecurity
       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
      WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname = ANY($1)`, TABLES);
-  const found = new Map(tables.map((r) => [r.relname, r.relrowsecurity]));
+  const found = new Map(tables.map((row) => [row.relname, row.relrowsecurity]));
 
-  if (expect === "absent") {
-    for (const t of TABLES) {
-      if (found.has(t)) problems.push(`${t} 가 이미 있습니다 — 적용 전 상태가 아닙니다.`);
-    }
-    notes.push(`Expo 테이블: ${found.size}/3`);
-  } else {
-    for (const t of TABLES) {
-      if (!found.has(t)) problems.push(`${t} 가 없습니다.`);
-      // 정책 없이 RLS 만 켠 상태가 의도다. RLS 가 꺼져 있으면 Data API 로 새어 나간다.
-      else if (found.get(t) !== true) problems.push(`${t} 에 RLS 가 꺼져 있습니다.`);
-    }
-    notes.push(`Expo 테이블: ${found.size}/3 (RLS 전부 켜짐: ${[...found.values()].every(Boolean)})`);
+  for (const table of absentTables) if (found.has(table)) problems.push(`${table} 가 있으면 안 됩니다.`);
+  for (const table of requiredTables) {
+    if (!found.has(table)) problems.push(`${table} 가 없습니다.`);
+    else if (found.get(table) !== true) problems.push(`${table} 에 RLS 가 꺼져 있습니다.`);
+  }
+  notes.push(`Expo 테이블: ${found.size}/${TABLES.length}`);
 
-    /**
-     * **컬럼까지 본다.** 이 파일 머리말이 "테이블만 확인하면 어중간하게 적용된 상태를
-     * 준비됨으로 오판한다" 고 선언해 놓고 정작 컬럼을 안 봤다 — `draft`·`draftRevision`·
-     * `published`·`liveAt`·`lastSeenOrigin` 같은 것이 통째로 빠진 테이블도 통과했다.
-     * (인덱스·외래키 이름이 10개 컬럼을 간접 보증하지만 나머지는 무검증이었다.)
-     *
-     * 기대 목록은 **`schema.prisma` 에서 파생**한다. 손으로 적는 목록을 하나 더 만들면
-     * 그게 갈라지는 것이 이 문제의 재발 형태다.
-     */
-    const expectedColumns = new Map(TABLES.map((t) => {
-      const model = Prisma.dmmf.datamodel.models.find((m) => m.name === t);
-      // 관계 필드(kind === "object")는 컬럼이 아니다.
-      return [t, new Set((model?.fields ?? []).filter((f) => f.kind !== "object").map((f) => f.name))];
+  if (expectMode !== "absent") {
+    const expectedColumns = new Map(requiredTables.map((table) => {
+      const model = Prisma.dmmf.datamodel.models.find((entry) => entry.name === table);
+      return [table, new Set((model?.fields ?? []).filter((field) => field.kind !== "object").map((field) => field.name))];
     }));
-
     const columns = await prisma.$queryRawUnsafe(`
       SELECT c.relname AS "table", a.attname AS "column"
         FROM pg_class c
         JOIN pg_namespace n ON n.oid = c.relnamespace
         JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
-       WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname = ANY($1)`, TABLES);
-    const haveColumns = new Map(TABLES.map((t) => [t, new Set()]));
+       WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname = ANY($1)`, requiredTables);
+    const haveColumns = new Map(requiredTables.map((table) => [table, new Set()]));
     for (const row of columns) haveColumns.get(row.table)?.add(row.column);
 
-    for (const t of TABLES) {
-      if (!found.has(t)) continue;          // 테이블 부재는 위에서 이미 문제로 올렸다
-      const want = expectedColumns.get(t);
-      const have = haveColumns.get(t);
-      if (!want || want.size === 0) { problems.push(`${t} 를 schema.prisma 에서 찾지 못했습니다.`); continue; }
-      for (const c of want) if (!have.has(c)) problems.push(`${t}.${c} 컬럼이 없습니다.`);
-      // 여분 컬럼도 문제다 — Expo 3테이블은 이 마이그레이션이 만든 새 테이블이라,
-      // 스키마에 없는 컬럼이 있다는 건 누가 db push 로 손댔다는 뜻이다.
-      for (const c of have) if (!want.has(c)) problems.push(`${t}.${c} 는 schema.prisma 에 없는 컬럼입니다.`);
-      notes.push(`${t} 컬럼: ${have.size}/${want.size}`);
+    for (const table of requiredTables) {
+      if (!found.has(table)) continue;
+      const want = expectedColumns.get(table);
+      const have = haveColumns.get(table);
+      if (!want || want.size === 0) { problems.push(`${table} 를 schema.prisma 에서 찾지 못했습니다.`); continue; }
+      for (const column of want) if (!have.has(column)) problems.push(`${table}.${column} 컬럼이 없습니다.`);
+      for (const column of have) if (!want.has(column)) problems.push(`${table}.${column} 는 schema.prisma 에 없는 컬럼입니다.`);
+      notes.push(`${table} 컬럼: ${have.size}/${want.size}`);
     }
 
     const indexes = await prisma.$queryRawUnsafe(`
       SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-       WHERE n.nspname = 'public' AND c.relkind = 'i' AND c.relname = ANY($1)`, INDEXES);
-    const haveIndexes = new Set(indexes.map((r) => r.relname));
-    for (const i of INDEXES) if (!haveIndexes.has(i)) problems.push(`인덱스 ${i} 가 없습니다.`);
-    notes.push(`인덱스: ${haveIndexes.size}/${INDEXES.length}`);
+       WHERE n.nspname = 'public' AND c.relkind = 'i' AND c.relname = ANY($1)`, requiredIndexes);
+    const haveIndexes = new Set(indexes.map((row) => row.relname));
+    for (const index of requiredIndexes) if (!haveIndexes.has(index)) problems.push(`인덱스 ${index} 가 없습니다.`);
+    notes.push(`인덱스: ${haveIndexes.size}/${requiredIndexes.length}`);
 
     const fks = await prisma.$queryRawUnsafe(`
-      SELECT conname FROM pg_constraint WHERE contype = 'f' AND conname = ANY($1)`, FKS);
-    const haveFks = new Set(fks.map((r) => r.conname));
-    for (const f of FKS) if (!haveFks.has(f)) problems.push(`외래키 ${f} 가 없습니다.`);
-    notes.push(`외래키: ${haveFks.size}/${FKS.length}`);
+      SELECT conname FROM pg_constraint WHERE contype = 'f' AND conname = ANY($1)`, requiredFks);
+    const haveFks = new Set(fks.map((row) => row.conname));
+    for (const fk of requiredFks) if (!haveFks.has(fk)) problems.push(`외래키 ${fk} 가 없습니다.`);
+    notes.push(`외래키: ${haveFks.size}/${requiredFks.length}`);
 
-    /**
-     * 정책이 있으면 의도와 다르다. 이 테이블들은 서버 라우트(Prisma)만 접근하므로
-     * 정책이 하나도 없어야 하고, 있으면 누가 Data API 경로를 열어 둔 것이다.
-     */
     const policies = await prisma.$queryRawUnsafe(`
       SELECT tablename, policyname FROM pg_policies
-       WHERE schemaname = 'public' AND tablename = ANY($1)`, TABLES);
-    for (const p of policies) problems.push(`정책이 있습니다: ${p.tablename}.${p.policyname}`);
+       WHERE schemaname = 'public' AND tablename = ANY($1)`, requiredTables);
+    for (const policy of policies) problems.push(`정책이 있습니다: ${policy.tablename}.${policy.policyname}`);
     notes.push(`정책: ${policies.length}개 (0이어야 함)`);
 
     const grants = await prisma.$queryRawUnsafe(`
       SELECT grantee, table_name, privilege_type
         FROM information_schema.role_table_grants
        WHERE table_schema = 'public' AND table_name = ANY($1) AND grantee = ANY($2)`,
-      TABLES, [...DATA_API_ROLES, "PUBLIC"]);
-    for (const g of grants) {
-      problems.push(`${g.grantee} 에게 ${g.table_name} 권한이 남아 있습니다: ${g.privilege_type}`);
-    }
+    requiredTables, [...DATA_API_ROLES, "PUBLIC"]);
+    for (const grant of grants) problems.push(`${grant.grantee} 에게 ${grant.table_name} 권한이 남아 있습니다: ${grant.privilege_type}`);
     notes.push(`Data API 롤 권한: ${grants.length}건 (0이어야 함)`);
   }
 
@@ -151,20 +133,15 @@ try {
      WHERE n.nspname = 'public' AND i.indisunique AND i.indpred IS NOT NULL`);
   const count = partial[0].n;
   notes.push(`부분 유니크 인덱스: ${count} (기준선 ${PARTIAL_UNIQUE_BASELINE})`);
-  if (count !== PARTIAL_UNIQUE_BASELINE) {
-    problems.push(
-      `부분 유니크 인덱스가 ${count}개입니다(기준선 ${PARTIAL_UNIQUE_BASELINE}). `
-      + `db push 가 지웠을 수 있습니다 — scripts/ensure-partial-unique-indexes.mjs 를 확인하세요.`,
-    );
-  }
+  if (count !== PARTIAL_UNIQUE_BASELINE) problems.push(`부분 유니크 인덱스가 ${count}개입니다(기준선 ${PARTIAL_UNIQUE_BASELINE}).`);
 } finally {
   await prisma.$disconnect();
 }
 
 for (const note of notes) console.log("·", note);
 if (problems.length > 0) {
-  console.error(`\n홈페이지 스키마 검사 실패 (--expect=${expect}):`);
-  for (const p of problems) console.error(`  ✗ ${p}`);
+  console.error(`\n홈페이지 스키마 검사 실패 (--expect=${expectMode}):`);
+  for (const problem of problems) console.error(`  ✗ ${problem}`);
   process.exit(1);
 }
-console.log(`\n홈페이지 스키마 검사 통과 (--expect=${expect})`);
+console.log(`\n홈페이지 스키마 검사 통과 (--expect=${expectMode})`);

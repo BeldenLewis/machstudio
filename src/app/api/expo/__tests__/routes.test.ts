@@ -29,7 +29,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser } }) }));
 vi.mock("@/lib/expo/schema-probe", () => ({ probeExpoSchema: () => probe() }));
 
-const SCHEMA_VERSION = "20260821-v1";
+const SCHEMA_VERSION = "20260901-v2";
 
 /** 우리 화면에서 온 JSON 쓰기 요청. */
 const write = (body: unknown, headers: Record<string, string> = {}) =>
