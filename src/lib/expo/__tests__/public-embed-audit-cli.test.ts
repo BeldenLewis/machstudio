@@ -16,8 +16,74 @@ interface FixturePage {
   published: unknown;
 }
 
+function countSqlStatements(sql: string): number {
+  let count = 0;
+  let hasToken = false;
+  let state = "normal";
+  let blockDepth = 0;
+  let dollarTag = "";
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const char = sql[index];
+    const next = sql[index + 1];
+    if (state === "line-comment") {
+      if (char === "\n") state = "normal";
+      continue;
+    }
+    if (state === "block-comment") {
+      if (char === "/" && next === "*") { blockDepth += 1; index += 1; }
+      else if (char === "*" && next === "/") {
+        blockDepth -= 1;
+        index += 1;
+        if (blockDepth === 0) state = "normal";
+      }
+      continue;
+    }
+    if (state === "single-quote") {
+      if (char === "'" && next === "'") index += 1;
+      else if (char === "'") state = "normal";
+      continue;
+    }
+    if (state === "double-quote") {
+      if (char === '"' && next === '"') index += 1;
+      else if (char === '"') state = "normal";
+      continue;
+    }
+    if (state === "dollar-quote") {
+      if (sql.startsWith(dollarTag, index)) { index += dollarTag.length - 1; state = "normal"; }
+      continue;
+    }
+
+    if (char === "-" && next === "-") { state = "line-comment"; index += 1; continue; }
+    if (char === "/" && next === "*") { state = "block-comment"; blockDepth = 1; index += 1; continue; }
+    if (char === "'") { state = "single-quote"; hasToken = true; continue; }
+    if (char === '"') { state = "double-quote"; hasToken = true; continue; }
+    if (char === "$") {
+      const match = /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/.exec(sql.slice(index));
+      if (match) {
+        dollarTag = match[0];
+        state = "dollar-quote";
+        hasToken = true;
+        index += dollarTag.length - 1;
+        continue;
+      }
+    }
+    if (char === ";") {
+      if (!hasToken) return Number.POSITIVE_INFINITY;
+      count += 1;
+      hasToken = false;
+      continue;
+    }
+    if (!/\s/.test(char)) hasToken = true;
+  }
+
+  if (state !== "normal" && state !== "line-comment") return Number.POSITIVE_INFINITY;
+  return count + (hasToken ? 1 : 0);
+}
+
 const pgStub = `
   const fixtures = JSON.parse(process.env.EXPO_AUDIT_FIXTURE_JSON || "[]");
+  const countSqlStatements = ${countSqlStatements.toString()};
   export class Client {
     constructor(options) {
       if (!options || options.connectionString !== process.env.DATABASE_URL) {
@@ -29,11 +95,8 @@ const pgStub = `
     async query(text) {
       this.queryCount += 1;
       if (this.queryCount !== 1) throw new Error("audit must execute exactly one query");
-      if (text.includes(";")) throw new Error("audit must execute exactly one SQL statement");
+      if (countSqlStatements(text) !== 1) throw new Error("audit must execute exactly one SQL statement");
       if (!/^\\s*SELECT\\b/i.test(text)) throw new Error("audit query must be SELECT-only");
-      if (/\\b(?:INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|TRUNCATE|MERGE|CALL)\\b/i.test(text)) {
-        throw new Error("mutating SQL is forbidden");
-      }
       const required = [
         'FROM public."ExpoPage" AS page',
         'INNER JOIN public."ExpoSite" AS site ON site."id" = page."siteId"',
@@ -144,20 +207,33 @@ describe("audit-expo-public-embeds --describe", () => {
     expect(contract.query).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|TRUNCATE|MERGE|CALL)\b/i);
   });
 
-  it("production SQL guard가 quoted/comment semicolon은 무시하고 실제 다중 statement는 거절한다", () => {
+  it("production SQL guard가 주석 토큰 경계와 trailing/quoted/comment semicolon을 허용하고 실제 다중 statement는 거절한다", () => {
     const moduleUrl = pathToFileURL(script).href;
     const source = `
       import { assertSingleReadOnlyStatement } from ${JSON.stringify(moduleUrl)};
+      assertSingleReadOnlyStatement("SELECT/*comment*/1");
+      assertSingleReadOnlyStatement("SELECT--comment\\n1");
+      assertSingleReadOnlyStatement("SELECT 1;");
       assertSingleReadOnlyStatement("SELECT ';' /* ; */ -- ;\\n");
-      let rejected = false;
-      try { assertSingleReadOnlyStatement("SELECT 1; SELECT 2"); } catch { rejected = true; }
-      if (!rejected) throw new Error("multi-statement SQL was accepted");
+      for (const sql of ["SELECT 1; SELECT 2", "SELECT 1;;"]) {
+        let rejected = false;
+        try { assertSingleReadOnlyStatement(sql); } catch { rejected = true; }
+        if (!rejected) throw new Error("extra SQL statement terminator was accepted");
+      }
     `;
     const result = spawnSync(process.execPath, ["--input-type=module", "--eval", source], {
       cwd: process.cwd(), encoding: "utf8",
     });
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
+  });
+
+  it("pg test double도 같은 single-statement semicolon 경계를 사용한다", () => {
+    expect(countSqlStatements("SELECT/*comment*/1")).toBe(1);
+    expect(countSqlStatements("SELECT 1;")).toBe(1);
+    expect(countSqlStatements("SELECT ';' /* ; */ -- ;\n")).toBe(1);
+    expect(countSqlStatements("SELECT 1; SELECT 2")).toBe(2);
+    expect(countSqlStatements("SELECT 1;;")).toBe(Number.POSITIVE_INFINITY);
   });
 });
 

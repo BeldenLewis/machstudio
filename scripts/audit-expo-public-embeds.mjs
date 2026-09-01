@@ -153,8 +153,9 @@ function sqlStatements(sql) {
       continue;
     }
 
-    if (char === "-" && next === "-") { state = "line-comment"; index += 1; continue; }
-    if (char === "/" && next === "*") { state = "block-comment"; blockDepth = 1; index += 1; continue; }
+    // A removed comment is whitespace in SQL grammar; preserve that token boundary.
+    if (char === "-" && next === "-") { state = "line-comment"; masked += " "; index += 1; continue; }
+    if (char === "/" && next === "*") { state = "block-comment"; blockDepth = 1; masked += " "; index += 1; continue; }
     if (char === "'") { state = "single-quote"; masked += " "; continue; }
     if (char === '"') { state = "double-quote"; masked += " "; continue; }
     if (char === "$") {
@@ -167,7 +168,11 @@ function sqlStatements(sql) {
         continue;
       }
     }
-    if (char === ";") { push(); continue; }
+    if (char === ";") {
+      if (!masked.trim()) throw new Error("audit SQL has an extra statement terminator");
+      push();
+      continue;
+    }
     masked += char;
   }
 
