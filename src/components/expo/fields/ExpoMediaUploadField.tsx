@@ -7,6 +7,7 @@ import { isSafePublicUrl } from "@/lib/expo/destination";
 import { EXPO_IMAGE_LIMITS } from "@/lib/expo/image-guard";
 import { EXPO_VIDEO_RULES } from "@/lib/expo/video-guard";
 import type { ExpoImageValue, ExpoVideoValue } from "@/lib/expo/sections/types";
+import type { FieldIssue } from "@/lib/expo/types";
 
 export interface ExpoMediaUploadFieldProps {
   siteId: string;
@@ -14,6 +15,9 @@ export interface ExpoMediaUploadFieldProps {
   label?: string;
   value?: ExpoImageValue | ExpoVideoValue;
   disabled?: boolean;
+  /** 편집기 구조화 오류가 실제 외부 주소 입력을 가리키는 경로. */
+  fieldPath?: string;
+  issues?: readonly FieldIssue[];
   onChange(next: ExpoImageValue | ExpoVideoValue | undefined): void;
 }
 
@@ -32,7 +36,9 @@ async function responseJson<T>(response: Response): Promise<T & { error?: string
   return await response.json().catch(() => ({})) as T & { error?: string };
 }
 
-export function ExpoMediaUploadField({ siteId, kind, label, value, disabled, onChange }: ExpoMediaUploadFieldProps) {
+export function ExpoMediaUploadField({
+  siteId, kind, label, value, disabled, fieldPath, issues = [], onChange,
+}: ExpoMediaUploadFieldProps) {
   const currentUrl = value?.url ?? "";
   const [externalDraft, setExternalDraft] = useState({ base: currentUrl, value: currentUrl });
   const externalUrl = externalDraft.base === currentUrl ? externalDraft.value : currentUrl;
@@ -157,6 +163,7 @@ export function ExpoMediaUploadField({ siteId, kind, label, value, disabled, onC
         <div className="min-w-0 flex-1">
           <Field
             aria-label={label ? `${label} 주소` : `외부 ${noun} HTTPS 주소`}
+            data-field-path={issues[0]?.path ?? fieldPath}
             value={externalUrl}
             onChange={(event) => {
               const next = event.target.value;
@@ -204,6 +211,11 @@ export function ExpoMediaUploadField({ siteId, kind, label, value, disabled, onC
 
       {progress ? <p role="status" className="text-[11px] text-muted-foreground">{progress}</p> : null}
       {error ? <p role="alert" className="text-[11px] text-[var(--destructive)]">{error}</p> : null}
+      {issues.map((issue, index) => (
+        <p key={`${issue.code}:${issue.path}:${index}`} role={issue.severity === "error" ? "alert" : "status"} className="text-[11px] text-[var(--destructive)]">
+          {issue.message}
+        </p>
+      ))}
 
       {kind === "image" ? (
         <div className="space-y-1.5">

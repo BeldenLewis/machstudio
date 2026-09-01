@@ -60,6 +60,57 @@ function dedupeFieldIssues(issues: readonly FieldIssue[]): FieldIssue[] {
   });
 }
 
+const NATIVE_FIELD_SELECTOR = "input:not([type='file']),textarea,select,button,a[href]";
+const VALUE_FIELD_SELECTOR = "input:not([type='file']),textarea,select";
+
+function enabledField(element: HTMLElement | null | undefined): boolean {
+  if (!element) return false;
+  if (!element.matches(NATIVE_FIELD_SELECTOR) && !element.hasAttribute("tabindex")) return false;
+  return !("disabled" in element && Boolean((element as HTMLInputElement).disabled));
+}
+
+function firstEnabledField(container: ParentNode | null | undefined): HTMLElement | null {
+  if (!container) return null;
+  const valueField = container.querySelector<HTMLElement>(VALUE_FIELD_SELECTOR);
+  if (valueField && enabledField(valueField)) return valueField;
+  const action = container.querySelector<HTMLElement>("button,a[href],[tabindex]");
+  return action && enabledField(action) ? action : null;
+}
+
+/**
+ * `data-field-path`는 control 자체, control을 감싼 조상, 오류 문구 sibling 어디에도 놓일 수 있다.
+ * 명시 대상(`data-field-focus-target` = element id)을 우선 지원하고, 같은 focus scope 안의
+ * sibling control까지 찾는다. 반환 path는 실제 control에 옮겨 접근성/회귀 검사가 같은 계약을 본다.
+ */
+export function resolveExpoFieldFocusTarget(
+  root: HTMLElement,
+  candidates: ReadonlySet<string>,
+): { element: HTMLElement; path: string } | null {
+  const markers = [...root.querySelectorAll<HTMLElement>("[data-field-path]")]
+    .filter((element) => candidates.has(element.dataset.fieldPath ?? ""));
+  const exactControl = markers.find((element) => element.matches(NATIVE_FIELD_SELECTOR) && enabledField(element));
+  if (exactControl) return { element: exactControl, path: exactControl.dataset.fieldPath! };
+
+  for (const marker of markers) {
+    const targetId = marker.dataset.fieldFocusTarget;
+    if (!targetId) continue;
+    const explicit = [...root.querySelectorAll<HTMLElement>("[id]")]
+      .find((element) => element.id === targetId);
+    if (explicit && enabledField(explicit)) return { element: explicit, path: marker.dataset.fieldPath! };
+  }
+  for (const marker of markers) {
+    const descendant = firstEnabledField(marker);
+    if (descendant) return { element: descendant, path: marker.dataset.fieldPath! };
+  }
+  for (const marker of markers) {
+    const scope = marker.closest<HTMLElement>("[data-field-focus-scope]");
+    const sibling = firstEnabledField(scope);
+    if (sibling) return { element: sibling, path: marker.dataset.fieldPath! };
+  }
+  const fallback = markers.find(enabledField);
+  return fallback ? { element: fallback, path: fallback.dataset.fieldPath! } : null;
+}
+
 export function mergeEditorIssues(
   readinessIssues: readonly unknown[],
   rejectedIssues: readonly ExpoRejection[] = [],
@@ -140,7 +191,8 @@ export function PageDraftWorkspace({
   const previousSaveState = useRef(state.saveState);
   const editorRootRef = useRef<HTMLElement | null>(null);
   const [exportIssues, setExportIssues] = useState<FieldIssue[]>([]);
-  const [exportFocus, setExportFocus] = useState<FieldIssue | null>(null);
+  const focusSequence = useRef(0);
+  const [exportFocus, setExportFocus] = useState<{ issue: FieldIssue; sequence: number } | null>(null);
   useEffect(() => {
     if (state.saveState === "saved" && previousSaveState.current !== "saved") onSaved?.();
     previousSaveState.current = state.saveState;
@@ -155,36 +207,44 @@ export function PageDraftWorkspace({
     () => mergeEditorIssues(allIssues, state.rejected ?? [], exportIssues),
     [allIssues, exportIssues, state.rejected],
   );
+  const draftSectionSids = useMemo(
+    () => new Set(state.config.sections.map((section) => section.sid)),
+    [state.config.sections],
+  );
   const focusExportIssue = useCallback((issue: FieldIssue) => {
-    if (issue.sid) setSelectedSid(issue.sid);
-    setExportFocus(issue);
-  }, [setSelectedSid]);
+    // 발행본에만 남은 sid라면 현재 초안 선택을 지우지 않는다.
+    if (issue.sid && draftSectionSids.has(issue.sid)) setSelectedSid(issue.sid);
+    focusSequence.current += 1;
+    // 같은 issue 객체를 다시 눌러도 sequence가 바뀌어 focus 효과가 다시 돈다.
+    setExportFocus({ issue, sequence: focusSequence.current });
+  }, [draftSectionSids, setSelectedSid]);
 
   useEffect(() => {
     if (!exportFocus || !editorRootRef.current) return;
-    if (exportFocus.sid && state.selectedSid !== exportFocus.sid) return;
+    const issue = exportFocus.issue;
+    if (issue.sid && draftSectionSids.has(issue.sid) && state.selectedSid !== issue.sid) return;
+    if (issue.sid && !draftSectionSids.has(issue.sid)) return;
 
-    const relative = exportFocus.path.replace(/^sections\[\d+\]\.content\.?/, "");
+    const relative = issue.path.replace(/^sections\[\d+\]\.content\.?/, "");
     const rowRelative = relative.includes("[") ? relative.slice(relative.indexOf("[")) : "";
-    const candidates = new Set([exportFocus.path, relative, rowRelative].filter(Boolean));
-    const marker = [...editorRootRef.current.querySelectorAll<HTMLElement>("[data-field-path]")]
-      .find((element) => candidates.has(element.dataset.fieldPath ?? ""));
-    const sectionCard = exportFocus.sid
+    // 업로드 UI는 url/originalUrl을 한 주소 입력으로 함께 고친다.
+    const urlAlias = relative.replace(/\.originalUrl$/, ".url");
+    const rowUrlAlias = urlAlias.includes("[") ? urlAlias.slice(urlAlias.indexOf("[")) : "";
+    const candidates = new Set([issue.path, relative, rowRelative, urlAlias, rowUrlAlias].filter(Boolean));
+    const match = resolveExpoFieldFocusTarget(editorRootRef.current, candidates);
+    const sectionCard = issue.sid
       ? [...editorRootRef.current.querySelectorAll<HTMLElement>("[data-expo-sid]")]
-        .find((element) => element.dataset.expoSid === exportFocus.sid)
+        .find((element) => element.dataset.expoSid === issue.sid)
       : undefined;
-    const target = marker ?? sectionCard;
+    const target = match?.element ?? sectionCard;
     if (!target) return;
-    const field = marker?.querySelector<HTMLElement>("input:not([type='file']),textarea,select")
-      ?? marker?.querySelector<HTMLElement>("button,[tabindex]");
-    const focusTarget = field ?? target;
-    if (field && marker?.dataset.fieldPath) field.dataset.fieldPath = marker.dataset.fieldPath;
-    if (!focusTarget.hasAttribute("tabindex")) focusTarget.setAttribute("tabindex", "-1");
-    focusTarget.focus({ preventScroll: true });
-    if (typeof focusTarget.scrollIntoView === "function") {
-      focusTarget.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (match && !target.dataset.fieldPath) target.dataset.fieldPath = match.path;
+    if (!enabledField(target) && !target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+    target.focus({ preventScroll: true });
+    if (typeof target.scrollIntoView === "function") {
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
     }
-  }, [exportFocus, state.selectedSid]);
+  }, [draftSectionSids, exportFocus, state.selectedSid]);
 
   if (state.loading && !state.page) {
     return <p className="py-12 text-sm text-muted-foreground">미리보기를 준비하는 중이에요.</p>;

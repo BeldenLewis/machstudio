@@ -105,14 +105,14 @@ function EventSettings({ event, issues, disabled, onChange }: { event: ExpoEvent
   return (
     <fieldset disabled={disabled} className={`${R.surface} ${FINISH.s2} space-y-3 bg-secondary/40 p-3`}>
       <legend className="px-1 text-xs font-semibold">행사</legend>
-      <NumberField label="행사 회차" value={event.edition} min={1} onChange={(edition) => onChange({ ...event, edition })} />
+      <NumberField label="행사 회차" path="settings.event.edition" value={event.edition} min={1} onChange={(edition) => onChange({ ...event, edition })} />
       <IssueList path="settings.event.edition" issues={issues} />
       <ScheduleField label="행사 시작" path="settings.event.startsAt" value={event.startsAt} issues={issues} onChange={(startsAt) => onChange({ ...event, startsAt })} />
       <ScheduleField label="행사 종료" path="settings.event.endsAt" value={event.endsAt} issues={issues} onChange={(endsAt) => onChange({ ...event, endsAt })} />
       <div className="grid gap-2 sm:grid-cols-3">
         {(["companies", "sessions", "booths"] as const).map((key) => (
           <div key={key}>
-            <NumberField label={{ companies: "참가기업 수", sessions: "세션 수", booths: "부스 수" }[key]} value={facts[key] ?? 0} min={0} onChange={(value) => onChange({ ...event, facts: { ...facts, [key]: value } })} />
+            <NumberField label={{ companies: "참가기업 수", sessions: "세션 수", booths: "부스 수" }[key]} path={`settings.event.facts.${key}`} value={facts[key] ?? 0} min={0} onChange={(value) => onChange({ ...event, facts: { ...facts, [key]: value } })} />
             <IssueList path={`settings.event.facts.${key}`} issues={issues} />
           </div>
         ))}
@@ -126,8 +126,8 @@ function CampaignSettings({ campaign, index, issues, onChange }: { campaign: Cam
   return (
     <div className={`${R.surface} ${FINISH.s2} space-y-2 bg-background/60 p-2.5`}>
       <div className="grid gap-2 sm:grid-cols-2">
-        <TextField label={`${campaign.label} 식별자`} value={campaign.id} onChange={(id) => onChange({ ...campaign, id })} />
-        <TextField label={`${campaign.label} 표시 이름`} value={campaign.label} onChange={(label) => onChange({ ...campaign, label })} />
+        <TextField label={`${campaign.label} 식별자`} path={`${base}.id`} value={campaign.id} onChange={(id) => onChange({ ...campaign, id })} />
+        <TextField label={`${campaign.label} 표시 이름`} path={`${base}.label`} value={campaign.label} onChange={(label) => onChange({ ...campaign, label })} />
       </div>
       <IssueList path={`${base}.id`} issues={issues} /><IssueList path={`${base}.label`} issues={issues} />
       <ScheduleField label={`${campaign.label} 시작`} path={`${base}.startsAt`} value={campaign.startsAt} issues={issues} onChange={(startsAt) => onChange({ ...campaign, startsAt })} />
@@ -135,7 +135,7 @@ function CampaignSettings({ campaign, index, issues, onChange }: { campaign: Cam
       <div className="flex flex-wrap items-end gap-3">
         <label className="block min-w-48 text-[11px] text-muted-foreground">
           {campaign.label} 상태 재정의
-          <FieldSelect aria-label={`${campaign.label} 상태 재정의`} value={campaign.override} onChange={(event) => onChange({ ...campaign, override: event.target.value as CampaignOverride })}>
+          <FieldSelect data-field-path={`${base}.override`} aria-label={`${campaign.label} 상태 재정의`} value={campaign.override} onChange={(event) => onChange({ ...campaign, override: event.target.value as CampaignOverride })}>
             <option value="auto">일정에 따름</option><option value="force-on">항상 켬</option><option value="force-off">항상 끔</option>
           </FieldSelect>
         </label>
@@ -159,8 +159,8 @@ function DestinationSettings({ destination, index, issues, onChange }: { destina
   return (
     <div className={`${R.surface} ${FINISH.s2} space-y-2 bg-background/60 p-2.5`}>
       <div className="grid gap-2 sm:grid-cols-2">
-        <TextField label={`${destination.label} 식별자`} value={destination.id} onChange={(id) => onChange({ ...destination, id })} />
-        <TextField label={`${destination.label} 표시 이름`} value={destination.label} onChange={(label) => onChange({ ...destination, label })} />
+        <TextField label={`${destination.label} 식별자`} path={`${base}.id`} value={destination.id} onChange={(id) => onChange({ ...destination, id })} />
+        <TextField label={`${destination.label} 표시 이름`} path={`${base}.label`} value={destination.label} onChange={(label) => onChange({ ...destination, label })} />
       </div>
       <label className="block text-[11px] text-muted-foreground">
         {destination.label} 동작
@@ -168,19 +168,19 @@ function DestinationSettings({ destination, index, issues, onChange }: { destina
           <option value="url">HTTPS 주소</option><option value="anchor">페이지 앵커</option><option value="download">파일 다운로드</option><option value="imweb-modal">아임웹 모달</option>
         </FieldSelect>
       </label>
-      {action.type === "url" || action.type === "download" ? <TextField label={`${destination.label} 주소`} value={action.href} onChange={(href) => patchAction({ href })} /> : null}
+      {action.type === "url" || action.type === "download" ? <TextField label={`${destination.label} 주소`} path={`${base}.action.href`} value={action.href} onChange={(href) => patchAction({ href })} /> : null}
       {action.type === "url" ? <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={action.newTab === true} onChange={(event) => patchAction({ newTab: event.target.checked })} /> 새 탭에서 열기</label> : null}
-      {action.type === "anchor" ? <TextField label={`${destination.label} 앵커`} value={action.target} onChange={(target) => patchAction({ target })} /> : null}
-      {action.type === "imweb-modal" ? <><TextField label={`${destination.label} 모달 ID`} value={action.modalId} onChange={(modalId) => patchAction({ modalId })} /><TextField label={`${destination.label} 대체 주소`} value={action.fallbackHref ?? ""} onChange={(fallbackHref) => patchAction({ fallbackHref: fallbackHref || undefined })} /></> : null}
+      {action.type === "anchor" ? <TextField label={`${destination.label} 앵커`} path={`${base}.action.target`} value={action.target} onChange={(target) => patchAction({ target })} /> : null}
+      {action.type === "imweb-modal" ? <><TextField label={`${destination.label} 모달 ID`} path={`${base}.action.modalId`} value={action.modalId} onChange={(modalId) => patchAction({ modalId })} /><TextField label={`${destination.label} 대체 주소`} path={`${base}.action.fallbackHref`} value={action.fallbackHref ?? ""} onChange={(fallbackHref) => patchAction({ fallbackHref: fallbackHref || undefined })} /></> : null}
       <IssueList path={`${base}.action.href`} issues={issues} /><IssueList path={`${base}.action.target`} issues={issues} /><IssueList path={`${base}.action.modalId`} issues={issues} /><IssueList path={`${base}.action.fallbackHref`} issues={issues} />
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="block text-[11px] text-muted-foreground">
           {destination.label} 분석 이벤트
-          <FieldSelect aria-label={`${destination.label} 분석 이벤트`} value={destination.analytics?.eventName ?? ""} onChange={(event) => onChange({ ...destination, analytics: event.target.value ? { eventName: event.target.value, ...(destination.analytics?.contentId ? { contentId: destination.analytics.contentId } : {}) } : undefined })}>
+          <FieldSelect data-field-path={`${base}.analytics.eventName`} aria-label={`${destination.label} 분석 이벤트`} value={destination.analytics?.eventName ?? ""} onChange={(event) => onChange({ ...destination, analytics: event.target.value ? { eventName: event.target.value, ...(destination.analytics?.contentId ? { contentId: destination.analytics.contentId } : {}) } : undefined })}>
             <option value="">추적 안 함</option>{ANALYTICS_EVENT_ALLOWLIST.map((eventName) => <option key={eventName} value={eventName}>{eventName}</option>)}
           </FieldSelect>
         </label>
-        <TextField label={`${destination.label} 분석 콘텐츠 ID`} value={destination.analytics?.contentId ?? ""} disabled={!destination.analytics} onChange={(contentId) => destination.analytics && onChange({ ...destination, analytics: { ...destination.analytics, contentId: contentId || undefined } })} />
+        <TextField label={`${destination.label} 분석 콘텐츠 ID`} path={`${base}.analytics.contentId`} value={destination.analytics?.contentId ?? ""} disabled={!destination.analytics} onChange={(contentId) => destination.analytics && onChange({ ...destination, analytics: { ...destination.analytics, contentId: contentId || undefined } })} />
       </div>
       <IssueList path={`${base}.analytics.eventName`} issues={issues} /><IssueList path={`${base}.analytics.contentId`} issues={issues} />
       <label className="flex min-h-9 items-center gap-2 text-xs"><Switch label={`${destination.label} 활성`} checked={destination.enabled} onChange={(enabled) => onChange({ ...destination, enabled })} /> 활성</label>
@@ -194,7 +194,7 @@ function ScheduleField({ label, path, value, issues, onChange }: { label: string
   return (
     <div>
       <div className="grid gap-2 sm:grid-cols-[1fr_1fr_110px]">
-        <label className="text-[11px] text-muted-foreground">{label} 날짜<Field type="date" aria-label={`${label} 날짜`} value={parts.date} onChange={(event) => write({ date: event.target.value })} /></label>
+        <label className="text-[11px] text-muted-foreground">{label} 날짜<Field data-field-path={path} type="date" aria-label={`${label} 날짜`} value={parts.date} onChange={(event) => write({ date: event.target.value })} /></label>
         <label className="text-[11px] text-muted-foreground">{label} 시각<Field type="time" step={1} aria-label={`${label} 시각`} value={parts.time} onChange={(event) => write({ time: event.target.value.length === 5 ? `${event.target.value}:00` : event.target.value })} /></label>
         <label className="text-[11px] text-muted-foreground">UTC 오프셋<Field type="number" min={-14} max={14} step={0.25} aria-label={`${label} UTC 오프셋`} value={parts.offsetHours} onChange={(event) => write({ offsetHours: Number(event.target.value) })} /></label>
       </div>
@@ -203,11 +203,11 @@ function ScheduleField({ label, path, value, issues, onChange }: { label: string
   );
 }
 
-function TextField({ label, value, disabled, onChange }: { label: string; value: string; disabled?: boolean; onChange(value: string): void }) {
-  return <label className="block min-w-0 text-[11px] text-muted-foreground">{label}<Field aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} /></label>;
+function TextField({ label, path, value, disabled, onChange }: { label: string; path?: string; value: string; disabled?: boolean; onChange(value: string): void }) {
+  return <label className="block min-w-0 text-[11px] text-muted-foreground">{label}<Field data-field-path={path} aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} /></label>;
 }
-function NumberField({ label, value, min, onChange }: { label: string; value: number; min: number; onChange(value: number): void }) {
-  return <label className="block min-w-0 text-[11px] text-muted-foreground">{label}<Field type="number" min={min} step={1} aria-label={label} value={value} onChange={(event) => onChange(Number(event.target.value))} /></label>;
+function NumberField({ label, path, value, min, onChange }: { label: string; path?: string; value: number; min: number; onChange(value: number): void }) {
+  return <label className="block min-w-0 text-[11px] text-muted-foreground">{label}<Field data-field-path={path} type="number" min={min} step={1} aria-label={label} value={value} onChange={(event) => onChange(Number(event.target.value))} /></label>;
 }
 function IssueList({ path, issues }: { path: string; issues: readonly FieldIssue[] }) {
   const exact = issues.filter((issue) => issue.path === path);

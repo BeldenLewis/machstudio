@@ -32,7 +32,15 @@ export function CampaignHeroEditor(props: SectionEditorProps) {
       <LocalizedField label="접근 가능한 헤드라인" value={content.accessibleHeadline} locale={props.locale} disabled={!props.canEdit} onChange={(accessibleHeadline) => patch({ accessibleHeadline })} />
       <div className="space-y-2">
         <p className="text-xs font-medium text-muted-foreground">Hero 영상</p>
-        <ExpoMediaUploadField siteId={props.siteId} kind="video" value={video} disabled={!props.canEdit} onChange={(next) => patch({ video: next?.kind === "video" ? next : undefined })} />
+        <ExpoMediaUploadField
+          siteId={props.siteId}
+          kind="video"
+          value={video}
+          disabled={!props.canEdit}
+          fieldPath="video.url"
+          issues={props.issues.filter((issue) => issue.path === "video" || issue.path.startsWith("video."))}
+          onChange={(next) => patch({ video: next?.kind === "video" ? next : undefined })}
+        />
         <label className="block text-[11px] text-muted-foreground">
           영상 사용 권리
           <FieldSelect

@@ -39,7 +39,7 @@ export function SponsorMarqueeEditor(props: SectionEditorProps) {
         onChange={(rows) => patch({ sponsors: rows.map((row, order) => ({ ...row, order })) })}
         renderRow={(row, index) => <div className="grid min-w-0 gap-2">
           <div className="grid gap-2 sm:grid-cols-2"><TextField label={`${index + 1}번 후원사 이름`} value={row.name} disabled={!props.canEdit} onChange={(name) => patchSponsor(index, { name })} /><TextField label={`${index + 1}번 후원사 홈페이지`} value={row.homepageUrl ?? ""} type="url" disabled={!props.canEdit} onChange={(homepageUrl) => patchSponsor(index, { homepageUrl: homepageUrl || undefined })} /></div>
-          <ExpoMediaUploadField siteId={props.siteId} kind="image" label={`${index + 1}번 후원사 로고`} value={row.logo} disabled={!props.canEdit} onChange={(next) => patchSponsor(index, { logo: next?.kind === "image" ? next : undefined })} />
+          <ExpoMediaUploadField siteId={props.siteId} kind="image" label={`${index + 1}번 후원사 로고`} fieldPath={`[${index}].logo.url`} value={row.logo} disabled={!props.canEdit} onChange={(next) => patchSponsor(index, { logo: next?.kind === "image" ? next : undefined })} />
           <label className="text-[11px] text-muted-foreground">후원사 그룹<FieldSelect aria-label={`${index + 1}번 후원사 그룹`} value={row.groupId} disabled={!props.canEdit} onChange={(event) => patchSponsor(index, { groupId: event.target.value })}><option value="">선택</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.id}</option>)}</FieldSelect></label>
           <Toggle label={`${index + 1}번 후원사 공개`} checked={row.enabled} disabled={!props.canEdit} onChange={(enabled) => patchSponsor(index, { enabled })} />
         </div>}

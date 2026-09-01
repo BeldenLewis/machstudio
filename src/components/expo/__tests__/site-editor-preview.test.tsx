@@ -50,7 +50,7 @@ class FakeResizeObserver {
 
 const { ExpoSiteEditor } = await import("@/components/expo/ExpoSiteEditor");
 const { expoSectionTitle } = await import("@/components/expo/ExpoSectionTree");
-const { mergeEditorIssues } = await import("@/components/expo/PageDraftWorkspace");
+const { mergeEditorIssues, resolveExpoFieldFocusTarget } = await import("@/components/expo/PageDraftWorkspace");
 const { instantiateStkHomeV1 } = await import("@/lib/expo/presets/stk-home-v1");
 // 발행 패널이 공용 확인 모달을 쓴다 — 프로바이더 없이 렌더하면 훅이 던진다.
 const { ConfirmProvider } = await import("@/components/ui/confirm-dialog");
@@ -660,6 +660,22 @@ describe("서버가 값을 거절하면", () => {
 });
 
 describe("발행 준비 문제", () => {
+  it.each([
+    ["self", '<input id="target" data-field-path="field.path">'],
+    ["ancestor", '<div data-field-path="field.path"><input id="target"></div>'],
+    ["sibling", '<div data-field-focus-scope><input id="target"><p data-field-path="field.path">오류</p></div>'],
+    ["explicit", '<input id="target"><p data-field-path="field.path" data-field-focus-target="target">오류</p>'],
+  ])("field focus resolver supports %s markers", (_mode, markup) => {
+    const rootElement = document.createElement("main");
+    rootElement.innerHTML = markup;
+    document.body.appendChild(rootElement);
+    const target = resolveExpoFieldFocusTarget(rootElement, new Set(["field.path"]))?.element;
+    target?.focus();
+    expect(target).toBeInstanceOf(HTMLInputElement);
+    expect(document.activeElement).toBe(target);
+    rootElement.remove();
+  });
+
   it("경로가 있는 준비 문제를 정확히 보존하고 저장 거절 중복만 제거한다", () => {
     const readinessIssue = {
       path: "sections[1].content.items[0].title",
@@ -740,7 +756,14 @@ describe("발행 준비 문제", () => {
     await click(buttonByText(`${expoSectionTitle(target)} HTML 다운로드`));
 
     expect(host.querySelector(`[aria-label="${expoSectionTitle(target)} 편집기"]`)).toBeTruthy();
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("1번 하위 전시 이름");
     expect(document.activeElement?.getAttribute("data-field-path")).toBe("[0].title");
+
+    const pageTitle = host.querySelector<HTMLInputElement>('input[aria-label="페이지 제목"]');
+    await act(async () => { pageTitle?.focus(); });
+    expect(document.activeElement).toBe(pageTitle);
+    await click(buttonByText("이 구획의 값을 확인해 주세요."));
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("1번 하위 전시 이름");
   });
 
   it("일반 구획의 백업 미디어 오류는 실제 주소 입력에 포커스한다", async () => {
@@ -769,6 +792,110 @@ describe("발행 준비 문제", () => {
     expect(document.activeElement?.getAttribute("aria-label")).toBe("배경 이미지 주소");
     expect(document.activeElement?.getAttribute("data-field-path")).toBe("media.url");
     expect(host.textContent).toContain("공개 HTTPS 주소가 필요해요.");
+  });
+
+  it("커스텀 표 미디어 오류는 같은 행의 첫 칸이 아니라 해당 주소 입력에 포커스한다", async () => {
+    const draft = instantiateStkHomeV1({
+      randomUUID: (() => {
+        let serial = 0;
+        return () => `00000000-0000-4000-8000-${String(++serial).padStart(12, "0")}`;
+      })(),
+    });
+    const targetIndex = draft.sections.findIndex((section) => section.type === "exhibition-grid");
+    const target = draft.sections[targetIndex];
+    const path = `sections[${targetIndex}].content.items[0].symbol.url`;
+    pageBody.draft = draft;
+    pageBody.hasPublished = true;
+    pageBody.exportSections = [{ sid: target.sid, label: expoSectionTitle(target) }];
+    nextExportFailure = { issues: [{
+      path, code: "standalone-media-public-https", message: "공개 심볼 주소가 필요해요.",
+      severity: "error", sid: target.sid,
+    }] };
+
+    await render();
+    await click(buttonByText(`${expoSectionTitle(target)} HTML 다운로드`));
+
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("1번 하위 전시 심볼 주소");
+    expect(document.activeElement?.getAttribute("data-field-path")).toBe("[0].symbol.url");
+  });
+
+  it("페이지 설정 백업 오류는 오류 문구가 아니라 해당 입력에 포커스한다", async () => {
+    const target = {
+      sid: "44444444-4444-4444-8444-444444444444",
+      type: "textblock", variant: "prose", enabled: true, embedEnabled: false,
+      design: { bg: "light" }, content: { body: { ko: "본문" } },
+    };
+    pageBody.draft = {
+      schemaVersion: 2,
+      settings: { destinations: [{
+        id: "inquiry", label: "문의", enabled: true,
+        action: { type: "imweb-modal", modalId: "mInquiry", fallbackHref: "http://127.0.0.1/private" },
+      }] },
+      sections: [target],
+    };
+    pageBody.hasPublished = true;
+    nextExportFailure = { issues: [{
+      path: "settings.destinations[0].action.fallbackHref", code: "standalone-modal-fallback-required",
+      message: "공개 대체 주소가 필요해요.", severity: "error",
+    }] };
+
+    await render();
+    await click(buttonByText("전체 HTML 다운로드"));
+
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("문의 대체 주소");
+    expect(document.activeElement?.getAttribute("data-field-path")).toBe("settings.destinations[0].action.fallbackHref");
+  });
+
+  it("Hero 영상 백업 오류는 marker가 없어도 영상 주소 입력에 포커스한다", async () => {
+    const target = {
+      sid: "55555555-5555-4555-8555-555555555555",
+      type: "campaign-hero", variant: "default", enabled: true, embedEnabled: false,
+      design: {}, content: {
+        typingLines: [{ ko: "STK 2027" }], accessibleHeadline: { ko: "STK 2027" }, ctas: [],
+        video: {
+          kind: "video", url: "http://127.0.0.1/private.mp4", originalUrl: "http://127.0.0.1/private.mp4",
+          mimeType: "video/mp4", rightsStatus: "confirmed",
+        },
+      },
+    };
+    pageBody.draft = { schemaVersion: 2, sections: [target] };
+    pageBody.hasPublished = true;
+    pageBody.exportSections = [{ sid: target.sid, label: "히어로" }];
+    nextExportFailure = { issues: [{
+      path: "sections[0].content.video.url", code: "standalone-media-public-https",
+      message: "공개 영상 주소가 필요해요.", severity: "error", sid: target.sid,
+    }] };
+
+    await render();
+    await click(buttonByText("히어로 HTML 다운로드"));
+
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("외부 영상 HTTPS 주소");
+    expect(document.activeElement?.getAttribute("data-field-path")).toBe("video.url");
+    expect(host.textContent).toContain("공개 영상 주소가 필요해요.");
+  });
+
+  it("초안에 없는 published-only sid 오류가 현재 초안 편집기를 비우지 않는다", async () => {
+    const local = {
+      sid: "66666666-6666-4666-8666-666666666666",
+      type: "textblock", variant: "prose", enabled: true, embedEnabled: false,
+      design: { bg: "light" }, content: { heading: { ko: "현재 초안" }, body: { ko: "본문" } },
+    };
+    const publishedOnlySid = "77777777-7777-4777-8777-777777777777";
+    pageBody.draft = { schemaVersion: 2, sections: [local] };
+    pageBody.hasPublished = true;
+    pageBody.exportSections = [{ sid: publishedOnlySid, label: "발행 전용" }];
+    nextExportFailure = { issues: [{
+      path: "scope.sid", code: "standalone-section-unavailable", message: "발행본 구획을 찾지 못했어요.",
+      severity: "error", sid: publishedOnlySid,
+    }] };
+
+    await render();
+    await click(host.querySelector('button[aria-label="현재 초안 편집"]') ?? undefined);
+    expect(host.querySelector('[aria-label="현재 초안 편집기"]')).toBeTruthy();
+    await click(buttonByText("발행 전용 HTML 다운로드"));
+
+    expect(host.querySelector('[aria-label="현재 초안 편집기"]')).toBeTruthy();
+    expect(host.textContent).not.toContain("왼쪽에서 구획을 골라 주세요.");
   });
 });
 

@@ -101,7 +101,7 @@ export function InlineEditableTable<Row extends { id: string }>({
                     <button type="button" disabled={disabled || index === rows.length - 1} aria-label={`${readableName(row, index)} 아래로 이동`} onClick={() => move(index, index + 1)} />
                   </span>
                 </td>
-                <td className="min-w-0 p-1 max-[390px]:col-start-2">
+                <td data-field-focus-scope className="min-w-0 p-1 max-[390px]:col-start-2">
                   <fieldset disabled={disabled} className="min-w-0 space-y-1.5 border-0 p-0">{renderRow(row, index)}</fieldset>
                   {rowIssues.map((issue, issueIndex) => (
                     <p key={`${issue.path}:${issueIndex}`} role={issue.severity === "error" ? "alert" : "status"} data-field-path={issue.path} className="mt-1 text-[11px] text-[var(--destructive)]">
