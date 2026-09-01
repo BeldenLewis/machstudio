@@ -2,7 +2,7 @@ import { isSafePublicUrl } from "@/lib/expo/destination";
 import type { ExpoSection, FieldIssue, SectionPlugin, ValidateContext } from "@/lib/expo/types";
 import {
   clamp, contentWarning, ctaPublishIssues, ctaWarnings, hasLocalizedText, imagePublishIssues, imageWarnings,
-  isRecord, localizedOf, normalizeCtas, normalizeVideo, optionalLocalizedOf, publishError, recordOf,
+  isRecord, localizedOf, normalizeCtas, normalizeImage, normalizeVideo, optionalLocalizedOf, publishError, recordOf,
   structuralError, validateBoolean, validateCtas, validateLocalized, validateNumber, validateVideoShape,
   type CampaignHeroContent, type ExpoVideoValue,
 } from "@/lib/expo/sections/types";
@@ -79,12 +79,27 @@ export function campaignHeroPublishIssues(section: ExpoSection, context: Validat
   const issues: FieldIssue[] = [];
   if (!hasLocalizedText(content.accessibleHeadline)) issues.push(publishError("typingLines", "required-text", "히어로 문구가 하나 이상 필요해요"));
   const video = normalizeVideo(content.video, false);
-  if (content.video !== undefined && !video) {
-    issues.push(publishError("video", "invalid-hero-video", "Hero 영상의 MP4 정보가 완전하지 않아요"));
-  } else if (video) {
-    if (!isSafePublicUrl(video.url)) issues.push(publishError("video.url", "invalid-url", "공개 HTTPS 영상 주소만 사용할 수 있어요"));
-    if (!isSafePublicUrl(video.originalUrl)) issues.push(publishError("video.originalUrl", "invalid-url", "공개 HTTPS 원본 영상 주소만 사용할 수 있어요"));
-    issues.push(...imagePublishIssues(video.poster, "video.poster"));
+  if (content.video !== undefined) {
+    const rawVideo = recordOf(content.video);
+    if (!video) issues.push(publishError("video", "invalid-hero-video", "Hero 영상의 MP4 정보가 완전하지 않아요"));
+    if (typeof rawVideo.url === "string" && !isSafePublicUrl(rawVideo.url.trim())) {
+      issues.push(publishError("video.url", "invalid-url", "공개 HTTPS 영상 주소만 사용할 수 있어요"));
+    }
+    if (typeof rawVideo.originalUrl === "string" && !isSafePublicUrl(rawVideo.originalUrl.trim())) {
+      issues.push(publishError("video.originalUrl", "invalid-url", "공개 HTTPS 원본 영상 주소만 사용할 수 있어요"));
+    }
+    const poster = normalizeImage(rawVideo.poster, false);
+    if (poster) {
+      issues.push(...imagePublishIssues(poster, "video.poster"));
+    } else {
+      const rawPoster = recordOf(rawVideo.poster);
+      if (typeof rawPoster.url === "string" && !isSafePublicUrl(rawPoster.url.trim())) {
+        issues.push(publishError("video.poster.url", "invalid-url", "공개 HTTPS 이미지 주소만 사용할 수 있어요"));
+      }
+      if (typeof rawPoster.originalUrl === "string" && !isSafePublicUrl(rawPoster.originalUrl.trim())) {
+        issues.push(publishError("video.poster.originalUrl", "invalid-url", "공개 HTTPS 이미지 주소만 사용할 수 있어요"));
+      }
+    }
   }
   issues.push(...ctaPublishIssues(content.ctas, "ctas", context));
   return issues;

@@ -6,9 +6,8 @@ import {
   type AudienceGroup, type AudienceLink, type AudienceLinksContent,
 } from "@/lib/expo/sections/types";
 
-function normalizeLinks(value: unknown, publicMode: boolean): AudienceLink[] {
+function normalizeLinks(value: unknown, publicMode: boolean, seen: Set<string>): AudienceLink[] {
   if (!Array.isArray(value)) return [];
-  const seen = new Set<string>();
   const links: AudienceLink[] = [];
   for (const raw of value.slice(0, 100)) {
     const link = recordOf(raw);
@@ -26,13 +25,13 @@ function normalizeLinks(value: unknown, publicMode: boolean): AudienceLink[] {
   return normalizeOrderedRows(links);
 }
 
-function normalizeGroup(audience: "exhibitor" | "visitor", raw: unknown, publicMode: boolean): AudienceGroup {
+function normalizeGroup(audience: "exhibitor" | "visitor", raw: unknown, publicMode: boolean, seen: Set<string>): AudienceGroup {
   const group = recordOf(raw);
   const description = optionalLocalizedOf(group.description);
   return {
     audience, title: localizedOf(group.title), ...(description ? { description } : {}),
     variant: group.variant === "dark" ? "dark" : "light",
-    items: normalizeLinks(group.items, publicMode),
+    items: normalizeLinks(group.items, publicMode, seen),
   };
 }
 
@@ -40,7 +39,11 @@ function normalizeAudienceLinks(raw: unknown, publicMode: boolean): AudienceLink
   const content = recordOf(raw);
   const groups = Array.isArray(content.groups) ? content.groups.slice(0, 100) : [];
   const find = (audience: string) => groups.find((rawGroup) => recordOf(rawGroup).audience === audience);
-  return { groups: [normalizeGroup("exhibitor", find("exhibitor"), publicMode), normalizeGroup("visitor", find("visitor"), publicMode)] };
+  const seen = new Set<string>();
+  return { groups: [
+    normalizeGroup("exhibitor", find("exhibitor"), publicMode, seen),
+    normalizeGroup("visitor", find("visitor"), publicMode, seen),
+  ] };
 }
 
 function validateAudienceLinks(section: ExpoSection): FieldIssue[] {

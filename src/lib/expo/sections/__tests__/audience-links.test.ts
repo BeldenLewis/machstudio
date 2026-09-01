@@ -27,6 +27,16 @@ describe("audience-links schema", () => {
     }
   });
 
+  it("deduplicates link ids across exhibitor and visitor groups during normalization", () => {
+    const duplicate = { id: "shared", label: { ko: "공통" }, destinationId: "overview", campaignIds: [], order: 0, enabled: true };
+    const content = normalizeExpoPage({ sections: [section([
+      group("exhibitor", [duplicate]), group("visitor", [duplicate]),
+    ])] }).sections[0].content as unknown as AudienceLinksContent;
+
+    expect(content.groups[0].items.map((row) => row.id)).toEqual(["shared"]);
+    expect(content.groups[1].items).toEqual([]);
+  });
+
   it("rejects image alt text beyond the canonical text cap", () => {
     const link = { id: "icon", label: { ko: "아이콘" }, destinationId: "overview", campaignIds: [], order: 0, enabled: false,
       icon: { kind: "image", url: "https://cdn.example.com/icon.png", alt: "가".repeat(501), decorative: false } };

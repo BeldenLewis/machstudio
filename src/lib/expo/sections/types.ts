@@ -349,7 +349,8 @@ export function normalizeCtas(value: unknown): CtaPlacement[] {
       destinationId: isCanonicalId(row.destinationId) ? row.destinationId : "",
       variant: (CTA_VARIANTS as readonly unknown[]).includes(row.variant) ? row.variant as CtaVariant : "primary",
       audience: (AUDIENCES as readonly unknown[]).includes(row.audience) ? row.audience as AudienceId : "all",
-      campaignIds, priority: clamp(row.priority, -10_000, 10_000, rows.length),
+      campaignIds,
+      priority: typeof row.priority === "number" && Number.isFinite(row.priority) ? row.priority : rows.length,
       fallback: row.fallback === true, enabled: row.enabled !== false,
     });
   }

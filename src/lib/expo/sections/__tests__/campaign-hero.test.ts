@@ -72,4 +72,21 @@ describe("campaign-hero schema", () => {
       path: "sections[0].content.video", code: "invalid-hero-video", severity: "error", sid,
     }));
   });
+
+  it("reports unsafe present video and poster URLs even when the video is incomplete", () => {
+    const config = normalizeExpoPage({ schemaVersion: 2, sections: [hero({
+      typingLines: [{ ko: "Hero" }],
+      video: {
+        kind: "video",
+        url: "javascript:alert(1)",
+        poster: { kind: "image", url: "data:text/html,unsafe", decorative: true },
+      },
+    })] });
+
+    expect(publishErrors(config)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "sections[0].content.video", code: "invalid-hero-video", severity: "error", sid }),
+      expect.objectContaining({ path: "sections[0].content.video.url", code: "invalid-url", severity: "error", sid }),
+      expect.objectContaining({ path: "sections[0].content.video.poster.url", code: "invalid-url", severity: "error", sid }),
+    ]));
+  });
 });

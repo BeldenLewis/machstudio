@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { selectVisibleCtas } from "@/lib/expo/cta";
+import { normalizeCtas } from "@/lib/expo/sections/types";
 
 const placements = [
   { id: "later", label: { ko: "나중" }, destinationId: "later", variant: "primary", audience: "all", campaignIds: ["campaign"], priority: 1, fallback: false, enabled: true },
@@ -38,5 +39,20 @@ describe("CTA selection", () => {
       limit: 2,
     });
     expect(result.map((row) => row.id)).toEqual(["later", "first"]);
+  });
+
+  it("preserves distinct finite priorities above 10000 when ordering normalized CTAs", () => {
+    const normalized = normalizeCtas([
+      { ...placements[0], id: "priority-20000", destinationId: "priority-20000", priority: 20_000 },
+      { ...placements[0], id: "priority-10001", destinationId: "priority-10001", priority: 10_001 },
+    ]);
+
+    expect(normalized.map((row) => row.priority)).toEqual([20_000, 10_001]);
+    expect(selectVisibleCtas(normalized, {
+      audience: "all",
+      activeCampaignIds: new Set(["campaign"]),
+      validDestinationIds: new Set(["priority-20000", "priority-10001"]),
+      limit: 2,
+    }).map((row) => row.id)).toEqual(["priority-10001", "priority-20000"]);
   });
 });
