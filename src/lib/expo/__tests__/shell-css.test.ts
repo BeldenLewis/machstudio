@@ -136,6 +136,10 @@ describe("생성물이 원본과 갈라지지 않았다", () => {
     expect(raw).toMatch(/\.msx-speaker-info\s*\{[\s\S]*?background:\s*linear-gradient\(rgba\(11, 12, 14, 0\.52\)/);
   });
 
+  it("어두운 audience 카드의 포커스 링은 밝은 dark text 토큰을 쓴다", () => {
+    expect(raw).toMatch(/\.msx-audience-group\[data-variant="dark"\]\s+:focus-visible\s*\{\s*outline-color:\s*var\(--msx-dark-text\)/);
+  });
+
   it("주석은 임베드로 나가지 않는다", () => {
     expect(EXPO_SHELL_CSS).not.toContain("/*");
   });

@@ -31,9 +31,11 @@ if (typeof CSS === "undefined" || typeof CSS.escape !== "function") {
   });
 }
 
+const mountExpo = vi.hoisted(() => vi.fn(() => ({ destroy: vi.fn() })));
+
 /** 실제 렌더 대신 마운트 성공만 흉내낸다 — 여기서 볼 것은 마운트 뒤의 판정이다. */
 vi.mock("@/lib/expo/mount", () => ({
-  mountExpo: () => ({ destroy: () => {} }),
+  mountExpo,
 }));
 
 const { boot, destroy } = await import("@/embed/expo-entry");
@@ -59,6 +61,7 @@ function mountPoint(size: { width: number; height: number }) {
 
 beforeEach(() => {
   warns.length = 0;
+  mountExpo.mockClear();
   vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
     warns.push(args.map(String).join(" "));
   });
@@ -75,6 +78,33 @@ afterEach(() => {
 const invisibleWarnings = () => warns.filter((w) => w.includes("자리가 보이지 않습니다"));
 
 describe("자리가 없으면 알린다", () => {
+  it("같은 인스턴스를 두 번 boot하면 이전 마운트를 정리하고 destroy는 최신 마운트도 정리한다", () => {
+    mountPoint({ width: 980, height: 802 });
+    boot(payload, null);
+    const first = mountExpo.mock.results[0].value;
+
+    boot(payload, null);
+    const second = mountExpo.mock.results[1].value;
+
+    expect(first.destroy).toHaveBeenCalledTimes(1);
+    expect(second.destroy).not.toHaveBeenCalled();
+    destroy(payload);
+    expect(second.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("DOMContentLoaded 대기 중 destroy하면 뒤늦게 다시 마운트하지 않는다", () => {
+    const readyState = vi.spyOn(document, "readyState", "get").mockReturnValue("loading");
+    mountPoint({ width: 980, height: 802 });
+    boot(payload, null);
+    expect(mountExpo).not.toHaveBeenCalled();
+
+    destroy(payload);
+    document.dispatchEvent(new Event("DOMContentLoaded"));
+
+    expect(mountExpo).not.toHaveBeenCalled();
+    readyState.mockRestore();
+  });
+
   it("호스트가 0×0 이면 경고한다", () => {
     mountPoint({ width: 0, height: 0 });
     boot(payload, null);

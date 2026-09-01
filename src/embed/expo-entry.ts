@@ -125,7 +125,17 @@ function render(instance: Instance, script: HTMLScriptElement | null): void {
   container.setAttribute("data-mach-expo-claimed", instance.payload.sectionId ?? instance.payload.pageId);
   unhideWidget(container);
 
-  // `mountExpoShell` 이 같은 컨테이너의 재진입을 스스로 처리한다 — 여기서 먼저 지우지 않는다.
+  if (instance.warningTimer !== null) {
+    window.clearTimeout(instance.warningTimer);
+    instance.warningTimer = null;
+  }
+  const previousHandle = instance.handle;
+  instance.handle = null;
+  try {
+    previousHandle?.destroy();
+  } catch (error) {
+    warn("이전 마운트 정리 실패", error);
+  }
   instance.handle = mountExpo({ container, payload: instance.payload });
   if (!instance.handle) {
     warn("마운트하지 못했습니다: " + instanceKey(instance.payload));
@@ -195,7 +205,10 @@ export function boot(payload: ExpoBootConfig, bootScript?: HTMLScriptElement | n
     const instance: Instance = { handle: null, payload, warningTimer: null };
     reg[key] = instance;
 
-    const run = () => render(instance, script);
+    const run = () => {
+      if (registry()[key] !== instance) return;
+      render(instance, script);
+    };
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", run, { once: true });
     } else {

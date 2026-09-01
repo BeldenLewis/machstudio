@@ -40,13 +40,13 @@ export const renderExhibitionGrid: SectionRenderer = (section, context) => {
     action.setAttribute("data-accent", text(item.accentToken) || "orange");
     const symbol = renderImage(doc, item.symbol as ExpoImageValue | undefined, { className: "msx-exhibition-symbol msx-source-color" });
     if (symbol) action.appendChild(symbol);
-    const title = doc.createElement("h3");
+    const title = doc.createElement("span");
     title.className = "msx-exhibition-title";
     title.textContent = text(item.title);
     action.appendChild(title);
     const description = text(item.description);
     if (description) {
-      const prose = doc.createElement("p");
+      const prose = doc.createElement("span");
       prose.className = "msx-exhibition-description";
       prose.textContent = description;
       action.appendChild(prose);

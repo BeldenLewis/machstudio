@@ -4,7 +4,8 @@
 
 Complete.
 
-- Commit: `feat: render STK homepage sections` (this commit)
+- Feature commit: `8d45829` (`feat: render STK homepage sections`)
+- Fix round 1 commit: `fix: close STK public renderer lifecycle gaps` (this commit)
 - Base: `54a4f8cc2cc9df162cf443b526c92d7ed0b83daa`
 - Scope: Task 9 only; 25 files including this report.
 
@@ -55,6 +56,18 @@ Complete.
 ## Review and concerns
 
 - Independent review reported no Critical finding. Its four Important/Minor observations were converted to RED tests and fixed before the final suite.
-- Repository-wide `npm run lint` remains red on the pre-existing baseline (127 errors / 49 warnings); focused lint for Task 9 is clean.
+- Repository-wide `npm run lint` remains red on the pre-existing baseline (127 errors / 46 warnings); focused lint for Task 9 is clean.
 - JSDOM and Vitest print existing intentional failure-path warnings and the Vite CJS deprecation; no tests failed.
 - No DB/Supabase/storage access, development server, browser, deployment, feature-flag change, or Imweb action was performed. Public Imweb rendering remains a later release verification step.
+
+## Fix round 1
+
+- Exact RED: 4 files ran with 4 failures / 41 passes, plus the expected uncaught throwing-host error. The failures proved that a throwing `SITE.openModalMenu` skipped the cancelable fallback, repeated boot leaked the prior mount, dark audience controls inherited a low-contrast accent ring, and modal exhibition buttons contained an invalid heading child.
+- Independent-review RED: 2 files ran with 2 failures / 16 passes. It proved a pending `DOMContentLoaded` callback could remount after `destroy()` and that exhibition descriptions still used non-phrasing `<p>` content inside modal buttons.
+- Imweb host lookup and invocation now run inside one guarded block. A missing or throwing host continues to the existing cancelable `msx:imweb-modal` event and safe `fallbackHref` path.
+- Expo re-entry clears the prior diagnostic timer and destroys the previous mount handle before replacement. The boot-twice regression proves the old handle is destroyed once and final `destroy()` reaches the newest handle. A registry identity guard also prevents pending `DOMContentLoaded` work from remounting a destroyed instance.
+- Dark audience cards now override `:focus-visible` with `--msx-dark-text`; exhibition titles and descriptions use styled phrasing `span` elements, valid for both real anchors and modal buttons.
+- Regenerated shell CSS: 24,028 → 14,358 bytes (40% reduction). Regenerated runtime: 83.1KB minified.
+- Final renderer/view/mount/CSS/runtime/hash suite: 11 files / 235 tests passed.
+- Final DB-free full suite: 188 files / 2,368 tests passed. Typecheck and focused ESLint passed. Repository-wide lint reproduced only its pre-existing 127 errors / 46 warnings; no fix-round file appears in that output. `git diff --check` passed.
+- No new dependency, DB/Supabase/storage access, development server, browser, deployment, feature-flag change, or Imweb action was involved.

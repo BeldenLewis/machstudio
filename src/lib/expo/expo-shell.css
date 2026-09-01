@@ -838,6 +838,10 @@ a.msx-card:focus-visible {
   outline-color: var(--msx-dark-text);
 }
 
+.msx-audience-group[data-variant="dark"] :focus-visible {
+  outline-color: var(--msx-dark-text);
+}
+
 /* ── 사전등록 폼 ──────────────────────────────────────────────────── */
 
 .msx-form {

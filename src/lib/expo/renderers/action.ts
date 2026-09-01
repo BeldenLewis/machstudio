@@ -108,11 +108,14 @@ export function renderDestinationAction(
     listen(button, "click", () => {
       writeAnalytics(doc, destination, options.mode);
       const view = doc.defaultView as RuntimeWindow | null;
-      const open = view?.SITE?.openModalMenu;
-      if (typeof open === "function") {
-        open.call(view?.SITE, action.modalId);
-        return;
-      }
+      try {
+        const site = view?.SITE;
+        const open = site?.openModalMenu;
+        if (typeof open === "function") {
+          open.call(site, action.modalId);
+          return;
+        }
+      } catch { /* a broken host integration falls through to the public fallback */ }
       const EventCtor = (view as unknown as { CustomEvent?: typeof CustomEvent } | null)?.CustomEvent ?? CustomEvent;
       const claimed = !doc.dispatchEvent(new EventCtor("msx:imweb-modal", {
         bubbles: true,

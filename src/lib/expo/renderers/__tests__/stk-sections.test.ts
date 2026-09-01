@@ -59,6 +59,18 @@ describe("STK public renderers", () => {
     expect(result?.node.querySelector(".msx-exhibition-symbol")?.classList.contains("msx-source-color")).toBe(true);
   });
 
+  it("uses phrasing content rather than a heading inside modal exhibition buttons", () => {
+    const result = renderExhibitionGrid(section("exhibition-grid", { items: [
+      { id: "inquiry", title: "Inquiry", description: "Talk to the team", destinationId: "inquiry", enabled: true },
+    ] }), context());
+    const action = result?.node.querySelector<HTMLButtonElement>(".msx-exhibition-item");
+    expect(action?.tagName).toBe("BUTTON");
+    expect(action?.querySelector("h1,h2,h3,h4,h5,h6")).toBeNull();
+    expect(action?.querySelector(".msx-exhibition-title")?.tagName).toBe("SPAN");
+    expect(action?.querySelector("p")).toBeNull();
+    expect(action?.querySelector(".msx-exhibition-description")?.tagName).toBe("SPAN");
+  });
+
   it("renders exactly the fixed Exhibitors and Visitors groups with no dead controls", () => {
     const result = renderAudienceLinks(section("audience-links", { groups: [
       { audience: "visitor", title: "Visitors", variant: "dark", items: [{ id: "visit", label: "Visit", destinationId: "overview", campaignIds: [], order: 0, enabled: true }] },

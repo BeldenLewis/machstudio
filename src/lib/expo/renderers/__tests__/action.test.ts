@@ -55,6 +55,20 @@ describe("destination actions", () => {
     expect(handled).toHaveBeenCalledTimes(1);
   });
 
+  it("continues to the cancelable fallback when the Imweb modal host throws", () => {
+    const handled = vi.fn((event: Event) => event.preventDefault());
+    const openModalMenu = vi.fn(() => { throw new Error("host failed"); });
+    Object.assign(window, { SITE: { openModalMenu } });
+    document.addEventListener("msx:imweb-modal", handled, { once: true });
+    const node = renderDestinationAction(document, destination({
+      type: "imweb-modal", modalId: "mInquiry", fallbackHref: "https://smarttechkorea.com/214",
+    }), { className: "msx-btn", mode: "live" });
+
+    expect(() => node?.click()).not.toThrow();
+    expect(openModalMenu).toHaveBeenCalledWith("mInquiry");
+    expect(handled).toHaveBeenCalledTimes(1);
+  });
+
   it.each(["preview-draft", "preview-published", "standalone"] as const)("writes no analytics in %s", (mode) => {
     const seen = vi.fn();
     document.addEventListener("msx:destination", seen);
