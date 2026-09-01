@@ -1,0 +1,205 @@
+{
+  "config": {
+    "schemaVersion": 2,
+    "preset": "stk-home-v1",
+    "sections": [
+      {
+        "sid": "10000000-0000-4000-8000-000000000001",
+        "type": "campaign-hero",
+        "variant": "default",
+        "enabled": true,
+        "embedEnabled": false,
+        "design": { "bg": "dark", "align": "left" },
+        "content": {
+          "eyebrow": { "ko": "국내 최대 스마트테크 전시회" },
+          "typingLines": [
+            { "ko": "550개 기업의 기술을\n3일 동안 만나보세요." },
+            { "ko": "2,000개 전시부스에서\n다음 파트너를 찾으세요." },
+            { "ko": "27개 이상의 세션에서\n산업의 다음을 확인하세요." }
+          ],
+          "accessibleHeadline": { "ko": "550개 기업의 기술을\n3일 동안 만나보세요." },
+          "overlay": 0.45,
+          "typing": { "enabled": true, "speedMs": 70, "holdMs": 2000 },
+          "ctas": [
+            {
+              "id": "exhibition-guide",
+              "label": { "ko": "전시 안내" },
+              "destinationId": "exhibition-overview",
+              "variant": "outline",
+              "audience": "all",
+              "campaignIds": [],
+              "priority": 0,
+              "fallback": true,
+              "enabled": true
+            },
+            {
+              "id": "visitor-preregister",
+              "label": { "ko": "사전등록" },
+              "destinationId": "visitor-registration",
+              "variant": "primary",
+              "audience": "visitor",
+              "campaignIds": ["visitor-registration"],
+              "priority": 1,
+              "fallback": false,
+              "enabled": true
+            }
+          ]
+        }
+      },
+      {
+        "sid": "10000000-0000-4000-8000-000000000002",
+        "type": "exhibition-grid",
+        "variant": "default",
+        "enabled": true,
+        "embedEnabled": false,
+        "design": { "bg": "light" },
+        "content": {
+          "heading": { "ko": "산업의 경계를 다시 그리는 6개 전문 전시" },
+          "items": [
+            { "id": "ai-data-center-show", "title": { "en": "AI & Data Center Show" }, "description": { "ko": "AI와 데이터센터가 여는 초연결·초지능의 미래" }, "accentToken": "ai", "destinationId": "exhibition-ai-data-center", "order": 0, "enabled": true },
+            { "id": "robot-tech-physical-ai-show", "title": { "en": "Robot Tech & Physical AI Show" }, "description": { "ko": "사람과 함께 진화하는 로봇과 피지컬 AI" }, "accentToken": "robotics", "destinationId": "exhibition-robot-tech", "order": 1, "enabled": true },
+            { "id": "ai-factory-show", "title": { "en": "AI Factory Show" }, "description": { "ko": "산업용 AI가 이끄는 자율형 공장의 미래" }, "accentToken": "autonomous-manufacturing", "destinationId": "exhibition-ai-factory", "order": 2, "enabled": true },
+            { "id": "secu-tech-show", "title": { "en": "Secu Tech Show" }, "description": { "ko": "미래 산업을 지키는 보안 기술의 새로운 기준" }, "accentToken": "teal", "destinationId": "exhibition-secu-tech", "order": 3, "enabled": true },
+            { "id": "retail-logis-tech-show", "title": { "en": "Retail & Logis Tech Show" }, "description": { "ko": "AI와 로봇으로 혁신하는 유통·물류의 미래" }, "accentToken": "purple", "destinationId": "exhibition-retail-logis", "order": 4, "enabled": true },
+            { "id": "smart-tech-show", "title": { "en": "Smart Tech Show" }, "description": { "ko": "차세대 기술로 한발 먼저 만나는 미래" }, "accentToken": "orange", "destinationId": "exhibition-smart-tech", "order": 5, "enabled": true }
+          ]
+        }
+      },
+      {
+        "sid": "10000000-0000-4000-8000-000000000003",
+        "type": "audience-links",
+        "variant": "default",
+        "enabled": true,
+        "embedEnabled": false,
+        "design": { "bg": "light" },
+        "content": {
+          "groups": [
+            {
+              "audience": "exhibitor",
+              "title": { "en": "For Exhibitors" },
+              "description": { "ko": "글로벌 스마트테크 시장으로의 도약, STK와 함께 준비하세요." },
+              "variant": "light",
+              "items": [
+                { "id": "booth-participation-guide", "label": { "ko": "부스 참가 방법" }, "destinationId": "booth-participation-guide", "campaignIds": ["exhibitor-recruitment"], "order": 0, "enabled": true },
+                { "id": "booth-inquiry-link", "label": { "ko": "부스 참가 문의" }, "destinationId": "booth-inquiry", "campaignIds": ["exhibitor-recruitment"], "order": 1, "enabled": true },
+                { "id": "brochure-link", "label": { "ko": "2026 브로슈어" }, "destinationId": "brochure-download", "campaignIds": [], "order": 2, "enabled": true },
+                { "id": "previous-results-link", "label": { "ko": "2025 개최 결과" }, "destinationId": "previous-event-results", "campaignIds": [], "order": 3, "enabled": true }
+              ]
+            },
+            {
+              "audience": "visitor",
+              "title": { "en": "For Visitors" },
+              "description": { "ko": "사전등록 방법과 전시장 오시는 길이 궁금하신가요?" },
+              "variant": "dark",
+              "items": [
+                { "id": "visitor-registration-guide", "label": { "ko": "사전등록 방법" }, "destinationId": "visitor-registration-guide", "campaignIds": ["visitor-registration"], "order": 0, "enabled": true },
+                { "id": "venue-location-link", "label": { "ko": "전시장 위치" }, "destinationId": "venue-location", "campaignIds": [], "order": 1, "enabled": true },
+                { "id": "directions-link", "label": { "ko": "오시는 길" }, "destinationId": "directions", "campaignIds": [], "order": 2, "enabled": true },
+                { "id": "parking-guide-link", "label": { "ko": "주차 안내" }, "destinationId": "parking-guide", "campaignIds": [], "order": 3, "enabled": true }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "sid": "10000000-0000-4000-8000-000000000004",
+        "type": "speaker-carousel",
+        "variant": "default",
+        "enabled": true,
+        "embedEnabled": false,
+        "design": { "bg": "dark" },
+        "content": {
+          "heading": { "en": "SPEAKERS" },
+          "description": { "ko": "산업의 최전선에서 답을 만들어온 리더들을 만나보세요." },
+          "categories": [
+            { "id": "robotics", "label": { "en": "ROBOTICS" }, "badgeToken": "robotics", "gradientToken": "robotics", "order": 0, "enabled": true },
+            { "id": "ai", "label": { "en": "AI" }, "badgeToken": "ai", "gradientToken": "ai", "order": 1, "enabled": true },
+            { "id": "autonomous-manufacturing", "label": { "en": "AUTONOMOUS MANUFACTURING" }, "badgeToken": "autonomous-manufacturing", "gradientToken": "autonomous-manufacturing", "order": 2, "enabled": true }
+          ],
+          "speakers": [
+            { "id": "henry-jiang", "name": { "en": "Henry Jiang" }, "company": { "en": "Unitree Robotics" }, "role": { "en": "APAC Business Director" }, "day": 1, "categoryId": "robotics", "crop": { "fit": "cover", "x": 50, "y": 16, "scale": 1 }, "order": 0, "enabled": true },
+            { "id": "changquk-myung", "name": { "en": "Changquk Myung" }, "company": { "en": "LG CNS" }, "role": { "en": "Vice President" }, "day": 1, "categoryId": "robotics", "crop": { "fit": "contain", "x": 50, "y": 50, "scale": 1.08 }, "order": 1, "enabled": true },
+            { "id": "jeremy-lee", "name": { "en": "Jeremy Lee" }, "company": { "en": "PaXini" }, "role": { "en": "Chief Commercial Officer" }, "day": 1, "categoryId": "robotics", "crop": { "fit": "contain", "x": 50, "y": 50, "scale": 1.12 }, "order": 2, "enabled": true },
+            { "id": "jonghyun-choi", "name": { "en": "Jonghyun Choi" }, "company": { "en": "Seoul National University" }, "role": { "en": "Associate Professor" }, "day": 1, "categoryId": "robotics", "crop": { "fit": "cover", "x": 50, "y": 14, "scale": 1 }, "order": 3, "enabled": true },
+            { "id": "kuk-won-ko", "name": { "en": "Kuk Won Ko" }, "company": { "en": "T-Robotics" }, "role": { "en": "Advisor, AI Technology Innovation" }, "day": 1, "categoryId": "robotics", "crop": { "fit": "cover", "x": 50, "y": 12, "scale": 1 }, "order": 4, "enabled": true },
+            { "id": "philippe-beaulieu", "name": { "en": "Philippe Beaulieu" }, "company": { "en": "Mecademic Industrial Robotics" }, "role": { "en": "CEO" }, "day": 1, "categoryId": "robotics", "crop": { "fit": "cover", "x": 50, "y": 12, "scale": 1 }, "order": 5, "enabled": true },
+            { "id": "jacob-jang", "name": { "en": "Jacob Jang" }, "company": { "en": "Robotiq Inc." }, "role": { "en": "Korea Regional Manager" }, "day": 1, "categoryId": "robotics", "crop": { "fit": "cover", "x": 68, "y": 18, "scale": 1 }, "order": 6, "enabled": true },
+            { "id": "aoi-fukawa", "name": { "en": "Aoi Fukawa" }, "company": { "en": "Galbot" }, "role": { "en": "Vice President" }, "day": 1, "categoryId": "robotics", "crop": { "fit": "cover", "x": 62, "y": 16, "scale": 1 }, "order": 7, "enabled": true },
+            { "id": "edward-liu", "name": { "en": "Edward Liu" }, "company": { "en": "RealMan Intelligent Technology Co., Ltd." }, "role": { "en": "Head of APAC & CoS" }, "day": 1, "categoryId": "robotics", "crop": { "fit": "cover", "x": 50, "y": 12, "scale": 1 }, "order": 8, "enabled": true },
+            { "id": "yoshua-bengio", "name": { "en": "Yoshua Bengio" }, "company": { "en": "MILA" }, "role": { "en": "Founder and Scientific Advisor" }, "day": 2, "categoryId": "ai", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 9, "enabled": true },
+            { "id": "remi-quirion", "name": { "en": "Rémi Quirion" }, "company": { "en": "Québec Government" }, "role": { "en": "Chief Scientist" }, "day": 2, "categoryId": "ai", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 10, "enabled": true },
+            { "id": "damien-pereira", "name": { "en": "Damien Pereira" }, "company": { "en": "Québec Government Office in Seoul" }, "role": { "en": "Chief Representative" }, "day": 2, "categoryId": "ai", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 11, "enabled": true },
+            { "id": "sarath-chandar", "name": { "en": "Sarath Chandar" }, "company": { "en": "Polytechnique Montréal" }, "role": { "en": "Associate Professor" }, "day": 2, "categoryId": "ai", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 12, "enabled": true },
+            { "id": "bang-liu", "name": { "en": "Bang Liu" }, "company": { "en": "Université de Montréal" }, "role": { "en": "Associate Professor" }, "day": 2, "categoryId": "ai", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 13, "enabled": true },
+            { "id": "jungjin-choi", "name": { "en": "Jungjin Choi" }, "company": { "en": "Samsung SDS" }, "role": { "en": "Group Leader" }, "day": 2, "categoryId": "ai", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 14, "enabled": true },
+            { "id": "tei-kim", "name": { "en": "Tei Kim" }, "company": { "en": "Dell Technologies" }, "role": { "en": "AI Pursuit" }, "day": 2, "categoryId": "ai", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 15, "enabled": true },
+            { "id": "sangwon-hong", "name": { "en": "Sangwon Hong" }, "company": { "en": "ElevenLabs" }, "role": { "en": "Head of Korea" }, "day": 2, "categoryId": "ai", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 16, "enabled": true },
+            { "id": "kagemu-so", "name": { "en": "Kagemu So" }, "company": { "en": "Similarweb" }, "role": { "en": "Sales Manager, Japan and Korea" }, "day": 2, "categoryId": "ai", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 17, "enabled": true },
+            { "id": "amy-kim", "name": { "en": "Amy Kim" }, "company": { "en": "Similarweb" }, "role": { "en": "Senior Customer Success Manager, Japan and Korea" }, "day": 2, "categoryId": "ai", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 18, "enabled": true },
+            { "id": "keuntae-park", "name": { "en": "Keuntae Park" }, "company": { "en": "S2W" }, "role": { "en": "CTO" }, "day": 2, "categoryId": "ai", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 19, "enabled": true },
+            { "id": "tino-hildebrand", "name": { "en": "Tino Hildebrand" }, "company": { "en": "Siemens Korea" }, "role": { "en": "Senior Vice President & Head of Digital Industries" }, "day": 3, "categoryId": "autonomous-manufacturing", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 20, "enabled": true },
+            { "id": "jong-seok-lee", "name": { "en": "Jong-Seok Lee" }, "company": { "en": "KAIST" }, "role": { "en": "Associate Professor" }, "day": 3, "categoryId": "autonomous-manufacturing", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 21, "enabled": true },
+            { "id": "seokju-cho", "name": { "en": "Seokju Cho" }, "company": { "en": "POSCO DX" }, "role": { "en": "Head of AX Laboratory" }, "day": 3, "categoryId": "autonomous-manufacturing", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 22, "enabled": true },
+            { "id": "yao-qiyuan", "name": { "en": "Yao Qiyuan" }, "company": { "en": "EngineAI" }, "role": { "en": "Co-Founder & Head of Marketing" }, "day": 3, "categoryId": "autonomous-manufacturing", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 23, "enabled": true },
+            { "id": "chen-xianyong", "name": { "en": "Chen Xianyong" }, "company": { "en": "Flexiv" }, "role": { "en": "Vice President" }, "day": 3, "categoryId": "autonomous-manufacturing", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 24, "enabled": true },
+            { "id": "jung-hoon-jang", "name": { "en": "Jung-hoon Jang" }, "company": { "en": "IntelliVIX" }, "role": { "en": "CTO" }, "day": 3, "categoryId": "autonomous-manufacturing", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 25, "enabled": true },
+            { "id": "jun-hee-park", "name": { "en": "Jun Hee Park" }, "company": { "en": "ETRI" }, "role": { "en": "Prime Researcher" }, "day": 3, "categoryId": "autonomous-manufacturing", "crop": { "fit": "cover", "x": 50, "y": 50, "scale": 1 }, "order": 26, "enabled": true },
+            { "id": "daekeun-lim", "name": { "en": "Daekeun Lim" }, "company": { "en": "SimPlatform" }, "role": { "en": "CEO" }, "day": 3, "categoryId": "autonomous-manufacturing", "crop": { "fit": "cover", "x": 85, "y": 24, "scale": 1 }, "order": 27, "enabled": true }
+          ]
+        }
+      },
+      {
+        "sid": "10000000-0000-4000-8000-000000000005",
+        "type": "sponsor-marquee",
+        "variant": "default",
+        "enabled": true,
+        "embedEnabled": false,
+        "design": { "bg": "light" },
+        "content": {
+          "heading": { "en": "SPONSORS & PARTNERS" },
+          "groups": [
+            { "id": "nation-of-honor", "title": { "en": "Nation of Honor" }, "marquee": true, "durationSeconds": 20, "order": 0 },
+            { "id": "sponsors", "title": { "en": "Sponsors" }, "marquee": true, "durationSeconds": 22, "order": 1 },
+            { "id": "supporters", "title": { "en": "Supporters" }, "marquee": true, "durationSeconds": 30, "order": 2 },
+            { "id": "official-ai-translation-partner", "title": { "en": "Official AI Translation Partner" }, "marquee": true, "durationSeconds": 20, "order": 3 }
+          ],
+          "sponsors": []
+        }
+      },
+      {
+        "sid": "10000000-0000-4000-8000-000000000006",
+        "type": "cta-band",
+        "variant": "default",
+        "enabled": true,
+        "embedEnabled": false,
+        "design": { "bg": "dark" },
+        "content": {
+          "headline": { "ko": "STK 2027 참가,\n지금 준비하세요." },
+          "audience": "exhibitor",
+          "ctas": [
+            { "id": "brochure-download", "label": { "ko": "STK 2027 브로슈어 다운로드" }, "description": { "ko": "전시 개요와 참가 정보를 한 번에 확인하세요" }, "destinationId": "brochure-download", "variant": "secondary", "audience": "exhibitor", "campaignIds": ["exhibitor-recruitment"], "priority": 0, "fallback": true, "enabled": true },
+            { "id": "booth-inquiry", "label": { "ko": "1:1 부스 참가 문의" }, "description": { "ko": "부스 유형과 참가 절차를 담당자와 상담하세요" }, "destinationId": "booth-inquiry", "variant": "primary", "audience": "exhibitor", "campaignIds": ["exhibitor-recruitment"], "priority": 1, "fallback": false, "enabled": true }
+          ]
+        }
+      }
+    ]
+  },
+  "sourceNotes": [
+    { "path": "sections.campaign-hero.video", "note": "Source video rights were not confirmed, so the video and poster are intentionally omitted." },
+    { "path": "sections.audience-links.groups.exhibitor.items.brochure-link", "sourceValue": "2026 브로슈어", "reviewedValue": "STK 2027 브로슈어 다운로드", "note": "The audience source and final CTA source use different edition labels; each reviewed visible label is preserved." },
+    { "path": "sections.speaker-carousel.speakers.changquk-myung", "sourceValue": "asset filename changguk-myung.webp", "reviewedValue": "Changquk Myung", "note": "The visible reviewed speaker spelling is preserved; the source asset filename differs." },
+    { "path": "sections.speaker-carousel.speakers.yoshua-bengio.company", "sourceValue": "asset label Université de Montréal", "reviewedValue": "MILA", "note": "The reviewed speaker card affiliation is preserved." },
+    { "path": "sections.speaker-carousel.speakers.damien-pereira.company", "sourceValue": "asset label Quebec Government of Officec in Seoul", "reviewedValue": "Québec Government Office in Seoul", "note": "The reviewed organization spelling corrects the asset-label typo." },
+    { "path": "sections.speaker-carousel.speakers.sarath-chandar.company", "sourceValue": "asset label Mila", "reviewedValue": "Polytechnique Montréal", "note": "The reviewed speaker card affiliation is preserved." },
+    { "path": "sections.speaker-carousel.speakers.bang-liu.company", "sourceValue": "asset label Mila", "reviewedValue": "Université de Montréal", "note": "The reviewed speaker card affiliation is preserved." },
+    { "path": "sections.speaker-carousel.speakers.tei-kim.name", "sourceValue": "asset label 김용태", "reviewedValue": "Tei Kim", "note": "The reviewed English speaker-card name is preserved for operator verification." },
+    { "path": "sections.speaker-carousel.speakers.seokju-cho.company", "sourceValue": "card label Posco DX", "reviewedValue": "POSCO DX", "note": "Reviewed brand capitalization is preserved." },
+    { "path": "sections.speaker-carousel.speakers.yao-qiyuan.company", "sourceValue": "asset label Engine AI", "reviewedValue": "EngineAI", "note": "The reviewed speaker-card brand spelling is preserved." },
+    { "path": "sections.speaker-carousel.speakers.chen-xianyong.name", "sourceValue": "asset label Chen xianyong", "reviewedValue": "Chen Xianyong", "note": "Reviewed name capitalization is preserved." },
+    { "path": "sections.speaker-carousel.speakers.daekeun-lim.company", "sourceValue": "card label Simplatform", "reviewedValue": "SimPlatform", "note": "Reviewed brand capitalization is preserved." },
+    { "path": "sections.speaker-carousel.speakers.jun-hee-park.role", "sourceValue": "Prime Researcher", "reviewedValue": "Prime Researcher", "note": "The uncommon English role is retained exactly from the reviewed card and remains an operator verification note." },
+    { "path": "sections.sponsor-marquee.sponsors", "note": "The source marks are placeholders, not verified sponsors, so no sponsor rows or logos are represented." },
+    { "path": "sections.cta-band.ctas.booth-inquiry", "sourceValue": "aria-label 1대1 부스 참가 문의", "reviewedValue": "1:1 부스 참가 문의", "note": "The reviewed visible CTA label is preserved." },
+    { "path": "config.settings", "note": "Campaign dates, event dates, destinations, modal ids, and public URLs remain operational inputs and are intentionally omitted." }
+  ]
+}

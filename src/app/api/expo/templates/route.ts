@@ -23,6 +23,7 @@ import {
 } from "@/lib/expo/template-service";
 import { EXPO_LIMITS } from "@/lib/expo/registry";
 import { validateTemplateSnapshot } from "@/lib/expo/request";
+import { builtInExpoPresets } from "@/lib/expo/presets";
 
 export async function GET(request: Request) {
   const guard = await guardExpoRoute(request);
@@ -37,7 +38,18 @@ export async function GET(request: Request) {
   });
 
   return NextResponse.json({
-    templates: templates.map((t) => {
+    templates: [
+      ...builtInExpoPresets().map((preset) => ({
+        id: preset.id,
+        name: preset.name,
+        description: preset.description,
+        contentMode: "full" as const,
+        pageCount: 1,
+        createdAt: null,
+        builtIn: true,
+        canManage: false,
+      })),
+      ...templates.map((t) => {
       const snap = (t.snapshot ?? {}) as { contentMode?: string; pages?: unknown[] };
       return {
         id: t.id,
@@ -46,9 +58,11 @@ export async function GET(request: Request) {
         contentMode: snap.contentMode === "full" ? "full" : "design",
         pageCount: Array.isArray(snap.pages) ? snap.pages.length : 0,
         createdAt: t.createdAt,
+        builtIn: false,
         canManage: guard.ctx.workspaceRole(t.workspaceId) !== "MEMBER",
       };
-    }),
+      }),
+    ],
   });
 }
 

@@ -12,7 +12,7 @@
  * 그 사실을 화면이 말해 주지 않으면, 운영자는 다 된 줄 알고 발행한다. 그래서 무엇을
  * 다시 연결해야 하는지 목록으로 돌려준다.
  */
-import { buildExpoTemplate, instantiateExpoTemplate, type TemplateContentMode, type TemplateSnapshot, type SourcePage, type InstantiatedPage } from "@/lib/expo/template";
+import { buildExpoTemplate, instantiateBuiltInExpoTemplate, instantiateExpoTemplate, type TemplateContentMode, type TemplateSnapshot, type SourcePage, type InstantiatedPage } from "@/lib/expo/template";
 import { collectExpoMediaUrls, rewriteExpoMediaUrls, type NotCopiedMedia } from "@/lib/expo/media";
 import type { ExpoTheme } from "@/lib/expo/types";
 
@@ -150,6 +150,23 @@ export function planTemplateInstantiate(snapshot: unknown): TemplateInstantiateP
     theme: result.theme,
     defaultLocale: result.defaultLocale,
     pages: result.pages,
+    mediaUrls: collectExpoMediaUrls(sections),
+    linksCleared: result.checklist.internalLinksNeedReview,
+    registerFormSections: countRegisterForms(sections),
+  };
+}
+
+export function planBuiltInPresetInstantiate(
+  presetId: string,
+  input?: { randomUUID?: () => string },
+): TemplateInstantiatePlan {
+  const result = instantiateBuiltInExpoTemplate(presetId, input);
+  const sections = result.pages.flatMap((page) => page.draft.sections);
+  return {
+    theme: result.theme,
+    defaultLocale: result.defaultLocale,
+    pages: result.pages,
+    // 기본 제공 초안은 운영 미디어를 의도적으로 비워 둔다. Storage 소유권도 없다.
     mediaUrls: collectExpoMediaUrls(sections),
     linksCleared: result.checklist.internalLinksNeedReview,
     registerFormSections: countRegisterForms(sections),

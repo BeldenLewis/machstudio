@@ -220,7 +220,17 @@ describe("목록", () => {
     ]);
     const { GET } = await import("@/app/api/expo/templates/route");
     const body = await (await GET(read())).json();
-    expect(body.templates[0]).toMatchObject({ contentMode: "full", pageCount: 1, canManage: false });
+    expect(body.templates.find((template: { id: string }) => template.id === "t1"))
+      .toMatchObject({ contentMode: "full", pageCount: 1, canManage: false });
+  });
+
+  it("기본 제공 STK 프리셋을 DB 템플릿 앞에 불변 항목으로 합친다", async () => {
+    prismaMock.expoTemplate.findMany.mockResolvedValue([]);
+    const { GET } = await import("@/app/api/expo/templates/route");
+    const body = await (await GET(read())).json();
+    expect(body.templates[0]).toMatchObject({
+      id: "stk-home-v1", builtIn: true, contentMode: "full", pageCount: 1, canManage: false,
+    });
   });
 });
 
@@ -265,6 +275,17 @@ describe("이름 변경·영구 삭제는 워크스페이스 관리자만", () =
     expect((await GET(read(), p("t9"))).status).toBe(404);
     expect((await PATCH(patch({ name: "x" }), p("t9"))).status).toBe(404);
     expect((await DELETE(del(), p("t9"))).status).toBe(404);
+  });
+
+  it("기본 제공 프리셋은 같은 id의 DB 행이 있어도 이름 변경·삭제할 수 없다", async () => {
+    prismaMock.expoTemplate.findFirst.mockResolvedValue({
+      id: "stk-home-v1", workspaceId: "w1", name: "위조 행", description: null, snapshot: {}, createdAt: new Date(),
+    });
+    const { PATCH, DELETE } = await import("@/app/api/expo/templates/[templateId]/route");
+    expect((await PATCH(patch({ name: "새 이름" }), p("stk-home-v1"))).status).toBe(404);
+    expect((await DELETE(del(), p("stk-home-v1"))).status).toBe(404);
+    expect(prismaMock.expoTemplate.update).not.toHaveBeenCalled();
+    expect(prismaMock.expoTemplate.delete).not.toHaveBeenCalled();
   });
 });
 
@@ -420,5 +441,27 @@ describe("템플릿에서 새 사이트를 만든다", () => {
     const copiedTo = storageMock.copy.mock.calls[0][1];
     expect(storageMock.remove).toHaveBeenCalledWith([copiedTo]);
     expect(storageMock.remove.mock.calls[0][0]).not.toContain("w1/expo-templates/t1/a.jpg");
+  });
+
+  it("기본 제공 STK 프리셋은 DB 템플릿·Storage를 읽지 않고 같은 프로젝트 권한으로 만든다", async () => {
+    prismaMock.project.findUnique.mockResolvedValue({ id: "proj2", workspaceId: "w1" });
+    const res = await instantiate({ projectId: "proj2", name: "STK 2027" }, "stk-home-v1");
+    expect(res.status).toBe(201);
+    expect(prismaMock.expoTemplate.findFirst).not.toHaveBeenCalled();
+    expect(storageMock.copy).not.toHaveBeenCalled();
+    const draft = prismaMock.expoPage.create.mock.calls[0][0].data.draft;
+    expect(draft.preset).toBe("stk-home-v1");
+    expect(draft.sections.map((section: { type: string }) => section.type)).toEqual([
+      "campaign-hero", "exhibition-grid", "audience-links", "speaker-carousel", "sponsor-marquee", "cta-band",
+    ]);
+  });
+
+  it("기본 제공 STK 프리셋도 목적지 프로젝트 접근 권한을 우회하지 않는다", async () => {
+    prismaMock.workspaceMember.findMany.mockResolvedValue([{ workspaceId: "w1", role: "MEMBER" }]);
+    prismaMock.projectMember.findMany.mockResolvedValue([]);
+    prismaMock.project.findUnique.mockResolvedValue({ id: "proj2", workspaceId: "w1" });
+    const res = await instantiate({ projectId: "proj2", name: "STK 2027" }, "stk-home-v1");
+    expect(res.status).toBe(404);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 });

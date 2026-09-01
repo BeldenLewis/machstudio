@@ -18,6 +18,7 @@ import { requireOwnedTemplate, requireWorkspaceAdmin } from "@/lib/expo/auth";
 import { expoTemplatePrefix, purgeExpoMediaPrefix } from "@/lib/expo/media";
 import { createExpoStorage } from "@/lib/expo/storage";
 import { normalizeTemplateMeta } from "@/lib/expo/template-service";
+import { isBuiltInExpoPresetId } from "@/lib/expo/presets";
 
 async function load(templateId: string) {
   return prisma.expoTemplate.findFirst({
@@ -68,6 +69,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ te
   const parsed = await readJsonBody(request);
   if (!parsed.ok) return parsed.response;
 
+  // 예약 id는 DB에 같은 행이 생겨도 관리 대상이 아니다.
+  if (isBuiltInExpoPresetId(templateId)) return authFailure({ kind: "not-found" });
+
   const row = await load(templateId);
   const owned = requireOwnedTemplate(row, guard.ctx.userId, guard.ctx.memberWorkspaceIds);
   if (!owned.ok) return authFailure(owned.failure);
@@ -91,6 +95,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ t
   const { templateId } = await params;
   const guard = await guardExpoRoute(request, { write: true });
   if (!guard.ok) return guard.response;
+
+  if (isBuiltInExpoPresetId(templateId)) return authFailure({ kind: "not-found" });
 
   const row = await load(templateId);
   const owned = requireOwnedTemplate(row, guard.ctx.userId, guard.ctx.memberWorkspaceIds);

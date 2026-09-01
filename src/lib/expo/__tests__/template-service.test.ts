@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyMediaToPages, applyMediaToSnapshot, normalizeTemplateMeta, planTemplateInstantiate,
-  planTemplateSave, reconnectChecklist, TEMPLATE_NAME_MAX,
+  planBuiltInPresetInstantiate, planTemplateSave, reconnectChecklist, TEMPLATE_NAME_MAX,
 } from "@/lib/expo/template-service";
 
 /**
@@ -109,6 +109,13 @@ describe("복제 계획", () => {
   it("읽을 수 없는 스냅샷은 던진다 — 반쪽짜리 사이트를 만들지 않는다", () => {
     expect(() => planTemplateInstantiate({ version: 99 })).toThrow();
     expect(() => planTemplateInstantiate({})).toThrow();
+  });
+
+  it("기본 제공 STK 프리셋은 외부 Storage 소유권을 복사하지 않는다", () => {
+    const plan = planBuiltInPresetInstantiate("stk-home-v1");
+    expect(plan.pages).toHaveLength(1);
+    expect(plan.mediaUrls).toEqual([]);
+    expect(plan.pages[0].draft.sections).toHaveLength(6);
   });
 });
 
