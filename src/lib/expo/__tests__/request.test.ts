@@ -12,7 +12,7 @@ import { normalizeExpoPage } from "@/lib/expo/config";
  */
 
 const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-const draft = (sections: unknown[]) => ({ sections });
+const draft = (sections: unknown[]) => ({ schemaVersion: 2, sections });
 
 describe("정상 입력은 통과한다", () => {
   it("보통의 페이지", () => {
@@ -230,6 +230,40 @@ describe("쓰기가 막는다 — 정규화가 조용히 버리던 것들", () =
     if (!r.ok) {
       expect(r.errors).toHaveLength(51);
       expect(r.errors[50].message).toContain("50건이 더 있어요");
+    }
+  });
+});
+
+describe("V2 설정 검증", () => {
+  const v2 = (settings: Record<string, unknown>) => ({ schemaVersion: 2, settings, sections: [] });
+
+  it("모르는 스키마와 잘못된 캠페인 시간을 정확한 경로로 막는다", () => {
+    const legacyWrite = validatePageDraft({ sections: [] });
+    expect(legacyWrite.ok).toBe(false);
+    if (!legacyWrite.ok) expect(legacyWrite.errors).toContainEqual(expect.objectContaining({ path: "schemaVersion", code: "invalid-schema" }));
+
+    const unknown = validatePageDraft({ schemaVersion: 3, sections: [] });
+    expect(unknown.ok).toBe(false);
+    if (!unknown.ok) expect(unknown.errors).toContainEqual(expect.objectContaining({ path: "schemaVersion", code: "invalid-schema" }));
+
+    const badDate = validatePageDraft(v2({ campaigns: [{
+      id: "apply", label: "신청", startsAt: "2027-02-01T00:00:00+09:00", endsAt: "2027-01-01T00:00:00+09:00", override: "auto", enabled: true,
+    }] }));
+    expect(badDate.ok).toBe(false);
+    if (!badDate.ok) expect(badDate.errors).toContainEqual(expect.objectContaining({ path: "settings.campaigns[0].endsAt", code: "invalid-date" }));
+  });
+
+  it("중복 목적지와 안전하지 않은 동작을 막는다", () => {
+    const result = validatePageDraft(v2({ destinations: [
+      { id: "contact", label: "문의", action: { type: "url", href: "https://example.com" }, enabled: true },
+      { id: "contact", label: "중복", action: { type: "url", href: "https://user:pass@example.com" }, enabled: true },
+      { id: "download", label: "다운로드", action: { type: "download", href: "http://127.0.0.1/file" }, enabled: true },
+    ] }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContainEqual(expect.objectContaining({ path: "settings.destinations[1].id", code: "duplicate-id" }));
+      expect(result.errors).toContainEqual(expect.objectContaining({ path: "settings.destinations[1].action.href", code: "invalid-url" }));
+      expect(result.errors).toContainEqual(expect.objectContaining({ path: "settings.destinations[2].action.href", code: "invalid-url" }));
     }
   });
 });

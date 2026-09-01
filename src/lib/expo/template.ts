@@ -19,7 +19,7 @@
 import { normalizeExpoPage, normalizeExpoTheme, newSection } from "@/lib/expo/config";
 import { EXPO_LIMITS, sectionDef } from "@/lib/expo/registry";
 import { slugFromTitle } from "@/lib/expo/model";
-import type { ExpoSection, ExpoTheme, SlotDef } from "@/lib/expo/types";
+import type { ExpoPageConfig, ExpoSection, ExpoTheme, SlotDef } from "@/lib/expo/types";
 
 export const EXPO_TEMPLATE_VERSION = 1;
 
@@ -209,7 +209,7 @@ export interface InstantiatedPage {
   isHome: boolean;
   sortOrder: number;
   parentId: string | null;
-  draft: { sections: ExpoSection[] };
+  draft: ExpoPageConfig;
 }
 
 export interface InstantiateResult {
@@ -297,7 +297,7 @@ export function instantiateExpoTemplate(raw: unknown): InstantiateResult {
       // 부모가 템플릿에 없으면 최상위로 올린다 — 고아 페이지를 만들지 않는다.
       parentId: idOf.get(str(src.parentKey)) ?? null,
       // 마지막으로 정규화를 한 번 더 태운다 — 여기 통과한 것만 저장된다.
-      draft: normalizeExpoPage({ sections }) as { sections: ExpoSection[] },
+      draft: normalizeExpoPage({ sections }),
     };
   });
 

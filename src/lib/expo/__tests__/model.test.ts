@@ -140,6 +140,6 @@ describe("homePageDefaults", () => {
     const h = homePageDefaults("ko");
     expect(h.isHome).toBe(true);
     expect(h.sortOrder).toBe(0);
-    expect(h.draft).toEqual({ sections: [] });
+    expect(h.draft).toEqual({ schemaVersion: 2, sections: [] });
   });
 });

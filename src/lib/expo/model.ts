@@ -124,7 +124,7 @@ export function homePageDefaults(locale = "ko") {
     title: locale === "ko" ? "홈" : "Home",
     isHome: true,
     sortOrder: 0,
-    draft: { sections: [] } satisfies ExpoPageConfig,
+    draft: { schemaVersion: 2, sections: [] } satisfies ExpoPageConfig,
   };
 }
 

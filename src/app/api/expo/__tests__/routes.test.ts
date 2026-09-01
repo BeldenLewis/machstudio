@@ -208,7 +208,7 @@ describe("draft 저장 — 편집 충돌", () => {
     prismaMock.expoPage.update.mockResolvedValue({ id: "pg1", draftRevision: 8 });
     const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
 
-    const res = await PATCH(patch({ draft: { sections: [] }, draftRevision: 7 }),
+    const res = await PATCH(patch({ draft: { schemaVersion: 2, sections: [] }, draftRevision: 7 }),
       { params: Promise.resolve({ pageId: "pg1" }) });
     expect(res.status).toBe(200);
     expect(prismaMock.expoPage.update).toHaveBeenCalled();
@@ -219,12 +219,12 @@ describe("draft 저장 — 편집 충돌", () => {
     prismaMock.expoPage.findFirst.mockResolvedValue(page);
     const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
 
-    const res = await PATCH(patch({ draft: { sections: [] }, draftRevision: 3 }),
+    const res = await PATCH(patch({ draft: { schemaVersion: 2, sections: [] }, draftRevision: 3 }),
       { params: Promise.resolve({ pageId: "pg1" }) });
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.draftRevision).toBe(7);
-    expect(body.draft).toEqual({ sections: [] });
+    expect(body.draft).toEqual({ schemaVersion: 2, sections: [] });
     expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
   });
 
@@ -234,7 +234,7 @@ describe("draft 저장 — 편집 충돌", () => {
     const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
 
     const res = await PATCH(patch({
-      draft: { sections: [{
+      draft: { schemaVersion: 2, sections: [{
         sid: "00000000-0000-4000-8000-000000000001",
         type: "kv", variant: "column", content: { title: "가".repeat(600) },
       }] },
@@ -333,7 +333,7 @@ describe("역할 — 화면이 숨긴 것은 API 도 막는다", () => {
     prismaMock.expoPage.update.mockResolvedValue({ id: "pg1", draftRevision: 4 });
     const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
     const res = await PATCH(
-      write({ draft: { sections: [] }, draftRevision: 3 }),
+      write({ draft: { schemaVersion: 2, sections: [] }, draftRevision: 3 }),
       { params: Promise.resolve({ pageId: "pg1" }) },
     );
     expect(res.status).toBe(200);
@@ -600,7 +600,7 @@ describe("릴리스 잠금", () => {
     const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
 
     const res = await PATCH(
-      write({ draft: { sections: [sec(sid, true)] }, draftRevision: 3 }, { }),
+      write({ draft: { schemaVersion: 2, sections: [sec(sid, true)] }, draftRevision: 3 }, { }),
       { params: Promise.resolve({ pageId: "pg1" }) },
     );
     expect(res.status).toBe(422);
@@ -619,7 +619,7 @@ describe("릴리스 잠금", () => {
 
     const next = { ...sec(sid, true), content: { body: "고친 본문" } };
     const res = await PATCH(
-      write({ draft: { sections: [next] }, draftRevision: 3 }),
+      write({ draft: { schemaVersion: 2, sections: [next] }, draftRevision: 3 }),
       { params: Promise.resolve({ pageId: "pg1" }) },
     );
     expect(res.status).toBe(200);

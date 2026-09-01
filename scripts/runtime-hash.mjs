@@ -127,6 +127,7 @@ export function expoSourceFiles(root) {
     join(root, "src/lib/expo/view-page.ts"),
     join(root, "src/lib/expo/view-sections.ts"),
     join(root, "src/lib/expo/custom-code.ts"),
+    join(root, "src/lib/expo/destination.ts"),
     join(root, "src/lib/expo/form-bridge.ts"),
     join(root, "src/lib/expo/seen.ts"),
     join(root, "src/lib/expo/preview-bridge.ts"),
@@ -142,6 +143,7 @@ export function expoSourceFiles(root) {
     // 마운트 자리 표시 상수를 스니펫 만드는 쪽과 공유한다 — 각자 적어 두면 한쪽만
     // 고쳐지는 날 코드는 붙었는데 런타임이 그 자리를 못 찾는다(snippet.ts 참고).
     join(root, "src/lib/expo/snippet.ts"),
+    join(root, "src/lib/expo/types.ts"),
     // 공용
     join(root, "src/lib/collect-form/target-registry.ts"),
     join(root, "src/lib/color.ts"),
@@ -149,6 +151,7 @@ export function expoSourceFiles(root) {
     join(root, "src/lib/dom/focus.ts"),
     join(root, "src/lib/dom/scroll-lock.ts"),
     join(root, "src/lib/webinar-config.ts"),
+    join(root, "src/lib/url-safety.ts"),
   ]).sort();
 }
 

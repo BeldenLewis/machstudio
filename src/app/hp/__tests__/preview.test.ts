@@ -402,4 +402,25 @@ describe("사전등록 소스 확인", () => {
       projectId: "p1", deletedAt: null, mode: "builder",
     });
   });
+
+  it("V2 해석 결과를 미리보기 런타임에 싣는다", async () => {
+    prismaMock.expoSite.findFirst.mockResolvedValue(site({
+      pages: [{
+        id: "pg1", isHome: true, sortOrder: 0,
+        draft: {
+          schemaVersion: 2,
+          settings: {
+            campaigns: [{ id: "apply", label: "참가기업 모집", startsAt: "2020-01-01T00:00:00+09:00", endsAt: "2030-01-01T00:00:00+09:00", override: "auto", enabled: true }],
+            destinations: [{ id: "contact", label: "문의", action: { type: "anchor", target: "contact" }, enabled: true }],
+          },
+          sections: [section()],
+        },
+        published: null, imwebUrl: null, deletedAt: null,
+      }],
+    }));
+    const args = bootArgs(await (await get()).text());
+    expect(args).toContain('"campaigns":[{"id":"apply","label":"참가기업 모집","active":true}]');
+    expect(args).toContain('"destinations":[{"id":"contact","label":"문의","action":{"type":"anchor","target":"contact"}}]');
+    expect(args).not.toContain('"startsAt"');
+  });
 });

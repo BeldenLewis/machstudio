@@ -261,6 +261,25 @@ describe("사전등록 소스 확인", () => {
     prismaMock.collectSource.findMany.mockResolvedValue([{ id: "src-other" }]);
     expect(bootArgs(await (await get({ pageId: "pg1" })).text())).toContain("src-other");
   });
+
+  it("서버에서 해석한 V2 행사·캠페인·목적지를 런타임에 싣는다", async () => {
+    prismaMock.expoPage.findFirst.mockResolvedValue(page({
+      published: {
+        schemaVersion: 2,
+        settings: {
+          event: { edition: 2027, startsAt: "2027-06-01T00:00:00+09:00", endsAt: "2027-06-03T00:00:00+09:00" },
+          campaigns: [{ id: "apply", label: "참가기업 모집", startsAt: "2020-01-01T00:00:00+09:00", endsAt: "2030-01-01T00:00:00+09:00", override: "auto", enabled: true }],
+          destinations: [{ id: "contact", label: "문의", action: { type: "anchor", target: "contact" }, enabled: true }],
+        },
+        sections: [{ sid: SID, type: "kv", variant: "column", enabled: true, embedEnabled: false, design: {}, content: { title: { ko: "제목" } } }],
+      },
+    }));
+    const args = bootArgs(await (await get({ pageId: "pg1" })).text());
+    expect(args).toContain('"campaigns":[{"id":"apply","label":"참가기업 모집","active":true}]');
+    expect(args).toContain('"destinations":[{"id":"contact","label":"문의","action":{"type":"anchor","target":"contact"}}]');
+    expect(args).toContain('"event":{"edition":2027');
+    expect(args).not.toContain('"override"');
+  });
 });
 
 describe("스크립트 본문 안전", () => {

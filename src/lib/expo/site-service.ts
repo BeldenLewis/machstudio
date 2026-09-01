@@ -114,7 +114,7 @@ export function prepareNewPage(
     isHome: false,
     // 홈이 0 을 쓰므로 새 페이지는 항상 그 뒤다.
     sortOrder: Math.max(0, ...active.map((p) => p.sortOrder)) + 1,
-    draft: { sections: [] },
+    draft: { schemaVersion: 2, sections: [] },
   });
 }
 

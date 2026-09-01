@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EXPO_SECTIONS, EXPO_LIMITS, sectionDef } from "@/lib/expo/registry";
 import { normalizeExpoPage, normalizeExpoTheme, newSection } from "@/lib/expo/config";
+import { EXPO_V2_RULES } from "@/lib/expo/types";
 
 /**
  * 정규화는 **총 함수**다 — 저장된 JSON 은 무엇이든 올 수 있고(직접 고친 값, 옛 버전,
@@ -45,11 +46,38 @@ describe("카탈로그 — W1 의 6타입", () => {
   });
 });
 
+describe("Expo V2 설정", () => {
+  it("V1 스냅샷을 sid 변경 없이 V2로 올린다", () => {
+    const sid = uid(11);
+    const normalized = normalizeExpoPage({ sections: [{ sid, type: "textblock", variant: "prose", content: { body: "본문" } }] });
+    expect(normalized.schemaVersion).toBe(2);
+    expect(normalized.sections[0]?.sid).toBe(sid);
+    expect(normalized.settings).toBeUndefined();
+  });
+
+  it("V2 설정은 안전한 구조만 보존한다", () => {
+    const normalized = normalizeExpoPage({
+      schemaVersion: 2,
+      preset: "stk-home-v1",
+      settings: {
+        event: { edition: 2027, startsAt: "2027-06-10T00:00:00+09:00", endsAt: "2027-06-12T00:00:00+09:00", facts: { companies: 500 } },
+        campaigns: [{ id: "visitor-registration", label: "사전등록", startsAt: "2027-01-01T00:00:00+09:00", endsAt: "2027-06-01T00:00:00+09:00", override: "auto", enabled: true }],
+        destinations: [{ id: "apply", label: "신청", action: { type: "url", href: "https://example.com/apply", newTab: true }, enabled: true }],
+      },
+      sections: [],
+    });
+    expect(normalized).toMatchObject({ schemaVersion: 2, preset: "stk-home-v1" });
+    expect(normalized.settings?.campaigns?.[0]?.id).toBe("visitor-registration");
+    expect(normalized.settings?.destinations?.[0]?.action).toEqual({ type: "url", href: "https://example.com/apply", newTab: true });
+    expect(EXPO_V2_RULES.id.test("visitor-registration")).toBe(true);
+  });
+});
+
 describe("정규화 — 던지지 않는다", () => {
   it("무엇을 넣어도 페이지 모양이 나온다", () => {
     for (const bad of [null, undefined, 0, "", "문자열", [], { sections: null }, { sections: "x" }, { sections: [null, 1, "a"] }]) {
       expect(() => normalizeExpoPage(bad)).not.toThrow();
-      expect(normalizeExpoPage(bad)).toEqual({ sections: [] });
+      expect(normalizeExpoPage(bad)).toEqual({ schemaVersion: 2, sections: [] });
     }
   });
 

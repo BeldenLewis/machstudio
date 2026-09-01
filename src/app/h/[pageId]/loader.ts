@@ -151,10 +151,11 @@ export async function serveExpoRuntime(req: Request, target: LoaderTarget): Prom
    * 구획 단독: 페이지의 `liveAt`·`enabled` 를 보지 않는다 — 그게 부분 이행의 정의다.
    *   발행본에 그 sid 가 아예 없으면 404, 있는데 게이트가 닫혀 있으면 연결 확인.
    */
+  const publishedConfig = normalizeExpoPage(row.published);
   let sections: ExpoSection[] = [];
   let connectionOnly = false;
   if (target.sid) {
-    const known = normalizeExpoPage(row.published).sections.some((s) => s.sid === target.sid);
+    const known = publishedConfig.sections.some((s) => s.sid === target.sid);
     if (!known) return script("not found", 404, CACHEABLE_MISS);
     const one = standaloneSection(row.published, target.sid);
     if (one) sections = [one];
@@ -165,7 +166,7 @@ export async function serveExpoRuntime(req: Request, target: LoaderTarget): Prom
     connectionOnly = true;
   }
 
-  let payloadSections: Array<Record<string, unknown>> = [];
+  let resolvedPayload: ReturnType<typeof buildExpoPayload> | null = null;
   if (!connectionOnly && sections.length > 0) {
     /**
      * 내부 링크는 **같은 사이트의 살아 있는 페이지**만 푼다. 형제 페이지를 한 번에
@@ -209,7 +210,7 @@ export async function serveExpoRuntime(req: Request, target: LoaderTarget): Prom
       return { ...section, content: { ...section.content, sourceRef: "" } };
     });
 
-    payloadSections = buildExpoPayload(safe, { locale, pages: siblings }).sections;
+    resolvedPayload = buildExpoPayload({ ...publishedConfig, sections: safe }, { locale, pages: siblings, now: new Date() });
   }
 
   const payload = {
@@ -217,7 +218,10 @@ export async function serveExpoRuntime(req: Request, target: LoaderTarget): Prom
     ...(target.sid ? { sectionId: target.sid } : {}),
     theme,
     origin,
-    sections: payloadSections,
+    sections: resolvedPayload?.sections ?? [],
+    campaigns: resolvedPayload?.campaigns ?? [],
+    destinations: resolvedPayload?.destinations ?? [],
+    ...(resolvedPayload?.event ? { event: resolvedPayload.event } : {}),
     ...(connectionOnly ? { connectionOnly: true } : {}),
   };
 

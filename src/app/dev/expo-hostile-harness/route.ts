@@ -27,7 +27,7 @@
 import { NextResponse } from "next/server";
 import { buildExpoPayload } from "@/lib/expo/payload";
 import { EXPO_RUNTIME_JS } from "@/generated/expo-runtime";
-import { EXPO_DEFAULT_THEME } from "@/lib/expo/config";
+import { EXPO_DEFAULT_THEME, normalizeExpoPage } from "@/lib/expo/config";
 import type { ExpoSection } from "@/lib/expo/types";
 
 const sid = (n: number) =>
@@ -108,7 +108,7 @@ export async function GET(request: Request) {
     pageId: "hostile-harness",
     theme: EXPO_DEFAULT_THEME,
     origin: url.origin,
-    sections: buildExpoPayload(SECTIONS, { locale: "ko", pages: [] }).sections,
+    sections: buildExpoPayload(normalizeExpoPage({ sections: SECTIONS }), { locale: "ko", pages: [], now: new Date() }).sections,
     mode: "preview-draft" as const,
   };
 

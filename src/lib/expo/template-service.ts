@@ -163,6 +163,6 @@ export function applyMediaToPages(
   if (map.size === 0) return pages;
   return pages.map((page) => ({
     ...page,
-    draft: { sections: rewriteExpoMediaUrls(page.draft.sections, map) },
+    draft: { ...page.draft, sections: rewriteExpoMediaUrls(page.draft.sections, map) },
   }));
 }

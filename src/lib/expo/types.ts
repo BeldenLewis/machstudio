@@ -85,9 +85,85 @@ export interface ExpoTheme {
 }
 
 /** 페이지의 편집 상태(draft)와 발행 스냅샷(published)이 같은 모양이다. */
-export interface ExpoPageConfig {
+export type CampaignOverride = "auto" | "force-on" | "force-off";
+export type AudienceId = "all" | "exhibitor" | "visitor";
+export type CampaignPreviewMode = "current" | "exhibitor" | "visitor" | "both" | "ended";
+
+export interface CampaignConfig {
+  id: string;
+  label: string;
+  startsAt: string;
+  endsAt: string;
+  override: CampaignOverride;
+  enabled: boolean;
+}
+
+export type DestinationAction =
+  | { type: "url"; href: string; newTab?: boolean }
+  | { type: "anchor"; target: string }
+  | { type: "download"; href: string }
+  | { type: "imweb-modal"; modalId: string; fallbackHref?: string };
+
+export interface DestinationConfig {
+  id: string;
+  label: string;
+  action: DestinationAction;
+  analytics?: { eventName: string; contentId?: string };
+  enabled: boolean;
+}
+
+export interface ExpoEventConfig {
+  edition: number;
+  startsAt: string;
+  endsAt: string;
+  facts?: { companies?: number; sessions?: number; booths?: number };
+}
+
+export interface ExpoPageConfigV2 {
+  schemaVersion: 2;
+  preset?: string;
+  settings?: {
+    event?: ExpoEventConfig;
+    campaigns?: CampaignConfig[];
+    destinations?: DestinationConfig[];
+  };
   sections: ExpoSection[];
 }
+
+/** V2 is the sole in-memory page shape; V1 is promoted during normalization. */
+export type ExpoPageConfig = ExpoPageConfigV2;
+
+export interface ResolvedCampaignState {
+  id: string;
+  label: string;
+  active: boolean;
+}
+
+export interface ResolvedDestination {
+  id: string;
+  label: string;
+  action: DestinationAction;
+  analytics?: { eventName: string; contentId?: string };
+}
+
+export type IssueSeverity = "error" | "warning";
+
+export interface FieldIssue {
+  path: string;
+  code: string;
+  message: string;
+  severity: IssueSeverity;
+  sid?: string;
+}
+
+export const EXPO_V2_RULES = {
+  id: /^[a-z][a-z0-9-]{0,63}$/,
+  anchorOrModal: /^[A-Za-z][A-Za-z0-9_-]{0,127}$/,
+  analyticsEvent: /^[A-Za-z][A-Za-z0-9_]{0,63}$/,
+  timezoneSuffix: /(Z|[+-]\d{2}:\d{2})$/,
+  maxRows: 100,
+  maxVisibleCtas: 2,
+} as const;
 
 /** 운영자가 보는 페이지 상태. 판정은 `derivePageState` 한 곳에서만 한다. */
 export type ExpoPageState = "draft" | "published" | "live";
