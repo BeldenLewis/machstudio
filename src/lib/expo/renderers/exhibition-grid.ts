@@ -1,5 +1,6 @@
 import { renderDestinationAction } from "@/lib/expo/renderers/action";
 import { renderImage, renderSectionShell } from "@/lib/expo/renderers/image";
+import { createRendererLifecycle } from "@/lib/expo/renderers/lifecycle";
 import type { ExpoImageValue } from "@/lib/expo/sections/types";
 import type { SectionRenderer } from "@/lib/expo/types";
 
@@ -8,7 +9,6 @@ const rows = (value: unknown): Array<Record<string, unknown>> => Array.isArray(v
 
 export const renderExhibitionGrid: SectionRenderer = (section, context) => {
   const doc = context.doc;
-  const controller = new (doc.defaultView?.AbortController ?? AbortController)();
   const items = rows(section.content.items)
     .filter((item) => item.enabled !== false && text(item.title) && context.destinations.has(text(item.destinationId)))
     .map((item, index) => ({ item, index }))
@@ -16,6 +16,8 @@ export const renderExhibitionGrid: SectionRenderer = (section, context) => {
     .map(({ item }) => item);
   if (items.length === 0) return null;
 
+  const lifecycle = createRendererLifecycle(doc);
+  return lifecycle.guard(() => {
   const root = doc.createElement("div");
   root.className = "msx-exhibition";
   const headingText = text(section.content.heading);
@@ -33,7 +35,7 @@ export const renderExhibitionGrid: SectionRenderer = (section, context) => {
     const action = renderDestinationAction(doc, { ...destination, label: text(item.title) }, {
       className: "msx-exhibition-item",
       mode: context.mode,
-      signal: controller.signal,
+      signal: lifecycle.signal,
     });
     if (!action) continue;
     while (action.firstChild) action.removeChild(action.firstChild);
@@ -54,12 +56,13 @@ export const renderExhibitionGrid: SectionRenderer = (section, context) => {
     grid.appendChild(action);
   }
   if (!grid.childElementCount) {
-    controller.abort();
+    lifecycle.dispose();
     return null;
   }
   root.appendChild(grid);
   const shell = renderSectionShell(doc, section, root, { className: "msx-exhibition-section" });
   shell.setAttribute("data-count", String(grid.childElementCount));
   shell.style.setProperty("--msx-exhibition-columns", String(grid.childElementCount));
-  return { node: shell, dispose: () => controller.abort() };
+  return { node: shell, dispose: lifecycle.dispose };
+  });
 };

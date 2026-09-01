@@ -1,5 +1,6 @@
 import { isSafePublicUrl } from "@/lib/expo/destination";
 import { renderImage, renderSectionShell } from "@/lib/expo/renderers/image";
+import { createRendererLifecycle } from "@/lib/expo/renderers/lifecycle";
 import type { ExpoImageValue, ImageCrop, SpeakerToken } from "@/lib/expo/sections/types";
 import type { SectionRenderer } from "@/lib/expo/types";
 
@@ -17,7 +18,6 @@ const ordered = (value: unknown) => rows(value).map((item, index) => ({ item, in
 
 export const renderSpeakerCarousel: SectionRenderer = (section, context) => {
   const doc = context.doc;
-  const controller = new (doc.defaultView?.AbortController ?? AbortController)();
   const speakers = ordered(section.content.speakers).filter((speaker) => speaker.enabled !== false && text(speaker.name) && text(speaker.categoryId));
   const occupied = new Set(speakers.map((speaker) => text(speaker.categoryId)));
   const categories = ordered(section.content.categories).filter((category) => category.enabled !== false && text(category.label) && occupied.has(text(category.id)));
@@ -25,6 +25,8 @@ export const renderSpeakerCarousel: SectionRenderer = (section, context) => {
   const publicSpeakers = speakers.filter((speaker) => categoryIds.has(text(speaker.categoryId)));
   if (!categories.length || !publicSpeakers.length) return null;
 
+  const lifecycle = createRendererLifecycle(doc);
+  return lifecycle.guard(() => {
   const root = doc.createElement("div");
   root.className = "msx-speakers";
   const headingText = text(section.content.heading);
@@ -71,7 +73,7 @@ export const renderSpeakerCarousel: SectionRenderer = (section, context) => {
     tab.type = "button";
     tab.dataset.category = categoryId;
     tab.textContent = text(category.label);
-    tab.addEventListener("click", () => applyActive(categoryId), { signal: controller.signal });
+    tab.addEventListener("click", () => applyActive(categoryId), { signal: lifecycle.signal });
     tab.addEventListener("keydown", (event) => {
       const current = tabs.indexOf(tab);
       let next = current;
@@ -82,7 +84,7 @@ export const renderSpeakerCarousel: SectionRenderer = (section, context) => {
       else return;
       event.preventDefault();
       applyActive(tabs[next].dataset.category ?? activeId, true);
-    }, { signal: controller.signal });
+    }, { signal: lifecycle.signal });
     tabs.push(tab);
     filters.appendChild(tab);
   });
@@ -147,27 +149,28 @@ export const renderSpeakerCarousel: SectionRenderer = (section, context) => {
     startScroll = track.scrollLeft;
     track.classList.add("is-dragging");
     track.setPointerCapture?.(event.pointerId);
-  }, { signal: controller.signal });
+  }, { signal: lifecycle.signal });
   // Chrome가 카드의 링크·이미지 drag를 먼저 시작하면 native pointermove가 끊긴다.
   // 브라우저 기본 drag만 막고 click은 남겨 carousel drag와 프로필 링크를 함께 보존한다.
-  track.addEventListener("dragstart", (event) => event.preventDefault(), { signal: controller.signal });
+  track.addEventListener("dragstart", (event) => event.preventDefault(), { signal: lifecycle.signal });
   track.addEventListener("pointermove", (event) => {
     if (pointerId !== event.pointerId) return;
     track.scrollLeft = startScroll - (event.clientX - startX);
-  }, { signal: controller.signal });
+  }, { signal: lifecycle.signal });
   const endPointer = (event: PointerEvent) => {
     if (pointerId !== event.pointerId) return;
     track.releasePointerCapture?.(event.pointerId);
     pointerId = null;
     track.classList.remove("is-dragging");
   };
-  track.addEventListener("pointerup", endPointer, { signal: controller.signal });
-  track.addEventListener("pointercancel", endPointer, { signal: controller.signal });
+  track.addEventListener("pointerup", endPointer, { signal: lifecycle.signal });
+  track.addEventListener("pointercancel", endPointer, { signal: lifecycle.signal });
 
   root.append(filters, track);
   applyActive(activeId);
   return {
     node: renderSectionShell(doc, section, root, { className: "msx-speaker-section", bg: "dark" }),
-    dispose: () => controller.abort(),
+    dispose: lifecycle.dispose,
   };
+  });
 };

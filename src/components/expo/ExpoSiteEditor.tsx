@@ -199,6 +199,27 @@ function EditorBody({ siteId, siteName, permissions, release, previewOrigin }: E
   );
 
   const transitionIntent = useRef(0);
+  /** 삭제 유예를 시작한 intent. DELETE 응답 뒤에도 최신 행동일 때만 fallback으로 간다. */
+  const removalIntents = useRef(new Map<string, number>());
+  useEffect(() => {
+    const pendingRemovals = removalIntents.current;
+    // 같은 컴포넌트 인스턴스가 다른 사이트를 받으면 이전 사이트의 await 결과를 모두 폐기한다.
+    transitionIntent.current += 1;
+    pendingRemovals.clear();
+    return () => {
+      // unmount 뒤 끝난 POST/flush도 router나 선택을 바꾸지 못한다.
+      transitionIntent.current += 1;
+      pendingRemovals.clear();
+    };
+  }, [siteId]);
+
+  const beginNavigationIntent = useCallback((): number => {
+    // 더 최신 행동이 시작되면 이전 삭제의 fallback token은 다시 쓰일 수 없다.
+    removalIntents.current.clear();
+    transitionIntent.current += 1;
+    return transitionIntent.current;
+  }, []);
+
   const flushBeforeTransition = useCallback(async (
     flush: () => Promise<FlushResult>,
   ): Promise<boolean> => {
@@ -208,22 +229,28 @@ function EditorBody({ siteId, siteName, permissions, release, previewOrigin }: E
     return false;
   }, []);
 
-  const selectPage = useCallback(async (
-    pageId: string,
-    flush: () => Promise<FlushResult>,
-  ): Promise<boolean> => {
-    if (pageId === selected?.id) return true;
-    const intent = ++transitionIntent.current;
-    if (!(await flushBeforeTransition(flush)) || intent !== transitionIntent.current) return false;
+  const commitPageSelection = useCallback((pageId: string, intent: number): boolean => {
+    if (intent !== transitionIntent.current) return false;
     const next = new URLSearchParams(params.toString());
     next.set("page", pageId);
     // `replace` 다 — 페이지를 훑을 때마다 뒤로가기 기록이 쌓이면 목록으로 못 돌아간다.
     router.replace(`?${next.toString()}`, { scroll: false });
     return true;
-  }, [flushBeforeTransition, params, router, selected?.id]);
+  }, [params, router]);
+
+  const selectPage = useCallback(async (
+    pageId: string,
+    flush: () => Promise<FlushResult>,
+  ): Promise<boolean> => {
+    if (pageId === selected?.id) return true;
+    const intent = beginNavigationIntent();
+    if (!(await flushBeforeTransition(flush)) || intent !== transitionIntent.current) return false;
+    return commitPageSelection(pageId, intent);
+  }, [beginNavigationIntent, commitPageSelection, flushBeforeTransition, selected?.id]);
 
   const addPage = useCallback(async (flush: () => Promise<FlushResult>) => {
-    if (!(await flushBeforeTransition(flush))) return false;
+    const intent = beginNavigationIntent();
+    if (!(await flushBeforeTransition(flush)) || intent !== transitionIntent.current) return false;
     const res = await fetch(`/api/expo/${encodeURIComponent(siteId)}/pages`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -234,9 +261,27 @@ function EditorBody({ siteId, siteName, permissions, release, previewOrigin }: E
       return false;
     }
     const { page } = (await res.json()) as { page: { id: string } };
+    // POST가 성공했다면 더 최신 선택이 있어도 목록에는 새 페이지를 반영한다. 자동 삭제하지 않는다.
     reload();
-    return selectPage(page.id, flush);
-  }, [flushBeforeTransition, siteId, reload, selectPage]);
+    return commitPageSelection(page.id, intent);
+  }, [beginNavigationIntent, commitPageSelection, flushBeforeTransition, siteId, reload]);
+
+  const preparePageRemoval = useCallback(async (
+    pageId: string,
+    flush: () => Promise<FlushResult>,
+  ): Promise<boolean> => {
+    const intent = beginNavigationIntent();
+    if (!(await flushBeforeTransition(flush)) || intent !== transitionIntent.current) return false;
+    removalIntents.current.set(pageId, intent);
+    return true;
+  }, [beginNavigationIntent, flushBeforeTransition]);
+
+  const selectAfterPageRemoval = useCallback((pageId: string, removedPageId: string): boolean => {
+    const intent = removalIntents.current.get(removedPageId);
+    removalIntents.current.delete(removedPageId);
+    if (intent === undefined) return false;
+    return commitPageSelection(pageId, intent);
+  }, [commitPageSelection]);
 
   if (loadError) {
     return (
@@ -288,8 +333,9 @@ function EditorBody({ siteId, siteName, permissions, release, previewOrigin }: E
             canRename={false}
             canManageSite={permissions.canManageSite}
             onSelect={(pageId) => selectPage(pageId, draft.flush)}
+            onSelectAfterRemove={selectAfterPageRemoval}
             onAdd={() => addPage(draft.flush)}
-            onBeforeRemove={() => flushBeforeTransition(draft.flush)}
+            onBeforeRemove={(pageId) => preparePageRemoval(pageId, draft.flush)}
             onReload={reload}
             onPendingChange={setPendingPages}
           />}

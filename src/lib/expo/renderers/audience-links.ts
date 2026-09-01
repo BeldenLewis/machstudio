@@ -1,5 +1,6 @@
 import { renderDestinationAction } from "@/lib/expo/renderers/action";
 import { renderImage, renderSectionShell } from "@/lib/expo/renderers/image";
+import { createRendererLifecycle } from "@/lib/expo/renderers/lifecycle";
 import type { ExpoImageValue } from "@/lib/expo/sections/types";
 import type { SectionRenderer } from "@/lib/expo/types";
 
@@ -8,7 +9,8 @@ const rows = (value: unknown): Array<Record<string, unknown>> => Array.isArray(v
 
 export const renderAudienceLinks: SectionRenderer = (section, context) => {
   const doc = context.doc;
-  const controller = new (doc.defaultView?.AbortController ?? AbortController)();
+  const lifecycle = createRendererLifecycle(doc);
+  return lifecycle.guard(() => {
   const source = rows(section.content.groups);
   const activeCampaigns = new Set([...context.campaigns.values()].filter((row) => row.active).map((row) => row.id));
   const root = doc.createElement("div");
@@ -50,7 +52,7 @@ export const renderAudienceLinks: SectionRenderer = (section, context) => {
         className: "msx-audience-action",
         arrow: "right",
         mode: context.mode,
-        signal: controller.signal,
+        signal: lifecycle.signal,
       });
       if (!action) continue;
       const icon = renderImage(doc, link.icon as ExpoImageValue | undefined, { className: "msx-audience-icon" });
@@ -62,11 +64,12 @@ export const renderAudienceLinks: SectionRenderer = (section, context) => {
   }
 
   if (!root.querySelector(".msx-audience-action")) {
-    controller.abort();
+    lifecycle.dispose();
     return null;
   }
   return {
     node: renderSectionShell(doc, section, root, { className: "msx-audience-section" }),
-    dispose: () => controller.abort(),
+    dispose: lifecycle.dispose,
   };
+  });
 };

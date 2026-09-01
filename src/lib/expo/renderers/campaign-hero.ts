@@ -2,6 +2,7 @@ import { selectVisibleCtas } from "@/lib/expo/cta";
 import { isSafePublicUrl } from "@/lib/expo/destination";
 import { renderDestinationAction } from "@/lib/expo/renderers/action";
 import { renderImage, renderSectionShell } from "@/lib/expo/renderers/image";
+import { createRendererLifecycle } from "@/lib/expo/renderers/lifecycle";
 import type { CtaPlacement, ExpoImageValue } from "@/lib/expo/sections/types";
 import type { SectionRenderer } from "@/lib/expo/types";
 
@@ -18,7 +19,8 @@ export const renderCampaignHero: SectionRenderer = (section, context) => {
 
   const doc = context.doc;
   const view = doc.defaultView;
-  const controller = new (view?.AbortController ?? AbortController)();
+  const lifecycle = createRendererLifecycle(doc);
+  return lifecycle.guard(() => {
   const hero = doc.createElement("div");
   hero.className = "msx-hero";
   const overlay = typeof content.overlay === "number" ? Math.max(0, Math.min(0.9, content.overlay)) : 0.45;
@@ -48,7 +50,7 @@ export const renderCampaignHero: SectionRenderer = (section, context) => {
       videoNode.addEventListener("error", () => {
         videoNode.hidden = true;
         posterNode.hidden = false;
-      }, { signal: controller.signal });
+      }, { signal: lifecycle.signal });
     } else media.appendChild(videoNode);
   } else if (posterNode) media.appendChild(posterNode);
   if (media.childElementCount) hero.appendChild(media);
@@ -96,6 +98,10 @@ export const renderCampaignHero: SectionRenderer = (section, context) => {
       timer = view.setTimeout(tick, delay);
     };
     timer = view.setTimeout(tick, hold);
+    lifecycle.addCleanup(() => {
+      if (timer !== null) view.clearTimeout(timer);
+      timer = null;
+    });
   }
 
   const placements = rows(content.ctas) as unknown as CtaPlacement[];
@@ -115,7 +121,7 @@ export const renderCampaignHero: SectionRenderer = (section, context) => {
       className: "msx-btn msx-hero-action",
       description: text((placement as unknown as Record<string, unknown>).description) || undefined,
       mode: context.mode,
-      signal: controller.signal,
+      signal: lifecycle.signal,
     });
     if (action) actions.appendChild(action);
   }
@@ -125,10 +131,7 @@ export const renderCampaignHero: SectionRenderer = (section, context) => {
   const shell = renderSectionShell(doc, section, hero, { className: "msx-hero-section", bg: "dark" });
   return {
     node: shell,
-    dispose() {
-      if (timer !== null && view) view.clearTimeout(timer);
-      timer = null;
-      controller.abort();
-    },
+    dispose: lifecycle.dispose,
   };
+  });
 };

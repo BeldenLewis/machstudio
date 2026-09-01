@@ -27,7 +27,9 @@
 - `flush()` now returns a meaningful result describing clean, saved, disabled, validation, conflict, and request-failure outcomes.
 - Page selection, page creation, and selected-page deletion wait for a successful flush before changing the visible page.
 - Validation (`422`), conflict (`409`), and transport (`503`) failures keep the current page and visible edits in place while retaining inline feedback.
-- Intent ordering prevents a slower earlier selection from overriding a newer selection.
+- Every navigation-producing action now owns an intent from its start. Selection, creation, and deletion fallback recheck it after flush and after their asynchronous POST/DELETE boundary.
+- A stale create waiting on flush sends no POST; a create whose POST already succeeded remains in the refreshed page list but cannot override a newer selection. Creation no longer calls selection and therefore does not flush twice.
+- Selected-page deletion carries its original intent through the undo window and DELETE response, so its fallback cannot override a newer page choice.
 
 ### 4. Live runtime mode
 
@@ -41,6 +43,8 @@
 - Section renderer exceptions now propagate instead of becoming an empty section.
 - Candidate-shell mounting tracks completed resources and listeners, aborts them on a later render failure, and preserves the staged old shell and its listeners.
 - The regression test mounts a candidate with a completed speaker plugin followed by a throwing STK section, verifies cleanup, exercises the old CTA listener, then proves a later successful swap.
+- A shared idempotent renderer lifecycle now guards every resourceful STK renderer (`campaign-hero`, `exhibition-grid`, `audience-links`, `speaker-carousel`, and `cta-band`) while it is still under construction.
+- Hero registers its typing timer with that lifecycle immediately after creation. A later shell failure clears the timer, aborts its listener controller exactly once, disposes the candidate, and leaves the old shell and CTA listener active.
 
 ### 6. Native gesture coverage
 
@@ -55,6 +59,8 @@
 - Editor RED: 5 focused failures exposed ungated selection/deletion; GREEN: 54/54 editor tests and 59/59 hook/tree tests.
 - Runtime RED: 4 focused failures exposed implicit standalone mode and swallowed render exceptions; GREEN: 87/87.
 - Gesture RED: Chromium desktop native dragging failed before `dragstart` handling; GREEN: 4/4 focused gesture projects and 72/72 full browser projects.
+- Re-review navigation RED: stale create sent one POST and create/deletion paths flushed three times, allowing old navigation to win; GREEN: three deterministic intent tests pass with two action flushes and one newest selection.
+- Re-review lifecycle RED: Hero partial failure produced only the candidate-shell abort and all five resourceful renderers produced zero local aborts; GREEN: Hero timer/listener cleanup and five construction guards pass exactly once.
 
 ## Verification
 
@@ -63,12 +69,13 @@
 - Focused server suites — 5 files, 122/122 tests passed.
 - Autosave/editor suites — 54/54 plus 59/59 tests passed.
 - Live/render suites — 87/87 tests passed.
+- Re-review focused suites — 3 files, 54/54 tests passed; broader affected suites — 7 files, 167/167 tests passed.
 - Native gesture matrix — 4/4 projects passed.
 - Generated runtime build executed twice with identical outputs:
-  - Expo SHA-256: `45cfe00c5afd4d944131b09a80f6396d0de3dbe230f2ad36bc57dbce646733c1`
-  - Standalone SHA-256: `d812037204658d3ffb43dbdf5f7e03c65d69263e272d0a4f1da8a4d14f72b85b`
-- Manifest/hash/build suites — 3 files, 131/131 tests passed.
-- Full DB-free Vitest run — 198 files, 2,553/2,553 tests passed.
+  - Expo SHA-256: `b07f75270139ae261e1674786ca9172fe51d31152729c1f7c591c8293808821a`
+  - Standalone SHA-256: `202b02e37d2f7709d8b8f77e62c9625659ca2388df2801cbe16780c4bb0be59a`
+- Manifest/hash/build suites — 4 files, 144/144 tests passed.
+- Full DB-free Vitest run — 199 files, 2,563/2,563 tests passed.
 - Full Playwright run — Chromium/WebKit desktop/mobile, 72/72 projects passed.
 - `git diff --check` — passed.
 
@@ -76,6 +83,7 @@ The full Vitest run used an invalid loopback `DATABASE_URL`, disabled schema cap
 
 ## Review
 
-- Manual self-review found no remaining contract or cleanup regression.
-- Independent read-only review found no Critical, Important, or Minor issues and judged the changes ready after report and commit.
+- The final integrated re-review found two Important gaps: incomplete navigation intent coverage and resources created inside a throwing renderer. Both are covered by the follow-up RED/GREEN regressions above.
+- Manual React and lifecycle self-review additionally invalidated pending intents on site change/unmount and made renderer cleanup idempotent.
+- Independent scoped re-review found no remaining Critical, Important, or Minor issue and judged both findings addressed and ready.
 - Public loader, cache, runtime, export, and editor contracts from prior tasks remain intact.

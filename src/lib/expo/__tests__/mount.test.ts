@@ -509,6 +509,69 @@ describe("실패해도 파트너 페이지를 깨지 않는다", () => {
     first.destroy();
     second?.destroy();
   });
+
+  it("Hero가 timer와 listener를 만든 뒤 실패해도 자체 자원과 후보만 한 번 정리한다", () => {
+    const { container } = host();
+    const destinations = [{
+      id: "overview", label: "소개", action: { type: "anchor" as const, target: "overview" },
+      analytics: { eventName: "select_content" },
+    }];
+    const first = mount({
+      container,
+      payload: payload({
+        destinations,
+        sections: [{ sid: SID, type: "cta-band", variant: "default", design: {}, content: {
+          headline: "이전 화면", audience: "all",
+          ctas: [{ label: "이전 CTA", destinationId: "overview", audience: "all", campaignIds: [], priority: 0, fallback: true, enabled: true }],
+        } }],
+      }),
+    })!;
+    const oldHost = container.querySelector<HTMLElement>(EXPO_HOST_TAG)!;
+    const oldAction = oldHost.shadowRoot!.querySelector<HTMLAnchorElement>(".msx-cta-action")!;
+    const abort = vi.spyOn(window.AbortController.prototype, "abort");
+    const clear = vi.spyOn(window, "clearTimeout");
+    const analytics = vi.fn();
+    document.addEventListener("msx:destination", analytics);
+
+    let candidateAction: HTMLAnchorElement | null = null;
+    const createElement = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation(((tag: string, options?: ElementCreationOptions) => {
+      if (tag === "section") throw new Error("Hero shell failed");
+      const node = createElement(tag, options);
+      if (tag === "a") candidateAction = node as HTMLAnchorElement;
+      return node;
+    }) as typeof document.createElement);
+    let failed: ReturnType<typeof mount> = null;
+    try {
+      failed = mount({
+        container,
+        payload: payload({
+          destinations,
+          sections: [{ sid: SID2, type: "campaign-hero", variant: "default", design: {}, content: {
+            accessibleHeadline: "후보 Hero", typingLines: ["후보 Hero", "Future"],
+            typing: { enabled: true, speedMs: 50, holdMs: 500 },
+            ctas: [{ label: "후보 CTA", destinationId: "overview", audience: "all", campaignIds: [], priority: 0, fallback: true, enabled: true }],
+          } }],
+        }),
+      });
+    } finally {
+      vi.mocked(document.createElement).mockRestore();
+    }
+
+    expect(failed).toBeNull();
+    expect(container.querySelector(EXPO_HOST_TAG)).toBe(oldHost);
+    expect(oldHost.shadowRoot!.textContent).toContain("이전 화면");
+    expect(abort).toHaveBeenCalledTimes(2);
+    expect(clear).toHaveBeenCalledTimes(1);
+
+    candidateAction!.click();
+    expect(analytics).not.toHaveBeenCalled();
+    oldAction.click();
+    expect(analytics).toHaveBeenCalledTimes(1);
+
+    document.removeEventListener("msx:destination", analytics);
+    first.destroy();
+  });
 });
 
 describe("붙어 있다 비콘", () => {

@@ -54,6 +54,8 @@ export interface ExpoPageTreeProps {
   /** 삭제는 `canManageSite` 다 — 서버도 역할까지 본다. */
   canManageSite: boolean;
   onSelect: (pageId: string) => void | boolean | Promise<void | boolean>;
+  /** DELETE 뒤 fallback 선택. 편집기는 삭제를 시작한 navigation intent를 여기서 재검사한다. */
+  onSelectAfterRemove?: (pageId: string, removedPageId: string) => void | boolean | Promise<void | boolean>;
   onAdd: () => void | boolean | Promise<void | boolean>;
   /** 삭제 유예를 시작하기 전에 현재 페이지 초안을 안전하게 비운다. */
   onBeforeRemove?: (pageId: string) => boolean | Promise<boolean>;
@@ -78,7 +80,7 @@ const STATE_DOT: Record<ExpoPageState, string> = {
 
 export function ExpoPageTree({
   siteId, pages, selectedId, canEdit, canRename = canEdit, canManageSite,
-  onSelect, onAdd, onBeforeRemove, onReload, onPendingChange,
+  onSelect, onSelectAfterRemove, onAdd, onBeforeRemove, onReload, onPendingChange,
 }: ExpoPageTreeProps) {
   const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
@@ -183,7 +185,10 @@ export function ExpoPageTree({
       // 지운 페이지를 보고 있었으면 다른 페이지로 옮긴다 — 없는 페이지를 편집하게 두지 않는다.
       if (page.id === selectedId) {
         const next = rows.find((p) => p.id !== page.id && p.isHome) ?? rows.find((p) => p.id !== page.id);
-        if (next) await onSelect(next.id);
+        if (next) {
+          if (onSelectAfterRemove) await onSelectAfterRemove(next.id, page.id);
+          else await onSelect(next.id);
+        }
       }
       setOrder(null);
       onReload();
@@ -192,7 +197,7 @@ export function ExpoPageTree({
     } finally {
       setBusy(false);
     }
-  }, [selectedId, rows, onSelect, onReload]);
+  }, [selectedId, rows, onSelect, onSelectAfterRemove, onReload]);
 
   /**
    * 공개 중인 페이지는 지우는 순간 파트너 사이트에서 사라진다 — 그건 확인받을 일이다.

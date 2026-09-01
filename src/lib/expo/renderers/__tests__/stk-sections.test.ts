@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderCampaignHero } from "@/lib/expo/renderers/campaign-hero";
 import { renderExhibitionGrid } from "@/lib/expo/renderers/exhibition-grid";
 import { renderAudienceLinks } from "@/lib/expo/renderers/audience-links";
@@ -7,7 +7,7 @@ import { renderSpeakerCarousel } from "@/lib/expo/renderers/speaker-carousel";
 import { renderSponsorMarquee } from "@/lib/expo/renderers/sponsor-marquee";
 import { renderCtaBand } from "@/lib/expo/renderers/cta-band";
 import type { PayloadSection } from "@/lib/expo/view-sections";
-import type { ResolvedDestination, SectionRenderContext } from "@/lib/expo/types";
+import type { ResolvedDestination, SectionRenderContext, SectionRenderer } from "@/lib/expo/types";
 
 const image = (id: string) => ({ kind: "image", url: `https://cdn.example.com/${id}.png`, alt: id, decorative: false });
 const destinations: ResolvedDestination[] = [
@@ -28,7 +28,46 @@ const section = (type: string, content: Record<string, unknown>): PayloadSection
   sid: `sid-${type}`, type, variant: "default", design: {}, content,
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
+
 describe("STK public renderers", () => {
+  const resourcefulCases: Array<[string, SectionRenderer, Record<string, unknown>]> = [
+    ["campaign hero", renderCampaignHero, {
+      accessibleHeadline: "STK 2027", typingLines: ["STK 2027", "Future"],
+      typing: { enabled: true, holdMs: 500 },
+      ctas: [{ label: "Overview", destinationId: "overview", audience: "all", campaignIds: [], priority: 0, fallback: true, enabled: true }],
+    }],
+    ["exhibition grid", renderExhibitionGrid, {
+      items: [{ title: "Robotics", destinationId: "overview", enabled: true }],
+    }],
+    ["audience links", renderAudienceLinks, {
+      groups: [{ audience: "visitor", items: [{ label: "Visit", destinationId: "overview", enabled: true }] }],
+    }],
+    ["speaker carousel", renderSpeakerCarousel, {
+      categories: [{ id: "robotics", label: "Robotics", enabled: true }],
+      speakers: [{ name: "Kim", categoryId: "robotics", enabled: true }],
+    }],
+    ["CTA band", renderCtaBand, {
+      headline: "Join", audience: "all",
+      ctas: [{ label: "Overview", destinationId: "overview", audience: "all", campaignIds: [], priority: 0, fallback: true, enabled: true }],
+    }],
+  ];
+
+  it.each(resourcefulCases)("aborts %s resources when construction throws after listener setup", (_name, renderer, content) => {
+    const abort = vi.spyOn(window.AbortController.prototype, "abort");
+    const createElement = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation(((tag: string, options?: ElementCreationOptions) => {
+      if (tag === "section") throw new Error("late shell failure");
+      return createElement(tag, options);
+    }) as typeof document.createElement);
+
+    expect(() => renderer(section("resourceful", content), context())).toThrow("late shell failure");
+    expect(abort).toHaveBeenCalledTimes(1);
+  });
+
   it("renders the hero h1 fallback and a reduced-motion poster without video or typing timers", () => {
     vi.useFakeTimers();
     const setTimeoutSpy = vi.spyOn(window, "setTimeout");

@@ -1,6 +1,7 @@
 import { selectVisibleCtas } from "@/lib/expo/cta";
 import { renderDestinationAction } from "@/lib/expo/renderers/action";
 import { renderSectionShell } from "@/lib/expo/renderers/image";
+import { createRendererLifecycle } from "@/lib/expo/renderers/lifecycle";
 import type { CtaPlacement } from "@/lib/expo/sections/types";
 import type { SectionRenderer } from "@/lib/expo/types";
 
@@ -9,7 +10,6 @@ const rows = (value: unknown): Array<Record<string, unknown>> => Array.isArray(v
 
 export const renderCtaBand: SectionRenderer = (section, context) => {
   const doc = context.doc;
-  const controller = new (doc.defaultView?.AbortController ?? AbortController)();
   const audience = section.content.audience === "exhibitor" || section.content.audience === "visitor" ? section.content.audience : "all";
   const selected = selectVisibleCtas(rows(section.content.ctas) as unknown as CtaPlacement[], {
     audience,
@@ -18,6 +18,8 @@ export const renderCtaBand: SectionRenderer = (section, context) => {
     limit: 2,
   });
   if (!selected.length || !text(section.content.headline)) return null;
+  const lifecycle = createRendererLifecycle(doc);
+  return lifecycle.guard(() => {
   const root = doc.createElement("div");
   root.className = "msx-cta-band";
   const heading = doc.createElement("h2");
@@ -36,19 +38,20 @@ export const renderCtaBand: SectionRenderer = (section, context) => {
       description: text(raw.description) || undefined,
       arrow: "right",
       mode: context.mode,
-      signal: controller.signal,
+      signal: lifecycle.signal,
     });
     if (!action) continue;
     action.setAttribute("data-variant", text(placement.variant) || "primary");
     actions.appendChild(action);
   }
   if (!actions.childElementCount) {
-    controller.abort();
+    lifecycle.dispose();
     return null;
   }
   root.appendChild(actions);
   return {
     node: renderSectionShell(doc, section, root, { className: "msx-cta-band-section", bg: "dark" }),
-    dispose: () => controller.abort(),
+    dispose: lifecycle.dispose,
   };
+  });
 };
