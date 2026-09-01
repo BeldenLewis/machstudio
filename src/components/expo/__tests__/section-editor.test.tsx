@@ -293,6 +293,19 @@ describe("목록 슬롯", () => {
     await click(buttonByText("카드 추가"));
     expect(findRowKeyLeak(stripExpoRowKeys(latest))).toBeNull();
   });
+
+  it("read-only nested rows and variant/design controls cannot mutate", async () => {
+    const text = newSection("textblock");
+    const cards = cardgrid();
+    const original = structuredClone([text, cards]);
+    await render([text, cards], false);
+
+    expect(host.querySelector('button[aria-label="카드 순서 변경 — 끌거나 포커스 후 방향키"]')).toBeNull();
+    expect(host.querySelector('button[aria-label="카드 삭제"]')).toBeNull();
+    expect(host.querySelector('[role="tablist"][aria-label="본문 형태"]')).toBeNull();
+    expect(host.querySelector('[role="tablist"][aria-label="카드 배경"]')).toBeNull();
+    expect(latest).toEqual(original);
+  });
 });
 
 describe("구획 스위치", () => {

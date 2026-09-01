@@ -38,25 +38,33 @@ function readLocalized(value: unknown, locale: string): string {
   return "";
 }
 
-function titleField(section: ExpoSection, defaultLocale: string): { key: string; locale: string; value: string } | null {
+type SectionTitleField =
+  | { kind: "slot"; key: string; locale: string; value: string; direct: boolean }
+  | { kind: "campaign-typing"; locale: string; value: string };
+
+function localizedField(value: unknown, defaultLocale: string) {
+  if (typeof value === "string") return { locale: defaultLocale, value, direct: true };
+  const map = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const locale = [defaultLocale, "ko", "en", ...Object.keys(map)]
+    .find((candidate) => typeof map[candidate] === "string") ?? defaultLocale;
+  return { locale, value: readLocalized(map, locale), direct: false };
+}
+
+function titleField(section: ExpoSection, defaultLocale: string): SectionTitleField | null {
+  if (section.type === "campaign-hero") {
+    const lines = Array.isArray(section.content.typingLines) ? section.content.typingLines : [];
+    const first = localizedField(lines[0], defaultLocale);
+    return { kind: "campaign-typing", locale: first.locale, value: first.value };
+  }
   const candidates = ["heading", "title", "headline", "accessibleHeadline"];
-  const existing = candidates.find((key) => {
-    const raw = section.content[key];
-    return typeof raw === "string" || Boolean(raw && typeof raw === "object" && !Array.isArray(raw));
-  });
   const slot = sectionDef(section.type)?.slots.find((candidate) =>
     candidates.includes(candidate.key) && (candidate.kind === "text" || candidate.kind === "textarea"),
   );
-  const key = existing ?? slot?.key;
-  if (!key) return null;
-  const raw = section.content[key];
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    const map = raw as Record<string, unknown>;
-    const locale = [defaultLocale, "ko", "en", ...Object.keys(map)]
-      .find((candidate) => typeof map[candidate] === "string") ?? defaultLocale;
-    return { key, locale, value: readLocalized(raw, locale) };
-  }
-  return { key, locale: defaultLocale, value: "" };
+  if (!slot) return null;
+  const field = localizedField(section.content[slot.key], defaultLocale);
+  return { kind: "slot", key: slot.key, ...field };
 }
 
 function LocalDraftPreview({
@@ -122,6 +130,37 @@ export function PageDraftWorkspace({
     state.updateConfig((current) => ({ ...current, sections }));
   };
   const heading = selected ? titleField(selected, locale) : null;
+  const replaceHeading = (value: string) => {
+    if (!selected || !heading) return;
+    if (heading.kind === "campaign-typing") {
+      const typingLines = Array.isArray(selected.content.typingLines) ? [...selected.content.typingLines] : [];
+      const first = typingLines[0];
+      const nextHeadline = first && typeof first === "object" && !Array.isArray(first)
+        ? { ...first as Record<string, unknown>, [heading.locale]: value }
+        : { [heading.locale]: value };
+      typingLines[0] = nextHeadline;
+      replaceSection({
+        ...selected,
+        content: { ...selected.content, typingLines, accessibleHeadline: nextHeadline },
+      });
+      return;
+    }
+    const current = selected.content[heading.key];
+    replaceSection({
+      ...selected,
+      content: {
+        ...selected.content,
+        [heading.key]: heading.direct
+          ? value
+          : {
+              ...(current && typeof current === "object" && !Array.isArray(current)
+                ? current as Record<string, unknown>
+                : {}),
+              [heading.locale]: value,
+            },
+      },
+    });
+  };
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(200px,240px)_minmax(0,1fr)_minmax(280px,380px)]">
@@ -193,18 +232,7 @@ export function PageDraftWorkspace({
               <span className="text-sm font-medium">섹션 제목</span>
               <Field
                 value={heading.value}
-                onChange={(event) => replaceSection({
-                  ...selected,
-                  content: {
-                    ...selected.content,
-                    [heading.key]: {
-                      ...(selected.content[heading.key] && typeof selected.content[heading.key] === "object"
-                        ? selected.content[heading.key] as Record<string, unknown>
-                        : {}),
-                      [heading.locale]: event.target.value,
-                    },
-                  },
-                })}
+                onChange={(event) => replaceHeading(event.target.value)}
                 disabled={!permissions.canEdit}
                 aria-label="섹션 제목"
                 className={FIELD_CLS}

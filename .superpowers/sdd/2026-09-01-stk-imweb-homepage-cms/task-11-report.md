@@ -3,6 +3,7 @@
 ## Status
 
 - Complete; commit title: `refactor: share one Expo page draft across the editor`.
+- Fix round 1 complete; follow-up commit title: `fix: harden the shared Expo page draft workspace`.
 - Base verified before work: `8a945354cba317b6ca4e266b604c8948f6eb631b`.
 - No database, auth, Supabase, storage, network, dev-server, browser, deploy, flag, or Imweb operation was used.
 
@@ -26,6 +27,13 @@
 - DB-free full suite (run once): 191 files, 2,401/2,401 tests passed.
 - `git diff --check` passed.
 
+### Fix round 1
+
+- RED: six exact regressions failed before implementation: deferred saves could update the replacement transport/page and update after unmount; read-only nested list/design controls remained active; the campaign-hero shortcut did not persist and direct string titles rendered blank; repeated keyboard moves did not produce distinct position announcements.
+- GREEN focused shared/tree/section/preview/publish/revision suites: 6 files, 93/93 tests passed.
+- TypeScript, Task 11 changed-file lint, and `git diff --check` passed.
+- DB-free full suite (run once for this fix round): 191 files, 2,407/2,407 tests passed.
+
 ## Self-review
 
 - One owner: `useExpoPageDraft` alone owns title, Imweb URL, config, revision, autosave, conflict, and immutable-`sid` selection. Workspace children receive values/callbacks and have no shadow draft or direct draft-save request.
@@ -37,6 +45,10 @@
 - Accessibility: the tree reuses `EditableList`, removes drag/delete controls for read-only users, gives item-specific drag labels and keyboard move controls, and announces moves through a polite live region.
 - Review closure: the final review findings were fixed by refreshing readiness/snippets after saves without replacing the draft, applying pinned-first order, restoring section creation in the tree, and only exposing a section-title shortcut for an existing or registry-valid title key.
 - React review: no new waterfall, render-time side effect, shadow derived state, unstable list key, or unnecessary bundle boundary was found; small bounded section scans are acceptable at the 40-section limit.
+- Async ownership: page/transport epochs plus a mounted guard now reject stale load/save/metadata completions before every post-await state update; autosave still owns stale-save rejection and keeps its existing CAS behavior.
+- Read-only enforcement: variant/design controls and every nested-list mutation path are hidden or gated by `canEdit`; tests cover both absent controls and unchanged data.
+- Title mapping: the shortcut now uses only registry-declared writable fields, maps campaign-hero edits to `typingLines[0]`, and preserves direct string values and storage shape.
+- Move announcements: keyboard moves include the resulting one-based position, so repeated moves always produce distinct screen-reader text.
 
 ## Concerns
 

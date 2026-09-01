@@ -109,8 +109,8 @@ export function SectionsEditor({
   const [pendingRemove, setPendingRemove] = useState<ReadonlySet<string>>(new Set());
 
   const commit = useCallback(
-    (next: ExpoSection[]) => onChange(applyPinned(next)),
-    [onChange],
+    (next: ExpoSection[]) => { if (canEdit) onChange(applyPinned(next)); },
+    [canEdit, onChange],
   );
 
   /**
@@ -167,7 +167,7 @@ export function SectionsEditor({
           removable={() => canEdit}
           rowChrome="bare"
           maxRows={EXPO_LIMITS.sectionsPerPage}
-          autoFocusNewRow
+          autoFocusNewRow={canEdit}
           onPendingRemoveChange={setPendingRemove}
           emptyState={
             <p className={`${R.surface} bg-secondary/40 p-4 text-center text-[12px] text-muted-foreground`}>
@@ -341,7 +341,8 @@ function SectionCard({
   const designKeys = Object.keys(design);
 
   const setSlot = (key: string, value: unknown) =>
-    patch({ content: { ...section.content, [key]: value } });
+    canEdit && patch({ content: { ...section.content, [key]: value } });
+  const applyPatch = (next: Partial<ExpoSection>) => { if (canEdit) patch(next); };
 
   return (
     <div
@@ -367,25 +368,27 @@ function SectionCard({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           {def.variants.length > 1 ? (
             <Knob label="형태">
+              {canEdit ? (
               <Segmented
                 label={`${def.label} 형태`}
                 value={section.variant}
-                onChange={(variant) => patch({ variant })}
+                onChange={(variant) => applyPatch({ variant })}
                 options={def.variants.map((v) => ({ value: v.id, label: v.label }))}
               />
+              ) : <span className="text-xs text-muted-foreground">{def.variants.find((variant) => variant.id === section.variant)?.label ?? section.variant}</span>}
             </Knob>
           ) : null}
           {designKeys.map((key) => (
             <Knob key={key} label={designLabel(key)}>
-              <Segmented
+              {canEdit ? <Segmented
                 label={`${def.label} ${designLabel(key)}`}
                 value={section.design[key] ?? design[key][0]}
-                onChange={(value) => patch({ design: { ...section.design, [key]: value } })}
+                onChange={(value) => applyPatch({ design: { ...section.design, [key]: value } })}
                 options={design[key].map((value) => ({
                   value,
                   label: designValueLabel(key, value),
                 }))}
-              />
+              /> : <span className="text-xs text-muted-foreground">{designValueLabel(key, section.design[key] ?? design[key][0])}</span>}
             </Knob>
           ))}
         </div>
@@ -452,7 +455,7 @@ function SectionCard({
         <label className="flex items-center gap-1.5 text-[11px]">
           <Switch
             checked={section.enabled}
-            onChange={(enabled) => patch({ enabled })}
+            onChange={(enabled) => applyPatch({ enabled })}
             disabled={!canEdit}
             label={`${def.label} 페이지에 표시`}
           />
@@ -461,7 +464,7 @@ function SectionCard({
         <label className="flex items-center gap-1.5 text-[11px]">
           <Switch
             checked={section.embedEnabled}
-            onChange={(embedEnabled) => patch({ embedEnabled })}
+            onChange={(embedEnabled) => applyPatch({ embedEnabled })}
             // `&& !section.embedEnabled` 가 비대칭이다 — **이미 켠 것은 끌 수 있다.**
             disabled={!canEdit || (embedLocked && !section.embedEnabled)}
             label={`${def.label} 이 구획만 따로 내보내기`}
@@ -527,7 +530,7 @@ function SpeakerMediaEditor({
     : [];
   if (rows.length === 0) return null;
   const patchRow = (index: number, patch: Record<string, unknown>) =>
-    onChange(rows.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row));
+    !disabled && onChange(rows.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row));
   return (
     <div className="space-y-2">
       <p className="text-xs font-medium text-muted-foreground">연사 이미지와 자르기</p>
@@ -611,11 +614,12 @@ function ListSlot({
           listId={`expo-${sid}-${slot.key}`}
           itemNoun={slot.label}
           items={rows}
-          onChange={onChange}
+          onChange={(next) => { if (canEdit) onChange(next); }}
           rowKey={(row) => row[ROW_KEY] as string}
           makeItem={makeRow}
-          reorderable
-          autoFocusNewRow
+          reorderable={canEdit}
+          removable={() => canEdit}
+          autoFocusNewRow={canEdit}
           maxRows={EXPO_LIMITS.rowsPerList}
           emptyState={
             canEdit ? null : (
@@ -658,7 +662,7 @@ function ListSlot({
                     key={itemSlot.key}
                     def={itemSlot}
                     value={item[itemSlot.key]}
-                    onChange={(next) => patch({ [itemSlot.key]: next })}
+                    onChange={(next) => { if (canEdit) patch({ [itemSlot.key]: next }); }}
                     disabled={!canEdit}
                     siteId={siteId}
                     sources={sources}

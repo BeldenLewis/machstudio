@@ -62,6 +62,13 @@ export function useExpoPageDraft(
   transport?: ExpoPageTransport,
 ): ExpoPageDraftState {
   const activeTransport = useMemo(() => transport ?? createExpoPageTransport(), [transport]);
+  /** page/transport 조합마다 새 토큰. await 뒤에는 이 토큰과 mounted 상태를 모두 확인한다. */
+  const epoch = useMemo(
+    () => ({ transport: activeTransport, pageId, siteId }),
+    [activeTransport, pageId, siteId],
+  );
+  const epochRef = useRef(epoch);
+  const mountedRef = useRef(false);
   const [page, setPage] = useState<ExpoPageEditorDto | null>(null);
   const [title, setTitle] = useState("");
   const [imwebUrl, setImwebUrl] = useState("");
@@ -71,6 +78,16 @@ export function useExpoPageDraft(
   const [error, setError] = useState<string | null>(null);
   const [generation, setGeneration] = useState(0);
   const [revision, setRevision] = useState(0);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+  useEffect(() => { epochRef.current = epoch; }, [epoch]);
+  const isCurrent = useCallback(
+    (captured: object) => mountedRef.current && epochRef.current === captured,
+    [],
+  );
 
   const install = useCallback((loaded: ExpoPageEditorDto) => {
     if (loaded.id !== pageId || loaded.siteId !== siteId) throw new Error("page-scope");
@@ -91,38 +108,45 @@ export function useExpoPageDraft(
   }, [pageId, siteId]);
 
   const load = useCallback(async () => {
+    const captured = epoch;
     setLoading(true);
     try {
-      install(await activeTransport.load(pageId));
+      const loaded = await activeTransport.load(pageId);
+      if (!isCurrent(captured)) return;
+      install(loaded);
     } catch {
+      if (!isCurrent(captured)) return;
       setError("페이지를 불러오지 못했어요.");
     } finally {
-      setLoading(false);
+      if (isCurrent(captured)) setLoading(false);
     }
-  }, [activeTransport, install, pageId]);
+  }, [activeTransport, epoch, install, isCurrent, pageId]);
 
   const loadRef = useRef(load);
   useEffect(() => { loadRef.current = load; }, [load]);
   useEffect(() => {
     let active = true;
+    const captured = epoch;
     activeTransport.load(pageId).then((loaded) => {
-      if (active) install(loaded);
+      if (active && isCurrent(captured)) install(loaded);
     }).catch(() => {
-      if (active) setError("페이지를 불러오지 못했어요.");
+      if (active && isCurrent(captured)) setError("페이지를 불러오지 못했어요.");
     }).finally(() => {
-      if (active) setLoading(false);
+      if (active && isCurrent(captured)) setLoading(false);
     });
     return () => { active = false; };
-  }, [activeTransport, install, pageId]);
+  }, [activeTransport, epoch, install, isCurrent, pageId]);
 
   const value = useMemo(() => ({ title, imwebUrl, config }), [title, imwebUrl, config]);
   const save = useCallback(async (next: typeof value, draftRevision: number) => {
+    const captured = epoch;
     const outcome = await activeTransport.save(pageId, {
       title: next.title,
       imwebUrl: next.imwebUrl,
       draft: { ...next.config, sections: stripExpoRowKeys(next.config.sections) },
       draftRevision,
     });
+    if (!isCurrent(captured)) return outcome;
     if (outcome.kind === "saved") {
       setRevision(outcome.revision);
       setPage((current) => current ? {
@@ -134,13 +158,14 @@ export function useExpoPageDraft(
       } : current);
       try {
         const fresh = await activeTransport.load(pageId);
+        if (!isCurrent(captured)) return outcome;
         setPage((current) => current ? withFreshMetadata(current, fresh) : current);
       } catch {
         // 저장은 성공했다. 메타 조회 실패 때문에 성공을 실패로 바꾸거나 초안을 지우지 않는다.
       }
     }
     return outcome;
-  }, [activeTransport, pageId]);
+  }, [activeTransport, epoch, isCurrent, pageId]);
 
   const autosave = usePageAutosave({
     pageId: `${pageId}:${generation}`,
@@ -158,13 +183,15 @@ export function useExpoPageDraft(
   const reloadAfterConflict = useCallback(async () => { await loadRef.current(); }, []);
 
   const refreshMetadata = useCallback(async () => {
+    const captured = epoch;
     try {
       const fresh = await activeTransport.load(pageId);
+      if (!isCurrent(captured)) return;
       setPage((current) => current ? withFreshMetadata(current, fresh) : current);
     } catch {
       // 내보내기 자체는 끝났다. 메타 새로고침 실패가 로컬 초안을 지우거나 막지 않는다.
     }
-  }, [activeTransport, pageId]);
+  }, [activeTransport, epoch, isCurrent, pageId]);
 
   const saveState: ExpoPageDraftState["saveState"] = autosave.conflict ? "conflict"
     : autosave.state === "saving" ? "saving"

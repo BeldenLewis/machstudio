@@ -61,7 +61,10 @@ export function ExpoSectionTree({
       && normalized.every((section) => sections.some((current) => current.sid === section.sid));
     if (sameMembers) {
       const moved = normalized.find((section, index) => sections[index]?.sid !== section.sid);
-      if (moved) setAnnouncement(`${expoSectionTitle(moved)} 구획을 이동했어요.`);
+      if (moved) {
+        const position = normalized.findIndex((section) => section.sid === moved.sid) + 1;
+        setAnnouncement(`${expoSectionTitle(moved)} 구획을 ${position}번째로 이동했어요.`);
+      }
     }
 
     if (selectedSid && !normalized.some((section) => section.sid === selectedSid)) {
@@ -122,6 +125,7 @@ export function ExpoSectionTree({
                     const next = [...sections];
                     [next[index - 1], next[index]] = [next[index], next[index - 1]];
                     commit(next);
+                    setAnnouncement(`${title} 구획을 ${index}번째로 이동했어요.`);
                   }}
                   className="h-7 w-6 text-xs text-muted-foreground disabled:opacity-30"
                 >↑</button>
@@ -134,7 +138,7 @@ export function ExpoSectionTree({
                     const next = [...sections];
                     [next[index], next[index + 1]] = [next[index + 1], next[index]];
                     commit(next);
-                    setAnnouncement(`${title} 구획을 이동했어요.`);
+                    setAnnouncement(`${title} 구획을 ${index + 2}번째로 이동했어요.`);
                   }}
                   className="h-7 w-6 text-xs text-muted-foreground disabled:opacity-30"
                 >↓</button>
@@ -170,7 +174,7 @@ export function ExpoSectionTree({
           </div>
         </div>
       ) : null}
-      <p role="status" aria-live="polite" className="sr-only">{announcement}</p>
+      <p data-testid="move-announcement" role="status" aria-live="polite" className="sr-only">{announcement}</p>
     </nav>
   );
 }

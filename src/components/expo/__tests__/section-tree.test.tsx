@@ -59,7 +59,11 @@ describe("Expo section tree", () => {
     expect(document.getElementById(handle.getAttribute("aria-describedby")!)).not.toBeNull();
     await user.click(screen.getByRole("button", { name: "둘째 아래로 이동" }));
     expect(screen.getByTestId("selection")).toHaveTextContent(second);
-    expect(screen.getByText(/둘째.*이동/)).toBeInTheDocument();
+    const firstAnnouncement = screen.getByTestId("move-announcement").textContent;
+    expect(firstAnnouncement).toMatch(/둘째.*3/);
+    await user.click(screen.getByRole("button", { name: "둘째 위로 이동" }));
+    expect(screen.getByTestId("move-announcement").textContent).toMatch(/둘째.*2/);
+    expect(screen.getByTestId("move-announcement").textContent).not.toBe(firstAnnouncement);
   });
 
   it("deleting the selected row chooses next then previous", async () => {

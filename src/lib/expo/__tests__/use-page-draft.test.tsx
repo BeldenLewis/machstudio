@@ -25,8 +25,8 @@ function page(): ExpoPageEditorDto {
       schemaVersion: 2,
       sections: [
         {
-          sid: speakerSid, type: "speaker-carousel", variant: "default", enabled: true,
-          embedEnabled: false, design: {}, content: { heading: { en: "SPEAKERS" }, categories: [], speakers: [] },
+          sid: speakerSid, type: "textblock", variant: "prose", enabled: true,
+          embedEnabled: false, design: {}, content: { heading: { en: "SPEAKERS" }, body: { en: "Lineup" } },
         },
         {
           sid: ctaSid, type: "cta-band", variant: "default", enabled: true,
@@ -45,6 +45,12 @@ function makeTransport(save = vi.fn().mockResolvedValue({ kind: "saved", revisio
   const load = vi.fn().mockResolvedValue(page());
   const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ revisions: [] }), { status: 200 }));
   return { transport: { load, save, request } satisfies ExpoPageTransport, load, save, request };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
 }
 
 beforeEach(() => vi.useFakeTimers());
@@ -139,5 +145,106 @@ describe("one Expo page draft owner", () => {
     ]));
     expect(globalFetch).not.toHaveBeenCalled();
     globalFetch.mockRestore();
+  });
+
+  it("ignores a deferred save after the page transport epoch changes", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const pending = deferred<Awaited<ReturnType<ExpoPageTransport["save"]>>>();
+    const first = makeTransport(vi.fn(() => pending.promise));
+    const secondPage = { ...page(), title: "새 서버", draftRevision: 20 };
+    const second = makeTransport();
+    second.load.mockResolvedValue(secondPage);
+    const view = render(
+      <PageDraftWorkspace
+        siteId="site-1" pageId="page-1" permissions={permissions} transport={first.transport}
+        renderPreview={(state) => <output data-testid="draft-meta">{state.revision}:{state.page?.title}</output>}
+      />,
+    );
+    await act(async () => {});
+    await user.type(screen.getByLabelText("페이지 제목"), " 오래됨");
+    await act(async () => { await vi.advanceTimersByTimeAsync(900); });
+
+    view.rerender(
+      <PageDraftWorkspace
+        siteId="site-1" pageId="page-1" permissions={permissions} transport={second.transport}
+        renderPreview={(state) => <output data-testid="draft-meta">{state.revision}:{state.page?.title}</output>}
+      />,
+    );
+    await act(async () => {});
+    pending.resolve({ kind: "saved", revision: 8 });
+    await act(async () => {});
+
+    expect(screen.getByTestId("draft-meta")).toHaveTextContent("20:새 서버");
+    expect(first.load).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not continue a deferred save after unmount", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const pending = deferred<Awaited<ReturnType<ExpoPageTransport["save"]>>>();
+    const first = makeTransport(vi.fn(() => pending.promise));
+    const view = render(<PageDraftWorkspace siteId="site-1" pageId="page-1" permissions={permissions} transport={first.transport} />);
+    await act(async () => {});
+    await user.type(screen.getByLabelText("페이지 제목"), " 늦음");
+    await act(async () => { await vi.advanceTimersByTimeAsync(900); });
+    view.unmount();
+    pending.resolve({ kind: "saved", revision: 8 });
+    await act(async () => {});
+    expect(first.load).toHaveBeenCalledTimes(1);
+  });
+
+  it("edits campaign hero through typingLines[0] and survives reload", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const hero = {
+      ...page(),
+      draft: {
+        schemaVersion: 2 as const,
+        sections: [{
+          sid: speakerSid, type: "campaign-hero", variant: "default", enabled: true,
+          embedEnabled: false, design: {},
+          content: { typingLines: [{ ko: "처음" }], accessibleHeadline: { ko: "처음" }, ctas: [] },
+        }],
+      },
+    };
+    const fresh = {
+      ...hero,
+      draftRevision: 8,
+      draft: {
+        ...hero.draft,
+        sections: [{
+          ...hero.draft.sections[0],
+          content: { typingLines: [{ ko: "다음" }], accessibleHeadline: { ko: "다음" }, ctas: [] },
+        }],
+      },
+    };
+    const { transport, load, save } = makeTransport();
+    load.mockResolvedValueOnce(hero).mockResolvedValue(fresh);
+    const view = render(<PageDraftWorkspace siteId="site-1" pageId="page-1" permissions={permissions} transport={transport} />);
+    await act(async () => {});
+    await user.clear(screen.getByLabelText("섹션 제목"));
+    await user.type(screen.getByLabelText("섹션 제목"), "다음");
+    await act(async () => { await vi.advanceTimersByTimeAsync(900); });
+    expect(save).toHaveBeenCalledWith("page-1", expect.objectContaining({
+      draft: expect.objectContaining({ sections: [expect.objectContaining({
+        content: expect.objectContaining({ typingLines: [{ ko: "다음" }] }),
+      })] }),
+    }));
+
+    view.unmount();
+    render(<PageDraftWorkspace siteId="site-1" pageId="page-1" permissions={permissions} transport={transport} />);
+    await act(async () => {});
+    expect(screen.getByLabelText("섹션 제목")).toHaveValue("다음");
+  });
+
+  it("shows a plugin-declared direct string title without blanking it", async () => {
+    const stringPage = page();
+    stringPage.draft.sections = [{
+      sid: speakerSid, type: "textblock", variant: "prose", enabled: true,
+      embedEnabled: false, design: {}, content: { heading: "Plain title", body: { ko: "본문" } },
+    }];
+    const { transport, load } = makeTransport();
+    load.mockResolvedValue(stringPage);
+    render(<PageDraftWorkspace siteId="site-1" pageId="page-1" permissions={permissions} transport={transport} />);
+    await act(async () => {});
+    expect(screen.getByLabelText("섹션 제목")).toHaveValue("Plain title");
   });
 });
