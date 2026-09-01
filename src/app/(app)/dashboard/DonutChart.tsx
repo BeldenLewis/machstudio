@@ -63,7 +63,7 @@ export default function DonutChart({ data, maxSlices = 5, channelColors, onColor
     도넛+범례 줄이 화면에서는 flex-wrap 으로 좁을 때 범례를 아래로 접지만, 인쇄에서는
     print:flex-nowrap 으로 항상 도넛 옆에 붙인다 — 인쇄 칸 폭이 빠듯할 때 줄바꿈
     계산에 맡기면 범례 자체가 통째로 안 그려지는 문제가 있었다(부모 grid 열도
-    유입경로 칸만 1.8fr 로 넓히고, 다섯 칸 전부 minmax(0, ...) 로 감싸 다른 칸이
+    유입경로 칸만 1.4fr 로 넓히고, 다섯 칸 전부 minmax(0, ...) 로 감싸 다른 칸이
     자기 콘텐츠 최소 폭으로 이 칸의 몫을 빼앗지 못하게 한다 — ProjectSummaryCard 참고).
 
     도넛 크기 자체도 같은 부류의 함정이 있었다: ResponsiveContainer(width="100%")는
@@ -107,13 +107,16 @@ function DonutLegend({ slices, total, onColorChange }: {
       {slices.map((slice) => {
         const editable = !!onColorChange && slice.label !== "기타";
         return (
-          <li key={slice.label} className="flex min-w-0 items-center gap-2 text-xs print:gap-0 print:text-[7px]">
+          <li key={slice.label} className="flex min-w-0 items-center gap-2 text-xs print:gap-0 print:text-[9px]">
+            <svg className="hidden h-2 w-2 shrink-0 print:block" viewBox="0 0 8 8" aria-hidden="true">
+              <circle cx="4" cy="4" r="4" fill={slice.color} />
+            </svg>
             {editable ? (
-              <label className="relative h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full ring-offset-1 ring-offset-background transition-shadow hover:ring-2 hover:ring-violet-400 print:h-1.5 print:w-1.5" style={{ backgroundColor: slice.color }} title={`${slice.label} 색 바꾸기`}>
+              <label className="relative h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full ring-offset-1 ring-offset-background transition-shadow hover:ring-2 hover:ring-violet-400 print:hidden" style={{ backgroundColor: slice.color }} title={`${slice.label} 색 바꾸기`}>
                 <input type="color" value={toColorInputValue(slice.color)} onChange={(e) => onColorChange?.(slice.label, e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label={`${slice.label} 색 바꾸기`} />
               </label>
             ) : (
-              <span className="h-2 w-2 shrink-0 rounded-full print:h-1.5 print:w-1.5" style={{ backgroundColor: slice.color }} />
+              <span className="h-2 w-2 shrink-0 rounded-full print:hidden" style={{ backgroundColor: slice.color }} />
             )}
             <span className="min-w-0 flex-1 truncate text-muted-foreground print:ml-1 print:flex-none">{slice.label}</span>
             <span className="shrink-0 font-medium tabular-nums print:ml-2">{Math.round((slice.count / total) * 100)}%</span>
