@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { AnalyticsShareModal } from "./AnalyticsShareModal";
 import { MetaAdsConnectionPanel } from "./MetaAdsConnectionPanel";
+import { AdPerformanceViews, type AdPerformanceViewConfig } from "./AdPerformanceViews";
 import DateRangePicker, { type DateRange, ALL_TIME_LABEL } from "@/components/DateRangePicker";
 import { toast } from "sonner";
 import {
@@ -388,6 +389,24 @@ export default function AnalyticsPage() {
     setDetailPage(1);
   };
 
+  const applyPerformanceView = (config: AdPerformanceViewConfig) => {
+    setSourceFilter(config.sourceType);
+    setSelectedCampaignName(config.campaignName);
+    setSelectedAdGroupName(config.adGroupName);
+    setRange(config.range);
+    setDetailPeriod(null);
+    setDetailPage(1);
+  };
+
+  const resetPerformanceView = () => {
+    setSourceFilter("ALL");
+    setSelectedCampaignName(null);
+    setSelectedAdGroupName(null);
+    setRange(defaultRange());
+    setDetailPeriod(null);
+    setDetailPage(1);
+  };
+
   const handleDetailSort = (col: string) => {
     if (detailSortCol === col) {
       setDetailSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
@@ -712,6 +731,20 @@ export default function AnalyticsPage() {
           </motion.button>
         </div>
       </div>
+
+      <AdPerformanceViews
+        key={currentProject.id}
+        workspaceId={workspace!.id}
+        projectId={currentProject.id}
+        current={{
+          sourceType: sourceFilter,
+          campaignName: selectedCampaignName,
+          adGroupName: selectedAdGroupName,
+          range,
+        }}
+        onApply={applyPerformanceView}
+        onReset={resetPerformanceView}
+      />
 
       <MetaAdsConnectionPanel workspaceId={workspace!.id} projectId={currentProject.id} onSynced={fetchData} onMetricsChanged={setMetaMetrics} />
 

@@ -80,6 +80,7 @@ model Workspace {
   webinars             Webinar[]
   webinarEmbedSites    WebinarEmbedSite[]
   adPerformanceImports AdPerformanceImportBatch[]
+  adPerformanceViews   AdPerformanceView[]
   adPerformanceRecords AdPerformanceRecord[]
   metaAdConnections    MetaAdConnection[]
   competitions         Competition[]
@@ -168,6 +169,7 @@ model Project {
   webinarEmbedSites    WebinarEmbedSite[]
   adPerformanceImports AdPerformanceImportBatch[]
   adPerformanceRecords AdPerformanceRecord[]
+  adPerformanceViews   AdPerformanceView[]
   metaAdConnection     MetaAdConnection?
   competitions         Competition[]
   expoSites            ExpoSite[]
@@ -237,6 +239,28 @@ model AdPerformanceRecord {
   @@index([projectId, reportDate])
   @@index([projectId, campaignName])
   @@index([projectId, resultBucket])
+}
+
+model AdPerformanceView {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  projectId    String
+  name         String
+  sourceType   String   @default("ALL")
+  campaignName String?
+  adGroupName  String?
+  rangeLabel   String
+  dateFrom     DateTime
+  dateTo       DateTime
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, sortOrder, createdAt])
+  @@index([workspaceId])
 }
 
 model MetaAdConnection {
