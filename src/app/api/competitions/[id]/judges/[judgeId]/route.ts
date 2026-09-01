@@ -41,6 +41,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     data.affiliation = typeof body.affiliation === "string" && body.affiliation.trim() ? body.affiliation.trim() : null;
   }
   if (typeof body.weight === "number" && body.weight >= 1) data.weight = Math.floor(body.weight);
+  if (body.roundKind === "prelim" || body.roundKind === "final") data.roundKind = body.roundKind;
 
   // 비밀번호는 해시로만 저장하므로 **복구가 아니라 재설정**이다. 잊었으면 새로 만들어 전달한다.
   if (body.resetPassword === true) {
@@ -65,8 +66,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   return NextResponse.json({
     judge: {
       id: updated.id, name: updated.name, email: updated.email, affiliation: updated.affiliation,
-      accessToken: updated.accessToken, weight: updated.weight, hasPassword: !!updated.passwordHash,
-      lastSeenAt: updated.lastSeenAt,
+      accessToken: updated.accessToken, weight: updated.weight, roundKind: updated.roundKind,
+      hasPassword: !!updated.passwordHash, lastSeenAt: updated.lastSeenAt,
     },
     ...(newPassword ? { password: newPassword } : {}),
   });

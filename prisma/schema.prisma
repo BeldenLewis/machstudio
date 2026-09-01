@@ -1257,6 +1257,10 @@ model CompetitionJudge {
   accessToken   String    @unique // 심사위원마다 다른 링크
   passwordHash  String? // 링크만으로는 열리지 않는다. hashSharePassword 재사용.
   weight        Int       @default(1)
+  // "prelim" | "final" — 등록할 때 고른, 이 심사위원이 심사할 라운드. 예선·본선을 같은
+  // 심사위원단이 통째로 보는 대회도 있지만 반대로 라운드마다 다른 사람을 쓰는 대회가 더
+  // 흔해서(현장 섭외 사정), 심사위원 단위로 배정한다 — 라운드 단위 명단이 아니다.
+  roundKind     String    @default("final")
   invitedAt     DateTime?
   lastSeenAt    DateTime?
   createdAt     DateTime  @default(now())
