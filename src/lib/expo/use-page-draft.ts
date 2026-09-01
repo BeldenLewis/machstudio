@@ -146,7 +146,7 @@ export function useExpoPageDraft(
       draft: { ...next.config, sections: stripExpoRowKeys(next.config.sections) },
       draftRevision,
     });
-    if (!isCurrent(captured)) return outcome;
+    if (!isCurrent(captured)) return { kind: "stale" as const, retry: mountedRef.current };
     if (outcome.kind === "saved") {
       setRevision(outcome.revision);
       setPage((current) => current ? {
@@ -158,10 +158,11 @@ export function useExpoPageDraft(
       } : current);
       try {
         const fresh = await activeTransport.load(pageId);
-        if (!isCurrent(captured)) return outcome;
+        if (!isCurrent(captured)) return { kind: "stale" as const, retry: mountedRef.current };
         setPage((current) => current ? withFreshMetadata(current, fresh) : current);
       } catch {
         // 저장은 성공했다. 메타 조회 실패 때문에 성공을 실패로 바꾸거나 초안을 지우지 않는다.
+        if (!isCurrent(captured)) return { kind: "stale" as const, retry: mountedRef.current };
       }
     }
     return outcome;

@@ -4,6 +4,7 @@
 
 - Complete; commit title: `refactor: share one Expo page draft across the editor`.
 - Fix round 1 complete; follow-up commit title: `fix: harden the shared Expo page draft workspace`.
+- Fix round 2 complete; follow-up commit title: `fix: invalidate stale Expo autosave outcomes`.
 - Base verified before work: `8a945354cba317b6ca4e266b604c8948f6eb631b`.
 - No database, auth, Supabase, storage, network, dev-server, browser, deploy, flag, or Imweb operation was used.
 
@@ -34,6 +35,13 @@
 - TypeScript, Task 11 changed-file lint, and `git diff --check` passed.
 - DB-free full suite (run once for this fix round): 191 files, 2,407/2,407 tests passed.
 
+### Fix round 2
+
+- RED: two precise transport-rerender races failed while the replacement load was still pending; stale `saved` advanced the old CAS anchor and stale `conflict` froze the shared autosave, so the new transport received no save.
+- GREEN focused hook/workspace/autosave suites: 3 files, 68/68 tests passed.
+- TypeScript, Task 11 changed-file lint, and `git diff --check` passed.
+- DB-free full suite (run once for this fix round): 191 files, 2,409/2,409 tests passed.
+
 ## Self-review
 
 - One owner: `useExpoPageDraft` alone owns title, Imweb URL, config, revision, autosave, conflict, and immutable-`sid` selection. Workspace children receive values/callbacks and have no shadow draft or direct draft-save request.
@@ -49,6 +57,7 @@
 - Read-only enforcement: variant/design controls and every nested-list mutation path are hidden or gated by `canEdit`; tests cover both absent controls and unchanged data.
 - Title mapping: the shortcut now uses only registry-declared writable fields, maps campaign-hero edits to `typingLines[0]`, and preserves direct string values and storage shape.
 - Move announcements: keyboard moves include the resulting one-based position, so repeated moves always produce distinct screen-reader text.
+- Stale autosave boundary: the draft owner converts obsolete transport outcomes into an internal autosave-only sentinel. A mounted replacement epoch retries the same dirty snapshot through the current save callback without advancing the old revision or accepting its conflict; unmount discards it without a state update or retry. Current-epoch saved/conflict behavior remains covered and unchanged.
 
 ## Concerns
 

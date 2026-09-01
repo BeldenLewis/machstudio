@@ -178,6 +178,66 @@ describe("one Expo page draft owner", () => {
     expect(first.load).toHaveBeenCalledTimes(1);
   });
 
+  it("does not advance the CAS anchor from a stale saved result before the replacement load", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const oldSave = deferred<Awaited<ReturnType<ExpoPageTransport["save"]>>>();
+    const replacementLoad = deferred<ExpoPageEditorDto>();
+    const first = makeTransport(vi.fn(() => oldSave.promise));
+    const second = makeTransport();
+    second.load
+      .mockImplementationOnce(() => replacementLoad.promise)
+      .mockResolvedValue({ ...page(), draftRevision: 8 });
+    const view = render(
+      <PageDraftWorkspace siteId="site-1" pageId="page-1" permissions={permissions} transport={first.transport} />,
+    );
+    await act(async () => {});
+    await user.type(screen.getByLabelText("페이지 제목"), " 오래됨");
+    await act(async () => { await vi.advanceTimersByTimeAsync(900); });
+
+    view.rerender(
+      <PageDraftWorkspace siteId="site-1" pageId="page-1" permissions={permissions} transport={second.transport} />,
+    );
+    await act(async () => {});
+    await act(async () => { oldSave.resolve({ kind: "saved", revision: 99 }); });
+
+    expect(second.save).toHaveBeenCalledTimes(1);
+    expect(second.save).toHaveBeenCalledWith("page-1", expect.objectContaining({
+      title: "홈 오래됨",
+      draftRevision: 7,
+    }));
+    expect(screen.queryByText("다른 팀원이 먼저 저장했어요")).not.toBeInTheDocument();
+  });
+
+  it("does not freeze the new epoch from a stale conflict before the replacement load", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const oldSave = deferred<Awaited<ReturnType<ExpoPageTransport["save"]>>>();
+    const replacementLoad = deferred<ExpoPageEditorDto>();
+    const first = makeTransport(vi.fn(() => oldSave.promise));
+    const second = makeTransport();
+    second.load
+      .mockImplementationOnce(() => replacementLoad.promise)
+      .mockResolvedValue({ ...page(), draftRevision: 8 });
+    const view = render(
+      <PageDraftWorkspace siteId="site-1" pageId="page-1" permissions={permissions} transport={first.transport} />,
+    );
+    await act(async () => {});
+    await user.type(screen.getByLabelText("페이지 제목"), " 오래됨");
+    await act(async () => { await vi.advanceTimersByTimeAsync(900); });
+
+    view.rerender(
+      <PageDraftWorkspace siteId="site-1" pageId="page-1" permissions={permissions} transport={second.transport} />,
+    );
+    await act(async () => {});
+    await act(async () => { oldSave.resolve({ kind: "conflict", revision: 99 }); });
+
+    expect(second.save).toHaveBeenCalledTimes(1);
+    expect(second.save).toHaveBeenCalledWith("page-1", expect.objectContaining({
+      title: "홈 오래됨",
+      draftRevision: 7,
+    }));
+    expect(screen.queryByText("다른 팀원이 먼저 저장했어요")).not.toBeInTheDocument();
+  });
+
   it("does not continue a deferred save after unmount", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const pending = deferred<Awaited<ReturnType<ExpoPageTransport["save"]>>>();
