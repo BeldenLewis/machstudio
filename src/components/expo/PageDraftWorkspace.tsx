@@ -6,6 +6,7 @@ import { Field, FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 import { ExpoPublishPanel } from "@/components/expo/ExpoPublishPanel";
 import { ExpoSectionTree, expoSectionTitle } from "@/components/expo/ExpoSectionTree";
 import { SelectedSectionEditor } from "@/components/expo/SectionEditor";
+import { ExpoPageSettings } from "@/components/expo/ExpoPageSettings";
 import { useExpoPageDraft, type ExpoPageDraftState } from "@/lib/expo/use-page-draft";
 import type { ExpoPageTransport } from "@/lib/expo/editor-dto";
 import type { ExpoPermissions } from "@/lib/expo/permissions";
@@ -111,6 +112,9 @@ export function PageDraftWorkspace({
     ...state.page.readiness.liveIssues,
     ...state.page.readiness.notes,
   ] : [], [state.page]);
+  const fieldIssues = useMemo(() => (state.rejected ?? []).map((issue) => ({
+    ...issue, code: "rejected", severity: "error" as const,
+  })), [state.rejected]);
 
   if (state.loading && !state.page) {
     return <p className="py-12 text-sm text-muted-foreground">미리보기를 준비하는 중이에요.</p>;
@@ -226,6 +230,13 @@ export function PageDraftWorkspace({
           </label>
         </section>
 
+        <ExpoPageSettings
+          config={state.config}
+          issues={fieldIssues}
+          canEdit={permissions.canEdit}
+          onChange={(config) => state.updateConfig(() => config)}
+        />
+
         {selected ? (
           <section className="space-y-3" aria-label={`${expoSectionTitle(selected)} 편집기`}>
             {heading ? <label className="block">
@@ -248,6 +259,8 @@ export function PageDraftWorkspace({
               sources={sources}
               pages={pages}
               locale={locale}
+              config={state.config}
+              issues={fieldIssues}
             />
           </section>
         ) : (

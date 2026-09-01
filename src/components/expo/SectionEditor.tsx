@@ -2,18 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Plus } from "lucide-react";
-import { Chip, FieldSelect, FINISH, R, Segmented } from "@/components/ui/primitives";
+import { Chip, FINISH, R, Segmented } from "@/components/ui/primitives";
 import { Switch } from "@/components/ui/switch";
 import { EditableList, ROW_KEY } from "@/components/ui/editable-list";
 import { SlotField, type LinkTarget } from "@/components/expo/SlotField";
-import { ExpoMediaUploadField } from "@/components/expo/fields/ExpoMediaUploadField";
-import { ImageCropField } from "@/components/expo/fields/ImageCropField";
+import { RegisteredSectionEditor, sectionEditorFor } from "@/components/expo/section-editors/registry";
 import { objectParticle, topicParticle } from "@/lib/korean";
 import { newSection } from "@/lib/expo/config";
 import { hasContent, slotHasContent } from "@/lib/expo/model";
 import { EXPO_LIMITS, EXPO_SECTIONS, sectionDef } from "@/lib/expo/registry";
-import type { ExpoSection, SlotDef } from "@/lib/expo/types";
-import type { ExpoImageValue, ExpoVideoValue, ImageCrop } from "@/lib/expo/sections/types";
+import type { ExpoPageConfigV2, ExpoSection, FieldIssue, SlotDef } from "@/lib/expo/types";
 
 /**
  * 구획 편집 — **한 카드 = 한 구획, 값은 그 자리에서 바로 고쳐진다.**
@@ -81,6 +79,9 @@ export interface SectionsEditorProps {
   pages?: readonly LinkTarget[];
   /** 사이트의 defaultLocale — 글이 어느 로케일에 들어가는가. */
   locale: string;
+  /** 전체 페이지 참조 registry — custom editor는 이 same-site draft만 받는다. */
+  config?: ExpoPageConfigV2;
+  issues?: readonly FieldIssue[];
   /**
    * 미리보기에서 누른 구획 — 그 카드로 데려가고 잠깐 테를 두른다.
    * **값을 비우는 것은 부모가 한다**(잠깐 뒤에). 여기서 타이머로 지우면 효과 안에서
@@ -95,7 +96,7 @@ export interface SectionsEditorProps {
 
 export function SectionsEditor({
   sections, onChange, canEdit, embedLocked = false, siteId, sources, pages, locale, focusedSid,
-  showCatalog = true, showHeading = true, reorderable = true,
+  config, issues = [], showCatalog = true, showHeading = true, reorderable = true,
 }: SectionsEditorProps) {
   /**
    * 삭제 유예(5초) 중인 구획 — **화면에서만** 사라진 것들이다. 배열에는 그대로 있다.
@@ -185,6 +186,8 @@ export function SectionsEditor({
               sources={sources}
               pages={pages}
               locale={locale}
+              config={config ?? { schemaVersion: 2, sections }}
+              issues={issues}
             />
           )}
           renderAdd={({ add, atMax }) =>
@@ -216,13 +219,15 @@ export interface SelectedSectionEditorProps {
   sources?: readonly { id: string; name: string; isActive: boolean }[];
   pages?: readonly LinkTarget[];
   locale: string;
+  config?: ExpoPageConfigV2;
+  issues?: readonly FieldIssue[];
 }
 
 /**
  * 기존 구획 편집기를 선택된 sid 한 장에 조립한다. 값 state는 만들지 않고 부모 초안을 바로 고친다.
  */
 export function SelectedSectionEditor({
-  section, onChange, onRemove, canEdit, embedLocked, siteId, sources, pages, locale,
+  section, onChange, onRemove, canEdit, embedLocked, siteId, sources, pages, locale, config, issues,
 }: SelectedSectionEditorProps) {
   return (
     <SectionsEditor
@@ -234,6 +239,8 @@ export function SelectedSectionEditor({
       sources={sources}
       pages={pages}
       locale={locale}
+      config={config}
+      issues={issues}
       focusedSid={section.sid}
       showCatalog={false}
       showHeading={false}
@@ -305,12 +312,14 @@ interface SectionCardProps {
   sources?: readonly { id: string; name: string; isActive: boolean }[];
   pages?: readonly LinkTarget[];
   locale: string;
+  config: ExpoPageConfigV2;
+  issues: readonly FieldIssue[];
   /** 미리보기에서 방금 눌렀다 — 잠깐 테를 둘러 눈이 따라가게 한다. */
   flash?: boolean;
 }
 
 function SectionCard({
-  section, controls, canEdit, embedLocked, siteId, sources, pages, locale, flash,
+  section, controls, canEdit, embedLocked, siteId, sources, pages, locale, config, issues, flash,
 }: SectionCardProps) {
   const def = sectionDef(section.type);
 
@@ -336,6 +345,7 @@ function SectionCard({
   }
 
   const { patch } = controls;
+  const hasCustomEditor = sectionEditorFor(section.type) !== null;
   const filled = hasContent(section);
   const design = def.design ?? {};
   const designKeys = Object.keys(design);
@@ -396,23 +406,19 @@ function SectionCard({
 
       {/* ── 값 ───────────────────────────────────────────────────── */}
       <div className={`space-y-2.5 ${section.enabled ? "" : "opacity-60"}`}>
-        {section.type === "campaign-hero" ? (
-          <CampaignHeroMediaEditor
-            siteId={siteId}
-            value={section.content.video}
-            disabled={!canEdit}
-            onChange={(video) => setSlot("video", video)}
-          />
-        ) : null}
-        {section.type === "speaker-carousel" ? (
-          <SpeakerMediaEditor
-            siteId={siteId}
-            speakers={section.content.speakers}
-            disabled={!canEdit}
-            onChange={(speakers) => setSlot("speakers", speakers)}
-          />
-        ) : null}
-        {def.slots.map((slot) =>
+        {hasCustomEditor ? <RegisteredSectionEditor
+          siteId={siteId}
+          locale={locale}
+          sources={sources ?? []}
+          pages={(pages ?? []).map((page) => ({ ...page, imwebUrl: null, deletedAt: null }))}
+          section={section}
+          config={config}
+          issues={issues
+            .filter((issue) => !issue.sid || issue.sid === section.sid)
+            .map((issue) => ({ ...issue, path: issue.path.replace(/^sections\[\d+\]\.content\.?/, "") }))}
+          canEdit={canEdit}
+          onChange={(next) => applyPatch(next)}
+        /> : def.slots.map((slot) =>
           slot.kind === "list" ? (
             <ListSlot
               key={slot.key}
@@ -479,80 +485,6 @@ function SectionCard({
           </span>
         </label>
       </div>
-    </div>
-  );
-}
-
-/** Hero 영상의 권리 확인은 업로드와 떨어뜨리지 않는다. 새 영상은 항상 미확인에서 시작한다. */
-function CampaignHeroMediaEditor({
-  siteId, value, disabled, onChange,
-}: {
-  siteId: string;
-  value: unknown;
-  disabled?: boolean;
-  onChange(value: ExpoVideoValue | undefined): void;
-}) {
-  const video = value && typeof value === "object" && (value as { kind?: unknown }).kind === "video"
-    ? value as ExpoVideoValue
-    : undefined;
-  return (
-    <div className="space-y-1.5">
-      <p className="text-xs font-medium text-muted-foreground">Hero 영상</p>
-      <ExpoMediaUploadField siteId={siteId} kind="video" value={video} disabled={disabled} onChange={(next) => onChange(next?.kind === "video" ? next : undefined)} />
-      {video ? (
-        <label className="block text-[11px] font-medium text-muted-foreground">
-          영상 사용 권리
-          <FieldSelect
-            aria-label="Hero 영상 사용 권리"
-            value={video.rightsStatus}
-            disabled={disabled}
-            onChange={(event) => onChange({ ...video, rightsStatus: event.target.value as ExpoVideoValue["rightsStatus"] })}
-          >
-            <option value="unconfirmed">아직 확인하지 않음</option>
-            <option value="confirmed">사용 권리 확인함</option>
-          </FieldSelect>
-        </label>
-      ) : null}
-    </div>
-  );
-}
-
-function SpeakerMediaEditor({
-  siteId, speakers, disabled, onChange,
-}: {
-  siteId: string;
-  speakers: unknown;
-  disabled?: boolean;
-  onChange(value: Array<Record<string, unknown>>): void;
-}) {
-  const rows = Array.isArray(speakers)
-    ? speakers.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object" && !Array.isArray(row))
-    : [];
-  if (rows.length === 0) return null;
-  const patchRow = (index: number, patch: Record<string, unknown>) =>
-    !disabled && onChange(rows.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row));
-  return (
-    <div className="space-y-2">
-      <p className="text-xs font-medium text-muted-foreground">연사 이미지와 자르기</p>
-      {rows.map((row, index) => {
-        const image = row.image && typeof row.image === "object" && (row.image as { kind?: unknown }).kind === "image"
-          ? row.image as ExpoImageValue
-          : undefined;
-        const rawCrop = row.crop && typeof row.crop === "object" ? row.crop as Partial<ImageCrop> : {};
-        const crop: ImageCrop = {
-          fit: rawCrop.fit === "contain" ? "contain" : "cover",
-          x: typeof rawCrop.x === "number" ? rawCrop.x : 50,
-          y: typeof rawCrop.y === "number" ? rawCrop.y : 50,
-          scale: typeof rawCrop.scale === "number" ? rawCrop.scale : 1,
-        };
-        return (
-          <div key={typeof row.id === "string" ? row.id : index} className={`${R.surface} ${FINISH.s2} space-y-2 bg-background/40 p-2`}>
-            <p className="text-[11px] font-medium">연사 {index + 1}</p>
-            <ExpoMediaUploadField siteId={siteId} kind="image" value={image} disabled={disabled} onChange={(next) => patchRow(index, { image: next?.kind === "image" ? next : undefined })} />
-            {image ? <ImageCropField image={image} value={crop} disabled={disabled} onChange={(next) => patchRow(index, { crop: next })} /> : null}
-          </div>
-        );
-      })}
     </div>
   );
 }

@@ -26,6 +26,7 @@ import { normalizeExpoPage, normalizeExpoTheme } from "@/lib/expo/config";
 import { normalizeHexColor } from "@/lib/color";
 import { buildExpoPayload, collectInternalPageIds, collectSourceRefs } from "@/lib/expo/payload";
 import { expoCustomCodeDigest, previewSections } from "@/lib/expo/code-digest";
+import { campaignPreviewMode, forcedCampaignsForPreview } from "@/lib/expo/campaign-preview";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +119,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
   const channel = (url.searchParams.get("channel") ?? "").slice(0, 64);
   const wantsCode = url.searchParams.get("customCode") === "run";
   const requestedDigest = (url.searchParams.get("codeDigest") ?? "").slice(0, 64);
+  const forcedCampaigns = forcedCampaignsForPreview(campaignPreviewMode(url.searchParams.get("campaignState")));
 
   let site: {
     id: string;
@@ -198,6 +200,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
     locale: site.defaultLocale || "ko",
     pages: siblings,
     now: new Date(),
+    ...(forcedCampaigns ? { forcedCampaigns } : {}),
   });
 
   /**

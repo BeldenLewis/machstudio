@@ -18,7 +18,8 @@ import { ExpoPageTree } from "@/components/expo/ExpoPageTree";
 import { useExpoPreviewChannel } from "@/lib/expo/use-preview-channel";
 import type { ExpoReadinessView, ExpoSnippetsView } from "@/lib/expo/editor-dto";
 import type { ExpoPermissions, ExpoRelease } from "@/lib/expo/permissions";
-import type { ExpoTheme } from "@/lib/expo/types";
+import type { CampaignPreviewMode, ExpoTheme } from "@/lib/expo/types";
+export { forcedCampaignsForPreview } from "@/lib/expo/campaign-preview";
 
 /**
  * 홈페이지 편집 — **탐색 · 편집 · 미리보기 3열**.
@@ -378,6 +379,8 @@ function PreviewPane({
   onSelectSection: (sid: string) => void;
 }) {
   const [showPublished, setShowPublished] = useState(false);
+  /** 미리보기 주소에만 실리는 캠페인 가정. 초안과 자동저장에는 닿지 않는다. */
+  const [campaignMode, setCampaignMode] = useState<CampaignPreviewMode>("current");
   /** 실행을 허가한 지문. 세션 한 번의 판단이라 저장하지 않는다. */
   const [approvedDigest, setApprovedDigest] = useState("");
 
@@ -423,6 +426,7 @@ function PreviewPane({
     if (!previewToken || !pageId || !own) return null;
     const query = new URLSearchParams({ page: pageId });
     if (wantPublished) query.set("published", "1");
+    if (campaignMode !== "current") query.set("campaignState", campaignMode);
     if (codeApproved) {
       query.set("customCode", "run");
       query.set("codeDigest", digest);
@@ -443,7 +447,7 @@ function PreviewPane({
     }
     query.set("channel", channel);
     return `/hp/${encodeURIComponent(previewToken)}?${query.toString()}`;
-  }, [previewToken, pageId, own, wantPublished, codeApproved, digest, channel, initialTheme]);
+  }, [previewToken, pageId, own, wantPublished, campaignMode, codeApproved, digest, channel, initialTheme]);
 
   if (!src) {
     return (
@@ -457,26 +461,43 @@ function PreviewPane({
   return (
     <aside className={`${R.panel} ${FINISH.s1} space-y-2 bg-card p-3`} aria-label="미리보기">
       <PreviewFrame
-        title="미리보기"
+        title="홈페이지 미리보기"
         src={src}
         frameRef={frameRef}
         /* 저장될 때마다 다시 불러온다 — 안 그러면 고친 내용이 영영 안 보인다. */
-        reloadKey={`${own?.revision ?? 0}:${codeApproved ? "code" : "safe"}`}
+        reloadKey={`${own?.revision ?? 0}:${campaignMode}:${codeApproved ? "code" : "safe"}`}
         openLabel="새 탭에서 미리보기 열기"
         note={release.publicEmbedEnabled ? undefined : "공개 전"}
         controls={
           /* 발행본이 실제로 있을 때만 고르게 한다 — 없는 것을 고르는 칸은 고장으로 읽힌다. */
-          own?.hasPublished ? (
-            <Segmented
-              label="무엇을 보는가"
-              value={showPublished ? "published" : "draft"}
-              onChange={(next) => setShowPublished(next === "published")}
-              options={[
-                { value: "draft", label: "초안" },
-                { value: "published", label: "발행본" },
-              ]}
-            />
-          ) : null
+          <div className="flex flex-wrap items-center gap-2">
+            {own?.hasPublished ? (
+              <Segmented
+                label="무엇을 보는가"
+                value={showPublished ? "published" : "draft"}
+                onChange={(next) => setShowPublished(next === "published")}
+                options={[
+                  { value: "draft", label: "초안" },
+                  { value: "published", label: "발행본" },
+                ]}
+              />
+            ) : null}
+            <label className="text-[11px] text-muted-foreground">
+              <span className="sr-only">캠페인 미리보기</span>
+              <select
+                aria-label="캠페인 미리보기"
+                value={campaignMode}
+                onChange={(event) => setCampaignMode(event.target.value as CampaignPreviewMode)}
+                className="min-h-8 rounded-md bg-secondary px-2 text-xs text-foreground"
+              >
+                <option value="current">현재 일정</option>
+                <option value="exhibitor">참가기업만</option>
+                <option value="visitor">참관객만</option>
+                <option value="both">둘 다</option>
+                <option value="ended">둘 다 종료</option>
+              </select>
+            </label>
+          </div>
         }
       />
 

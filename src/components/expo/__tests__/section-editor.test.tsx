@@ -341,6 +341,20 @@ describe("카탈로그에 없는 타입", () => {
   });
 });
 
+describe("STK client editor registry", () => {
+  it.each([
+    ["campaign-hero", "campaign-hero-editor"],
+    ["exhibition-grid", "exhibition-grid-editor"],
+    ["audience-links", "audience-links-editor"],
+    ["speaker-carousel", "speaker-carousel-editor"],
+    ["sponsor-marquee", "sponsor-marquee-editor"],
+    ["cta-band", "cta-band-editor"],
+  ])("%s 구획은 전용 편집기로 보낸다", async (type, testId) => {
+    await render([newSection(type)]);
+    expect(host.querySelector(`[data-testid="${testId}"]`)).toBeTruthy();
+  });
+});
+
 /**
  * 올리는 동안에도 화면은 살아 있다 — 그 사이의 편집이 **되돌아가면 안 된다.**
  *

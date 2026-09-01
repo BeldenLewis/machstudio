@@ -256,6 +256,34 @@ describe("초안과 발행본", () => {
   });
 });
 
+describe("캠페인 미리보기 가정", () => {
+  function campaignSite() {
+    const config = {
+      schemaVersion: 2,
+      settings: { campaigns: [
+        { id: "exhibitor-recruitment", label: "참가기업", startsAt: "2020-01-01T00:00:00Z", endsAt: "2030-01-01T00:00:00Z", override: "force-off", enabled: true },
+        { id: "visitor-registration", label: "참관객", startsAt: "2020-01-01T00:00:00Z", endsAt: "2030-01-01T00:00:00Z", override: "force-off", enabled: true },
+      ] },
+      sections: [section()],
+    };
+    return site({ pages: [{ id: "pg1", isHome: true, sortOrder: 0, draft: config, published: config, imwebUrl: null, deletedAt: null }] });
+  }
+
+  it("whitelisted both 상태만 두 캠페인을 강제로 켠다", async () => {
+    prismaMock.expoSite.findFirst.mockResolvedValue(campaignSite());
+    const args = bootArgs(await (await get("?campaignState=both")).text());
+    expect(args).toContain('"exhibitor-recruitment","label":"참가기업","active":true');
+    expect(args).toContain('"visitor-registration","label":"참관객","active":true');
+  });
+
+  it("모르는 query 값은 안전하게 무시한다", async () => {
+    prismaMock.expoSite.findFirst.mockResolvedValue(campaignSite());
+    const args = bootArgs(await (await get("?campaignState=unknown")).text());
+    expect(args).toContain('"exhibitor-recruitment","label":"참가기업","active":false');
+    expect(args).toContain('"visitor-registration","label":"참관객","active":false');
+  });
+});
+
 describe("컨테이너 폭", () => {
   /** 아임웹 콘텐츠 폭 흉내 — 실측 1410/1440·360/390. */
   it("기본은 표준 폭이다", async () => {

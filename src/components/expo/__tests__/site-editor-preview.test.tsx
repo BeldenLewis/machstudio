@@ -253,6 +253,20 @@ describe("미리보기 주소", () => {
     await click(buttonByText("발행본"));
     expect(frameSrc()).toContain("published=1");
   });
+
+  it("캠페인 가정만 주소에 바꾸고 초안과 자동저장은 건드리지 않는다", async () => {
+    await render();
+    const beforeDraft = structuredClone(pageBody.draft);
+    const beforePatches = patchCount;
+    const select = host.querySelector<HTMLSelectElement>('select[aria-label="캠페인 미리보기"]')!;
+    await act(async () => {
+      select.value = "both";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(frameSrc()).toContain("campaignState=both");
+    expect(pageBody.draft).toEqual(beforeDraft);
+    expect(patchCount).toBe(beforePatches);
+  });
 });
 
 describe("붙여넣은 코드", () => {
