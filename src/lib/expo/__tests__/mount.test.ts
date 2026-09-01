@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mountExpo, type ExpoRuntimePayload } from "@/lib/expo/mount";
-import { EXPO_HOST_TAG } from "@/lib/expo/shadow";
+import { EXPO_HOST_TAG, mountExpoShell } from "@/lib/expo/shadow";
 import { resetExpoPortal } from "@/lib/expo/overlay";
-import { resetFormTargets } from "@/lib/collect-form/target-registry";
-import { getFormTarget } from "@/lib/collect-form/target-registry";
+import {
+  formTargetKey, getFormTarget, registerFormTarget, resetFormTargets, unregisterFormTarget,
+} from "@/lib/collect-form/target-registry";
 import { resetExpoFontRegistry } from "@/lib/expo/font";
 import { resetExpoSeen } from "@/lib/expo/seen";
 import { scrollLockDepth, unlockScroll } from "@/lib/dom/scroll-lock";
@@ -63,6 +64,7 @@ beforeEach(() => {
   resetExpoFontRegistry(globalThis as never);
   delete (globalThis as Record<string, unknown>).__MACH_EXPO_MOUNTS_V1__;
   delete (globalThis as Record<string, unknown>).__MACH_EXPO_SHEET_V1__;
+  delete (window as unknown as Record<string, unknown>).__MACH_EXPO_FORM_INSTANCE_SEQUENCE_V1__;
   while (scrollLockDepth() > 0) unlockScroll();
 });
 
@@ -225,9 +227,13 @@ describe("등록 폼 구획", () => {
     const oldTarget = getFormTarget(key)!;
 
     const second = mount({ container, payload: payload({ sections: [formSection("inline")] }) });
-    const nextTarget = getFormTarget(key);
+    const nextKey = document.head.querySelector<HTMLScriptElement>("script[data-ms-form-target]")!
+      .dataset.msFormTarget!;
+    const nextTarget = getFormTarget(nextKey);
 
     expect(second).not.toBeNull();
+    expect(nextKey).not.toBe(key);
+    expect(getFormTarget(key)).toBeNull();
     expect(nextTarget).not.toBeNull();
     expect(nextTarget).not.toBe(oldTarget);
     expect((nextTarget!.container.getRootNode() as ShadowRoot).host.isConnected).toBe(true);
@@ -243,7 +249,7 @@ describe("등록 폼 구획", () => {
     const oldTarget = getFormTarget(key)!;
     const append = document.head.appendChild.bind(document.head);
     vi.spyOn(document.head, "appendChild").mockImplementation(((node: Node) => {
-      if ((node as HTMLScriptElement).dataset?.msFormTarget === key) {
+      if ((node as HTMLScriptElement).dataset?.msFormTarget) {
         throw new Error("form script attach failed");
       }
       return append(node);
@@ -260,6 +266,43 @@ describe("등록 폼 구획", () => {
     expect(getFormTarget(key)).toBe(oldTarget);
     expect((oldTarget.container.getRootNode() as ShadowRoot).host.isConnected).toBe(true);
     first.destroy();
+  });
+
+  it("pre-ea3f632 shell의 무조건 cleanup도 mixed-version 후보 예약을 지우지 않는다", () => {
+    const { container } = host();
+    const legacy = mountExpoShell({
+      container,
+      pageId: "pg1",
+      theme: THEME,
+      origin: "https://mach.example.com",
+      doc: document,
+    })!;
+    const legacySlot = document.createElement("div");
+    legacy.renderRoot.appendChild(legacySlot);
+    legacy.ready();
+    const legacyKey = formTargetKey({
+      sourceId: "src-1", view: "form", mode: "live", instanceKey: `pg1:page:${SID}`,
+    });
+    registerFormTarget(legacyKey, {
+      container: legacySlot,
+      styleRoot: legacy.root,
+      mode: "live",
+      disposeSignal: legacy.signal,
+    });
+    // pre-ea3f632 form-bridge closure는 record identity를 모르고 같은 key를 무조건 지웠다.
+    legacy.addCleanup(() => unregisterFormTarget(legacyKey));
+
+    const next = mount({ container, payload: payload({ sections: [formSection("inline")] }) });
+    const candidateKey = document.head.querySelector<HTMLScriptElement>("script[data-ms-form-target]")!
+      .dataset.msFormTarget!;
+
+    expect(next).not.toBeNull();
+    expect(candidateKey).not.toBe(legacyKey);
+    expect(getFormTarget(legacyKey)).toBeNull();
+    expect(getFormTarget(candidateKey)).not.toBeNull();
+    expect((getFormTarget(candidateKey)!.container.getRootNode() as ShadowRoot).host.isConnected).toBe(true);
+    expect(legacy.host.isConnected).toBe(false);
+    next?.destroy();
   });
 
   it("안내 문구의 줄바꿈을 보존한다", () => {

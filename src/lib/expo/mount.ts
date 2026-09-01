@@ -3,8 +3,9 @@
  *
  * ── 두 가지 크기 ──────────────────────────────────────────────────────
  * 페이지 통짜(`pageId:page`)와 섹션 단독(`pageId:{sid}`) — 조립 규칙은 같고 열쇠만
- * 다르다. 열쇠는 재진입에도 **안정**해야 한다: 파트너 사이트에 박힌 스니펫이 그 자리를
- * 다시 부를 때 같은 자리를 찾아야 하고, 폼 예약 열쇠의 접두사도 이 값이다.
+ * 다르다. shell 열쇠는 재진입에도 **안정**해야 한다: 파트너 사이트에 박힌 스니펫이 그
+ * 자리를 다시 부를 때 같은 자리를 찾는다. 폼 예약은 staged 세대를 더 붙여 구 런타임의
+ * cleanup closure가 새 후보의 같은 key를 지울 수 없게 한다.
  *
  * ── 절대 파트너 페이지를 깨지 않는다 ──────────────────────────────────
  * 어떤 실패도 던지지 않는다. 섹션 렌더러 하나가 던져도 **나머지는 보이고**
@@ -66,6 +67,21 @@ export interface ExpoMountHandle {
 const REMOUNT_LIMIT = 5;
 const REMOUNT_WINDOW_MS = 60_000;
 const REMOUNT_DEBOUNCE_MS = 200;
+const FORM_INSTANCE_SEQUENCE_KEY = "__MACH_EXPO_FORM_INSTANCE_SEQUENCE_V1__";
+
+type FormInstanceSequenceHost = { [FORM_INSTANCE_SEQUENCE_KEY]?: number };
+
+/** 서로 따로 캐시된 Expo IIFE도 같은 문서에서는 절대 같은 후보 form key를 쓰지 않는다. */
+function nextFormInstancePrefix(doc: Document, stablePrefix: string): string {
+  const host = (doc.defaultView ?? globalThis) as unknown as FormInstanceSequenceHost;
+  const current = host[FORM_INSTANCE_SEQUENCE_KEY];
+  const next = typeof current === "number" && Number.isSafeInteger(current)
+    && current >= 0 && current < Number.MAX_SAFE_INTEGER
+    ? current + 1
+    : 1;
+  host[FORM_INSTANCE_SEQUENCE_KEY] = next;
+  return `${stablePrefix}:stage-${next.toString(36)}`;
+}
 
 function warn(message: string, error?: unknown): void {
   try {
@@ -86,7 +102,7 @@ export function mountExpo(options: ExpoMountOptions): ExpoMountHandle | null {
    * 미리보기를 열 때마다 남의 추적 스크립트가 발화하면 통계가 오염된다.
    */
   const allowCustomCode = mode === "live" || mode === "standalone" ? true : payload.preview?.allowCustomCode === true;
-  const instancePrefix = `${payload.pageId}:${payload.sectionId ?? "page"}`;
+  const stableInstancePrefix = `${payload.pageId}:${payload.sectionId ?? "page"}`;
 
   let shell: ExpoShellHandle | null = null;
   let observer: MutationObserver | null = null;
@@ -107,6 +123,7 @@ export function mountExpo(options: ExpoMountOptions): ExpoMountHandle | null {
     });
     if (!stage) return false;
     const next = stage.shell;
+    const instancePrefix = nextFormInstancePrefix(doc, stableInstancePrefix);
 
     try {
       // 연결 확인 상태에서는 내용을 한 글자도 그리지 않는다.

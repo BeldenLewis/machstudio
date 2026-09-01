@@ -2,7 +2,8 @@
 
 ## Status
 
-- Complete; commit title: `feat: harden Expo dynamic delivery and connection status`.
+- Complete; original commit title: `feat: harden Expo dynamic delivery and connection status`.
+- Official-review follow-up title: `fix: isolate staged Expo form targets across runtimes`.
 - Base verified before work: `9ebb52bf44c785a23572c473c3fcc641a6b9331c`.
 - Scope was limited to Task 13. No plan, spec, or ledger file was edited.
 - No database, network, storage, dev-server, browser, deploy, feature-flag, or Imweb operation was used.
@@ -13,18 +14,18 @@
 - Added `src/lib/expo/connection-status.ts` and its focused tests.
 - Added atomic candidate staging across `src/lib/expo/shadow.ts`, `src/lib/expo/mount.ts`, `src/lib/expo/view-page.ts`, and `src/embed/expo-entry.ts`, with shell/mount regressions. Shared form reservations now use ownership-aware leases in the target registry/form bridge.
 - Returned seen metadata from the page GET and passed it through `PageDraftWorkspace` to `ExpoPublishPanel`; extended the API and panel tests.
-- Regenerated `src/generated/expo-runtime.ts` and the affected shared `src/generated/form-runtime.ts`; Expo runtime source hash is `sha256:a4c6f914b78881727773ecf9bd0ae307`.
+- Regenerated `src/generated/expo-runtime.ts` and the affected shared `src/generated/form-runtime.ts`; final Expo runtime source hash is `sha256:bd354bc00cec3489f67360f90ba1c1ea`.
 
 ## TDD evidence
 
 - RED: seven intended assertions failed and the new connection-status suite could not load because its module did not exist. Failures exposed the 86400-second SWR, missing stage API, destructive renderer failure, missing connection diagnostics, and schedule strings in the boot payload.
 - GREEN focused command from the brief: 6 files, 164/164 tests passed.
-- Final focused plus API/runtime/form-reservation boundary verification: 13 files, 375/375 tests passed.
-- Runtime builds passed: Expo is 84.2 KB and the affected shared form runtime is 74.6 KB minified.
+- Final focused plus API/runtime/form-reservation boundary verification: 13 files, 376/376 tests passed.
+- Runtime builds passed: Expo is 84.5 KB and the affected shared form runtime is 74.6 KB minified.
 - TypeScript: `npx tsc --noEmit -p tsconfig.json` passed.
 - Changed-file ESLint passed with zero findings. The repository-wide lint command still reports the pre-existing unrelated baseline of 173 findings (127 errors, 46 warnings).
 - Runtime leakage checks passed: embed manifest/build/load tests passed and the generated runtime contains none of the checked React runtime markers (`react-dom`, `jsx-runtime`, React internals, or `createRoot(`).
-- DB-free full suite was run once: 195 files, 2,455/2,455 tests passed.
+- Final DB-free full suite: 195 files, 2,459/2,459 tests passed.
 - `git diff --check` passed.
 
 ## Self-review
@@ -40,7 +41,7 @@
 ## Concerns
 
 - Repository-wide lint is not green because of the unrelated existing 173-finding baseline; every Task 13 changed source/test file is lint-clean.
-- The full suite emits existing intentional failure-path/jsdom stderr, but all 2,455 assertions pass.
+- The full suite emits existing intentional failure-path/jsdom stderr, but all 2,459 assertions pass.
 - Browser/dev-server verification was intentionally not run because Task 13 prohibited it; connected staging and UI behavior are covered with jsdom/runtime boundary tests.
 
 ## Review fix
@@ -51,4 +52,12 @@
 - Re-review found that the already-booted old form runtime could still unconditionally unregister the successor. RED round 2 reproduced that path with the old runtime booted; 1/12 failed.
 - GREEN round 2: target cleanup now deletes only the exact record it owns; form target/registry/bridge/mount suites passed 69/69.
 - Final independent read-only re-review confirms the prior Important issue is fully addressed and found no new Critical or Important issue.
-- The final affected focused/runtime boundary set passed 375/375. The DB-free full suite was not repeated after this review fix, preserving the requested single full-suite run.
+- The `ea3f632` affected focused/runtime boundary set passed 375/375. The DB-free full suite was not repeated during that first review round.
+
+## Official review fix
+
+- Official review found one remaining mixed-version boundary: a pre-`ea3f632` Expo IIFE captured unconditional `unregisterFormTarget(key)` and could delete a same-key staged candidate when its old shell was destroyed.
+- RED: a regression installed a legacy shell/target with the old unconditional cleanup, staged the new inline form, and failed 1/36 because the candidate reused the legacy key and its reservation disappeared.
+- Fix: every staged build adds a document-global monotonically increasing generation to its form instance prefix. Separately cached Expo IIFEs share the counter through the document window, while pre-fix IIFEs use the unsuffixed legacy key. The old closure therefore cannot name or delete the candidate reservation; render/attach failure and synchronous shell commit behavior are unchanged.
+- GREEN: mount suite 36/36; final focused/runtime boundary 376/376; final DB-free full suite 2,459/2,459. TypeScript, scoped ESLint, generated runtime source-hash synchronization, React/schedule marker checks, and `git diff --check` passed.
+- Independent read-only review found no Critical or Important issue and rated the fix Ready. Its only minor test note was addressed by directly asserting both same-version and legacy previous keys are absent after successful replacement.
