@@ -207,6 +207,7 @@ const MEDIA_FILTERS = [
   { value: "ALL", label: "전체" },
   { value: "GOOGLE", label: "Google" },
   { value: "META", label: "Meta" },
+  { value: "TIKTOK", label: "TikTok" },
   { value: "LINKEDIN", label: "LinkedIn" },
 ];
 
@@ -246,6 +247,14 @@ function defaultRange(): DateRange {
   const endOfToday = new Date(today.getTime() + 86_400_000 - 1);
   const from = new Date(today.getTime() - 30 * 86_400_000);
   return { from, to: endOfToday, label: "최근 30일" };
+}
+
+function folderDateRange(reportStart: string, reportEnd: string): DateRange {
+  const from = new Date(`${reportStart.slice(0, 10)}T00:00:00+09:00`);
+  const endDate = new Date(`${reportEnd.slice(0, 10)}T00:00:00+09:00`);
+  const to = new Date(endDate.getTime() + 86_400_000 - 1);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return defaultRange();
+  return { from, to, label: "폴더 기본 기간" };
 }
 
 function formatNumber(value: number | null | undefined) {
@@ -329,9 +338,13 @@ function formatDetailPeriod(value: string | null | undefined, granularity: Detai
 export default function AdPerformanceDashboard({
   folderId,
   folderProject,
+  reportStart,
+  reportEnd,
 }: {
   folderId: string;
   folderProject: { id: string; name: string };
+  reportStart?: string;
+  reportEnd?: string;
 }) {
   // 차트 색을 토큰에서 읽는다 — 박아 둔 #8b5cf6 은 리브랜드로 팔레트에서 사라진 보라였고,
   // 그래서 이 페이지의 그래프만 앱의 나머지(네이비)와 다른 색으로 보였다.
@@ -342,7 +355,7 @@ export default function AdPerformanceDashboard({
   const [data, setData] = useState<PerformanceResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [range, setRange] = useState<DateRange>(() => defaultRange());
+  const [range, setRange] = useState<DateRange>(() => reportStart && reportEnd ? folderDateRange(reportStart, reportEnd) : defaultRange());
   const [sourceFilter, setSourceFilter] = useState("ALL");
   const [selectedCampaignName, setSelectedCampaignName] = useState<string | null>(null);
   const [selectedAdGroupName, setSelectedAdGroupName] = useState<string | null>(null);
@@ -363,6 +376,19 @@ export default function AdPerformanceDashboard({
   const [campaignViewMode, setCampaignViewMode] = useState<"scroll" | "grid">("scroll");
   const [adGroupViewMode, setAdGroupViewMode] = useState<"scroll" | "grid">("scroll");
   const [showCampaigns, setShowCampaigns] = useState(false);
+
+  useEffect(() => {
+    if (reportStart && reportEnd) return;
+    let active = true;
+    void fetch(`/api/ad-performance/folders/${folderId}`)
+      .then(response => response.ok ? response.json() : null)
+      .then(result => {
+        if (active && result?.folder?.reportStart && result?.folder?.reportEnd) {
+          setRange(folderDateRange(result.folder.reportStart, result.folder.reportEnd));
+        }
+      });
+    return () => { active = false; };
+  }, [folderId, reportStart, reportEnd]);
 
   const selectSource = (nextSource: string) => {
     setSourceFilter(nextSource);
