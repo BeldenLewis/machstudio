@@ -49,6 +49,9 @@ class FakeResizeObserver {
 }
 
 const { ExpoSiteEditor } = await import("@/components/expo/ExpoSiteEditor");
+const { expoSectionTitle } = await import("@/components/expo/ExpoSectionTree");
+const { mergeEditorIssues } = await import("@/components/expo/PageDraftWorkspace");
+const { instantiateStkHomeV1 } = await import("@/lib/expo/presets/stk-home-v1");
 // 발행 패널이 공용 확인 모달을 쓴다 — 프로바이더 없이 렌더하면 훅이 던진다.
 const { ConfirmProvider } = await import("@/components/ui/confirm-dialog");
 
@@ -647,6 +650,67 @@ describe("서버가 값을 거절하면", () => {
     rejectNext = { errors: [] };
     await editAndSave("https://example.com/x");
     expect(bannerText()).toContain("저장할 수 없는 값이 있어요");
+  });
+});
+
+describe("발행 준비 문제", () => {
+  it("경로가 있는 준비 문제를 정확히 보존하고 저장 거절 중복만 제거한다", () => {
+    const readinessIssue = {
+      path: "sections[1].content.items[0].title",
+      code: "required-title",
+      message: "하위 전시 이름이 필요해요",
+      severity: "warning" as const,
+      sid: "section-2",
+    };
+    expect(mergeEditorIssues(
+      [readinessIssue, { code: "not-published", message: "발행 전이에요" }],
+      [
+        { path: readinessIssue.path, message: readinessIssue.message, sid: readinessIssue.sid },
+        { path: "settings.event.startsAt", message: "시작 시각이 필요해요" },
+      ],
+    )).toEqual([
+      readinessIssue,
+      {
+        path: "settings.event.startsAt",
+        code: "rejected",
+        message: "시작 시각이 필요해요",
+        severity: "error",
+      },
+    ]);
+  });
+
+  it("문제가 있는 구획을 고르면 같은 필드의 인라인 오류를 보여 준다", async () => {
+    const draft = instantiateStkHomeV1({
+      randomUUID: (() => {
+        let serial = 0;
+        return () => `00000000-0000-4000-8000-${String(++serial).padStart(12, "0")}`;
+      })(),
+    });
+    const targetIndex = draft.sections.findIndex((section) => section.type === "exhibition-grid");
+    const target = draft.sections[targetIndex];
+    const path = `sections[${targetIndex}].content.items[0].title`;
+    pageBody.draft = draft;
+    pageBody.readiness = {
+      canPublish: false,
+      canGoLive: false,
+      publishIssues: [{
+        path,
+        code: "required-title",
+        message: "하위 전시 이름이 필요해요",
+        severity: "error",
+        sid: target.sid,
+      }],
+      liveIssues: [],
+      notes: [],
+    };
+
+    await render();
+    expect([...host.querySelectorAll("[data-field-path]")]
+      .some((element) => element.textContent === "하위 전시 이름이 필요해요")).toBe(false);
+    await click(host.querySelector(`button[aria-label="${expoSectionTitle(target)} 편집"]`) ?? undefined);
+    const inlineIssue = [...host.querySelectorAll("[data-field-path]")]
+      .find((element) => element.textContent === "하위 전시 이름이 필요해요");
+    expect(inlineIssue).toBeTruthy();
   });
 });
 

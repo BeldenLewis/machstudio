@@ -11,7 +11,8 @@ import { useExpoPageDraft, type ExpoPageDraftState } from "@/lib/expo/use-page-d
 import type { ExpoPageTransport } from "@/lib/expo/editor-dto";
 import type { ExpoPermissions } from "@/lib/expo/permissions";
 import { sectionDef } from "@/lib/expo/registry";
-import type { ExpoSection } from "@/lib/expo/types";
+import type { ExpoSection, FieldIssue } from "@/lib/expo/types";
+import type { ExpoRejection } from "@/lib/expo/use-page-autosave";
 
 export interface PageDraftWorkspaceProps {
   siteId: string;
@@ -37,6 +38,38 @@ function readLocalized(value: unknown, locale: string): string {
     if (typeof text === "string") return text;
   }
   return "";
+}
+
+function isFieldIssue(value: unknown): value is FieldIssue {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const issue = value as Partial<FieldIssue>;
+  return typeof issue.path === "string"
+    && typeof issue.code === "string"
+    && typeof issue.message === "string"
+    && (issue.severity === "error" || issue.severity === "warning")
+    && (issue.sid === undefined || typeof issue.sid === "string");
+}
+
+function dedupeFieldIssues(issues: readonly FieldIssue[]): FieldIssue[] {
+  const seen = new Set<string>();
+  return issues.filter((issue) => {
+    const key = [issue.path, issue.message, issue.sid ?? ""].join("\u0000");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function mergeEditorIssues(
+  readinessIssues: readonly unknown[],
+  rejectedIssues: readonly ExpoRejection[] = [],
+): FieldIssue[] {
+  return dedupeFieldIssues([
+    ...readinessIssues.flatMap((issue) => isFieldIssue(issue) ? [issue] : []),
+    ...rejectedIssues.map((issue) => ({
+      ...issue, code: "rejected", severity: "error" as const,
+    })),
+  ]);
 }
 
 type SectionTitleField =
@@ -112,9 +145,10 @@ export function PageDraftWorkspace({
     ...state.page.readiness.liveIssues,
     ...state.page.readiness.notes,
   ] : [], [state.page]);
-  const fieldIssues = useMemo(() => (state.rejected ?? []).map((issue) => ({
-    ...issue, code: "rejected", severity: "error" as const,
-  })), [state.rejected]);
+  const fieldIssues = useMemo(
+    () => mergeEditorIssues(allIssues, state.rejected ?? []),
+    [allIssues, state.rejected],
+  );
 
   if (state.loading && !state.page) {
     return <p className="py-12 text-sm text-muted-foreground">미리보기를 준비하는 중이에요.</p>;

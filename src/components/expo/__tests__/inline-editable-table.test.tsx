@@ -27,8 +27,13 @@ describe("InlineEditableTable", () => {
         </>}
       />,
     );
-    expect(screen.getByRole("table", { name: "연사" })).toHaveClass("max-w-full");
+    const table = screen.getByRole("table", { name: "연사" });
+    expect(table).toHaveClass("max-w-full");
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["순서", "편집 값", "삭제"]);
+    expect(screen.getAllByRole("row").slice(1).every((row) => row.querySelectorAll("td").length === 3)).toBe(true);
     expect(screen.getAllByTestId("inline-row")[0]).toHaveClass("max-[390px]:grid");
+    expect(screen.getAllByTestId("inline-row").every((row) => !row.hasAttribute("draggable"))).toBe(true);
+    expect(screen.getByRole("button", { name: /첫 행 순서 변경/ })).toHaveAttribute("draggable", "true");
     expect(screen.getByAltText("첫 행 썸네일")).toBeInTheDocument();
     expect(screen.getByText("이름이 필요해요")).toHaveAttribute("data-field-path", "speakers[0].name");
   });

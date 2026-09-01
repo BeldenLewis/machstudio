@@ -41,3 +41,17 @@
 
 - The full suite emits existing intentional stderr from failure-path and jsdom limitation tests, but all 2,434 assertions pass.
 - Browser/dev-server visual verification was intentionally not run because Task 12 explicitly prohibited both; responsive behavior is covered structurally in jsdom and by the existing runtime CSS tests.
+
+## Fix round 1
+
+- Status: complete; limited to the four review findings and the handle-only drag cleanup. No plan, spec, or ledger file changed.
+- RED: the new regressions failed in all four intended places: readiness issues were absent from inline fields, a selected disabled campaign could not be removed, newly added speaker categories had no public toggle, and the table exposed two headers plus row-level dragging for three cells.
+- GREEN focused command: 6 files, 124/124 tests passed. TypeScript and changed-file ESLint passed with zero findings.
+- React best-practices review passed: helpers remain module-level and pure, hooks are unconditional, rows keep stable ids, and the new switch/header/drag semantics are accessible without adding a client data owner or effect.
+- Independent fix-diff review found no remaining Critical or Important issue.
+- DB-free full suite: 194 files, 2,438/2,438 tests passed with database and Supabase credentials explicitly empty.
+- Readiness issues: every path-bearing publish/live/note issue is merged with autosave rejections for settings and the selected editor. Duplicate path/message/sid entries collapse with readiness first, preserving its exact path, code, severity, and sid; section selection now exposes the matching inline error.
+- References/read-only: an unavailable campaign remains unselectable, while a stale selected unavailable campaign can be unchecked. Every speaker category, including a new disabled category, now has a guarded public switch; viewer interaction remains disabled.
+- Table semantics: the hidden header now has three scoped columns aligned with order, editable value, and delete cells. Only the accessible handle is draggable; table rows are drop targets but no longer claim to be draggable.
+- Settings/timezone, deletion reference guards, preview forcing, editor dispatch/registry boundaries, and the Task 11 shared draft/autosave/conflict/request path were not changed by this round.
+- The existing intentional full-suite stderr remains. Browser, dev server, database, network, storage, deploy, flags, and Imweb operations were not run.

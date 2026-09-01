@@ -21,8 +21,9 @@ export function CampaignPicker({ label, campaigns, value, disabled, onChange }: 
             <input
               type="checkbox"
               checked={selected.has(campaign.id)}
-              disabled={disabled || !campaign.enabled}
+              disabled={disabled || (!campaign.enabled && !selected.has(campaign.id))}
               onChange={(event) => {
+                if (event.target.checked && !campaign.enabled) return;
                 const next = new Set(value);
                 if (event.target.checked) next.add(campaign.id); else next.delete(campaign.id);
                 onChange(campaigns.map((item) => item.id).filter((id) => next.has(id)));

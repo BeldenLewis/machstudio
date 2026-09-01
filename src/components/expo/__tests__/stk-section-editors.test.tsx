@@ -46,6 +46,55 @@ describe("STK section editors", () => {
     expect(campaignChange).toHaveBeenLastCalledWith(["exhibitor-recruitment", "visitor-registration"]);
   });
 
+  it("allows removing a selected disabled campaign but never adding one", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const campaigns = config.settings!.campaigns!.map((campaign) => ({
+      ...campaign,
+      enabled: campaign.id !== "visitor-registration",
+    }));
+    const { rerender } = render(<CampaignPicker label="캠페인" campaigns={campaigns} value={[]} onChange={onChange} />);
+    const unavailable = screen.getByRole("checkbox", { name: "참관객" });
+    expect(unavailable).toBeDisabled();
+    await user.click(unavailable);
+    expect(onChange).not.toHaveBeenCalled();
+
+    rerender(<CampaignPicker label="캠페인" campaigns={campaigns} value={["visitor-registration"]} onChange={onChange} />);
+    const staleSelection = screen.getByRole("checkbox", { name: "참관객" });
+    expect(staleSelection).toBeEnabled();
+    await user.click(staleSelection);
+    expect(onChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it("can enable a newly added speaker category and gates its toggle for viewers", async () => {
+    const user = userEvent.setup();
+    const section = config.sections.find((candidate) => candidate.type === "speaker-carousel")!;
+    const Editor = sectionEditorFor(section.type)!;
+    const onChange = vi.fn();
+    const baseProps: SectionEditorProps = {
+      siteId: "site-1", locale: "ko", sources: [], pages: [], section, config, issues: [], canEdit: true, onChange,
+    };
+    const { rerender } = render(<Editor {...baseProps} />);
+
+    await user.click(screen.getByRole("button", { name: "연사 카테고리 추가" }));
+    const added = onChange.mock.lastCall![0] as typeof section;
+    rerender(<Editor {...baseProps} section={added} />);
+    const newCategoryNumber = (added.content.categories as unknown[]).length;
+    const toggleName = `${newCategoryNumber}번 카테고리 공개`;
+    const toggle = screen.getByRole("switch", { name: toggleName });
+    expect(toggle).not.toBeChecked();
+    await user.click(toggle);
+    const enabled = onChange.mock.lastCall![0] as typeof section;
+    expect((enabled.content.categories as Array<{ enabled: boolean }>).at(-1)?.enabled).toBe(true);
+
+    const beforeViewerClick = onChange.mock.calls.length;
+    rerender(<Editor {...baseProps} section={enabled} canEdit={false} />);
+    const viewerToggle = screen.getByRole("switch", { name: toggleName });
+    expect(viewerToggle).toBeDisabled();
+    await user.click(viewerToggle);
+    expect(onChange).toHaveBeenCalledTimes(beforeViewerClick);
+  });
+
   it.each(config.sections)("renders the $type editor and disables its controls for viewers", (section) => {
     const Editor = sectionEditorFor(section.type)!;
     const props: SectionEditorProps = { siteId: "site-1", locale: "ko", sources: [], pages: [], section, config, issues: [], canEdit: false, onChange: vi.fn() };

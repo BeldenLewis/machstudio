@@ -28,10 +28,11 @@ export function SpeakerCarouselEditor(props: SectionEditorProps) {
         issues={fieldIssues(props.issues, "categories")}
         canDelete={(category) => speakers.some((speaker) => speaker.categoryId === category.id) ? "이 카테고리를 참조하는 연사가 있어요" : true}
         onChange={(rows) => patch({ categories: rows.map((row, order) => ({ ...row, order })) })}
-        renderRow={(row, index) => <div className="grid gap-2 sm:grid-cols-3">
+        renderRow={(row, index) => <div className="grid gap-2 sm:grid-cols-4">
           <LocalizedField label={`${index + 1}번 카테고리 이름`} value={row.label} locale={props.locale} disabled={!props.canEdit} onChange={(label) => patchCategory(index, { label })} />
           <label className="text-[11px] text-muted-foreground">배지 토큰<FieldSelect aria-label={`${index + 1}번 카테고리 배지`} value={row.badgeToken} disabled={!props.canEdit} onChange={(event) => patchCategory(index, { badgeToken: event.target.value as SpeakerCategory["badgeToken"] })}>{SPEAKER_TOKENS.map((token) => <option key={token}>{token}</option>)}</FieldSelect></label>
           <label className="text-[11px] text-muted-foreground">그라디언트 토큰<FieldSelect aria-label={`${index + 1}번 카테고리 그라디언트`} value={row.gradientToken} disabled={!props.canEdit} onChange={(event) => patchCategory(index, { gradientToken: event.target.value as SpeakerCategory["gradientToken"] })}>{SPEAKER_TOKENS.map((token) => <option key={token}>{token}</option>)}</FieldSelect></label>
+          <Toggle label={`${index + 1}번 카테고리 공개`} checked={row.enabled} disabled={!props.canEdit} onChange={(enabled) => patchCategory(index, { enabled })} />
         </div>}
       />
       <AddButton label="연사 카테고리 추가" disabled={!props.canEdit} onClick={() => patch({ categories: [...categories, { id: makeSemanticId("speaker-category", categories), label: { [props.locale]: "새 카테고리" }, badgeToken: "robotics", gradientToken: "robotics", order: categories.length, enabled: false }] })} />

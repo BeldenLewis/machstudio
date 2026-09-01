@@ -71,7 +71,7 @@ export function InlineEditableTable<Row extends { id: string }>({
   return (
     <div className="max-w-full min-w-0 overflow-x-clip">
       <table aria-label={ariaLabel} className="w-full max-w-full table-fixed border-separate border-spacing-y-2 max-[390px]:block">
-        <thead className="sr-only"><tr><th>순서와 편집 값</th><th>삭제</th></tr></thead>
+        <thead className="sr-only"><tr><th scope="col">순서</th><th scope="col">편집 값</th><th scope="col">삭제</th></tr></thead>
         <tbody className="max-[390px]:block">
           {rows.map((row, index) => {
             const rowIssues = issues.filter((issue) => issue.path === `[${index}]` || issue.path.startsWith(`[${index}].`) || issue.path.includes(`[${index}]`));
@@ -79,7 +79,6 @@ export function InlineEditableTable<Row extends { id: string }>({
               <tr
                 key={row.id}
                 data-testid="inline-row"
-                draggable={!disabled}
                 onDragOver={(event) => dragOver(event, index)}
                 onDrop={(event) => drop(event, index)}
                 onDragEnd={() => setDragged(null)}
