@@ -196,7 +196,8 @@ export interface StandaloneExpoRuntimePayload {
   theme: ExpoTheme;
   sections: PayloadSection[];
   locale: string;
-  campaigns: ResolvedCampaignState[];
+  /** Export 시각에 굳힌 id → 활성 boolean. 일정·label·override는 artifact에 싣지 않는다. */
+  campaigns: Record<string, boolean>;
   destinations: ResolvedDestination[];
   mode: "standalone";
 }

@@ -80,6 +80,7 @@ async function render(over: Partial<Parameters<typeof ExpoPublishPanel>[0]> = {}
           liveAt={null}
           readiness={READY}
           snippets={SNIPPETS}
+          exportSections={[]}
           canPublish
           onChanged={onChanged}
           {...over}
@@ -318,22 +319,25 @@ describe("백업 HTML", () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:standalone");
   });
 
-  it("offers a download for each eligible section", async () => {
+  it("uses authoritative published export sections instead of draft snippet sections", async () => {
     await render({
       hasPublished: true,
+      exportSections: [{ sid: "published-sid", label: "발행 키비주얼" }],
       snippets: {
         ok: true,
         page: SNIPPETS.page,
         sections: [{
-          sid: "s1", label: "키비주얼", snippet: { code: "<script></script>", src: "https://x/h/pg1/s1" }, issues: [],
+          sid: "draft-sid", label: "초안 본문", snippet: { code: "<script></script>", src: "https://x/h/pg1/draft-sid" }, issues: [],
         }],
       },
     });
-    await click(panelButton("키비주얼 HTML 다운로드"));
-    expect(posts.at(-1)).toEqual({ url: "/api/expo/pages/pg1/export", body: { scope: "section", sid: "s1" } });
+    expect(panelButton("초안 본문 HTML 다운로드")).toBeUndefined();
+    await click(panelButton("발행 키비주얼 HTML 다운로드"));
+    expect(posts.at(-1)).toEqual({ url: "/api/expo/pages/pg1/export", body: { scope: "section", sid: "published-sid" } });
   });
 
   it("shows structured export errors beside the affected scope", async () => {
+    const onFocusExportIssue = vi.fn();
     nextResponse = {
       ok: false,
       status: 422,
@@ -341,6 +345,8 @@ describe("백업 HTML", () => {
     };
     await render({
       hasPublished: true,
+      exportSections: [{ sid: "s1", label: "폼" }],
+      onFocusExportIssue,
       snippets: {
         ok: true,
         page: SNIPPETS.page,
@@ -350,6 +356,40 @@ describe("백업 HTML", () => {
     await click(panelButton("폼 HTML 다운로드"));
     expect(host.textContent).toContain("이 구획은 백업 HTML로 내보낼 수 없어요.");
     expect(toastError).toHaveBeenCalledWith("이 구획은 백업 HTML로 내보낼 수 없어요.");
+    expect(onFocusExportIssue).toHaveBeenCalledWith(expect.objectContaining({ path: "scope.sid", sid: "s1" }));
+    expect(host.querySelector('[data-field-path="scope.sid"]')).toBeTruthy();
+  });
+
+  it("keeps every visible scope issue synchronized when another export starts", async () => {
+    const onExportIssuesChange = vi.fn();
+    const onFocusExportIssue = vi.fn();
+    await render({
+      hasPublished: true,
+      exportSections: [{ sid: "s1", label: "본문" }],
+      onExportIssuesChange,
+      onFocusExportIssue,
+    });
+    nextResponse = {
+      ok: false, status: 422,
+      body: { issues: [{ path: "sections[0].content.media.url", sid: "s1", code: "section-error", message: "구획 오류", severity: "error" }] },
+    };
+    await click(panelButton("본문 HTML 다운로드"));
+    nextResponse = {
+      ok: false, status: 422,
+      body: { issues: [{ path: "settings.destinations[0].action.fallbackHref", code: "page-error", message: "페이지 오류", severity: "error" }] },
+    };
+    await click(panelButton("전체 HTML 다운로드"));
+
+    expect(onExportIssuesChange).toHaveBeenLastCalledWith(expect.arrayContaining([
+      expect.objectContaining({ code: "section-error" }),
+      expect.objectContaining({ code: "page-error" }),
+    ]));
+    await click([...host.querySelectorAll("button")].find((button) => button.textContent === "구획 오류"));
+    expect(onFocusExportIssue).toHaveBeenLastCalledWith(expect.objectContaining({ code: "section-error", sid: "s1" }));
+    expect(onExportIssuesChange).toHaveBeenLastCalledWith(expect.arrayContaining([
+      expect.objectContaining({ code: "section-error" }),
+      expect.objectContaining({ code: "page-error" }),
+    ]));
   });
 
   it("does not render backup controls without publish permission or a published snapshot", async () => {

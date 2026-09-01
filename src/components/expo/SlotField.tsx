@@ -5,7 +5,7 @@ import { Link2 } from "lucide-react";
 import { Field, FieldArea, FieldSelect, FINISH, R, UrlField } from "@/components/ui/primitives";
 import { safeHttpUrl } from "@/lib/webinar-config";
 import { EXPO_LIMITS } from "@/lib/expo/registry";
-import type { SlotDef } from "@/lib/expo/types";
+import type { FieldIssue, SlotDef } from "@/lib/expo/types";
 import { ExpoMediaUploadField } from "@/components/expo/fields/ExpoMediaUploadField";
 import type { ExpoImageValue } from "@/lib/expo/sections/types";
 
@@ -81,10 +81,12 @@ export interface SlotFieldProps {
    * 테이블 머리글이 대신해 주지도 않는다. 라벨만 작게 만든다.
    */
   compact?: boolean;
+  /** 이 슬롯을 가리키는 서버 구조화 오류. path는 구획 content 기준 상대 경로다. */
+  issues?: readonly FieldIssue[];
 }
 
 export function SlotField({
-  def, value, onChange, disabled, siteId, sources, pages, locale, compact,
+  def, value, onChange, disabled, siteId, sources, pages, locale, compact, issues = [],
 }: SlotFieldProps) {
   const uid = useId();
   const id = `${uid}-${def.key}`;
@@ -168,7 +170,7 @@ export function SlotField({
   if (!control) return null;
 
   return (
-    <div className="min-w-0">
+    <div className="min-w-0" data-field-path={issues[0]?.path}>
       <label
         htmlFor={id}
         className={`block font-medium text-muted-foreground ${compact ? "text-[11px]" : "text-xs"}`}
@@ -177,6 +179,15 @@ export function SlotField({
         {def.required ? <span className="ml-1 text-[var(--destructive)]">필수</span> : null}
       </label>
       <div className={compact ? "mt-0.5" : "mt-1"}>{control}</div>
+      {issues.map((issue, index) => (
+        <p
+          key={`${issue.code}:${issue.path}:${index}`}
+          role={issue.severity === "error" ? "alert" : "status"}
+          className="mt-1 text-[11px] text-[var(--destructive)]"
+        >
+          {issue.message}
+        </p>
+      ))}
     </div>
   );
 }

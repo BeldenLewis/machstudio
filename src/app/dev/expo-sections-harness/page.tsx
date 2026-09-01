@@ -225,6 +225,7 @@ function Harness() {
                   : [],
               }],
             }}
+            exportSections={stage === "draft" ? [] : [{ sid: SID(3), label: "카드" }]}
           />
 
         <div className={`${R.panel} ${FINISH.s1} min-w-0 bg-card p-4`}>

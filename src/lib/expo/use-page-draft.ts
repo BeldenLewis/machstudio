@@ -51,6 +51,7 @@ function withFreshMetadata(current: ExpoPageEditorDto, fresh: ExpoPageEditorDto)
     updatedAt: fresh.updatedAt,
     readiness: fresh.readiness,
     snippets: fresh.snippets,
+    exportSections: fresh.exportSections,
     lastSeenAt: fresh.lastSeenAt,
     lastSeenOrigin: fresh.lastSeenOrigin,
   };

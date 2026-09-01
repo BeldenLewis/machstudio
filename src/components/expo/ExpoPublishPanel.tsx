@@ -12,10 +12,12 @@ import { ExpoRevisionPanel } from "@/components/expo/ExpoRevisionPanel";
 import { pageWarnings } from "@/lib/expo/connection-status";
 import type {
   ExpoEditorRequest,
+  ExpoExportSectionView,
   ExpoReadinessView,
   ExpoSnippetView,
   ExpoSnippetsView,
 } from "@/lib/expo/editor-dto";
+import type { FieldIssue } from "@/lib/expo/types";
 
 export type {
   ExpoReadinessView,
@@ -56,6 +58,8 @@ export interface ExpoPublishPanelProps {
   now?: Date;
   readiness: ExpoReadinessView;
   snippets: ExpoSnippetsView;
+  /** 현재 발행본에서 서버가 판정한 standalone 내보내기 가능 구획. */
+  exportSections: ExpoExportSectionView[];
   canPublish: boolean;
   /**
    * 자동저장이 아직 안 끝났거나 어긋났다. **발행은 저장된 초안을 굳히는 일**이라,
@@ -68,6 +72,10 @@ export interface ExpoPublishPanelProps {
   launchLocked?: boolean;
   /** 발행·공개가 끝나면 부른다 — 화면이 서버 상태를 다시 읽는다. */
   onChanged: () => void;
+  /** standalone 오류도 본문 편집기의 인라인 오류와 같은 경로로 보여 준다. */
+  onExportIssuesChange?: (issues: FieldIssue[]) => void;
+  /** sid를 고른 뒤 path가 가리키는 인라인 오류로 데려간다. */
+  onFocusExportIssue?: (issue: FieldIssue) => void;
   /** 테스트/하니스는 같은 요청 라우터를 모든 내보내기 작업에 주입한다. */
   request?: ExpoEditorRequest;
 }
@@ -75,15 +83,25 @@ export interface ExpoPublishPanelProps {
 export function ExpoPublishPanel({
   pageId, pageTitle, hasPublished, liveAt, imwebUrl = null, lastSeenAt = null,
   lastSeenOrigin = null, publishedAt = null, updatedAt = null, now,
-  readiness, snippets, canPublish, saveBlocked, onChanged, launchLocked = false, request,
+  readiness, snippets, exportSections, canPublish, saveBlocked, onChanged, launchLocked = false, request,
+  onExportIssuesChange, onFocusExportIssue,
 }: ExpoPublishPanelProps) {
   const confirm = useConfirm();
   const [busy, setBusy] = useState<"publish" | "live" | `export:${string}` | null>(null);
-  const [exportIssues, setExportIssues] = useState<Record<string, DisplayIssue[]>>({});
+  const [exportIssues, setExportIssues] = useState<Record<string, FieldIssue[]>>({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const live = Boolean(liveAt);
   const fallbackRequest = useCallback((path: string, init?: RequestInit) => window.fetch(path, init), []);
   const requester = request ?? fallbackRequest;
+  const updateExportScopeIssues = useCallback((key: string, issues: FieldIssue[]) => {
+    const next = { ...exportIssues, [key]: issues };
+    setExportIssues(next);
+    onExportIssuesChange?.(Object.values(next).flat());
+  }, [exportIssues, onExportIssuesChange]);
+  const focusVisibleExportIssue = useCallback((issue: FieldIssue) => {
+    onExportIssuesChange?.(Object.values(exportIssues).flat());
+    onFocusExportIssue?.(issue);
+  }, [exportIssues, onExportIssuesChange, onFocusExportIssue]);
 
   /**
    * **바뀐 게 없으면 누를 것도 없다.**
@@ -170,7 +188,7 @@ export function ExpoPublishPanel({
   const downloadHtml = useCallback(async (scope: { type: "page" } | { type: "section"; sid: string }) => {
     const key = scope.type === "page" ? "page" : scope.sid;
     setBusy(`export:${key}`);
-    setExportIssues((current) => ({ ...current, [key]: [] }));
+    updateExportScopeIssues(key, []);
     let objectUrl: string | null = null;
     try {
       const res = await requester(`/api/expo/pages/${encodeURIComponent(pageId)}/export`, {
@@ -179,10 +197,12 @@ export function ExpoPublishPanel({
         body: JSON.stringify(scope.type === "page" ? { scope: "page" } : { scope: "section", sid: scope.sid }),
       });
       if (!res.ok) {
-        const failed = await res.json().catch(() => ({})) as { error?: string; issues?: DisplayIssue[] };
-        const issues = failed.issues?.length ? failed.issues : [{ code: "standalone-export-failed", message: failed.error ?? "백업 HTML을 만들 수 없어요." }];
+        const failed = await res.json().catch(() => ({})) as { error?: unknown; issues?: unknown };
+        const issues = exportFailureIssues(failed, scope.type === "section" ? scope.sid : undefined);
         const affected = issues.filter((entry) => !entry.sid || entry.sid === key || key === "page");
-        setExportIssues((current) => ({ ...current, [key]: affected.length ? affected : issues }));
+        const visibleIssues = affected.length ? affected : issues;
+        updateExportScopeIssues(key, visibleIssues);
+        onFocusExportIssue?.(visibleIssues[0]);
         toast.error(issues[0].message);
         return;
       }
@@ -198,14 +218,18 @@ export function ExpoPublishPanel({
       anchor.click();
       anchor.remove();
     } catch {
-      const issues = [{ code: "standalone-export-failed", message: "백업 HTML을 만들 수 없어요. 연결을 확인해 주세요." }];
-      setExportIssues((current) => ({ ...current, [key]: issues }));
+      const issues = [exportFallbackIssue(
+        "백업 HTML을 만들 수 없어요. 연결을 확인해 주세요.",
+        scope.type === "section" ? scope.sid : undefined,
+      )];
+      updateExportScopeIssues(key, issues);
+      onFocusExportIssue?.(issues[0]);
       toast.error(issues[0].message);
     } finally {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
       setBusy(null);
     }
-  }, [pageId, requester]);
+  }, [onFocusExportIssue, pageId, requester, updateExportScopeIssues]);
 
   return (
     <section className={`${R.panel} ${FINISH.s1} space-y-3 bg-card p-3`} aria-labelledby="expo-publish-heading">
@@ -259,8 +283,8 @@ export function ExpoPublishPanel({
             disabled={!hasPublished || busy !== null}
             onClick={() => void downloadHtml({ type: "page" })}
           />
-          <Reasons issues={exportIssues.page ?? []} />
-          {snippets.ok ? snippets.sections.map((section) => (
+          <ExportReasons issues={exportIssues.page ?? []} onFocus={focusVisibleExportIssue} />
+          {exportSections.map((section) => (
             <div key={`export:${section.sid}`} className="space-y-1">
               <ExportButton
                 label={section.label}
@@ -268,9 +292,9 @@ export function ExpoPublishPanel({
                 disabled={!hasPublished || busy !== null}
                 onClick={() => void downloadHtml({ type: "section", sid: section.sid })}
               />
-              <Reasons issues={exportIssues[section.sid] ?? []} />
+              <ExportReasons issues={exportIssues[section.sid] ?? []} onFocus={focusVisibleExportIssue} />
             </div>
-          )) : null}
+          ))}
           {!hasPublished ? (
             <p className="text-[11px] leading-relaxed text-muted-foreground">먼저 페이지를 발행해 주세요.</p>
           ) : null}
@@ -385,6 +409,63 @@ function StateChip({ hasPublished, live }: { hasPublished: boolean; live: boolea
 }
 
 type DisplayIssue = { code: string; message: string; sid?: string };
+
+function exportFallbackIssue(message: string, sid?: string): FieldIssue {
+  return {
+    path: sid ? "scope.sid" : "scope",
+    code: "standalone-export-failed",
+    message,
+    severity: "error",
+    ...(sid ? { sid } : {}),
+  };
+}
+
+/** API 응답은 신뢰 경계다. 편집기에 전달하기 전에 FieldIssue 닫힌 모양으로 만든다. */
+function exportFailureIssues(
+  failed: { error?: unknown; issues?: unknown },
+  scopeSid?: string,
+): FieldIssue[] {
+  const raw = Array.isArray(failed.issues) ? failed.issues : [];
+  const issues = raw.flatMap((entry): FieldIssue[] => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const issue = entry as Record<string, unknown>;
+    if (typeof issue.path !== "string" || typeof issue.code !== "string" || typeof issue.message !== "string") return [];
+    return [{
+      path: issue.path,
+      code: issue.code,
+      message: issue.message,
+      severity: issue.severity === "warning" ? "warning" : "error",
+      ...(typeof issue.sid === "string" ? { sid: issue.sid } : scopeSid ? { sid: scopeSid } : {}),
+    }];
+  });
+  if (issues.length > 0) return issues;
+  return [exportFallbackIssue(
+    typeof failed.error === "string" ? failed.error : "백업 HTML을 만들 수 없어요.",
+    scopeSid,
+  )];
+}
+
+function ExportReasons({
+  issues, onFocus,
+}: { issues: readonly FieldIssue[]; onFocus?: (issue: FieldIssue) => void }) {
+  if (issues.length === 0) return null;
+  return (
+    <ul className="space-y-0.5">
+      {issues.map((issue, index) => (
+        <li key={`${issue.code}:${issue.path}:${index}`}>
+          <button
+            type="button"
+            data-field-path={issue.path}
+            onClick={() => onFocus?.(issue)}
+            className="text-left text-[11px] leading-relaxed text-amber-600 underline-offset-2 hover:underline dark:text-amber-400"
+          >
+            {issue.message}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function Reasons({ issues, tone = "block" }: { issues: readonly DisplayIssue[]; tone?: "block" | "note" }) {
   if (issues.length === 0) return null;

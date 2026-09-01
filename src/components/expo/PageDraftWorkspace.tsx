@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import { Field, FIELD_CLS, FINISH, R } from "@/components/ui/primitives";
 import { ExpoPublishPanel } from "@/components/expo/ExpoPublishPanel";
@@ -63,12 +63,14 @@ function dedupeFieldIssues(issues: readonly FieldIssue[]): FieldIssue[] {
 export function mergeEditorIssues(
   readinessIssues: readonly unknown[],
   rejectedIssues: readonly ExpoRejection[] = [],
+  exportIssues: readonly FieldIssue[] = [],
 ): FieldIssue[] {
   return dedupeFieldIssues([
     ...readinessIssues.flatMap((issue) => isFieldIssue(issue) ? [issue] : []),
     ...rejectedIssues.map((issue) => ({
       ...issue, code: "rejected", severity: "error" as const,
     })),
+    ...exportIssues,
   ]);
 }
 
@@ -134,7 +136,11 @@ export function PageDraftWorkspace({
   leftTop, leftBottom, renderPreview, onSaved,
 }: PageDraftWorkspaceProps) {
   const state = useExpoPageDraft(siteId, pageId, transport);
+  const setSelectedSid = state.setSelectedSid;
   const previousSaveState = useRef(state.saveState);
+  const editorRootRef = useRef<HTMLElement | null>(null);
+  const [exportIssues, setExportIssues] = useState<FieldIssue[]>([]);
+  const [exportFocus, setExportFocus] = useState<FieldIssue | null>(null);
   useEffect(() => {
     if (state.saveState === "saved" && previousSaveState.current !== "saved") onSaved?.();
     previousSaveState.current = state.saveState;
@@ -146,9 +152,39 @@ export function PageDraftWorkspace({
     ...state.page.readiness.notes,
   ] : [], [state.page]);
   const fieldIssues = useMemo(
-    () => mergeEditorIssues(allIssues, state.rejected ?? []),
-    [allIssues, state.rejected],
+    () => mergeEditorIssues(allIssues, state.rejected ?? [], exportIssues),
+    [allIssues, exportIssues, state.rejected],
   );
+  const focusExportIssue = useCallback((issue: FieldIssue) => {
+    if (issue.sid) setSelectedSid(issue.sid);
+    setExportFocus(issue);
+  }, [setSelectedSid]);
+
+  useEffect(() => {
+    if (!exportFocus || !editorRootRef.current) return;
+    if (exportFocus.sid && state.selectedSid !== exportFocus.sid) return;
+
+    const relative = exportFocus.path.replace(/^sections\[\d+\]\.content\.?/, "");
+    const rowRelative = relative.includes("[") ? relative.slice(relative.indexOf("[")) : "";
+    const candidates = new Set([exportFocus.path, relative, rowRelative].filter(Boolean));
+    const marker = [...editorRootRef.current.querySelectorAll<HTMLElement>("[data-field-path]")]
+      .find((element) => candidates.has(element.dataset.fieldPath ?? ""));
+    const sectionCard = exportFocus.sid
+      ? [...editorRootRef.current.querySelectorAll<HTMLElement>("[data-expo-sid]")]
+        .find((element) => element.dataset.expoSid === exportFocus.sid)
+      : undefined;
+    const target = marker ?? sectionCard;
+    if (!target) return;
+    const field = marker?.querySelector<HTMLElement>("input:not([type='file']),textarea,select")
+      ?? marker?.querySelector<HTMLElement>("button,[tabindex]");
+    const focusTarget = field ?? target;
+    if (field && marker?.dataset.fieldPath) field.dataset.fieldPath = marker.dataset.fieldPath;
+    if (!focusTarget.hasAttribute("tabindex")) focusTarget.setAttribute("tabindex", "-1");
+    focusTarget.focus({ preventScroll: true });
+    if (typeof focusTarget.scrollIntoView === "function") {
+      focusTarget.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [exportFocus, state.selectedSid]);
 
   if (state.loading && !state.page) {
     return <p className="py-12 text-sm text-muted-foreground">미리보기를 준비하는 중이에요.</p>;
@@ -215,7 +251,7 @@ export function PageDraftWorkspace({
         {leftBottom}
       </div>
 
-      <main className={`${R.panel} ${FINISH.s1} space-y-5 bg-card p-5`}>
+      <main ref={editorRootRef} className={`${R.panel} ${FINISH.s1} space-y-5 bg-card p-5`}>
         {state.saveState === "conflict" ? (
           <div className={`${R.surface} ${FINISH.s2Danger} bg-secondary p-3 text-sm`}>
             <p className="font-medium">다른 팀원이 먼저 저장했어요</p>
@@ -323,11 +359,17 @@ export function PageDraftWorkspace({
             updatedAt={state.page.updatedAt}
             readiness={state.page.readiness}
             snippets={state.page.snippets}
+            exportSections={state.page.exportSections}
             canPublish={permissions.canPublish}
             saveBlocked={state.saveBlocked}
             launchLocked={embedLocked}
             request={state.request}
-            onChanged={() => void state.refreshMetadata()}
+            onExportIssuesChange={setExportIssues}
+            onFocusExportIssue={focusExportIssue}
+            onChanged={() => {
+              setExportIssues([]);
+              void state.refreshMetadata();
+            }}
           />
         </ConfirmProvider>
       </div>

@@ -29,7 +29,7 @@ function render(payload: StandaloneExpoRuntimePayload): void {
 
   const context = {
     locale: payload.locale || "ko",
-    campaigns: new Map(payload.campaigns.map((row) => [row.id, row])),
+    campaigns: new Map(Object.entries(payload.campaigns).map(([id, active]) => [id, { id, label: id, active }])),
     destinations: new Map(payload.destinations.map((row) => [row.id, row])),
     mode: "standalone" as const,
     reducedMotion: Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches),

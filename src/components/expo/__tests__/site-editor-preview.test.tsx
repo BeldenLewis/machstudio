@@ -79,11 +79,15 @@ let detailCount = 0;
 let sitePatches: unknown[] = [];
 /** 목록이 돌려주는 이름. 트리의 이름 PATCH 가 서버처럼 이걸 바꾼다. */
 let listTitle = "홈";
+let nextExportFailure: { issues: Array<{ path: string; code: string; message: string; severity: "error"; sid?: string }> } | null = null;
 
 function stubFetch() {
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
     const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body } as Response);
     if (url.startsWith("/api/expo/pages/")) {
+      if (url.endsWith("/export") && init?.method === "POST" && nextExportFailure) {
+        return { ok: false, status: 422, json: async () => nextExportFailure } as Response;
+      }
       if (init?.method === "PATCH") {
         const body = JSON.parse(String(init.body ?? "{}"));
         // 이름 바꾸기는 자동저장이 아니다 — 트리가 따로 보낸다. 같이 세면 저장 횟수가 거짓말한다.
@@ -194,6 +198,7 @@ beforeEach(() => {
   sitePatches = [];
   listTitle = "홈";
   rejectNext = null;
+  nextExportFailure = null;
   liveAt = null;
   detailCount = 0;
   holdPageDetail = () => {};
@@ -211,6 +216,7 @@ beforeEach(() => {
       publishIssues: [], liveIssues: [], notes: [],
     },
     snippets: { ok: true, page: { code: "<script></script>", src: "https://x/h/pg1" }, sections: [] },
+    exportSections: [],
   };
   vi.stubGlobal("ResizeObserver", FakeResizeObserver);
   stubFetch();
@@ -711,6 +717,58 @@ describe("발행 준비 문제", () => {
     const inlineIssue = [...host.querySelectorAll("[data-field-path]")]
       .find((element) => element.textContent === "하위 전시 이름이 필요해요");
     expect(inlineIssue).toBeTruthy();
+  });
+
+  it("백업 HTML 오류의 sid와 path로 구획을 고르고 해당 필드 오류에 포커스한다", async () => {
+    const draft = instantiateStkHomeV1({
+      randomUUID: (() => {
+        let serial = 0;
+        return () => `00000000-0000-4000-8000-${String(++serial).padStart(12, "0")}`;
+      })(),
+    });
+    const targetIndex = draft.sections.findIndex((section) => section.type === "exhibition-grid");
+    const target = draft.sections[targetIndex];
+    const path = `sections[${targetIndex}].content.items[0].title`;
+    pageBody.draft = draft;
+    pageBody.hasPublished = true;
+    pageBody.exportSections = [{ sid: target.sid, label: expoSectionTitle(target) }];
+    nextExportFailure = {
+      issues: [{ path, code: "standalone-media-public-https", message: "이 구획의 값을 확인해 주세요.", severity: "error", sid: target.sid }],
+    };
+
+    await render();
+    await click(buttonByText(`${expoSectionTitle(target)} HTML 다운로드`));
+
+    expect(host.querySelector(`[aria-label="${expoSectionTitle(target)} 편집기"]`)).toBeTruthy();
+    expect(document.activeElement?.getAttribute("data-field-path")).toBe("[0].title");
+  });
+
+  it("일반 구획의 백업 미디어 오류는 실제 주소 입력에 포커스한다", async () => {
+    const target = {
+      sid: "33333333-3333-4333-8333-333333333333",
+      type: "kv", variant: "column", enabled: true, embedEnabled: false,
+      design: { bg: "light", align: "left" },
+      content: {
+        title: { ko: "키비주얼" },
+        media: { kind: "image", url: "http://127.0.0.1/private.jpg" },
+      },
+    };
+    pageBody.draft = { schemaVersion: 2, sections: [target] };
+    pageBody.hasPublished = true;
+    pageBody.exportSections = [{ sid: target.sid, label: "키비주얼" }];
+    nextExportFailure = {
+      issues: [{
+        path: "sections[0].content.media.url", code: "standalone-media-public-https",
+        message: "공개 HTTPS 주소가 필요해요.", severity: "error", sid: target.sid,
+      }],
+    };
+
+    await render();
+    await click(buttonByText("키비주얼 HTML 다운로드"));
+
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("배경 이미지 주소");
+    expect(document.activeElement?.getAttribute("data-field-path")).toBe("media.url");
+    expect(host.textContent).toContain("공개 HTTPS 주소가 필요해요.");
   });
 });
 

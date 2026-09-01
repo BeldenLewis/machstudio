@@ -568,6 +568,23 @@ describe("페이지 상세 — 내보내기 정보", () => {
     // 아직 발행 전이라 붙여도 안 나온다 — 그 사유가 함께 온다.
     expect(body.page.snippets.sections[0].issues[0].code).toBe("not-published");
   });
+
+  it("백업 HTML 구획은 발행본에서 만들고 embedEnabled와 초안 차이를 무시한다", async () => {
+    const publishedSid = "11111111-1111-4111-8111-111111111111";
+    const draftOnlySid = "22222222-2222-4222-8222-222222222222";
+    const { body } = await get({
+      draft: { schemaVersion: 2, sections: [{
+        sid: draftOnlySid, type: "textblock", variant: "prose", enabled: true, embedEnabled: true,
+        design: {}, content: { body: { ko: "아직 발행하지 않은 초안" } },
+      }] },
+      published: { schemaVersion: 2, sections: [{
+        sid: publishedSid, type: "kv", variant: "column", enabled: true, embedEnabled: false,
+        design: {}, content: { title: { ko: "발행된 키비주얼" } },
+      }] },
+    });
+
+    expect(body.page.exportSections).toEqual([{ sid: publishedSid, label: "키비주얼" }]);
+  });
 });
 
 describe("발행·공개", () => {

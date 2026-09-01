@@ -38,6 +38,7 @@ function page(): ExpoPageEditorDto {
     publishedAt: null, liveAt: null, updatedAt: "2026-09-01T00:00:00.000Z",
     readiness: { canPublish: true, canGoLive: true, publishIssues: [], liveIssues: [], notes: [] },
     snippets: { ok: true, page: { code: "<script></script>", src: "https://example.com/h/page-1" }, sections: [] },
+    exportSections: [],
   };
 }
 

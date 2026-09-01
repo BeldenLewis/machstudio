@@ -322,6 +322,9 @@ function SectionCard({
   section, controls, canEdit, embedLocked, siteId, sources, pages, locale, config, issues, flash,
 }: SectionCardProps) {
   const def = sectionDef(section.type);
+  const relativeIssues = issues
+    .filter((issue) => !issue.sid || issue.sid === section.sid)
+    .map((issue) => ({ ...issue, path: issue.path.replace(/^sections\[\d+\]\.content\.?/, "") }));
 
   /**
    * 카탈로그에 없는 타입 — 옛 초안에 남아 있을 수 있다. 편집 위젯을 지어낼 수 없으니
@@ -413,9 +416,7 @@ function SectionCard({
           pages={(pages ?? []).map((page) => ({ ...page, imwebUrl: null, deletedAt: null }))}
           section={section}
           config={config}
-          issues={issues
-            .filter((issue) => !issue.sid || issue.sid === section.sid)
-            .map((issue) => ({ ...issue, path: issue.path.replace(/^sections\[\d+\]\.content\.?/, "") }))}
+          issues={relativeIssues}
           canEdit={canEdit}
           onChange={(next) => applyPatch(next)}
         /> : def.slots.map((slot) =>
@@ -431,6 +432,7 @@ function SectionCard({
               pages={pages}
               locale={locale}
               sid={section.sid}
+              issues={relativeIssues.filter((issue) => issue.path === slot.key || issue.path.startsWith(`${slot.key}[`))}
             />
           ) : (
             <SlotField
@@ -443,6 +445,7 @@ function SectionCard({
               sources={sources}
               pages={pages}
               locale={locale}
+              issues={relativeIssues.filter((issue) => issue.path === slot.key || issue.path.startsWith(`${slot.key}.`))}
             />
           ),
         )}
@@ -520,7 +523,7 @@ function Knob({ label, children }: { label: string; children: ReactNode }) {
  * (editable-list.tsx 가 순수 함수를 따로 빼 둔 이유도 같다). 실제 끌기는 브라우저에서 본다.
  */
 function ListSlot({
-  slot, value, onChange, canEdit, siteId, sources, pages, locale, sid,
+  slot, value, onChange, canEdit, siteId, sources, pages, locale, sid, issues,
 }: {
   slot: SlotDef;
   value: unknown;
@@ -531,6 +534,7 @@ function ListSlot({
   pages?: readonly LinkTarget[];
   locale: string;
   sid: string;
+  issues: readonly FieldIssue[];
 }) {
   const rows = listRows(value);
   const itemSlots = slot.itemSlots ?? [];
@@ -601,6 +605,10 @@ function ListSlot({
                     pages={pages}
                     locale={locale}
                     compact
+                    issues={issues.filter((issue) => {
+                      const path = `${slot.key}[${visibleIndex}].${itemSlot.key}`;
+                      return issue.path === path || issue.path.startsWith(`${path}.`);
+                    })}
                   />
                 ))}
                 {missing.length > 0 ? (

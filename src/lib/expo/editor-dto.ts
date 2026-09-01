@@ -18,6 +18,12 @@ export type ExpoSnippetsView =
   | { ok: true; page: ExpoSnippetView; sections: ExpoSectionSnippetView[] }
   | { ok: false; message: string };
 
+/** 현재 발행본에서 실제 standalone 구획 export가 가능한 서버 파생 목록. */
+export interface ExpoExportSectionView {
+  sid: string;
+  label: string;
+}
+
 export interface ExpoReadinessView {
   canPublish: boolean;
   canGoLive: boolean;
@@ -42,6 +48,7 @@ export interface ExpoPageEditorDto {
   updatedAt: string;
   readiness: ExpoReadinessView;
   snippets: ExpoSnippetsView;
+  exportSections: ExpoExportSectionView[];
   lastSeenAt?: string | null;
   lastSeenOrigin?: string | null;
 }

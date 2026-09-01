@@ -20,6 +20,7 @@ import { pageReadiness, sectionSnippetIssues } from "@/lib/expo/readiness";
 import { expoPageSnippet, expoSectionSnippet } from "@/lib/expo/snippet";
 import { getRequiredExpoPublicOrigin, expoOriginMessage } from "@/lib/expo/origin";
 import { sectionDef } from "@/lib/expo/registry";
+import { hasContent } from "@/lib/expo/model";
 import { safeHttpUrl } from "@/lib/webinar-config";
 
 async function ownedPage(pageId: string, ctx: { userId: string; memberWorkspaceIds: string[] }) {
@@ -69,6 +70,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ page
         imwebUrl: page!.imwebUrl,
       }),
       snippets: buildSnippets(page!),
+      exportSections: buildExportSections(page!.published),
       /**
        * 발행본 쪽 지문. 미리보기에서 발행본을 볼 때 쓴다 — 초안 지문을 그대로 보내면
        * 서버가 계산한 값과 달라 실행이 거절되고, 화면에는 이유가 안 보인다.
@@ -80,6 +82,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ page
       lastSeenAt: page!.lastSeenAt, lastSeenOrigin: page!.lastSeenOrigin,
     },
   });
+}
+
+/**
+ * 백업 HTML 버튼은 draft의 embed 토글이 아니라 현재 published 사본에서 파생한다.
+ * standalone builder와 같은 enabled/content/지원 타입 문을 사용하되 렌더 입력은 싣지 않는다.
+ */
+function buildExportSections(publishedRaw: unknown) {
+  if (!publishedRaw) return [];
+  return normalizeExpoPage(publishedRaw).sections
+    .filter((section) => section.enabled && hasContent(section)
+      && section.type !== "register-form" && section.type !== "custom-code")
+    .map((section) => ({
+      sid: section.sid,
+      label: sectionDef(section.type)?.label ?? section.type,
+    }));
 }
 
 /**

@@ -150,6 +150,49 @@ describe("standalone Expo export", () => {
     expect(htmlOf(prepare(config))).toContain("https://cdn.example.com/image.jpg");
   });
 
+  it("inspects the first duplicate sid selected by normalization instead of a later safe duplicate", () => {
+    const config = publishedConfig([
+      kv({ content: { title: { ko: "첫 구획" }, media: { kind: "image", url: "http://127.0.0.1/private.jpg" } } }),
+      kv({ content: { title: { ko: "중복 구획" }, media: { kind: "image", url: "https://cdn.example.com/safe.jpg" } } }),
+    ]);
+    expect(prepare(config)).toMatchObject({
+      ok: false,
+      status: 422,
+      issues: [{ path: "sections[0].content.media.url", code: "standalone-media-public-https", sid: SID }],
+    });
+  });
+
+  it("inspects the first duplicate sid that survives normalization", () => {
+    const discarded = kv({
+      type: "retired-section",
+      content: { title: { ko: "정규화에서 탈락" } },
+    });
+    const config = publishedConfig([
+      discarded,
+      kv({ content: { title: { ko: "실제 렌더" }, media: { kind: "image", url: "http://127.0.0.1/private.jpg" } } }),
+    ]);
+    expect(prepare(config)).toMatchObject({
+      ok: false,
+      status: 422,
+      issues: [{ path: "sections[1].content.media.url", code: "standalone-media-public-https", sid: SID }],
+    });
+  });
+
+  it("reports unsafe media with its original section index after filtering", () => {
+    const config = publishedConfig([
+      kv({ enabled: false, content: { title: { ko: "숨김" } } }),
+      kv({
+        sid: SID_2, type: "textblock", variant: "prose",
+        content: { body: { ko: "둘째" }, media: { kind: "image", url: "http://127.0.0.1/private.jpg" } },
+      }),
+    ]);
+    expect(prepare(config)).toMatchObject({
+      ok: false,
+      status: 422,
+      issues: [{ path: "sections[1].content.media.url", code: "standalone-media-public-https", sid: SID_2 }],
+    });
+  });
+
   it("requires a public HTTPS modal fallback and rewrites the action to a URL", () => {
     const withoutFallback = publishedConfig();
     withoutFallback.settings!.destinations = [{
@@ -197,6 +240,14 @@ describe("standalone Expo export", () => {
         issues: [{ code: "standalone-republish-required" }],
       });
     }
+  });
+
+  it("serializes frozen campaigns as an id-to-boolean map without labels", () => {
+    const config = publishedConfig();
+    config.settings!.campaigns![0].label = "SERIALIZED_LABEL_MUST_NOT_LEAK";
+    const html = htmlOf(prepare(config));
+    expect(html).toContain('\"campaigns\":{\"exhibitor-recruitment\":true,\"visitor-registration\":false}');
+    expect(html).not.toContain("SERIALIZED_LABEL_MUST_NOT_LEAK");
   });
 
   it("escapes script JSON and comment metadata through separate boundaries", () => {

@@ -3,6 +3,7 @@ import { normalizeExpoPage, normalizeExpoTheme } from "@/lib/expo/config";
 import { isSafePublicUrl } from "@/lib/expo/destination";
 import { hasContent } from "@/lib/expo/model";
 import { buildExpoPayload, type LinkTarget } from "@/lib/expo/payload";
+import { EXPO_LIMITS, sectionDef } from "@/lib/expo/registry";
 import { EXPO_SHELL_CSS } from "@/lib/expo/shell-css";
 import { snapshotDigest } from "@/lib/expo/snapshot-digest";
 import type {
@@ -55,7 +56,7 @@ function selectedSections(config: ExpoPageConfigV2, scope: ExpoExportScope): Exp
   return found && found.enabled && hasContent(found) ? [found] : null;
 }
 
-function mediaIssues(sections: readonly ExpoSection[]): FieldIssue[] {
+function mediaIssues(sections: readonly { section: ExpoSection; index: number }[]): FieldIssue[] {
   const issues: FieldIssue[] = [];
   const walk = (value: unknown, path: string, sid: string): void => {
     if (Array.isArray(value)) {
@@ -80,8 +81,27 @@ function mediaIssues(sections: readonly ExpoSection[]): FieldIssue[] {
     }
     for (const [key, child] of Object.entries(row)) walk(child, `${path}.${key}`, sid);
   };
-  sections.forEach((section, index) => walk(section.content, `sections[${index}].content`, section.sid));
+  sections.forEach(({ section, index }) => walk(section.content, `sections[${index}].content`, section.sid));
   return issues;
+}
+
+/** normalizeExpoPage와 같은 탈락/중복/singleton 순서로 실제 살아남은 원본 행을 찾는다. */
+function normalizedSourceSections(config: ExpoPageConfigV2): Map<string, { section: ExpoSection; index: number }> {
+  const sources = new Map<string, { section: ExpoSection; index: number }>();
+  const usedSingletons = new Set<string>();
+  for (const [index, section] of config.sections.entries()) {
+    if (sources.size >= EXPO_LIMITS.sectionsPerPage) break;
+    const normalized = normalizeExpoPage({ schemaVersion: 2, sections: [section] }).sections[0];
+    if (!normalized || sources.has(normalized.sid)) continue;
+    const def = sectionDef(normalized.type);
+    if (!def) continue;
+    if (!def.multi) {
+      if (usedSingletons.has(normalized.type)) continue;
+      usedSingletons.add(normalized.type);
+    }
+    sources.set(normalized.sid, { section, index });
+  }
+  return sources;
 }
 
 function standaloneDestinations(rawConfig: ExpoPageConfigV2, normalizedConfig: ExpoPageConfigV2):
@@ -155,8 +175,13 @@ export function prepareStandaloneExpoHtml(input: StandaloneExpoInput): ExpoExpor
     ));
   // public 정규화는 위험한 media 객체를 버린다. 그 뒤만 검사하면 잘못된 발행본이
   // 조용히 "이미지 없는 성공"이 되므로, 선택된 sid의 원본 스냅샷을 먼저 검사한다.
-  const originalBySid = new Map(input.config.sections.map((section) => [section.sid, section]));
-  const unsafeMedia = mediaIssues(sections.map((section) => originalBySid.get(section.sid) ?? section));
+  // raw 첫 행이 아니라 정규화에서 실제 살아남은 첫 행을 고른다. 모르는 타입/앞선 singleton에
+  // 밀린 행이 같은 sid를 먼저 예약하면, 뒤의 렌더 원본에 든 private URL을 놓치게 된다.
+  const originalBySid = normalizedSourceSections(input.config);
+  const unsafeMedia = mediaIssues(sections.map((section) => originalBySid.get(section.sid) ?? {
+    section,
+    index: config.sections.findIndex((candidate) => candidate.sid === section.sid),
+  }));
   // fallback가 잘못되면 normalizeExpoPage가 destination 전체를 버린다. 그 뒤만 보면
   // "모달이 없으니 성공"이 되므로 발행 스냅샷 원본에서 먼저 검증하고 재작성한다.
   const destinationResult = standaloneDestinations(input.config, config);
@@ -179,7 +204,7 @@ export function prepareStandaloneExpoHtml(input: StandaloneExpoInput): ExpoExpor
     theme,
     sections: resolved.sections,
     locale,
-    campaigns: resolved.campaigns,
+    campaigns: Object.fromEntries(resolved.campaigns.map((campaign) => [campaign.id, campaign.active])),
     destinations: destinationResult.destinations,
     mode: "standalone",
   };
