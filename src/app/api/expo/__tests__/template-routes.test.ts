@@ -210,7 +210,21 @@ describe("목록", () => {
     const { GET } = await import("@/app/api/expo/templates/route");
     await GET(read());
     expect(prismaMock.expoTemplate.findMany.mock.calls[0][0].where)
-      .toEqual({ workspaceId: { in: ["w1"] } });
+      .toEqual({ workspaceId: { in: ["w1"] }, id: { notIn: ["stk-home-v1"] } });
+  });
+
+  it("예약 id를 take 전에 제외해 정상 템플릿 200개 슬롯을 모두 돌려준다", async () => {
+    prismaMock.expoTemplate.findMany.mockResolvedValue(Array.from({ length: 200 }, (_, index) => ({
+      id: `t${index}`, workspaceId: "w1", name: `정상 행 ${index}`, description: null,
+      snapshot: {}, createdAt: new Date(index),
+    })));
+    const { GET } = await import("@/app/api/expo/templates/route");
+    const body = await (await GET(read())).json();
+    expect(prismaMock.expoTemplate.findMany.mock.calls[0][0]).toMatchObject({
+      where: { workspaceId: { in: ["w1"] }, id: { notIn: ["stk-home-v1"] } },
+      take: 200,
+    });
+    expect(body.templates.filter((template: { builtIn: boolean }) => !template.builtIn)).toHaveLength(200);
   });
 
   it("MEMBER 에게는 관리 권한이 없다고 알려 준다", async () => {

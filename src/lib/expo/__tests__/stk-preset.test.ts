@@ -166,6 +166,32 @@ describe("STK source importer", () => {
     }
   });
 
+  it("allows public 192.0.1 addresses while blocking adjacent reserved CIDR boundaries", () => {
+    for (const publicUrl of [
+      "https://192.0.1.0/asset.webp",
+      "https://192.0.1.255/asset.webp",
+    ]) {
+      const dir = tempDir();
+      const assets = path.join(dir, "assets.json");
+      writeFileSync(assets, JSON.stringify({ "speaker.henry-jiang.image": publicUrl }));
+      const result = run(["--dry-run", `--asset-map=${assets}`]);
+      expect(result.status, publicUrl).toBe(2);
+      expect(result.stderr, publicUrl).toBe("");
+    }
+    for (const blockedUrl of [
+      "https://192.0.0.255/asset.webp",
+      "https://192.0.2.0/asset.webp",
+      "https://192.0.2.255/asset.webp",
+    ]) {
+      const dir = tempDir();
+      const assets = path.join(dir, "assets.json");
+      writeFileSync(assets, JSON.stringify({ "speaker.henry-jiang.image": blockedUrl }));
+      const result = run(["--dry-run", `--asset-map=${assets}`]);
+      expect(result.status, blockedUrl).toBe(1);
+      expect(JSON.parse(result.stderr).errors[0]).toMatch(/unsafe/i);
+    }
+  });
+
   it("rejects typoed, duplicate, invalid, and broken semantic inventories", () => {
     const mutate = (fn: (document: typeof presetSource) => void) => {
       const document = structuredClone(presetSource);

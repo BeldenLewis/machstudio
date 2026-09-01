@@ -28,10 +28,12 @@ import { builtInExpoPresets, isBuiltInExpoPresetId } from "@/lib/expo/presets";
 export async function GET(request: Request) {
   const guard = await guardExpoRoute(request);
   if (!guard.ok) return guard.response;
+  const presets = builtInExpoPresets();
+  const builtInIds = presets.map((preset) => preset.id);
 
   // 스냅샷은 싣지 않는다 — 목록에 담으면 응답이 수 MB 가 되고 화면이 쓰지도 않는다.
   const templates = await prisma.expoTemplate.findMany({
-    where: { workspaceId: { in: guard.ctx.memberWorkspaceIds } },
+    where: { workspaceId: { in: guard.ctx.memberWorkspaceIds }, id: { notIn: builtInIds } },
     select: { id: true, workspaceId: true, name: true, description: true, snapshot: true, createdAt: true },
     orderBy: { createdAt: "desc" },
     take: 200,
@@ -39,7 +41,7 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     templates: [
-      ...builtInExpoPresets().map((preset) => ({
+      ...presets.map((preset) => ({
         id: preset.id,
         name: preset.name,
         description: preset.description,

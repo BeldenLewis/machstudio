@@ -5,7 +5,8 @@
 Complete.
 
 - Feature commit: `5081f5f` (`feat: add the STK homepage preset`).
-- Fix round 1 commit: `fix: close STK preset input and built-in read gaps` (this report update is included in that commit).
+- Fix round 1 commit: `8d8341c` (`fix: close STK preset input and built-in read gaps`).
+- Fix round 2 commit: `fix: tighten STK preset URL and list boundaries` (this report update is included in that commit).
 - Base: `c906304af40fc9e1f5e268739c1733e6e1053865`.
 - Scope: Task 10 only; 16 files including this report.
 - No plan, spec, ledger, source attachment, generated runtime, or unrelated file was edited.
@@ -82,3 +83,13 @@ Complete.
 - Final focused preset/template/importer suites: 5 files / 97 tests passed. Default dry-run remained exit 2 with sorted missing inventories 43 assets / 16 destinations / 3 schedules and zero writes.
 - Final DB-free full suite: 189 files / 2,390 tests passed. Typecheck, focused ESLint, and `git diff --check` passed. Independent fix-diff review found no remaining Critical or Important issue.
 - No materialization occurred outside test-managed temporary paths. No network, DB, Supabase, Storage, development server, deployment, or Imweb action was performed.
+
+## Fix round 2
+
+- Scope: two remaining reviewed Important findings only; 5 existing Task 10 files including this report. No plan, spec, ledger, source data, or unrelated file changed.
+- Exact RED: 2 files ran with 3 failures / 46 passes. The importer rejected public `192.0.1.0`, while both list-query assertions proved the reserved built-in id was absent from the Prisma `where` clause applied before `take:200`.
+- IPv4 handling now represents `192.0.0.0/24` and documentation `192.0.2.0/24` as separate exact ranges. Regressions allow public `192.0.1.0` and `192.0.1.255`, reject both adjacent reserved boundaries, and retain the prior private/link-local/loopback/IPv4-mapped-private coverage.
+- Template listing derives all reserved ids from the immutable built-in registry and supplies `id.notIn` in the Prisma query before `take:200`. A full-page regression proves 200 legitimate DB templates remain available alongside the built-in entry; the defensive response filter remains in place.
+- Final focused template/importer suites: 5 files / 99 tests passed. Default dry-run remained exit 2 with sorted missing inventories 43 assets / 16 destinations / 3 schedules and zero writes.
+- Final DB-free full suite: 189 files / 2,392 tests passed. Typecheck, focused ESLint, and `git diff --check` passed. Independent fix-diff review found no remaining Critical or Important issue.
+- No network, DB, Supabase, Storage, development server, deployment, or Imweb action was performed.
