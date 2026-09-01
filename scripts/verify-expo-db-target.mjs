@@ -14,6 +14,14 @@ function requiredEnv(name) {
   return value;
 }
 
+function decodeUrlPart(value, field) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    fail(`${field} contains an invalid percent escape.`);
+  }
+}
+
 function parseAndValidateUrl() {
   const rawUrl = requiredEnv("EXPO_SESSION_DATABASE_URL");
   const approved = {
@@ -31,10 +39,10 @@ function parseAndValidateUrl() {
 
   const actual = {
     protocol: parsed.protocol,
-    host: parsed.hostname,
+    host: decodeUrlPart(parsed.hostname, "hostname"),
     port: parsed.port,
-    database: decodeURIComponent(parsed.pathname.replace(/^\//, "")),
-    user: decodeURIComponent(parsed.username),
+    database: decodeUrlPart(parsed.pathname.replace(/^\//, ""), "database name"),
+    user: decodeUrlPart(parsed.username, "username"),
   };
   const mismatches = [
     ["protocol", actual.protocol, EXPECTED_PROTOCOL],

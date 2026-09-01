@@ -30,6 +30,18 @@ describe("verify-expo-db-target --url-only", () => {
     expect(result.stdout + result.stderr).not.toContain("never-print-this");
   });
 
+  it("percent-encoded hostname도 디코드한 승인 호스트와 비교한다", () => {
+    const result = urlOnly("postgresql://expo%2Fuser:password@db%2Eexample.test:5432/expo%2Fdb");
+    expect(result.status).toBe(0);
+    expect(result.stdout + result.stderr).not.toContain("password");
+  });
+
+  it("잘못된 percent escape는 접속 전에 안전하게 거절한다", () => {
+    const result = urlOnly("postgresql://expo%ZZuser:password@db.example.test:5432/expo%2Fdb");
+    expect(result.status).toBe(1);
+    expect(result.stdout + result.stderr).not.toContain("password");
+  });
+
   it.each([
     ["protocol", "postgres://expo%2Fuser:password@db.example.test:5432/expo%2Fdb"],
     ["host", "postgresql://expo%2Fuser:password@other.example.test:5432/expo%2Fdb"],
