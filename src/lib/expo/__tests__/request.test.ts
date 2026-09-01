@@ -51,6 +51,36 @@ describe("정상 입력은 통과한다", () => {
     expect(context?.destinations.get("contact")?.label).toBe("문의");
   });
 
+  it("plugin relative/content/absolute/empty 경로와 malformed issue를 현재 섹션에 안전하게 맞춘다", () => {
+    textblockPlugin.validate = () => ([
+      { path: "rows[0].name", code: "relative", message: "relative", severity: "error", sid: uid(999) },
+      { path: "content.rows[1].name", code: "content", message: "content", severity: "warning", sid: uid(999) },
+      { path: "sections[99].content.rows[2].name", code: "absolute", message: "absolute", severity: "error", sid: uid(999) },
+      { path: "", code: "empty", message: "empty", severity: "error", sid: uid(999) },
+      null,
+    ] as unknown as ReturnType<NonNullable<SectionPlugin["validate"]>>);
+    const sid = uid(42);
+    const raw = draft([{ sid, type: "textblock", variant: "prose", content: { rows: [{}, {}, {}] } }]);
+
+    expect(() => validatePageDraft(raw)).not.toThrow();
+    const result = validatePageDraft(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.map((issue) => issue.path)).toEqual([
+      "sections[0].content.rows[0].name",
+      "sections[0].content.rows[1].name",
+      "sections[0].content.rows[2].name",
+      "sections[0].content",
+      "sections[0].content",
+    ]);
+    expect(result.errors.map((issue) => issue.sid)).toEqual([sid, sid, sid, sid, sid]);
+    expect(result.errors[4]).toMatchObject({
+      code: "invalid-shape",
+      message: "구획 검증 결과의 모양이 올바르지 않아요",
+      severity: "error",
+    });
+  });
+
   it("보통의 페이지", () => {
     const r = validatePageDraft(draft([
       { sid: uid(1), type: "kv", variant: "column", content: { title: "제목" } },

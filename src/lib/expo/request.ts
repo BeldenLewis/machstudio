@@ -268,6 +268,53 @@ function validateSlot(def: SlotDef, value: unknown, path: string, errors: FieldE
   }
 }
 
+function pluginIssuePath(path: string, sectionIndex: number): string {
+  const at = `sections[${sectionIndex}]`;
+  const clean = path.trim().replace(/^\.+/, "");
+  if (!clean) return `${at}.content`;
+  if (/^sections\[\d+\](?=\.|$)/.test(clean)) {
+    return clean.replace(/^sections\[\d+\]/, at);
+  }
+  if (clean === "content" || clean.startsWith("content.")) return `${at}.${clean}`;
+  return `${at}.content.${clean}`;
+}
+
+function malformedPluginIssue(sectionIndex: number, sid: string | undefined): FieldError {
+  return {
+    path: `sections[${sectionIndex}].content`,
+    code: "invalid-shape",
+    message: "구획 검증 결과의 모양이 올바르지 않아요",
+    severity: "error",
+    sid,
+  };
+}
+
+function normalizePluginIssue(raw: unknown, sectionIndex: number, sid: string | undefined): FieldError {
+  try {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      return malformedPluginIssue(sectionIndex, sid);
+    }
+    const issue = raw as Record<string, unknown>;
+    if (
+      typeof issue.path !== "string"
+      || typeof issue.code !== "string" || !issue.code.trim()
+      || typeof issue.message !== "string" || !issue.message.trim()
+      || (issue.severity !== "error" && issue.severity !== "warning")
+    ) {
+      return malformedPluginIssue(sectionIndex, sid);
+    }
+    return {
+      path: pluginIssuePath(issue.path, sectionIndex),
+      code: issue.code,
+      message: issue.message,
+      severity: issue.severity,
+      sid,
+    };
+  } catch {
+    return malformedPluginIssue(sectionIndex, sid);
+  }
+}
+
 /**
  * 페이지 draft 쓰기를 검증한다. **정규화 전에** 돈다 — 정규화가 자르고 나면
  * 무엇이 넘쳤는지 알 수 없다.
@@ -345,7 +392,7 @@ export function validatePageDraft(raw: unknown): ValidateResult {
 
     const content = obj(s.content);
     if (def.validate) {
-      let pluginIssues = [] as ReturnType<NonNullable<typeof def.validate>>;
+      let pluginIssues: unknown;
       try {
         pluginIssues = def.validate(s as unknown as ExpoSection, {
           config,
@@ -359,13 +406,9 @@ export function validatePageDraft(raw: unknown): ValidateResult {
           severity: "error",
         }];
       }
-      for (const issue of Array.isArray(pluginIssues) ? pluginIssues : []) {
-        const relative = typeof issue.path === "string" ? issue.path.replace(/^\.+/, "") : "";
-        errors.push({
-          ...issue,
-          path: relative ? `${at}.content.${relative}` : `${at}.content`,
-          sid,
-        });
+      const issueRows = Array.isArray(pluginIssues) ? pluginIssues : [pluginIssues];
+      for (const issue of issueRows) {
+        errors.push(normalizePluginIssue(issue, i, sid));
       }
     } else {
       for (const slot of def.slots) {

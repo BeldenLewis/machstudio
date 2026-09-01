@@ -104,6 +104,24 @@ describe("정규화 — 던지지 않는다", () => {
     expect(normalizeExpoPage(raw).sections).toEqual([]);
   });
 
+  it("plugin normalize에 null과 array content를 raw 그대로 넘겨 감지하고 건너뛴다", () => {
+    const seen: unknown[] = [];
+    textblockPlugin.normalize = (content) => {
+      seen.push(content);
+      if (!content || typeof content !== "object" || Array.isArray(content)) throw new Error("malformed content");
+      return content as Record<string, unknown>;
+    };
+    const raw = { sections: [
+      { sid: uid(33), type: "textblock", variant: "prose", content: null },
+      { sid: uid(34), type: "textblock", variant: "prose", content: [] },
+    ] };
+
+    let normalized: ReturnType<typeof normalizeExpoPage> | undefined;
+    expect(() => { normalized = normalizeExpoPage(raw); }).not.toThrow();
+    expect(normalized?.sections).toEqual([]);
+    expect(seen).toEqual([null, []]);
+  });
+
   it("무엇을 넣어도 페이지 모양이 나온다", () => {
     for (const bad of [null, undefined, 0, "", "문자열", [], { sections: null }, { sections: "x" }, { sections: [null, 1, "a"] }]) {
       expect(() => normalizeExpoPage(bad)).not.toThrow();

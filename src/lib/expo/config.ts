@@ -144,17 +144,17 @@ function normalizeSection(raw: unknown): ExpoSection | null {
   const def = sectionDef(str(s.type));
   if (!def) return null;                        // 모르는 타입은 버린다
 
-  const srcContent = obj(s.content);
   let content: Record<string, unknown>;
   if (def.normalize) {
     try {
-      const normalized = def.normalize(srcContent, { mode: "stored" });
+      const normalized = def.normalize(s.content, { mode: "stored" });
       if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) return null;
       content = normalized;
     } catch {
       return null;
     }
   } else {
+    const srcContent = obj(s.content);
     content = {};
     for (const slot of def.slots) {
       const v = normalizeSlot(slot, srcContent[slot.key]);
