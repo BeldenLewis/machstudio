@@ -72,7 +72,9 @@ node scripts/ensure-expo-quarantine-bucket.mjs --check
 
 `EXPO_PUBLIC_EMBED_RELEASE`는 전역 스위치다. 스키마 배포로 자동 활성화하지 않는다. 별도 public-embed 및 Imweb cutover 승인 뒤, `verify-expo-db-target.mjs`를 통과하고 전역 플래그를 켜기 직전에만 읽기 전용 감사를 실행한다.
 
-승인 allowlist는 쉼표로 구분한 완전한 page-id 집합이다. 앞뒤 공백은 정규화하지만 빈 ID, ID 내부 공백, 중복, `none`과 ID의 혼합은 실패한다. 승인된 빈 집합은 반드시 literal `none`을 쓴다. 감사 대상은 살아 있는 `ExpoSite`가 소유한, 삭제되지 않고 발행본이 있는 모든 `ExpoPage`다. `liveAt`이 있거나 발행본에서 `enabled=true`와 `embedEnabled=true`가 동시에 켜진 구획이 하나라도 있으면 public surface로 센다.
+승인 allowlist는 쉼표로 구분한 완전한 page-id 집합이다. 앞뒤 공백은 정규화하지만 빈 ID, ID 내부 공백, 중복, `none`과 ID의 혼합은 실패한다. 승인된 빈 집합은 반드시 literal `none`을 쓴다. 감사 대상은 살아 있는 `ExpoSite`가 소유한, 삭제되지 않고 발행본이 있는 모든 `ExpoPage`다. `liveAt`이 있거나 발행본에서 `embedEnabled=true`인 구획이 하나라도 있으면 public surface로 센다. **구획 단독 loader는 `enabled`를 보지 않으므로 `enabled=false`여도 반드시 집계한다.** 위 stop/go 문구의 “enabled embed surfaces”는 이 독립 `embedEnabled` 공개 스위치가 켜진 surface를 뜻한다.
+
+실제 loader는 발행본을 정규화한 뒤 유효한 sid와 content renderability도 확인한다. 감사 CLI는 노출 가능성을 절대 누락하지 않도록 그보다 보수적으로 raw `embedEnabled=true` 구획을 전부 센다. 따라서 content가 비었거나 정규화에서 탈락할 구획도 승인 검토 대상으로 과대 집계할 수 있다. 반대로 발행 JSON의 root/sections 구조, `embedEnabled` 타입, 공개 sid가 모호하거나 sid가 중복되면 exact-set 비교 전에 fail closed 한다. 이 오류를 allowlist 확대로 우회하지 말고 인증된 편집기에서 발행본을 고친 뒤 다시 감사한다.
 
 ```bash
 test -n "$EXPO_APPROVED_PUBLIC_PAGE_IDS" # use literal none when the approved set is empty
