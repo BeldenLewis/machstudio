@@ -15,7 +15,7 @@ export async function POST(
   if (!guard.ok) return guard.response;
 
   const page = await prisma.expoPage.findFirst({
-    where: { id: pageId, deletedAt: null },
+    where: { id: pageId, deletedAt: null, site: { deletedAt: null } },
     select: { id: true, siteId: true, draft: true, draftRevision: true, published: true, site: { select: { id: true, workspaceId: true, projectId: true } } },
   });
   const owned = requireOwnedPage(page, guard.ctx.userId, guard.ctx.memberWorkspaceIds);
@@ -36,6 +36,7 @@ export async function POST(
   const now = new Date();
   const result = await prisma.$transaction((tx) => rollbackPageRevision(tx, {
     pageId: owned.value.id,
+    siteId: owned.value.siteId,
     revisionId: target.id,
     publishedBy: guard.ctx.userId,
     publicEmbedEnabled: guard.ctx.caps.publicEmbed,

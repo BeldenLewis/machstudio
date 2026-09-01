@@ -18,7 +18,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ pag
   if (!guard.ok) return guard.response;
 
   const page = await prisma.expoPage.findFirst({
-    where: { id: pageId, deletedAt: null },
+    where: { id: pageId, deletedAt: null, site: { deletedAt: null } },
     select: {
       id: true, siteId: true, draft: true, published: true,
       site: { select: { id: true, workspaceId: true, projectId: true } },
@@ -41,6 +41,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ pag
   const now = new Date();
   const result = await prisma.$transaction((tx) => publishPageRevision(tx, {
     pageId: page!.id,
+    siteId: page!.siteId,
     publishedBy: guard.ctx.userId!,
     publicEmbedEnabled: guard.ctx.caps.publicEmbed,
     now,

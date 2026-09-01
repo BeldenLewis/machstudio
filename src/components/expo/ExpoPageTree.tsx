@@ -53,8 +53,10 @@ export interface ExpoPageTreeProps {
   canRename?: boolean;
   /** 삭제는 `canManageSite` 다 — 서버도 역할까지 본다. */
   canManageSite: boolean;
-  onSelect: (pageId: string) => void;
-  onAdd: () => void;
+  onSelect: (pageId: string) => void | boolean | Promise<void | boolean>;
+  onAdd: () => void | boolean | Promise<void | boolean>;
+  /** 삭제 유예를 시작하기 전에 현재 페이지 초안을 안전하게 비운다. */
+  onBeforeRemove?: (pageId: string) => boolean | Promise<boolean>;
   /** 목록을 다시 읽는다(생성·삭제·순서 변경 뒤). */
   onReload: () => void;
   /** 유예로 화면에서 사라진 페이지들 — 편집기와 발행 패널이 이걸 보고 잠근다. */
@@ -76,7 +78,7 @@ const STATE_DOT: Record<ExpoPageState, string> = {
 
 export function ExpoPageTree({
   siteId, pages, selectedId, canEdit, canRename = canEdit, canManageSite,
-  onSelect, onAdd, onReload, onPendingChange,
+  onSelect, onAdd, onBeforeRemove, onReload, onPendingChange,
 }: ExpoPageTreeProps) {
   const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
@@ -181,7 +183,7 @@ export function ExpoPageTree({
       // 지운 페이지를 보고 있었으면 다른 페이지로 옮긴다 — 없는 페이지를 편집하게 두지 않는다.
       if (page.id === selectedId) {
         const next = rows.find((p) => p.id !== page.id && p.isHome) ?? rows.find((p) => p.id !== page.id);
-        if (next) onSelect(next.id);
+        if (next) await onSelect(next.id);
       }
       setOrder(null);
       onReload();
@@ -207,8 +209,9 @@ export function ExpoPageTree({
       });
       if (!ok) return;
     }
+    if (onBeforeRemove && !(await onBeforeRemove(page.id))) return;
     request();
-  }, [confirm]);
+  }, [confirm, onBeforeRemove]);
 
   return (
     <nav className={`${R.panel} ${FINISH.s1} bg-card p-2`} aria-label="페이지">
@@ -236,7 +239,7 @@ export function ExpoPageTree({
           canEdit ? (
             <button
               type="button"
-              onClick={onAdd}
+              onClick={() => { void onAdd(); }}
               disabled={busy}
               className={`flex w-full items-center gap-2 ${R.control} px-2.5 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-60`}
             >
@@ -269,7 +272,7 @@ export function ExpoPageTree({
                 <input
                   value={drafts[item.id] ?? item.title}
                   onChange={(event) => editTitle(item.id, event.target.value)}
-                  onFocus={() => onSelect(item.id)}
+                  onFocus={() => { void onSelect(item.id); }}
                   onBlur={() => flushTitle(item.id)}
                   onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                   maxLength={120}
@@ -280,7 +283,7 @@ export function ExpoPageTree({
               ) : (
                 <button
                   type="button"
-                  onClick={() => onSelect(item.id)}
+                  onClick={() => { void onSelect(item.id); }}
                   aria-current={active ? "page" : undefined}
                   className="min-w-0 flex-1 truncate py-2 text-left text-sm"
                 >

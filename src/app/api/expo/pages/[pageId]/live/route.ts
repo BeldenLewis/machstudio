@@ -25,7 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ pag
   const live = parsed.body.live;
 
   const page = await prisma.expoPage.findFirst({
-    where: { id: pageId, deletedAt: null },
+    where: { id: pageId, deletedAt: null, site: { deletedAt: null } },
     select: {
       id: true, siteId: true, published: true,
       site: { select: { id: true, workspaceId: true, projectId: true } },

@@ -23,7 +23,8 @@ export interface PageDraftWorkspaceProps {
   pages?: readonly { id: string; title: string }[];
   locale?: string;
   embedLocked?: boolean;
-  leftTop?: ReactNode;
+  /** 초안 상태가 필요한 페이지 탐색기는 렌더 함수로 받는다. */
+  leftTop?: ReactNode | ((state: ExpoPageDraftState) => ReactNode);
   leftBottom?: ReactNode;
   renderPreview?: (state: ExpoPageDraftState) => ReactNode;
   onSaved?: () => void;
@@ -299,7 +300,7 @@ export function PageDraftWorkspace({
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(200px,240px)_minmax(0,1fr)_minmax(280px,380px)]">
       <div className="space-y-3">
-        {leftTop}
+        {typeof leftTop === "function" ? leftTop(state) : leftTop}
         <ExpoSectionTree
           sections={state.config.sections}
           selectedSid={state.selectedSid}

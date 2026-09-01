@@ -145,7 +145,7 @@ describe("깨끗한 페이지", () => {
     expect(shadow.querySelector("[data-type='exhibition-grid'] .msx-exhibition-item")?.textContent).toContain("Robotics");
   });
 
-  it("섹션 단독 standalone destination은 이동 기능만 유지하고 analytics를 쓰지 않는다", () => {
+  it("mode를 생략한 섹션 단독 공개 payload도 live analytics를 쓴다", () => {
     const seen = vi.fn();
     document.addEventListener("msx:destination", seen);
     const dataLayer: unknown[] = [];
@@ -164,6 +164,35 @@ describe("깨끗한 페이지", () => {
     const action = container.querySelector(EXPO_HOST_TAG)!.shadowRoot!.querySelector<HTMLAnchorElement>(".msx-cta-action")!;
     expect(action.getAttribute("href")).toBe("#overview");
     action.click();
+    expect(seen).toHaveBeenCalledTimes(1);
+    expect(dataLayer).toEqual([{
+      event: "select_content",
+      content_id: undefined,
+      destination_id: "overview",
+    }]);
+    document.removeEventListener("msx:destination", seen);
+    delete (window as Window & { dataLayer?: unknown }).dataLayer;
+  });
+
+  it("standalone은 명시한 내보내기에서만 analytics를 쓰지 않는다", () => {
+    const seen = vi.fn();
+    document.addEventListener("msx:destination", seen);
+    const dataLayer: unknown[] = [];
+    Object.assign(window, { dataLayer });
+    const { container } = host();
+    mount({
+      container,
+      payload: payload({
+        sectionId: SID,
+        mode: "standalone",
+        destinations: [{ id: "overview", label: "소개", action: { type: "anchor", target: "overview" }, analytics: { eventName: "select_content" } }],
+        sections: [{ sid: SID, type: "cta-band", variant: "default", design: {}, content: {
+          headline: "Join", audience: "all", ctas: [{ id: "join", label: "Join", destinationId: "overview", variant: "primary", audience: "all", campaignIds: [], priority: 0, fallback: true, enabled: true }],
+        } }],
+      }),
+    });
+    container.querySelector(EXPO_HOST_TAG)!.shadowRoot!
+      .querySelector<HTMLAnchorElement>(".msx-cta-action")!.click();
     expect(seen).not.toHaveBeenCalled();
     expect(dataLayer).toEqual([]);
     document.removeEventListener("msx:destination", seen);
@@ -413,28 +442,47 @@ describe("실패해도 파트너 페이지를 깨지 않는다", () => {
     expect(root.getAttribute("data-msx-ready")).toBe("1");
   });
 
-  it("새 렌더가 던지면 이전 DOM과 listener를 유지하고 다음 성공에서만 교체한다", () => {
+  it("STK 렌더가 던지면 후보만 정리하고 이전 DOM·listener·폼 예약을 유지한다", () => {
     const { container } = host();
     const first = mount({
-      container,
-      payload: payload({ sections: [{
-        sid: SID, type: "register-form", variant: "cta", design: {},
-        content: { sourceRef: "src-1", heading: "이전 폼" },
-      }] }),
+      container, payload: payload({ sections: [
+        {
+          sid: SID, type: "register-form", variant: "inline", design: {},
+          content: { sourceRef: "src-1", heading: "이전 인라인 폼" },
+        },
+        {
+          sid: SID2, type: "register-form", variant: "cta", design: {},
+          content: { sourceRef: "src-1", heading: "이전 폼" },
+        },
+      ] }),
     })!;
     const oldHost = container.querySelector<HTMLElement>(EXPO_HOST_TAG)!;
     const oldButton = oldHost.shadowRoot!.querySelector<HTMLButtonElement>(".msx-btn")!;
+    const oldKey = document.head.querySelector<HTMLScriptElement>("script[data-ms-form-target]")!
+      .dataset.msFormTarget!;
+    const oldTarget = getFormTarget(oldKey)!;
+    const abort = vi.spyOn(window.AbortController.prototype, "abort");
 
     const createElement = document.createElement.bind(document);
     vi.spyOn(document, "createElement").mockImplementation(((tag: string, options?: ElementCreationOptions) => {
-      if (tag === "section") throw new Error("renderer failed");
+      if (tag === "a") throw new Error("STK renderer failed");
       return createElement(tag, options);
     }) as typeof document.createElement);
     let failed: ReturnType<typeof mount> = null;
     try {
       failed = mount({
         container,
-        payload: payload({ sections: [{ sid: SID, type: "textblock", variant: "prose", design: {}, content: { body: "후보" } }] }),
+        payload: payload({ sections: [
+          { sid: SID, type: "speaker-carousel", variant: "default", design: {}, content: {
+            heading: "후보 발표자",
+            categories: [{ id: "robotics", label: "Robotics", gradientToken: "robotics", badgeToken: "robotics", order: 0, enabled: true }],
+            speakers: [{ id: "speaker-1", name: "Kim", categoryId: "robotics", order: 0, enabled: true }],
+          } },
+          { sid: SID2, type: "sponsor-marquee", variant: "default", design: {}, content: {
+            groups: [{ id: "partners", title: "Partners", marquee: false, order: 0 }],
+            sponsors: [{ id: "sponsor-1", groupId: "partners", name: "Sponsor", homepageUrl: "https://example.com", order: 0, enabled: true }],
+          } },
+        ] }),
       });
     } finally {
       vi.mocked(document.createElement).mockRestore();
@@ -444,6 +492,9 @@ describe("실패해도 파트너 페이지를 깨지 않는다", () => {
     expect(container.querySelector(EXPO_HOST_TAG)).toBe(oldHost);
     expect(oldHost.isConnected).toBe(true);
     expect(oldHost.shadowRoot!.textContent).toContain("이전 폼");
+    expect(getFormTarget(oldKey)).toBe(oldTarget);
+    // 후보 shell + 먼저 완성된 speaker plugin만 정확히 정리한다.
+    expect(abort).toHaveBeenCalledTimes(2);
     oldButton.click();
     expect(document.body.querySelector("mach-expo-overlay")).not.toBeNull();
 

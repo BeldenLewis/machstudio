@@ -77,6 +77,17 @@ describe("Expo revision routes", () => {
     expect((await response.json()).revisions[0].publisher).toBeNull();
   });
 
+  it("부모 사이트가 소프트 삭제된 알려진 페이지의 이력을 숨긴다", async () => {
+    prismaMock.expoPage.findFirst.mockImplementation(async (args) =>
+      args.where?.site?.deletedAt === null ? null : { ...page, site: { ...page.site, deletedAt: new Date() } });
+    const { GET } = await import("@/app/api/expo/pages/[pageId]/revisions/route");
+
+    const response = await GET(read(), { params: Promise.resolve({ pageId: "page-1" }) });
+
+    expect(response.status).toBe(404);
+    expect(prismaMock.expoPageRevision.findMany).not.toHaveBeenCalled();
+  });
+
   it("lets an EDITOR roll back, retaining the current draft and passing the normal release gate", async () => {
     guardExpoRoute.mockResolvedValue({ ok: true, ctx: context("EDITOR", false) });
     const { POST } = await import("@/app/api/expo/pages/[pageId]/revisions/[revisionId]/rollback/route");
@@ -102,5 +113,26 @@ describe("Expo revision routes", () => {
     const { POST } = await import("@/app/api/expo/pages/[pageId]/revisions/[revisionId]/rollback/route");
     expect((await POST(write(), { params: Promise.resolve({ pageId: "page-1", revisionId: "revision-7" }) })).status).toBe(404);
     expect(rollbackPageRevision).not.toHaveBeenCalled();
+  });
+
+  it("부모 사이트가 소프트 삭제된 알려진 페이지를 rollback하지 않는다", async () => {
+    prismaMock.expoPage.findFirst.mockImplementation(async (args) =>
+      args.where?.site?.deletedAt === null ? null : { ...page, site: { ...page.site, deletedAt: new Date() } });
+    const { POST } = await import("@/app/api/expo/pages/[pageId]/revisions/[revisionId]/rollback/route");
+
+    const response = await POST(write(), { params: Promise.resolve({ pageId: "page-1", revisionId: "revision-7" }) });
+
+    expect(response.status).toBe(404);
+    expect(rollbackPageRevision).not.toHaveBeenCalled();
+  });
+
+  it("사전 조회 뒤 사이트 삭제가 경합하면 rollback 트랜잭션의 404를 전달한다", async () => {
+    rollbackPageRevision.mockResolvedValue({ ok: false, status: 404, code: "page-not-found", issues: [] });
+    const { POST } = await import("@/app/api/expo/pages/[pageId]/revisions/[revisionId]/rollback/route");
+
+    const response = await POST(write(), { params: Promise.resolve({ pageId: "page-1", revisionId: "revision-7" }) });
+
+    expect(response.status).toBe(404);
+    expect((await response.json()).code).toBe("page-not-found");
   });
 });

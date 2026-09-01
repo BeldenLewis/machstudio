@@ -122,7 +122,7 @@ export async function serveExpoRuntime(req: Request, target: LoaderTarget): Prom
   } | null = null;
   try {
     row = await prisma.expoPage.findFirst({
-      where: { id: target.pageId, deletedAt: null },
+      where: { id: target.pageId, deletedAt: null, site: { deletedAt: null } },
       select: {
         id: true, published: true, liveAt: true,
         site: { select: { id: true, projectId: true, theme: true, defaultLocale: true, deletedAt: true } },
@@ -215,6 +215,8 @@ export async function serveExpoRuntime(req: Request, target: LoaderTarget): Prom
   const payload = {
     pageId: row.id,
     ...(target.sid ? { sectionId: target.sid } : {}),
+    // 공개 로더는 통짜와 구획 단독 모두 라이브다. standalone은 내보내기 산출물만 명시한다.
+    mode: "live" as const,
     theme,
     origin,
     sections: resolvedPayload?.sections ?? [],

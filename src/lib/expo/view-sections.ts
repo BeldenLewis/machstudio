@@ -225,7 +225,7 @@ export function renderStaticSectionResult(
   const stkRenderer = STK_RENDERERS[section.type];
   if (stkRenderer) {
     if (!context) return null;
-    try { return stkRenderer(section, context); } catch { return null; }
+    return stkRenderer(section, context);
   }
   const renderer = STATIC_RENDERERS[section.type];
   if (!renderer) return null;

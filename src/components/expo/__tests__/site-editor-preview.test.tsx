@@ -80,6 +80,10 @@ let sitePatches: unknown[] = [];
 /** 목록이 돌려주는 이름. 트리의 이름 PATCH 가 서버처럼 이걸 바꾼다. */
 let listTitle = "홈";
 let nextExportFailure: { issues: Array<{ path: string; code: string; message: string; severity: "error"; sid?: string }> } | null = null;
+let includeSecondPage = false;
+let conflictNext = false;
+let transportFailureNext = false;
+let draftSaveGate: Promise<void> | null = null;
 
 function stubFetch() {
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
@@ -97,6 +101,18 @@ function stubFetch() {
         }
         if (typeof body.title === "string") listTitle = body.title;
         patchCount += 1;
+        if (draftSaveGate) await draftSaveGate;
+        if (transportFailureNext) {
+          transportFailureNext = false;
+          return { ok: false, status: 503, json: async () => ({ error: "temporarily unavailable" }) } as Response;
+        }
+        if (conflictNext) {
+          conflictNext = false;
+          return {
+            ok: false, status: 409,
+            json: async () => ({ draftRevision: 12, draft: pageBody.draft }),
+          } as Response;
+        }
         if (rejectNext) {
           const payload = rejectNext;
           return { ok: false, status: 422, json: async () => payload } as Response;
@@ -136,7 +152,10 @@ function stubFetch() {
         pages: [{
           id: PAGE_ID, slug: "home", title: listTitle, isHome: true, sortOrder: 0,
           imwebUrl: null, hasPublished: Boolean(pageBody.hasPublished), liveAt,
-        }],
+        }, ...(includeSecondPage ? [{
+          id: "pg2", slug: "about", title: "소개", isHome: false, sortOrder: 1,
+          imwebUrl: null, hasPublished: false, liveAt: null,
+        }] : [])],
         sources: [],
       });
     }
@@ -199,6 +218,10 @@ beforeEach(() => {
   listTitle = "홈";
   rejectNext = null;
   nextExportFailure = null;
+  includeSecondPage = false;
+  conflictNext = false;
+  transportFailureNext = false;
+  draftSaveGate = null;
   liveAt = null;
   detailCount = 0;
   holdPageDetail = () => {};
@@ -1013,5 +1036,88 @@ describe("페이지 이름", () => {
     await render();
     await rename("첫 화면");
     expect(patchCount).toBe(1);
+  });
+});
+
+describe("페이지 전환 전 자동저장", () => {
+  const titleInput = () => host.querySelector<HTMLInputElement>('input[aria-label="페이지 제목"]')!;
+  const pageButton = (title: string) => [...host.querySelectorAll("button")]
+    .find((button) => button.textContent?.trim() === title);
+  const editTitle = async (title: string) => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setter.call(titleInput(), title);
+      titleInput().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    includeSecondPage = true;
+  });
+
+  it("느린 저장이 끝난 뒤에만 다른 페이지로 이동한다", async () => {
+    let release!: () => void;
+    draftSaveGate = new Promise<void>((resolve) => { release = resolve; });
+    await render();
+    await editTitle("이동 전 저장할 제목");
+
+    await click(pageButton("소개"));
+    expect(patchCount).toBe(1);
+    expect(replace).not.toHaveBeenCalled();
+
+    release();
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(replace).toHaveBeenCalledWith("?page=pg2", { scroll: false });
+  });
+
+  it("검증 거절이면 이동하지 않고 보이는 초안을 유지한다", async () => {
+    rejectNext = { errors: [{ path: "title", message: "제목을 확인해 주세요." }] };
+    await render();
+    await editTitle("로컬 검증 초안");
+
+    await click(pageButton("소개"));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(replace).not.toHaveBeenCalled();
+    expect(titleInput().value).toBe("로컬 검증 초안");
+    expect(host.textContent).toContain("제목을 확인해 주세요.");
+  });
+
+  it("409 충돌이면 이동하지 않고 보이는 초안을 유지한다", async () => {
+    conflictNext = true;
+    await render();
+    await editTitle("로컬 충돌 초안");
+
+    await click(pageButton("소개"));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(replace).not.toHaveBeenCalled();
+    expect(titleInput().value).toBe("로컬 충돌 초안");
+    expect(host.textContent).toContain("다른 팀원이 먼저 저장했어요");
+  });
+
+  it("전송 실패면 이동하지 않고 보이는 초안을 유지한다", async () => {
+    transportFailureNext = true;
+    await render();
+    await editTitle("로컬 전송 초안");
+
+    await click(pageButton("소개"));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(replace).not.toHaveBeenCalled();
+    expect(titleInput().value).toBe("로컬 전송 초안");
+  });
+
+  it("저장 거절이면 페이지 삭제를 예약하지 않는다", async () => {
+    rejectNext = { errors: [{ path: "title", message: "제목을 확인해 주세요." }] };
+    await render();
+    await editTitle("삭제 전 로컬 초안");
+
+    await click(host.querySelector('button[aria-label="소개 페이지 삭제"]') ?? undefined);
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_100); });
+
+    expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+    expect(titleInput().value).toBe("삭제 전 로컬 초안");
   });
 });

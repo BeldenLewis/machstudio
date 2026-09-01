@@ -79,9 +79,9 @@ class FakeRevisionDb {
         return [{ id: this.pages[0]?.id }];
       },
       expoPage: {
-        findUnique: async ({ where }: { where: { id: string } }) => {
+        findFirst: async ({ where }: { where: { id: string; siteId: string } }) => {
           this.events.push("reload-page");
-          return structuredClone(this.pages.find((page) => page.id === where.id) ?? null);
+          return structuredClone(this.pages.find((page) => page.id === where.id && where.siteId === "site-1") ?? null);
         },
         update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
           this.events.push("update-page");
@@ -160,6 +160,7 @@ const page = (over: Partial<PageState> = {}): PageState => ({
 
 const input = (over: Partial<RevisionServiceInput> = {}): RevisionServiceInput => ({
   pageId: "pg1",
+  siteId: "site-1",
   publishedBy: "user-1",
   publicEmbedEnabled: true,
   now: new Date("2026-09-01T04:00:00.000Z"),
@@ -185,8 +186,25 @@ describe("publishPageRevision", () => {
     expect(db.events[0]).toBe("lock");
     expect(db.events[1]).toBe("reload-page");
     expect(db.lockQueries[0].values).toContain("pg1");
+    expect(db.lockQueries[0].values).toContain("site-1");
     expect(db.lockQueries[0].strings?.join("")).not.toContain("pg1");
+    expect(db.lockQueries[0].strings?.join(" ")).toMatch(/ExpoSite[\s\S]*deletedAt[\s\S]*FOR UPDATE/i);
   });
+
+  it.each(["publish", "rollback"] as const)(
+    "returns 404 when parent-site deletion wins the transaction lock before %s",
+    async (kind) => {
+      const tx = {
+        $queryRaw: async () => [],
+        expoPage: { findFirst: async () => { throw new Error("must not reload an inactive page"); } },
+      } as unknown as Prisma.TransactionClient;
+      const result = kind === "publish"
+        ? await publishPageRevision(tx, input())
+        : await rollbackPageRevision(tx, { ...input(), revisionId: "rev-1" });
+
+      expect(result).toEqual({ ok: false, status: 404, code: "page-not-found", issues: [] });
+    },
+  );
 
   it("serializes concurrent publishes so they receive distinct sequences", async () => {
     const db = new FakeRevisionDb(page());

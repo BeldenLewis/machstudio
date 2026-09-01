@@ -7,6 +7,8 @@ import type { ExpoPageConfigV2, FieldIssue } from "@/lib/expo/types";
 
 export interface RevisionServiceInput {
   pageId: string;
+  /** URL-owned page가 사전 조회 때 속해 있던 사이트. lock 뒤에도 같은 소속인지 재확인한다. */
+  siteId: string;
   publishedBy: string;
   publicEmbedEnabled: boolean;
   now: Date;
@@ -23,8 +25,8 @@ export interface RevisionServiceSuccess {
 
 export type RevisionServiceFailure = {
   ok: false;
-  status: 422;
-  code: "publish-readiness-failed" | "public-embed-release-disabled";
+  status: 404 | 422;
+  code: "page-not-found" | "publish-readiness-failed" | "public-embed-release-disabled";
   issues: FieldIssue[];
 };
 
@@ -36,6 +38,13 @@ type LockedPage = {
   published: Prisma.JsonValue | null;
   liveAt: Date | null;
 };
+
+const inactivePage = (): RevisionServiceFailure => ({
+  ok: false,
+  status: 404,
+  code: "page-not-found",
+  issues: [],
+});
 
 function asFieldIssues(raw: unknown): FieldIssue[] {
   return publishErrors(raw);
@@ -77,17 +86,32 @@ function releaseGateIssues(
   return issues;
 }
 
-async function lockAndReloadPage(tx: Prisma.TransactionClient, pageId: string): Promise<LockedPage> {
+async function lockAndReloadPage(
+  tx: Prisma.TransactionClient,
+  input: Pick<RevisionServiceInput, "pageId" | "siteId">,
+): Promise<LockedPage | null> {
   const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    SELECT "id" FROM "ExpoPage" WHERE "id" = ${pageId} FOR UPDATE
+    SELECT page."id"
+      FROM "ExpoPage" AS page
+      INNER JOIN "ExpoSite" AS site ON site."id" = page."siteId"
+     WHERE page."id" = ${input.pageId}
+       AND page."siteId" = ${input.siteId}
+       AND page."deletedAt" IS NULL
+       AND site."deletedAt" IS NULL
+     FOR UPDATE OF page, site
   `);
-  if (locked.length === 0) throw new Error("Expo page not found while locking");
+  if (locked.length === 0) return null;
 
-  const page = await tx.expoPage.findUnique({
-    where: { id: pageId },
+  const page = await tx.expoPage.findFirst({
+    where: {
+      id: input.pageId,
+      siteId: input.siteId,
+      deletedAt: null,
+      site: { deletedAt: null },
+    },
     select: { id: true, draft: true, published: true, liveAt: true },
   });
-  if (!page) throw new Error("Expo page not found after locking");
+  if (!page) return null;
   return page;
 }
 
@@ -166,7 +190,8 @@ export async function publishPageRevision(
   tx: Prisma.TransactionClient,
   input: RevisionServiceInput,
 ): Promise<RevisionServiceResult> {
-  const page = await lockAndReloadPage(tx, input.pageId);
+  const page = await lockAndReloadPage(tx, input);
+  if (!page) return inactivePage();
   return recordRevision(tx, page, page.draft, input);
 }
 
@@ -174,7 +199,8 @@ export async function rollbackPageRevision(
   tx: Prisma.TransactionClient,
   input: RevisionServiceInput & { revisionId: string },
 ): Promise<RevisionServiceResult> {
-  const page = await lockAndReloadPage(tx, input.pageId);
+  const page = await lockAndReloadPage(tx, input);
+  if (!page) return inactivePage();
   const target = await tx.expoPageRevision.findFirst({
     where: { id: input.revisionId, pageId: input.pageId },
     select: { snapshot: true },

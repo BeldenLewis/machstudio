@@ -26,7 +26,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ pag
   if (!guard.ok) return guard.response;
 
   const page = await prisma.expoPage.findFirst({
-    where: { id: pageId, deletedAt: null },
+    where: { id: pageId, deletedAt: null, site: { deletedAt: null } },
     select: {
       id: true,
       siteId: true,

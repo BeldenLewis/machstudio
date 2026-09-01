@@ -18,6 +18,7 @@ import { ExpoPageTree } from "@/components/expo/ExpoPageTree";
 import { useExpoPreviewChannel } from "@/lib/expo/use-preview-channel";
 import type { ExpoReadinessView, ExpoSnippetsView } from "@/lib/expo/editor-dto";
 import type { ExpoPermissions, ExpoRelease } from "@/lib/expo/permissions";
+import type { FlushResult } from "@/lib/expo/use-page-autosave";
 import type { CampaignPreviewMode, ExpoTheme } from "@/lib/expo/types";
 export { forcedCampaignsForPreview } from "@/lib/expo/campaign-preview";
 
@@ -197,14 +198,32 @@ function EditorBody({ siteId, siteName, permissions, release, previewOrigin }: E
     [pages],
   );
 
-  const selectPage = useCallback((pageId: string) => {
+  const transitionIntent = useRef(0);
+  const flushBeforeTransition = useCallback(async (
+    flush: () => Promise<FlushResult>,
+  ): Promise<boolean> => {
+    const result = await flush();
+    if (result === "clean" || result === "saved" || result === "disabled") return true;
+    if (result === "failed") toast.error("페이지를 저장하지 못했어요. 연결을 확인한 뒤 다시 시도해 주세요.");
+    return false;
+  }, []);
+
+  const selectPage = useCallback(async (
+    pageId: string,
+    flush: () => Promise<FlushResult>,
+  ): Promise<boolean> => {
+    if (pageId === selected?.id) return true;
+    const intent = ++transitionIntent.current;
+    if (!(await flushBeforeTransition(flush)) || intent !== transitionIntent.current) return false;
     const next = new URLSearchParams(params.toString());
     next.set("page", pageId);
     // `replace` 다 — 페이지를 훑을 때마다 뒤로가기 기록이 쌓이면 목록으로 못 돌아간다.
     router.replace(`?${next.toString()}`, { scroll: false });
-  }, [params, router]);
+    return true;
+  }, [flushBeforeTransition, params, router, selected?.id]);
 
-  const addPage = useCallback(async () => {
+  const addPage = useCallback(async (flush: () => Promise<FlushResult>) => {
+    if (!(await flushBeforeTransition(flush))) return false;
     const res = await fetch(`/api/expo/${encodeURIComponent(siteId)}/pages`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -212,12 +231,12 @@ function EditorBody({ siteId, siteName, permissions, release, previewOrigin }: E
     });
     if (!res.ok) {
       toast.error((await res.json().catch(() => ({}))).error ?? "페이지를 만들지 못했어요");
-      return;
+      return false;
     }
     const { page } = (await res.json()) as { page: { id: string } };
     reload();
-    selectPage(page.id);
-  }, [siteId, reload, selectPage]);
+    return selectPage(page.id, flush);
+  }, [flushBeforeTransition, siteId, reload, selectPage]);
 
   if (loadError) {
     return (
@@ -261,15 +280,16 @@ function EditorBody({ siteId, siteName, permissions, release, previewOrigin }: E
           locale={site.defaultLocale || "ko"}
           embedLocked={!release.publicEmbedEnabled}
           onSaved={reload}
-          leftTop={<ExpoPageTree
+          leftTop={(draft) => <ExpoPageTree
             siteId={siteId}
             pages={pages}
             selectedId={selected.id}
             canEdit={permissions.canEdit}
             canRename={false}
             canManageSite={permissions.canManageSite}
-            onSelect={selectPage}
-            onAdd={addPage}
+            onSelect={(pageId) => selectPage(pageId, draft.flush)}
+            onAdd={() => addPage(draft.flush)}
+            onBeforeRemove={() => flushBeforeTransition(draft.flush)}
             onReload={reload}
             onPendingChange={setPendingPages}
           />}

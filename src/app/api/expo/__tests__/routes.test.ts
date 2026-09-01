@@ -16,7 +16,10 @@ const prismaMock = {
   workspaceMember: { findMany: vi.fn() },
   projectMember: { findMany: vi.fn() },
   expoSite: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
-  expoPage: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+  expoPage: {
+    findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn(),
+    updateManyAndReturn: vi.fn(),
+  },
   expoPageRevision: {
     aggregate: vi.fn(), findFirst: vi.fn(), create: vi.fn(), findMany: vi.fn(), deleteMany: vi.fn(),
   },
@@ -226,13 +229,65 @@ describe("draft 저장 — 편집 충돌", () => {
 
   it("번호가 맞으면 저장한다", async () => {
     prismaMock.expoPage.findFirst.mockResolvedValue(page);
-    prismaMock.expoPage.update.mockResolvedValue({ id: "pg1", draftRevision: 8 });
+    prismaMock.expoPage.updateManyAndReturn.mockResolvedValue([{
+      id: "pg1", slug: "home", title: "홈", imwebUrl: null, draftRevision: 8, updatedAt: new Date(),
+    }]);
     const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
 
     const res = await PATCH(patch({ draft: { schemaVersion: 2, sections: [] }, draftRevision: 7 }),
       { params: Promise.resolve({ pageId: "pg1" }) });
     expect(res.status).toBe(200);
-    expect(prismaMock.expoPage.update).toHaveBeenCalled();
+    expect(prismaMock.expoPage.updateManyAndReturn).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        id: "pg1", siteId: "s1", deletedAt: null, draftRevision: 7,
+        site: { deletedAt: null },
+      }),
+      data: expect.objectContaining({ draftRevision: { increment: 1 } }),
+    }));
+  });
+
+  it("동일한 번호의 두 요청 중 하나만 원자적으로 저장한다", async () => {
+    let stored = { ...page, draft: { schemaVersion: 2, sections: [] }, draftRevision: 7 };
+    let initialReads = 0;
+    let releaseReads!: () => void;
+    const bothRead = new Promise<void>((resolve) => { releaseReads = resolve; });
+    prismaMock.expoPage.findFirst.mockImplementation(async () => {
+      if (initialReads < 2) {
+        initialReads += 1;
+        const captured = structuredClone(stored);
+        if (initialReads === 2) releaseReads();
+        await bothRead;
+        return captured;
+      }
+      return structuredClone(stored);
+    });
+    prismaMock.expoPage.updateManyAndReturn.mockImplementation(async ({ where, data }) => {
+      if (stored.draftRevision !== where.draftRevision) return [];
+      stored = {
+        ...stored,
+        draft: structuredClone(data.draft),
+        draftRevision: stored.draftRevision + Number(data.draftRevision.increment),
+      };
+      return [{
+        id: stored.id, slug: stored.slug, title: stored.title, imwebUrl: stored.imwebUrl,
+        draftRevision: stored.draftRevision, updatedAt: stored.updatedAt,
+      }];
+    });
+    const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
+    const firstDraft = { schemaVersion: 2, sections: [], preset: "first" };
+    const secondDraft = { schemaVersion: 2, sections: [], preset: "second" };
+
+    const responses = await Promise.all([
+      PATCH(patch({ draft: firstDraft, draftRevision: 7 }), { params: Promise.resolve({ pageId: "pg1" }) }),
+      PATCH(patch({ draft: secondDraft, draftRevision: 7 }), { params: Promise.resolve({ pageId: "pg1" }) }),
+    ]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    const conflict = responses.find((response) => response.status === 409)!;
+    expect(await conflict.json()).toMatchObject({ draft: stored.draft, draftRevision: 8 });
+    expect(stored.draftRevision).toBe(8);
+    expect(stored.draft).toEqual(expect.objectContaining({ preset: expect.stringMatching(/^(first|second)$/) }));
+    expect(prismaMock.expoPage.updateManyAndReturn).toHaveBeenCalledTimes(2);
   });
 
   /** 409 에 **최신 값을 함께** 준다 — 화면이 그걸로 다시 읽는다. 자동 재시도는 안 한다. */
@@ -364,14 +419,16 @@ describe("역할 — 화면이 숨긴 것은 API 도 막는다", () => {
     asMember();
     asProjectRole("EDITOR");
     prismaMock.expoPage.findFirst.mockResolvedValue(page);
-    prismaMock.expoPage.update.mockResolvedValue({ id: "pg1", draftRevision: 4 });
+    prismaMock.expoPage.updateManyAndReturn.mockResolvedValue([{
+      id: "pg1", slug: "home", title: "홈", imwebUrl: null, draftRevision: 4, updatedAt: new Date(),
+    }]);
     const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
     const res = await PATCH(
       write({ draft: { schemaVersion: 2, sections: [] }, draftRevision: 3 }),
       { params: Promise.resolve({ pageId: "pg1" }) },
     );
     expect(res.status).toBe(200);
-    expect(prismaMock.expoPage.update).toHaveBeenCalled();
+    expect(prismaMock.expoPage.updateManyAndReturn).toHaveBeenCalled();
   });
 
   /** 사이트 이름 바꾸기도 편집 쪽이다. */
@@ -433,6 +490,50 @@ describe("프로젝트 목록 노출", () => {
     const res = await GET(new Request("https://machstudio.vercel.app/api/expo?projectId=p2"));
     expect(res.status).toBe(404);
     expect(prismaMock.expoSite.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("살아 있는 부모 사이트 경계", () => {
+  const knownPage = {
+    id: "pg-deleted-site", siteId: "deleted-site", slug: "known", title: "알려진 페이지",
+    isHome: false, sortOrder: 1, draft: { schemaVersion: 2, sections: [] }, draftRevision: 3,
+    published: null, publishedAt: null, liveAt: null, imwebUrl: null, updatedAt: new Date(),
+    site: { id: "deleted-site", workspaceId: "w1", projectId: "p1", deletedAt: new Date() },
+  };
+  const activeOnly = async (args: { where?: { site?: { deletedAt?: null } } }) =>
+    args.where?.site?.deletedAt === null ? null : knownPage;
+
+  it.each([
+    ["읽기", async () => {
+      const { GET } = await import("@/app/api/expo/pages/[pageId]/route");
+      return GET(read(), { params: Promise.resolve({ pageId: knownPage.id }) });
+    }],
+    ["편집", async () => {
+      const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
+      return PATCH(write({ title: "수정" }), { params: Promise.resolve({ pageId: knownPage.id }) });
+    }],
+    ["삭제", async () => {
+      const { DELETE } = await import("@/app/api/expo/pages/[pageId]/route");
+      return DELETE(write({}), { params: Promise.resolve({ pageId: knownPage.id }) });
+    }],
+    ["공개 전환", async () => {
+      const { POST } = await import("@/app/api/expo/pages/[pageId]/live/route");
+      return POST(write({ live: false }), { params: Promise.resolve({ pageId: knownPage.id }) });
+    }],
+    ["발행", async () => {
+      const { POST } = await import("@/app/api/expo/pages/[pageId]/publish/route");
+      return POST(write({}), { params: Promise.resolve({ pageId: knownPage.id }) });
+    }],
+  ])("부모가 소프트 삭제된 알려진 page id의 %s를 404로 숨긴다", async (_label, invoke) => {
+    prismaMock.expoPage.findFirst.mockImplementation(activeOnly);
+    const response = await invoke();
+    expect(response.status).toBe(404);
+    expect(prismaMock.expoPage.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: knownPage.id, deletedAt: null, site: { deletedAt: null } }),
+    }));
+    expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
+    expect(prismaMock.expoPage.updateManyAndReturn).not.toHaveBeenCalled();
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 });
 
@@ -734,7 +835,9 @@ describe("릴리스 잠금", () => {
     prismaMock.expoPage.findFirst.mockResolvedValue({
       ...base, draft: { sections: [sec(sid, true)] }, draftRevision: 3,
     });
-    prismaMock.expoPage.update.mockResolvedValue({ id: "pg1", draftRevision: 4 });
+    prismaMock.expoPage.updateManyAndReturn.mockResolvedValue([{
+      id: "pg1", slug: "home", title: "홈", imwebUrl: null, draftRevision: 4, updatedAt: new Date(),
+    }]);
     const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
 
     const next = { ...sec(sid, true), content: { body: "고친 본문" } };

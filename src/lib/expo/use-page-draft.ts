@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useReportAutosave } from "@/components/ui/autosave-scope";
 import { attachExpoRowKeys, stripExpoRowKeys } from "@/lib/expo/row-key";
-import { usePageAutosave, type ExpoRejection } from "@/lib/expo/use-page-autosave";
+import { usePageAutosave, type ExpoRejection, type FlushResult } from "@/lib/expo/use-page-autosave";
 import { createExpoPageTransport, type ExpoPageEditorDto, type ExpoPageTransport } from "@/lib/expo/editor-dto";
 import type { ExpoPageConfigV2 } from "@/lib/expo/types";
 
@@ -27,6 +27,8 @@ export interface ExpoPageDraftState {
   revision: number;
   rejected: ExpoRejection[] | null;
   saveBlocked: boolean;
+  /** 페이지 전환·삭제 전에 대기 중인 저장을 끝내고 그 결과를 돌려준다. */
+  flush(): Promise<FlushResult>;
   retry(): void;
   refreshMetadata(): Promise<void>;
   request: ExpoPageTransport["request"];
@@ -239,6 +241,7 @@ export function useExpoPageDraft(
   return {
     config, updateConfig, title, setTitle, imwebUrl, setImwebUrl, selectedSid, setSelectedSid,
     loading, error, saveState, reloadAfterConflict, page, revision, rejected: autosave.rejected,
-    saveBlocked, retry: autosave.retry, refreshMetadata, request: activeTransport.request,
+    saveBlocked, flush: autosave.flush, retry: autosave.retry,
+    refreshMetadata, request: activeTransport.request,
   };
 }

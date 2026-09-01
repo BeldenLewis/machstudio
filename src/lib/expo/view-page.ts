@@ -89,7 +89,18 @@ export function renderExpoSections(
   let openModal: ExpoModalHandle | null = null;
   const formMode: FormMountMode = ctx.mode === "standalone" ? "live" : ctx.mode;
 
-  for (const section of sections) {
+  const dispose = () => {
+    // 모달이 먼저다 — 안 닫으면 파트너 사이트가 스크롤되지 않는다.
+    openModal?.close();
+    openModal = null;
+    for (const bridge of bridges.splice(0)) bridge.destroy();
+    for (const code of codes.splice(0)) code.destroy();
+    for (const rendered of renderedPlugins.splice(0).reverse()) rendered.dispose?.();
+    deferred.length = 0;
+  };
+
+  try {
+    for (const section of sections) {
     if (section.type === "register-form") {
       const sourceId = str(section.content.sourceRef);
       // 소스가 안 붙어 있으면 그릴 것이 없다 — 빈 껍데기를 내보내지 않는다.
@@ -195,6 +206,11 @@ export function renderExpoSections(
       nodes.push(rendered.node);
       if (rendered.attach) deferred.push(() => rendered.attach?.());
     }
+    }
+  } catch (error) {
+    // 아직 shell cleanup에 등록되기 전의 조립 실패다. 완성된 후보 자원은 여기서 직접 거둔다.
+    dispose();
+    throw error;
   }
 
   return {
@@ -206,14 +222,6 @@ export function renderExpoSections(
       for (const fn of deferred.splice(0)) fn();
     },
 
-    dispose() {
-      // 모달이 먼저다 — 안 닫으면 파트너 사이트가 스크롤되지 않는다.
-      openModal?.close();
-      openModal = null;
-      for (const bridge of bridges.splice(0)) bridge.destroy();
-      for (const code of codes.splice(0)) code.destroy();
-      for (const rendered of renderedPlugins.splice(0).reverse()) rendered.dispose?.();
-      deferred.length = 0;
-    },
+    dispose,
   };
 }

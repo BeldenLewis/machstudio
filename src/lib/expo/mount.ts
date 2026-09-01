@@ -8,8 +8,8 @@
  * cleanup closure가 새 후보의 같은 key를 지울 수 없게 한다.
  *
  * ── 절대 파트너 페이지를 깨지 않는다 ──────────────────────────────────
- * 어떤 실패도 던지지 않는다. 섹션 렌더러 하나가 던져도 **나머지는 보이고**
- * 준비 표시는 `finally` 에서 켜진다 — 안 그러면 그들 홈페이지에 영구히 빈 칸이 남는다.
+ * 어떤 실패도 파트너에게 던지지 않는다. 새 후보 하나라도 실패하면 그 후보만 버리고
+ * 이전 화면과 listener를 그대로 둔다 — 반쪽짜리 후보를 성공으로 교체하지 않는다.
  */
 import { expoThemeVars } from "@/lib/expo/css";
 import { stageExpoShell, type ExpoShellHandle } from "@/lib/expo/shadow";
@@ -96,7 +96,8 @@ export function mountExpo(options: ExpoMountOptions): ExpoMountHandle | null {
   if (!doc) return null;
 
   const { container, payload } = options;
-  const mode: SectionRenderContext["mode"] = payload.mode ?? (payload.sectionId ? "standalone" : "live");
+  // mode 생략은 공개 로더의 구·신 혼재에서도 live다. standalone은 export가 명시해야만 된다.
+  const mode: SectionRenderContext["mode"] = payload.mode ?? "live";
   /**
    * 라이브는 자동으로 돈다. 미리보기는 운영자가 **그 세션에서 명시적으로 고른** 경우만 —
    * 미리보기를 열 때마다 남의 추적 스크립트가 발화하면 통계가 오염된다.

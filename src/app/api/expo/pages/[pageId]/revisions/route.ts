@@ -29,7 +29,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ page
   if (!guard.ok) return guard.response;
 
   const page = await prisma.expoPage.findFirst({
-    where: { id: pageId, deletedAt: null },
+    where: { id: pageId, deletedAt: null, site: { deletedAt: null } },
     select: { id: true, siteId: true, site: { select: { id: true, workspaceId: true, projectId: true } } },
   });
   const owned = requireOwnedPage(page, guard.ctx.userId, guard.ctx.memberWorkspaceIds);

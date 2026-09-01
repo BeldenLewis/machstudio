@@ -25,7 +25,7 @@ import { safeHttpUrl } from "@/lib/webinar-config";
 
 async function ownedPage(pageId: string, ctx: { userId: string; memberWorkspaceIds: string[] }) {
   const page = await prisma.expoPage.findFirst({
-    where: { id: pageId, deletedAt: null },
+    where: { id: pageId, deletedAt: null, site: { deletedAt: null } },
     select: {
       id: true, siteId: true, slug: true, title: true, isHome: true, sortOrder: true,
       draft: true, draftRevision: true, published: true, publishedAt: true,
@@ -147,6 +147,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ pa
   const body = parsed.body;
 
   const data: Record<string, unknown> = {};
+  let draftExpectedRevision: number | null = null;
 
   if (typeof body.title === "string") data.title = body.title.trim().slice(0, 120) || "제목 없음";
   if (typeof body.slug === "string") {
@@ -222,11 +223,48 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ pa
       );
     }
     data.draft = JSON.parse(JSON.stringify(prepared.value.draft));
-    data.draftRevision = prepared.value.draftRevision;
+    draftExpectedRevision = expected;
   }
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "바꿀 항목이 없어요" }, { status: 400 });
+  }
+
+  if (draftExpectedRevision !== null) {
+    /**
+     * 검증 때 읽은 번호를 믿고 `update()` 하면 두 요청이 모두 통과한다. WHERE 자체가
+     * 활성 페이지 소속 + 정확한 revision을 조건으로 삼고, 증가는 DB 문장 안에서 한다.
+     */
+    const [updated] = await prisma.expoPage.updateManyAndReturn({
+      where: {
+        id: page!.id,
+        siteId: page!.siteId,
+        deletedAt: null,
+        draftRevision: draftExpectedRevision,
+        site: { deletedAt: null },
+      },
+      data: { ...data, draftRevision: { increment: 1 } },
+      limit: 1,
+      select: { id: true, slug: true, title: true, imwebUrl: true, draftRevision: true, updatedAt: true },
+    });
+
+    if (!updated) {
+      // 조건부 write가 진 요청만 최신의 **인가된 활성 페이지**를 다시 읽어 409에 싣는다.
+      const latest = await ownedPage(pageId, guard.ctx);
+      if (!latest.owned.ok) return authFailure(latest.owned.failure);
+      const latestAccess = requireProjectAccess(
+        guard.ctx.workspaceRole(latest.owned.value.site.workspaceId),
+        guard.ctx.projectRole(latest.owned.value.site.projectId),
+      );
+      if (!latestAccess.ok) return authFailure(latestAccess.failure);
+      return NextResponse.json({
+        error: serviceMessage({ kind: "conflict", currentRevision: latest.page!.draftRevision }),
+        draft: normalizeExpoPage(latest.page!.draft),
+        draftRevision: latest.page!.draftRevision,
+      }, { status: 409 });
+    }
+
+    return NextResponse.json({ page: { ...updated, codeDigest: expoPreviewCodeDigest(data.draft) } });
   }
 
   const updated = await prisma.expoPage.update({

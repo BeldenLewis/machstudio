@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
 
 const CDN_ORIGIN = "https://cdn.example.com";
 const SECTION_TYPES = [
@@ -46,6 +46,43 @@ async function guardRuntimeNetwork(page: Page) {
 
 function runtime(page: Page) {
   return page.locator("mach-expo-section");
+}
+
+/** DOM 이벤트를 꾸미지 않고 브라우저 입력 경로로 실제 track을 민다. */
+async function dragSpeakerTrack(page: Page, track: Locator, testInfo: TestInfo) {
+  await track.scrollIntoViewIfNeeded();
+  const box = await track.boundingBox();
+  const firstCard = track.locator(".msx-speaker-card:not([hidden])").first();
+  const before = await firstCard.boundingBox();
+  if (!box || !before) throw new Error("speaker track is not visibly laid out");
+  const start = { x: box.x + box.width * 0.78, y: box.y + box.height * 0.5 };
+  const end = { x: box.x + box.width * 0.22, y: start.y };
+  const expectVisibleMovement = () => expect.poll(
+    async () => (await firstCard.boundingBox())?.x ?? before.x,
+  ).toBeLessThan(before.x - 20);
+
+  if (testInfo.project.name === "chromium-mobile") {
+    const cdp = await page.context().newCDPSession(page);
+    try {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ ...start, id: 1, radiusX: 2, radiusY: 2, force: 1 }] });
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: (start.x + end.x) / 2, y: start.y, id: 1, radiusX: 2, radiusY: 2, force: 1 }] });
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ ...end, id: 1, radiusX: 2, radiusY: 2, force: 1 }] });
+      await expectVisibleMovement();
+    } finally {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      await cdp.detach();
+    }
+  } else {
+    // WebKit에는 CDP touch sequence가 없다. Playwright의 브라우저-native mouse를 쓴다.
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    try {
+      await page.mouse.move(end.x, end.y, { steps: 6 });
+      await expectVisibleMovement();
+    } finally {
+      await page.mouse.up();
+    }
+  }
 }
 
 test("six STK sections and five frozen campaign states render exact Hero actions", async ({ page }) => {
@@ -102,15 +139,7 @@ test("speaker keyboard, pointer drag, lazy image and crop contract work", async 
   await expect(image).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
 
   const track = host.locator(".msx-speaker-track");
-  const pointerType = testInfo.project.name.endsWith("mobile") ? "touch" : "mouse";
-  const before = await track.evaluate((node) => node.scrollLeft);
-  await track.evaluate((node, type) => {
-    const element = node as HTMLElement;
-    element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 7, pointerType: type, clientX: 300 }));
-    element.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 7, pointerType: type, clientX: 80 }));
-    element.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 7, pointerType: type, clientX: 80 }));
-  }, pointerType);
-  await expect.poll(() => track.evaluate((node) => node.scrollLeft)).toBeGreaterThan(before);
+  await dragSpeakerTrack(page, track, testInfo);
   expect(unexpected).toEqual([]);
 });
 

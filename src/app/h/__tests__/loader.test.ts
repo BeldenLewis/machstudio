@@ -195,6 +195,7 @@ describe("⑤ 조회와 게이트", () => {
   it("공개 중인 페이지는 구획을 실어 보낸다", async () => {
     const args = bootArgs(await (await get({ pageId: "pg1" })).text());
     expect(args).toContain("제목");
+    expect(args).toContain('"mode":"live"');
     expect(args).not.toContain("connectionOnly");
   });
 
@@ -219,6 +220,7 @@ describe("구획 단독", () => {
     const args = bootArgs(await (await get({ pageId: "pg1", sid: SID })).text());
     expect(args).toContain("히어로");
     expect(args).toContain(`"sectionId":"${SID}"`);
+    expect(args).toContain('"mode":"live"');
   });
 
   it("발행본에 없는 sid 는 404", async () => {

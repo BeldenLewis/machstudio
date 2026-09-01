@@ -126,6 +126,19 @@ describe("Expo standalone export route", () => {
     expect(prepareStandaloneExpoHtml).not.toHaveBeenCalled();
   });
 
+  it("부모 사이트가 소프트 삭제된 알려진 페이지를 내보내지 않는다", async () => {
+    prismaMock.expoPage.findFirst.mockImplementation(async (args) =>
+      args.where?.site?.deletedAt === null ? null : { ...page, site: { ...page.site, deletedAt: new Date() } });
+
+    const response = await POST(request({ scope: "page" }), { params: Promise.resolve({ pageId: "page-1" }) });
+
+    expect(response.status).toBe(404);
+    expect(prismaMock.expoPage.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "page-1", deletedAt: null, site: { deletedAt: null } },
+    }));
+    expect(prepareStandaloneExpoHtml).not.toHaveBeenCalled();
+  });
+
   it("never accepts a client snapshot, time, campaign override, or revision metadata", async () => {
     const response = await POST(request({
       scope: "page",

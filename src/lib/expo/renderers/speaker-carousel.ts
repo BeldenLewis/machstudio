@@ -148,6 +148,9 @@ export const renderSpeakerCarousel: SectionRenderer = (section, context) => {
     track.classList.add("is-dragging");
     track.setPointerCapture?.(event.pointerId);
   }, { signal: controller.signal });
+  // Chrome가 카드의 링크·이미지 drag를 먼저 시작하면 native pointermove가 끊긴다.
+  // 브라우저 기본 drag만 막고 click은 남겨 carousel drag와 프로필 링크를 함께 보존한다.
+  track.addEventListener("dragstart", (event) => event.preventDefault(), { signal: controller.signal });
   track.addEventListener("pointermove", (event) => {
     if (pointerId !== event.pointerId) return;
     track.scrollLeft = startScroll - (event.clientX - startX);
