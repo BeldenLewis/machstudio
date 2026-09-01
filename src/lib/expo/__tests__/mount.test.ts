@@ -123,6 +123,63 @@ describe("깨끗한 페이지", () => {
   it("떼어진 컨테이너에는 붙지 않는다", () => {
     expect(mountExpo({ container: document.createElement("div"), payload: payload() })).toBeNull();
   });
+
+  it("STK plugin도 같은 Shadow runtime과 destination map으로 그린다", () => {
+    const { container } = host();
+    mount({
+      container,
+      payload: payload({
+        destinations: [{ id: "overview", label: "소개", action: { type: "anchor", target: "overview" } }],
+        sections: [{
+          sid: SID, type: "exhibition-grid", variant: "default", design: {}, content: {
+            heading: "하위 전시",
+            items: [{ id: "robotics", title: "Robotics", accentToken: "robotics", destinationId: "overview", order: 0, enabled: true }],
+          },
+        }],
+      }),
+    });
+    const shadow = container.querySelector(EXPO_HOST_TAG)!.shadowRoot!;
+    expect(shadow.querySelector("[data-type='exhibition-grid'] .msx-exhibition-item")?.textContent).toContain("Robotics");
+  });
+
+  it("섹션 단독 standalone destination은 이동 기능만 유지하고 analytics를 쓰지 않는다", () => {
+    const seen = vi.fn();
+    document.addEventListener("msx:destination", seen);
+    const dataLayer: unknown[] = [];
+    Object.assign(window, { dataLayer });
+    const { container } = host();
+    mount({
+      container,
+      payload: payload({
+        sectionId: SID,
+        destinations: [{ id: "overview", label: "소개", action: { type: "anchor", target: "overview" }, analytics: { eventName: "select_content" } }],
+        sections: [{ sid: SID, type: "cta-band", variant: "default", design: {}, content: {
+          headline: "Join", audience: "all", ctas: [{ id: "join", label: "Join", destinationId: "overview", variant: "primary", audience: "all", campaignIds: [], priority: 0, fallback: true, enabled: true }],
+        } }],
+      }),
+    });
+    const action = container.querySelector(EXPO_HOST_TAG)!.shadowRoot!.querySelector<HTMLAnchorElement>(".msx-cta-action")!;
+    expect(action.getAttribute("href")).toBe("#overview");
+    action.click();
+    expect(seen).not.toHaveBeenCalled();
+    expect(dataLayer).toEqual([]);
+    document.removeEventListener("msx:destination", seen);
+    delete (window as Window & { dataLayer?: unknown }).dataLayer;
+  });
+
+  it("destroy가 Hero typing timer까지 같은 lifecycle에서 정리한다", () => {
+    const clear = vi.spyOn(window, "clearTimeout");
+    const { container } = host();
+    const handle = mount({
+      container,
+      payload: payload({ sections: [{ sid: SID, type: "campaign-hero", variant: "default", design: {}, content: {
+        accessibleHeadline: "STK 2027", typingLines: ["STK 2027", "Future"],
+        typing: { enabled: true, speedMs: 50, holdMs: 500 }, ctas: [],
+      } }] }),
+    });
+    handle?.destroy();
+    expect(clear).toHaveBeenCalled();
+  });
 });
 
 describe("등록 폼 구획", () => {

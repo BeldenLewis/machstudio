@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { describe, expect, it } from "vitest";
-import { LANDING_RUNTIME_JS, LANDING_RUNTIME_SRC_HASH } from "@/generated/landing-runtime";
+import { LANDING_RUNTIME_SRC_HASH } from "@/generated/landing-runtime";
 import { FORM_RUNTIME_JS, FORM_RUNTIME_SRC_HASH } from "@/generated/form-runtime";
 import { EXPO_RUNTIME_JS, EXPO_RUNTIME_SRC_HASH } from "@/generated/expo-runtime";
 import { COMPETITION_RUNTIME_SRC_HASH } from "@/generated/competition-runtime";
@@ -106,6 +106,14 @@ describe("홈페이지 번들 정적 검사", () => {
 
   it("전역 이름으로 부트 진입점을 노출한다", () => {
     expect(EXPO_RUNTIME_JS).toContain("__msExpo");
+  });
+
+  it("React runtime이나 stored-code 평가 경로를 포함하지 않는다", () => {
+    expect(EXPO_RUNTIME_JS).not.toContain("react/jsx-runtime");
+    expect(EXPO_RUNTIME_JS).not.toContain("react-dom");
+    expect(EXPO_RUNTIME_JS).not.toContain("dangerouslySetInnerHTML");
+    expect(EXPO_RUNTIME_JS).not.toMatch(/\beval\s*\(/);
+    expect(EXPO_RUNTIME_JS).not.toContain("new Function(");
   });
 });
 

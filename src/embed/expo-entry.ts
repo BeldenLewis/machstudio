@@ -27,6 +27,7 @@ export type ExpoBootConfig = ExpoRuntimePayload;
 interface Instance {
   handle: ExpoMountHandle | null;
   payload: ExpoBootConfig;
+  warningTimer: number | null;
 }
 
 type Registry = Record<string, Instance>;
@@ -152,7 +153,9 @@ function render(instance: Instance, script: HTMLScriptElement | null): void {
 function reportIfInvisible(instance: Instance, container: HTMLElement): void {
   const key = instanceKey(instance.payload);
   try {
-    window.setTimeout(() => {
+    if (instance.warningTimer !== null) window.clearTimeout(instance.warningTimer);
+    instance.warningTimer = window.setTimeout(() => {
+      instance.warningTimer = null;
       /**
        * 그 사이 정리됐으면 아무 말도 하지 않는다. **레지스트리로 판정한다** —
        * `destroy` 는 항목을 지우기만 하고 붙잡아 둔 instance 의 handle 은 비우지 않으므로,
@@ -189,7 +192,7 @@ export function boot(payload: ExpoBootConfig, bootScript?: HTMLScriptElement | n
       return;
     }
 
-    const instance: Instance = { handle: null, payload };
+    const instance: Instance = { handle: null, payload, warningTimer: null };
     reg[key] = instance;
 
     const run = () => render(instance, script);
@@ -209,6 +212,10 @@ export function destroy(payload: Pick<ExpoBootConfig, "pageId" | "sectionId">): 
   try {
     const reg = registry();
     const key = instanceKey(payload as ExpoBootConfig);
+    if (reg[key]?.warningTimer !== null && reg[key]?.warningTimer !== undefined) {
+      window.clearTimeout(reg[key].warningTimer as number);
+      reg[key].warningTimer = null;
+    }
     reg[key]?.handle?.destroy();
     delete reg[key];
   } catch (error) {

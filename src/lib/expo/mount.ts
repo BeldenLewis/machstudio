@@ -16,8 +16,7 @@ import { renderExpoSections } from "@/lib/expo/view-page";
 import { reportExpoSeen } from "@/lib/expo/seen";
 import { attachExpoPreviewBridge } from "@/lib/expo/preview-bridge";
 import type { PayloadSection } from "@/lib/expo/view-sections";
-import type { FormMountMode } from "@/lib/collect-form/target-registry";
-import type { ExpoTheme } from "@/lib/expo/types";
+import type { ExpoTheme, ResolvedCampaignState, ResolvedDestination, SectionRenderContext } from "@/lib/expo/types";
 
 /** 로더가 스크립트 본문에 실어 보내는 것. */
 export interface ExpoRuntimePayload {
@@ -28,13 +27,16 @@ export interface ExpoRuntimePayload {
   /** 서체·폼 스크립트를 받아 올 절대 주소. 서버가 정한다. */
   origin: string;
   sections: PayloadSection[];
+  locale?: string;
+  campaigns?: ResolvedCampaignState[];
+  destinations?: ResolvedDestination[];
   /**
    * 발행은 됐지만 공개 스위치가 꺼져 있다 — **의도한 호스트만 확보하고 아무것도 안 그린다.**
    * 그래야 운영자가 전환일 전에 스니펫을 미리 붙여 두고 "붙었는지" 를 확인할 수 있다.
    */
   connectionOnly?: boolean;
   /** 부작용을 내도 되는가. 없으면 라이브다. */
-  mode?: FormMountMode;
+  mode?: SectionRenderContext["mode"];
   preview?: {
     allowCustomCode?: boolean;
     /**
@@ -78,12 +80,12 @@ export function mountExpo(options: ExpoMountOptions): ExpoMountHandle | null {
   if (!doc) return null;
 
   const { container, payload } = options;
-  const mode: FormMountMode = payload.mode ?? "live";
+  const mode: SectionRenderContext["mode"] = payload.mode ?? (payload.sectionId ? "standalone" : "live");
   /**
    * 라이브는 자동으로 돈다. 미리보기는 운영자가 **그 세션에서 명시적으로 고른** 경우만 —
    * 미리보기를 열 때마다 남의 추적 스크립트가 발화하면 통계가 오염된다.
    */
-  const allowCustomCode = mode === "live" ? true : payload.preview?.allowCustomCode === true;
+  const allowCustomCode = mode === "live" || mode === "standalone" ? true : payload.preview?.allowCustomCode === true;
   const instancePrefix = `${payload.pageId}:${payload.sectionId ?? "page"}`;
 
   let shell: ExpoShellHandle | null = null;
@@ -112,6 +114,10 @@ export function mountExpo(options: ExpoMountOptions): ExpoMountHandle | null {
       const output = renderExpoSections(list, {
         origin: payload.origin,
         mode,
+        locale: payload.locale ?? "ko",
+        campaigns: new Map((payload.campaigns ?? []).map((row) => [row.id, row])),
+        destinations: new Map((payload.destinations ?? []).map((row) => [row.id, row])),
+        reducedMotion: Boolean(doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches),
         themeVars: expoThemeVars(payload.theme),
         styleRoot: next.root,
         instancePrefix,
@@ -145,7 +151,7 @@ export function mountExpo(options: ExpoMountOptions): ExpoMountHandle | null {
      * 내용이 없는 연결 확인 상태(발행됐지만 공개 스위치가 꺼짐)에서도 보낸다 —
      * 그게 이 값의 뜻이다: 붙어 있는지이지, 보이는지가 아니다.
      */
-    if (mode === "live") {
+    if (mode === "live" || mode === "standalone") {
       reportExpoSeen({ origin: payload.origin, pageId: payload.pageId, sectionId: payload.sectionId ?? null });
       return true;
     }

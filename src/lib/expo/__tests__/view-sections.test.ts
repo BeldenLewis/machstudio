@@ -184,9 +184,12 @@ describe("그리지 않는 것", () => {
     expect(renderStaticSection(section({ type: "nope" }))).toBeNull();
   });
 
-  it("W1 정적 네 타입만 다루고 STK 플러그인은 전용 렌더러 전까지 넘긴다", () => {
+  it("W1 정적 네 타입과 여섯 STK 플러그인을 다룬다", () => {
     const handled = EXPO_SECTIONS.filter((d) => isStaticSectionType(d.type)).map((d) => d.type);
-    expect(handled.sort()).toEqual(["cardgrid", "kv", "textblock", "toolbox"]);
+    expect(handled.sort()).toEqual([
+      "audience-links", "campaign-hero", "cardgrid", "cta-band", "exhibition-grid", "kv",
+      "speaker-carousel", "sponsor-marquee", "textblock", "toolbox",
+    ]);
     expect(EXPO_SECTIONS).toHaveLength(12);
   });
 });

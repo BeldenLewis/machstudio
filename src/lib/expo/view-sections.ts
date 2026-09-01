@@ -19,6 +19,13 @@
  */
 import { h, type Child } from "@/lib/dom/h";
 import { sectionDef } from "@/lib/expo/registry";
+import { renderCampaignHero } from "@/lib/expo/renderers/campaign-hero";
+import { renderExhibitionGrid } from "@/lib/expo/renderers/exhibition-grid";
+import { renderAudienceLinks } from "@/lib/expo/renderers/audience-links";
+import { renderSpeakerCarousel } from "@/lib/expo/renderers/speaker-carousel";
+import { renderSponsorMarquee } from "@/lib/expo/renderers/sponsor-marquee";
+import { renderCtaBand } from "@/lib/expo/renderers/cta-band";
+import type { SectionRenderContext, SectionRenderer, SectionRenderResult } from "@/lib/expo/types";
 import { safeHttpUrl } from "@/lib/webinar-config";
 
 /** `buildExpoPayload` 가 내보낸 섹션 하나. */
@@ -161,9 +168,19 @@ const STATIC_RENDERERS: Record<string, (section: PayloadSection) => Child[]> = {
   toolbox: renderToolbox,
 };
 
+const STK_RENDERERS: Record<string, SectionRenderer> = {
+  "campaign-hero": renderCampaignHero,
+  "exhibition-grid": renderExhibitionGrid,
+  "audience-links": renderAudienceLinks,
+  "speaker-carousel": renderSpeakerCarousel,
+  "sponsor-marquee": renderSponsorMarquee,
+  "cta-band": renderCtaBand,
+};
+
 /** 이 타입을 이 파일이 그리는가 — 나머지 둘은 수명이 있어 자기 모듈이 맡는다. */
 export function isStaticSectionType(type: string): boolean {
-  return Object.prototype.hasOwnProperty.call(STATIC_RENDERERS, type);
+  return Object.prototype.hasOwnProperty.call(STATIC_RENDERERS, type)
+    || Object.prototype.hasOwnProperty.call(STK_RENDERERS, type);
 }
 
 // ── 껍데기 ──────────────────────────────────────────────────────────────
@@ -199,13 +216,25 @@ export function sectionShell(section: PayloadSection, ...inner: Child[]): HTMLEl
  * 수명이 있는 두 타입(`register-form`·`custom-code`)은 여기서 처리하지 않는다.
  * 그것들은 스크립트를 붙이거나 iframe 을 만들고, 정리할 것이 남는다.
  */
-export function renderStaticSection(section: PayloadSection): HTMLElement | null {
+export function renderStaticSectionResult(
+  section: PayloadSection,
+  context?: SectionRenderContext,
+): SectionRenderResult | null {
   // 카탈로그에 없는 타입은 조용히 버린다 — 옛 발행본에 남아 있을 수 있다.
   if (!sectionDef(section.type)) return null;
+  const stkRenderer = STK_RENDERERS[section.type];
+  if (stkRenderer) {
+    if (!context) return null;
+    try { return stkRenderer(section, context); } catch { return null; }
+  }
   const renderer = STATIC_RENDERERS[section.type];
   if (!renderer) return null;
 
   const inner = renderer(section).filter(Boolean);
   if (inner.length === 0) return null;
-  return sectionShell(section, ...inner);
+  return { node: sectionShell(section, ...inner) };
+}
+
+export function renderStaticSection(section: PayloadSection, context?: SectionRenderContext): HTMLElement | null {
+  return renderStaticSectionResult(section, context)?.node ?? null;
 }

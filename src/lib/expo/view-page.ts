@@ -15,8 +15,9 @@ import { h } from "@/lib/dom/h";
 import { attachExpoForm, type ExpoFormBridgeHandle } from "@/lib/expo/form-bridge";
 import { mountExpoCustomCode, type ExpoCustomCodeHandle } from "@/lib/expo/custom-code";
 import { openExpoModal, type ExpoModalHandle } from "@/lib/expo/overlay";
-import { renderStaticSection, sectionShell, type PayloadSection } from "@/lib/expo/view-sections";
+import { renderStaticSectionResult, sectionShell, type PayloadSection } from "@/lib/expo/view-sections";
 import type { FormMountMode } from "@/lib/collect-form/target-registry";
+import type { ResolvedCampaignState, ResolvedDestination, SectionRenderContext, SectionRenderResult } from "@/lib/expo/types";
 
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 
@@ -24,7 +25,11 @@ export interface RenderSectionsContext {
   /** 폼 스크립트·서체를 받아 올 절대 주소. */
   origin: string;
   /** 부작용을 내도 되는가. 미리보기면 저장·추적이 전부 꺼진다. */
-  mode: FormMountMode;
+  mode: SectionRenderContext["mode"];
+  locale: string;
+  campaigns: ReadonlyMap<string, ResolvedCampaignState>;
+  destinations: ReadonlyMap<string, ResolvedDestination>;
+  reducedMotion: boolean;
   /** 포털이 자기 레이어에 얹을 색. */
   themeVars: Record<string, string>;
   /** 이 임베드의 ShadowRoot — 폼이 여기에 자기 스타일을 넣는다. */
@@ -80,7 +85,9 @@ export function renderExpoSections(
 
   const bridges: ExpoFormBridgeHandle[] = [];
   const codes: ExpoCustomCodeHandle[] = [];
+  const renderedPlugins: SectionRenderResult[] = [];
   let openModal: ExpoModalHandle | null = null;
+  const formMode: FormMountMode = ctx.mode === "standalone" ? "live" : ctx.mode;
 
   for (const section of sections) {
     if (section.type === "register-form") {
@@ -101,7 +108,7 @@ export function renderExpoSections(
         nodes.push(el);
         deferred.push(() => {
           const bridge = attachExpoForm({
-            sourceId, view: "form", mode: ctx.mode,
+            sourceId, view: "form", mode: formMode,
             container: slot, styleRoot: ctx.styleRoot, origin: ctx.origin,
             instanceKey: `${ctx.instancePrefix}:${section.sid}`,
             // 동의 전문 팝업이 Shadow 밖으로 나가지 않게 — 다리가 포털 자리를 만든다.
@@ -140,7 +147,7 @@ export function renderExpoSections(
         if (!modal) return;
         openModal = modal;
         bridge = attachExpoForm({
-          sourceId, view: "form", mode: ctx.mode,
+          sourceId, view: "form", mode: formMode,
           container: modal.body, styleRoot: modal.styleRoot, origin: ctx.origin,
           // 같은 소스의 인라인 폼과 **다른 열쇠**여야 서로의 자리를 뺏지 않는다.
           instanceKey: `${ctx.instancePrefix}:${section.sid}:modal`,
@@ -175,8 +182,19 @@ export function renderExpoSections(
       continue;
     }
 
-    const el = renderStaticSection(section);
-    if (el) nodes.push(el);
+    const rendered = renderStaticSectionResult(section, {
+      locale: ctx.locale,
+      campaigns: ctx.campaigns,
+      destinations: ctx.destinations,
+      mode: ctx.mode,
+      reducedMotion: ctx.reducedMotion,
+      doc: ctx.doc ?? document,
+    });
+    if (rendered) {
+      renderedPlugins.push(rendered);
+      nodes.push(rendered.node);
+      if (rendered.attach) deferred.push(() => rendered.attach?.());
+    }
   }
 
   return {
@@ -198,6 +216,7 @@ export function renderExpoSections(
       openModal = null;
       for (const bridge of bridges.splice(0)) bridge.destroy();
       for (const code of codes.splice(0)) code.destroy();
+      for (const rendered of renderedPlugins.splice(0).reverse()) rendered.dispose?.();
       deferred.length = 0;
     },
   };

@@ -48,6 +48,16 @@ describe("임베드 빌드 연결", () => {
     expect(callsSheet).toBeLessThan(callsBuild);
   });
 
+  it("홈페이지 해시 경계가 여섯 public renderer와 공통 action/image를 모두 포함한다", () => {
+    const source = readFileSync(join(ROOT, "scripts/runtime-hash.mjs"), "utf8");
+    for (const file of [
+      "action.ts", "image.ts", "campaign-hero.ts", "exhibition-grid.ts", "audience-links.ts",
+      "speaker-carousel.ts", "sponsor-marquee.ts", "cta-band.ts",
+    ]) {
+      expect(`${file}: ${source.includes(`src/lib/expo/renderers/${file}`)}`).toBe(`${file}: true`);
+    }
+  });
+
   /** 라우트가 스크립트 본문으로 내려보내므로 이 두 리터럴은 빌드 단계에서 막는다. */
   it("홈페이지 번들 빌드가 위험한 리터럴을 스스로 막는다", () => {
     const source = readFileSync(join(ROOT, "scripts/build-expo-runtime.mjs"), "utf8");
