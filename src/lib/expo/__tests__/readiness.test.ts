@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   EXPO_READINESS_MESSAGES, hasUnpublishedChanges, liveIssues, pageReadiness,
-  publishIssues, sectionSnippetIssues,
+  publishErrors, sectionSnippetIssues,
 } from "@/lib/expo/readiness";
 import { normalizeExpoPage } from "@/lib/expo/config";
 
@@ -21,22 +21,28 @@ const codes = (issues: Array<{ code: string }>) => issues.map((i) => i.code);
 
 describe("발행할 수 있는가 — draft 를 본다", () => {
   it("섹션이 없으면 막고 이유를 준다", () => {
-    expect(codes(publishIssues({ sections: [] }))).toEqual(["no-sections"]);
+    expect(publishErrors({ sections: [] })).toEqual([expect.objectContaining({
+      path: "sections", code: "no-sections", severity: "error",
+    })]);
   });
 
   it("켜진 섹션이 하나라도 내용이 있으면 발행할 수 있다", () => {
-    expect(publishIssues(cfg([sec(1)]))).toEqual([]);
+    expect(publishErrors(cfg([sec(1)]))).toEqual([]);
   });
 
   /** 켜 놓고 비워 둔 섹션은 나가지 않는다 — 발행 전에 알려 준다. */
   it("켜져 있는데 빈 섹션을 짚어 준다", () => {
-    const out = publishIssues(cfg([sec(1), sec(2, { content: {} })]));
+    const out = publishErrors(cfg([sec(1), sec(2, { content: {} })]));
     expect(codes(out)).toContain("empty-enabled-section");
-    expect(out.find((i) => i.code === "empty-enabled-section")?.sid).toBe(uid(2));
+    expect(out.find((i) => i.code === "empty-enabled-section")).toEqual(expect.objectContaining({
+      path: "sections[1].content", severity: "error", sid: uid(2),
+    }));
   });
 
   it("전부 꺼져 있으면 내보낼 게 없다고 말한다", () => {
-    expect(codes(publishIssues(cfg([sec(1, { enabled: false })])))).toContain("no-renderable-section");
+    expect(publishErrors(cfg([sec(1, { enabled: false })]))).toEqual([expect.objectContaining({
+      path: "sections", code: "no-renderable-section", severity: "error",
+    })]);
   });
 });
 

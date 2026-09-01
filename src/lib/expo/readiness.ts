@@ -14,7 +14,7 @@
 import { hasContent } from "@/lib/expo/model";
 import { normalizeExpoPage } from "@/lib/expo/config";
 import { sectionDef } from "@/lib/expo/registry";
-import type { ExpoSection } from "@/lib/expo/types";
+import type { ExpoSection, FieldIssue } from "@/lib/expo/types";
 
 export type ReadinessCode =
   | "no-sections"
@@ -72,15 +72,23 @@ export interface PageReadinessInput {
 /**
  * **발행할 수 있는가.** draft 를 본다 — 발행은 draft 를 밖에 내보낼 사본으로 굳히는 일이다.
  */
-export function publishIssues(draftRaw: unknown): ReadinessIssue[] {
+export function publishErrors(draftRaw: unknown): FieldIssue[] {
   const { sections } = normalizeExpoPage(draftRaw);
-  if (sections.length === 0) return [issue("no-sections")];
+  if (sections.length === 0) return [{ ...issue("no-sections"), path: "sections", severity: "error" }];
 
-  const out: ReadinessIssue[] = [];
-  for (const s of sections) {
-    if (s.enabled && !hasContent(s)) out.push(issue("empty-enabled-section", s.sid));
+  const out: FieldIssue[] = [];
+  for (const [index, s] of sections.entries()) {
+    if (s.enabled && !hasContent(s)) {
+      out.push({
+        ...issue("empty-enabled-section", s.sid),
+        path: `sections[${index}].content`,
+        severity: "error",
+      });
+    }
   }
-  if (!sections.some((s) => s.enabled && hasContent(s))) out.push(issue("no-renderable-section"));
+  if (!sections.some((s) => s.enabled && hasContent(s))) {
+    out.push({ ...issue("no-renderable-section"), path: "sections", severity: "error" });
+  }
   return out;
 }
 
@@ -127,7 +135,7 @@ export function hasUnpublishedChanges(input: Pick<PageReadinessInput, "published
 
 /** 페이지 카드 한 장이 보여줄 것 전부. */
 export function pageReadiness(input: PageReadinessInput) {
-  const publish = publishIssues(input.draft);
+  const publish = publishErrors(input.draft);
   const live = liveIssues(input.published);
   const stale = hasUnpublishedChanges(input);
   const extra: ReadinessIssue[] = [];

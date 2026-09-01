@@ -16,10 +16,13 @@ const prismaMock = {
   workspaceMember: { findMany: vi.fn() },
   projectMember: { findMany: vi.fn() },
   expoSite: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
-  expoPage: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+  expoPage: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+  expoPageRevision: {
+    aggregate: vi.fn(), findFirst: vi.fn(), create: vi.fn(), findMany: vi.fn(), deleteMany: vi.fn(),
+  },
   project: { findUnique: vi.fn() },
   collectSource: { findFirst: vi.fn(), findMany: vi.fn() },
-  $transaction: vi.fn(async (ops: unknown[]) => ops),
+  $transaction: vi.fn(),
   $queryRaw: vi.fn(),
 };
 const getUser = vi.fn();
@@ -50,6 +53,22 @@ beforeEach(() => {
   getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
   prismaMock.workspaceMember.findMany.mockResolvedValue([{ workspaceId: "w1", role: "OWNER" }]);
   prismaMock.projectMember.findMany.mockResolvedValue([]);
+  prismaMock.$queryRaw.mockResolvedValue([{ id: "pg1" }]);
+  prismaMock.expoPage.findUnique.mockImplementation(async () => {
+    const latest = prismaMock.expoPage.findFirst.mock.results.at(-1);
+    return latest ? await latest.value : null;
+  });
+  prismaMock.expoPageRevision.aggregate.mockResolvedValue({ _max: { sequence: null } });
+  prismaMock.expoPageRevision.findFirst.mockResolvedValue(null);
+  prismaMock.expoPageRevision.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
+    id: "rev-created", createdAt: new Date(), ...data,
+  }));
+  prismaMock.expoPageRevision.findMany.mockResolvedValue([]);
+  prismaMock.expoPageRevision.deleteMany.mockResolvedValue({ count: 0 });
+  prismaMock.$transaction.mockImplementation(async (work: unknown) =>
+    typeof work === "function"
+      ? (work as (tx: typeof prismaMock) => Promise<unknown>)(prismaMock)
+      : work);
 });
 
 describe("① 기능 게이트가 첫 줄", () => {
@@ -548,12 +567,19 @@ describe("발행·공개", () => {
   const base = { id: "pg1", siteId: "s1", site: { id: "s1", workspaceId: "w1", projectId: "p1" } };
 
   it("내보낼 섹션이 없으면 발행을 막고 이유를 준다", async () => {
-    prismaMock.expoPage.findFirst.mockResolvedValue({ ...base, draft: { sections: [] } });
+    prismaMock.expoPage.findFirst.mockResolvedValue({
+      ...base, draft: { schemaVersion: 2, sections: [] }, published: null, liveAt: null,
+    });
     const { POST } = await import("@/app/api/expo/pages/[pageId]/publish/route");
 
     const res = await POST(write({}), { params: Promise.resolve({ pageId: "pg1" }) });
     expect(res.status).toBe(422);
-    expect((await res.json()).issues[0].code).toBe("no-sections");
+    const body = await res.json();
+    expect(body.code).toBe("publish-readiness-failed");
+    expect(body.issues[0]).toEqual(expect.objectContaining({
+      path: "sections", code: "no-sections", severity: "error",
+    }));
+    expect(prismaMock.$transaction).toHaveBeenCalledOnce();
     expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
   });
 
@@ -622,13 +648,15 @@ describe("릴리스 잠금", () => {
   it("따로 내보내기를 새로 켜는 발행을 막는다", async () => {
     const sid = "00000000-0000-4000-8000-000000000001";
     prismaMock.expoPage.findFirst.mockResolvedValue({
-      ...base, draft: { sections: [sec(sid, true)] }, published: { sections: [sec(sid, false)] },
+      ...base, draft: { schemaVersion: 2, sections: [sec(sid, true)] },
+      published: { schemaVersion: 2, sections: [sec(sid, false)] }, liveAt: null,
     });
     const { POST } = await import("@/app/api/expo/pages/[pageId]/publish/route");
 
     const res = await POST(write({}), { params: Promise.resolve({ pageId: "pg1" }) });
     expect(res.status).toBe(422);
     const body = await res.json();
+    expect(body.code).toBe("public-embed-release-disabled");
     expect(body.issues[0].code).toBe("launch-locked-embed");
     expect(body.issues[0].sid).toBe(sid);
     expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
@@ -638,7 +666,8 @@ describe("릴리스 잠금", () => {
   it("이미 켜져 있던 구획은 다시 발행해도 막지 않는다", async () => {
     const sid = "00000000-0000-4000-8000-000000000001";
     prismaMock.expoPage.findFirst.mockResolvedValue({
-      ...base, draft: { sections: [sec(sid, true)] }, published: { sections: [sec(sid, true)] },
+      ...base, draft: { schemaVersion: 2, sections: [sec(sid, true)] },
+      published: { schemaVersion: 2, sections: [sec(sid, true)] }, liveAt: null,
     });
     prismaMock.expoPage.update.mockResolvedValue({ id: "pg1" });
     const { POST } = await import("@/app/api/expo/pages/[pageId]/publish/route");
@@ -650,7 +679,8 @@ describe("릴리스 잠금", () => {
   it("따로 내보내기를 끄는 발행은 막지 않는다", async () => {
     const sid = "00000000-0000-4000-8000-000000000001";
     prismaMock.expoPage.findFirst.mockResolvedValue({
-      ...base, draft: { sections: [sec(sid, false)] }, published: { sections: [sec(sid, true)] },
+      ...base, draft: { schemaVersion: 2, sections: [sec(sid, false)] },
+      published: { schemaVersion: 2, sections: [sec(sid, true)] }, liveAt: null,
     });
     prismaMock.expoPage.update.mockResolvedValue({ id: "pg1" });
     const { POST } = await import("@/app/api/expo/pages/[pageId]/publish/route");
