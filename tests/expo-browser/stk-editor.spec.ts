@@ -200,6 +200,27 @@ test("409 halts autosave until the operator reloads server state", async ({ page
   expect(unexpected).toEqual([]);
 });
 
+/**
+ * 발행 이력 패널을 연다.
+ *
+ * 그냥 `click()` 하면 **CI 에서만** 조용히 삼켜졌다(webkit-mobile, 72개 중 이 하나).
+ * 이 토글은 390×844 뷰포트에서 문서 맨 아래에 놓이는데, 바로 앞의 "다시 발행" 이 발행
+ * 패널의 안내 문구를 바꿔 높이를 흔든다 — 클릭 좌표를 잡은 뒤 요소가 밀리면 클릭은
+ * 성공으로 기록되고도 아무 일이 일어나지 않는다(트레이스상 click 에 오류가 없는데
+ * `aria-expanded` 는 그대로였다).
+ *
+ * 그래서 **열렸다는 것까지 확인하고, 안 열렸으면 다시 누른다.** 대기 시간을 늘리는 것으로는
+ * 못 고친다 — 잃어버린 클릭은 기다린다고 도착하지 않는다.
+ */
+async function openPublishHistory(page: Page) {
+  const toggle = page.getByRole("button", { name: /발행 이력 (보기|닫기)/ });
+  await toggle.scrollIntoViewIfNeeded();
+  await expect(async () => {
+    if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true", { timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+}
+
 test("publish, history rollback and row export issue focus use only in-memory transport", async ({ page }) => {
   const unexpected = await guardEditorNetwork(page);
   await openEditor(page);
@@ -207,7 +228,7 @@ test("publish, history rollback and row export issue focus use only in-memory tr
   await expect(page.getByTestId("request-count")).toHaveText("requests:1");
   await expect(page.getByText("발행본과 같아요. 고친 내용이 생기면 다시 발행할 수 있어요.")).toBeVisible();
 
-  await page.getByRole("button", { name: "발행 이력 보기" }).click();
+  await openPublishHistory(page);
   await expect(page.getByRole("button", { name: "버전 16 복구" })).toBeVisible();
   await page.getByRole("button", { name: "버전 16 복구" }).click();
   await page.getByRole("button", { name: "발행본으로 복구" }).click();
@@ -251,7 +272,7 @@ test("sections publish panel routes publish, live, export and revisions only thr
   await page.getByRole("button", { name: "전체 HTML 다운로드" }).click();
   expect((await downloadPromise).suggestedFilename()).toBe("mach-expo-sections-harness-page.html");
 
-  await page.getByRole("button", { name: "발행 이력 보기" }).click();
+  await openPublishHistory(page);
   await expect(page.getByRole("button", { name: "버전 7 복구" })).toBeVisible();
   await page.getByRole("button", { name: "버전 7 복구" }).click();
   await page.getByRole("button", { name: "발행본으로 복구" }).click();
