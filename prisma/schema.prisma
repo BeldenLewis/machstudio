@@ -81,6 +81,7 @@ model Workspace {
   webinarEmbedSites    WebinarEmbedSite[]
   adPerformanceImports AdPerformanceImportBatch[]
   adPerformanceRecords AdPerformanceRecord[]
+  metaAdConnections    MetaAdConnection[]
   competitions         Competition[]
   expoSites            ExpoSite[]
   expoTemplates        ExpoTemplate[]
@@ -167,6 +168,7 @@ model Project {
   webinarEmbedSites    WebinarEmbedSite[]
   adPerformanceImports AdPerformanceImportBatch[]
   adPerformanceRecords AdPerformanceRecord[]
+  metaAdConnection     MetaAdConnection?
   competitions         Competition[]
   expoSites            ExpoSite[]
 }
@@ -194,32 +196,38 @@ model AdPerformanceImportBatch {
 }
 
 model AdPerformanceRecord {
-  id                String    @id @default(cuid())
-  batchId           String
-  workspaceId       String
-  projectId         String
-  sourceType        String
-  campaignName      String
-  adGroupName       String?
-  reportDate        DateTime?
-  reportStart       DateTime?
-  reportEnd         DateTime?
-  status            String?
-  currency          String?
-  cost              Float?
-  impressions       Int?
-  reach             Int?
-  clicks            Int?
-  cpm               Float?
-  cpc               Float?
-  ctr               Float?
-  conversions       Float?
-  costPerConversion Float?
-  conversionRate    Float?
-  resultType        String?
-  resultBucket      String?
-  raw               Json
-  createdAt         DateTime  @default(now())
+  id                 String    @id @default(cuid())
+  batchId            String
+  workspaceId        String
+  projectId          String
+  sourceType         String
+  campaignName       String
+  adGroupName        String?
+  reportDate         DateTime?
+  reportStart        DateTime?
+  reportEnd          DateTime?
+  status             String?
+  currency           String?
+  cost               Float?
+  impressions        Int?
+  reach              Int?
+  clicks             Int?
+  cpm                Float?
+  cpc                Float?
+  ctr                Float?
+  conversions        Float?
+  costPerConversion  Float?
+  conversionRate     Float?
+  purchaseValue      Float?
+  roas               Float?
+  resultType         String?
+  resultBucket       String?
+  raw                Json
+  externalCampaignId String?
+  externalAdGroupId  String?
+  externalAdId       String?
+  providerRecordKey  String?   @unique
+  createdAt          DateTime  @default(now())
 
   batch     AdPerformanceImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
   workspace Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -229,6 +237,30 @@ model AdPerformanceRecord {
   @@index([projectId, reportDate])
   @@index([projectId, campaignName])
   @@index([projectId, resultBucket])
+}
+
+model MetaAdConnection {
+  id                   String    @id @default(cuid())
+  workspaceId          String
+  projectId            String    @unique
+  encryptedAccessToken String
+  metaUserId           String?
+  adAccountId          String?
+  adAccountName        String?
+  currency             String?
+  timezoneName         String?
+  enabledMetrics       Json
+  status               String    @default("CONNECTED")
+  lastSyncedAt         DateTime?
+  lastSyncError        String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([adAccountId])
 }
 
 model UTMPreset {
