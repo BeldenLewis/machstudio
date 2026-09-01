@@ -9,6 +9,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { objectParticle } from "@/lib/korean";
 import type { ReadinessIssue } from "@/lib/expo/readiness";
 import { ExpoRevisionPanel } from "@/components/expo/ExpoRevisionPanel";
+import { pageWarnings } from "@/lib/expo/connection-status";
 import type {
   ExpoEditorRequest,
   ExpoReadinessView,
@@ -46,6 +47,13 @@ export interface ExpoPublishPanelProps {
   pageTitle: string;
   hasPublished: boolean;
   liveAt: string | null;
+  imwebUrl?: string | null;
+  lastSeenAt?: string | null;
+  lastSeenOrigin?: string | null;
+  publishedAt?: string | null;
+  updatedAt?: string | null;
+  /** 테스트에서 10분 경계를 고정한다. */
+  now?: Date;
   readiness: ExpoReadinessView;
   snippets: ExpoSnippetsView;
   canPublish: boolean;
@@ -65,8 +73,9 @@ export interface ExpoPublishPanelProps {
 }
 
 export function ExpoPublishPanel({
-  pageId, pageTitle, hasPublished, liveAt, readiness, snippets, canPublish, saveBlocked, onChanged,
-  launchLocked = false, request,
+  pageId, pageTitle, hasPublished, liveAt, imwebUrl = null, lastSeenAt = null,
+  lastSeenOrigin = null, publishedAt = null, updatedAt = null, now,
+  readiness, snippets, canPublish, saveBlocked, onChanged, launchLocked = false, request,
 }: ExpoPublishPanelProps) {
   const confirm = useConfirm();
   const [busy, setBusy] = useState<"publish" | "live" | null>(null);
@@ -83,7 +92,17 @@ export function ExpoPublishPanel({
    * 다시 발행해도 아무 일이 일어나지 않는다 — 그런데 버튼이 눌리면 운영자는 **뭔가 했다고
    * 믿는다.** 공개 중이면 확인 모달까지 뜨고 아무것도 안 바뀐다.
    */
-  const stale = readiness.notes.some((n) => n.code === "draft-ahead-of-published");
+  const metadataWarnings = pageWarnings({
+    imwebUrl, lastSeenAt, lastSeenOrigin, publishedAt, updatedAt, now: now ?? new Date(),
+  });
+  const notes = [
+    ...readiness.notes,
+    ...metadataWarnings.filter((warning) =>
+      !readiness.notes.some((note) => note.code === warning.code)),
+  ];
+  const stale = notes.some((n) => n.code === "draft-ahead-of-published");
+  const connectionNotes = metadataWarnings.filter((note) => note.code.startsWith("connection-"));
+  const pageNotes = notes.filter((note) => !note.code.startsWith("connection-"));
   const nothingToPublish = hasPublished && !stale;
   const publishBlocked =
     !readiness.canPublish || nothingToPublish || Boolean(saveBlocked) || busy !== null;
@@ -153,6 +172,8 @@ export function ExpoPublishPanel({
         <h2 id="expo-publish-heading" className="text-sm font-semibold">내보내기</h2>
         <StateChip hasPublished={hasPublished} live={live} />
       </div>
+      {/* 연결 진단은 발행 가능 여부와 별개다. 상단에서 보이되 어떤 버튼도 잠그지 않는다. */}
+      <Reasons issues={connectionNotes} tone="note" />
 
       {/* ── 발행 ─────────────────────────────────────────────────── */}
       <div className="space-y-1.5">
@@ -169,7 +190,7 @@ export function ExpoPublishPanel({
         ) : null}
 
         <Reasons issues={readiness.publishIssues} />
-        <Reasons issues={readiness.notes} tone="note" />
+        <Reasons issues={pageNotes} tone="note" />
         {/* 왜 못 누르는지 말한다 — 회색 버튼만 두면 고장으로 읽힌다. */}
         {saveBlocked ? (
           <p className="text-[11px] leading-relaxed text-muted-foreground">
@@ -273,7 +294,9 @@ function StateChip({ hasPublished, live }: { hasPublished: boolean; live: boolea
   return <Chip>초안</Chip>;
 }
 
-function Reasons({ issues, tone = "block" }: { issues: ReadinessIssue[]; tone?: "block" | "note" }) {
+type DisplayIssue = { code: string; message: string; sid?: string };
+
+function Reasons({ issues, tone = "block" }: { issues: readonly DisplayIssue[]; tone?: "block" | "note" }) {
   if (issues.length === 0) return null;
   return (
     <ul className="space-y-0.5">

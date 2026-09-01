@@ -4,6 +4,7 @@ import { mountExpo, type ExpoRuntimePayload } from "@/lib/expo/mount";
 import { EXPO_HOST_TAG } from "@/lib/expo/shadow";
 import { resetExpoPortal } from "@/lib/expo/overlay";
 import { resetFormTargets } from "@/lib/collect-form/target-registry";
+import { getFormTarget } from "@/lib/collect-form/target-registry";
 import { resetExpoFontRegistry } from "@/lib/expo/font";
 import { resetExpoSeen } from "@/lib/expo/seen";
 import { scrollLockDepth, unlockScroll } from "@/lib/dom/scroll-lock";
@@ -200,6 +201,67 @@ describe("등록 폼 구획", () => {
     expect(shadow.querySelector("script")).toBeNull();
   });
 
+  it("인라인 attach는 후보 root가 문서에 연결된 뒤 실행된다", () => {
+    const append = document.head.appendChild.bind(document.head);
+    const connected: boolean[] = [];
+    vi.spyOn(document.head, "appendChild").mockImplementation(((node: Node) => {
+      const key = (node as HTMLScriptElement).dataset?.msFormTarget;
+      const target = key ? getFormTarget(key) : null;
+      connected.push(Boolean(target?.container.getRootNode() instanceof ShadowRoot
+        && (target.container.getRootNode() as ShadowRoot).host.isConnected));
+      return append(node);
+    }) as typeof document.head.appendChild);
+
+    const { container } = host();
+    mount({ container, payload: payload({ sections: [formSection("inline")] }) });
+    expect(connected).toEqual([true]);
+  });
+
+  it("같은 소스의 성공 재마운트 뒤에는 새 후보 예약만 남는다", () => {
+    const { container } = host();
+    const first = mount({ container, payload: payload({ sections: [formSection("inline")] }) })!;
+    const key = document.head.querySelector<HTMLScriptElement>("script[data-ms-form-target]")!
+      .dataset.msFormTarget!;
+    const oldTarget = getFormTarget(key)!;
+
+    const second = mount({ container, payload: payload({ sections: [formSection("inline")] }) });
+    const nextTarget = getFormTarget(key);
+
+    expect(second).not.toBeNull();
+    expect(nextTarget).not.toBeNull();
+    expect(nextTarget).not.toBe(oldTarget);
+    expect((nextTarget!.container.getRootNode() as ShadowRoot).host.isConnected).toBe(true);
+    first.destroy();
+    second?.destroy();
+  });
+
+  it("같은 소스의 attach 실패는 이전 예약을 그대로 복원한다", () => {
+    const { container } = host();
+    const first = mount({ container, payload: payload({ sections: [formSection("inline")] }) })!;
+    const key = document.head.querySelector<HTMLScriptElement>("script[data-ms-form-target]")!
+      .dataset.msFormTarget!;
+    const oldTarget = getFormTarget(key)!;
+    const append = document.head.appendChild.bind(document.head);
+    vi.spyOn(document.head, "appendChild").mockImplementation(((node: Node) => {
+      if ((node as HTMLScriptElement).dataset?.msFormTarget === key) {
+        throw new Error("form script attach failed");
+      }
+      return append(node);
+    }) as typeof document.head.appendChild);
+
+    let failed: ReturnType<typeof mount> = null;
+    try {
+      failed = mount({ container, payload: payload({ sections: [formSection("inline")] }) });
+    } finally {
+      vi.mocked(document.head.appendChild).mockRestore();
+    }
+
+    expect(failed).toBeNull();
+    expect(getFormTarget(key)).toBe(oldTarget);
+    expect((oldTarget.container.getRootNode() as ShadowRoot).host.isConnected).toBe(true);
+    first.destroy();
+  });
+
   it("안내 문구의 줄바꿈을 보존한다", () => {
     const { container } = host();
     mount({ container, payload: payload({ sections: [formSection("inline")] }) });
@@ -306,6 +368,52 @@ describe("실패해도 파트너 페이지를 깨지 않는다", () => {
     mount({ container, payload: payload({ sections: [] }) });
     const root = container.querySelector(EXPO_HOST_TAG)!.shadowRoot!.querySelector<HTMLElement>(".msx-root")!;
     expect(root.getAttribute("data-msx-ready")).toBe("1");
+  });
+
+  it("새 렌더가 던지면 이전 DOM과 listener를 유지하고 다음 성공에서만 교체한다", () => {
+    const { container } = host();
+    const first = mount({
+      container,
+      payload: payload({ sections: [{
+        sid: SID, type: "register-form", variant: "cta", design: {},
+        content: { sourceRef: "src-1", heading: "이전 폼" },
+      }] }),
+    })!;
+    const oldHost = container.querySelector<HTMLElement>(EXPO_HOST_TAG)!;
+    const oldButton = oldHost.shadowRoot!.querySelector<HTMLButtonElement>(".msx-btn")!;
+
+    const createElement = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation(((tag: string, options?: ElementCreationOptions) => {
+      if (tag === "section") throw new Error("renderer failed");
+      return createElement(tag, options);
+    }) as typeof document.createElement);
+    let failed: ReturnType<typeof mount> = null;
+    try {
+      failed = mount({
+        container,
+        payload: payload({ sections: [{ sid: SID, type: "textblock", variant: "prose", design: {}, content: { body: "후보" } }] }),
+      });
+    } finally {
+      vi.mocked(document.createElement).mockRestore();
+    }
+    expect(failed).toBeNull();
+
+    expect(container.querySelector(EXPO_HOST_TAG)).toBe(oldHost);
+    expect(oldHost.isConnected).toBe(true);
+    expect(oldHost.shadowRoot!.textContent).toContain("이전 폼");
+    oldButton.click();
+    expect(document.body.querySelector("mach-expo-overlay")).not.toBeNull();
+
+    const second = mount({
+      container,
+      payload: payload({ sections: [{ sid: SID, type: "textblock", variant: "prose", design: {}, content: { body: "새 화면" } }] }),
+    });
+    expect(second).not.toBeNull();
+    expect(oldHost.isConnected).toBe(false);
+    expect(container.querySelector(EXPO_HOST_TAG)!.shadowRoot!.textContent).toContain("새 화면");
+    expect(document.body.querySelector("mach-expo-overlay")).toBeNull();
+    first.destroy();
+    second?.destroy();
   });
 });
 

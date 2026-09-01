@@ -28,7 +28,7 @@ async function ownedPage(pageId: string, ctx: { userId: string; memberWorkspaceI
     select: {
       id: true, siteId: true, slug: true, title: true, isHome: true, sortOrder: true,
       draft: true, draftRevision: true, published: true, publishedAt: true,
-      liveAt: true, imwebUrl: true, updatedAt: true,
+      liveAt: true, imwebUrl: true, lastSeenAt: true, lastSeenOrigin: true, updatedAt: true,
       site: { select: { id: true, workspaceId: true, projectId: true } },
     },
   });
@@ -77,6 +77,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ page
       publishedCodeDigest: expoPreviewCodeDigest(page!.published),
       hasPublished: Boolean(page!.published),
       publishedAt: page!.publishedAt, liveAt: page!.liveAt, updatedAt: page!.updatedAt,
+      lastSeenAt: page!.lastSeenAt, lastSeenOrigin: page!.lastSeenOrigin,
     },
   });
 }

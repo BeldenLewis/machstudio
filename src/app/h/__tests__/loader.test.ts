@@ -252,7 +252,7 @@ describe("사전등록 소스 확인", () => {
     expect(args).not.toContain("src-other");
     // 같은 프로젝트인지 서버가 직접 확인한다.
     expect(prismaMock.collectSource.findMany.mock.calls[0][0].where).toMatchObject({
-      projectId: "p1", deletedAt: null, mode: "builder",
+      id: { in: ["src-other"] }, projectId: "p1", deletedAt: null, mode: "builder",
     });
   });
 
@@ -260,6 +260,12 @@ describe("사전등록 소스 확인", () => {
     prismaMock.expoPage.findFirst.mockResolvedValue(withForm());
     prismaMock.collectSource.findMany.mockResolvedValue([{ id: "src-other" }]);
     expect(bootArgs(await (await get({ pageId: "pg1" })).text())).toContain("src-other");
+  });
+
+  it("소스 확인 조회가 실패해도 참조를 비운다", async () => {
+    prismaMock.expoPage.findFirst.mockResolvedValue(withForm());
+    prismaMock.collectSource.findMany.mockRejectedValue(new Error("catalog unavailable"));
+    expect(bootArgs(await (await get({ pageId: "pg1" })).text())).not.toContain("src-other");
   });
 
   it("서버에서 해석한 V2 행사·캠페인·목적지를 런타임에 싣는다", async () => {
@@ -277,8 +283,59 @@ describe("사전등록 소스 확인", () => {
     const args = bootArgs(await (await get({ pageId: "pg1" })).text());
     expect(args).toContain('"campaigns":[{"id":"apply","label":"참가기업 모집","active":true}]');
     expect(args).toContain('"destinations":[{"id":"contact","label":"문의","action":{"type":"anchor","target":"contact"}}]');
-    expect(args).toContain('"event":{"edition":2027');
+    // 행사 일정도 런타임이 소비하지 않는다. 저장 문자열을 스크립트에 싣지 않는다.
+    expect(args).not.toContain('"event"');
     expect(args).not.toContain('"override"');
+    expect(args).not.toContain('"startsAt"');
+    expect(args).not.toContain('"endsAt"');
+  });
+});
+
+describe("라이브 캠페인 해석", () => {
+  const campaignPage = () => page({
+    published: {
+      schemaVersion: 2,
+      settings: {
+        campaigns: [{
+          id: "apply", label: "참가기업 모집",
+          startsAt: "2026-09-01T03:00:00.000Z", endsAt: "2026-09-01T04:00:00.000Z",
+          override: "auto", enabled: true,
+        }],
+      },
+      sections: [{
+        sid: SID, type: "kv", variant: "column", enabled: true, embedEnabled: false,
+        design: {}, content: { title: { ko: "제목" } },
+      }],
+    },
+  });
+
+  it("campaignState query를 무시하고 서버 시각만 사용한다", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-09-01T02:59:59.000Z"));
+      prismaMock.expoPage.findFirst.mockResolvedValue(campaignPage());
+      const args = bootArgs(await (await get(
+        { pageId: "pg1" },
+        req("https://machstudio.example.com/h/pg1?campaignState=both"),
+      )).text());
+      expect(args).toContain('"id":"apply","label":"참가기업 모집","active":false');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("같은 발행본도 활성 경계를 지나면 ETag가 바뀐다", async () => {
+    vi.useFakeTimers();
+    try {
+      prismaMock.expoPage.findFirst.mockResolvedValue(campaignPage());
+      vi.setSystemTime(new Date("2026-09-01T02:59:59.000Z"));
+      const before = await get({ pageId: "pg1" });
+      vi.setSystemTime(new Date("2026-09-01T03:00:00.000Z"));
+      const active = await get({ pageId: "pg1" });
+      expect(before.headers.get("ETag")).not.toBe(active.headers.get("ETag"));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -312,7 +369,7 @@ describe("캐시 검증자", () => {
     const res = await get({ pageId: "pg1" });
     expect(res.headers.get("ETag")).toMatch(/^W\/"[\w-]{27}"$/);
     expect(res.headers.get("Cache-Control")).toBe("public, max-age=0, must-revalidate");
-    expect(res.headers.get("CDN-Cache-Control")).toContain("stale-while-revalidate=86400");
+    expect(res.headers.get("CDN-Cache-Control")).toBe("public, s-maxage=30, stale-while-revalidate=30");
   });
 
   it("같은 ETag 면 304 다", async () => {
@@ -320,6 +377,11 @@ describe("캐시 검증자", () => {
     const res = await get({ pageId: "pg1" }, req("https://machstudio.example.com/h/pg1", { "if-none-match": etag }));
     expect(res.status).toBe(304);
     expect(await res.text()).toBe("");
+    expect(res.headers.get("Cache-Control")).toBe("public, max-age=0, must-revalidate");
+    expect(res.headers.get("CDN-Cache-Control")).toBe("public, s-maxage=30, stale-while-revalidate=30");
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(res.headers.get("X-Robots-Tag")).toBe("noindex");
   });
 
   it("파트너 사이트에서 받아 갈 수 있다", async () => {

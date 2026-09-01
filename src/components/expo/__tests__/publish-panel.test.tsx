@@ -107,6 +107,17 @@ afterEach(async () => {
 });
 
 describe("발행", () => {
+  it("연결 상태 경고를 보여 주되 발행을 막지 않는다", async () => {
+    await render({
+      imwebUrl: "https://smarttechkorea.com/214",
+      lastSeenAt: "2026-09-01T02:59:00.000Z",
+      lastSeenOrigin: "https://other.example",
+      now: new Date("2026-09-01T03:00:00.000Z"),
+    });
+    expect(host.textContent).toContain("다른 주소");
+    expect(panelButton("발행하기")?.disabled).toBe(false);
+  });
+
   it("아직 발행 전이면 초안이라고 말한다", async () => {
     await render();
     expect(host.textContent).toContain("초안");

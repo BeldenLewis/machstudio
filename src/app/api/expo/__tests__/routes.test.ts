@@ -498,6 +498,7 @@ describe("페이지 상세 — 내보내기 정보", () => {
   const page = {
     id: "pg1", siteId: "s1", slug: "home", title: "홈", isHome: true, sortOrder: 0,
     draftRevision: 3, publishedAt: null, liveAt: null, imwebUrl: null, updatedAt: new Date(),
+    lastSeenAt: new Date("2026-09-01T02:59:00.000Z"), lastSeenOrigin: "https://smarttechkorea.com",
     site: { id: "s1", workspaceId: "w1", projectId: "p1" },
     draft: { sections: [] }, published: null,
   };
@@ -513,6 +514,12 @@ describe("페이지 상세 — 내보내기 정보", () => {
     const { body } = await get();
     expect(body.page.readiness.canPublish).toBe(false);
     expect(body.page.readiness.publishIssues[0].code).toBe("no-sections");
+  });
+
+  it("연결 진단용 최근 시각과 origin을 함께 준다", async () => {
+    const { body } = await get();
+    expect(body.page.lastSeenAt).toBe("2026-09-01T02:59:00.000Z");
+    expect(body.page.lastSeenOrigin).toBe("https://smarttechkorea.com");
   });
 
   it("발행 전에는 공개도 못 켠다고 말한다", async () => {

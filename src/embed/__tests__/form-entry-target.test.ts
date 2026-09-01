@@ -195,6 +195,26 @@ describe("지정 자리의 생존 판정", () => {
     controller.abort();
     expect(destroy).toHaveBeenCalledTimes(1);
   });
+
+  it("부트된 이전 폼의 abort 정리는 staged 후속 예약을 지우지 않는다", async () => {
+    const { script, controller, key } = await reserved();
+    const { boot } = await load();
+    boot(CFG, script);
+
+    const { getFormTarget, leaseFormTarget } = await import("@/lib/collect-form/target-registry");
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const shadow = host.attachShadow({ mode: "open" });
+    const container = document.createElement("div");
+    shadow.appendChild(container);
+    const successor = { container, styleRoot: shadow, mode: "live" as const };
+    const lease = leaseFormTarget(key, successor);
+
+    controller.abort();
+
+    expect(getFormTarget(key)).toBe(successor);
+    lease.release();
+  });
 });
 
 describe("단독 /f 경로는 그대로다", () => {

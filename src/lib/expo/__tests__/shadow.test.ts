@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  EXPO_HOST_MARK, EXPO_HOST_TAG, findExpoShell, mountExpoShell,
+  EXPO_HOST_MARK, EXPO_HOST_TAG, findExpoShell, mountExpoShell, stageExpoShell,
 } from "@/lib/expo/shadow";
 import { EXPO_HOST_RESET_CSS, EXPO_PORTAL_RESET_CSS } from "@/lib/expo/host-reset";
 import { EXPO_SHEET_MARK, canAdoptStyleSheets, ensureExpoStyles, resetExpoSheetRegistry } from "@/lib/expo/sheet";
@@ -325,6 +325,107 @@ describe("재진입", () => {
     const second = mount({ container })!;
     expect(second.host).toBe(first.host);
     expect(container.querySelectorAll(EXPO_HOST_TAG)).toHaveLength(1);
+  });
+});
+
+describe("staged 교체", () => {
+  it("commit 전에는 후보를 분리하고 성공 시 이전 껍데기를 한 번만 정리한다", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const first = mount({ container })!;
+    first.renderRoot.textContent = "old";
+    first.ready();
+    const cleanup = vi.fn();
+    first.addCleanup(cleanup);
+
+    const stage = stageExpoShell({
+      container, pageId: "pg1", theme: THEME, origin: ORIGIN, doc: document,
+    })!;
+    stage.shell.renderRoot.textContent = "new";
+    const lifecycleState: Array<{ candidateConnected: boolean; oldConnected: boolean; inert: boolean }> = [];
+    stage.addAttach(() => lifecycleState.push({
+      candidateConnected: stage.shell.renderRoot.isConnected,
+      oldConnected: first.host.isConnected,
+      inert: stage.shell.host.hasAttribute("inert") && stage.shell.host.getAttribute("aria-hidden") === "true",
+    }));
+
+    expect(stage.shell.host.isConnected).toBe(false);
+    expect(first.host.isConnected).toBe(true);
+    expect(first.renderRoot.textContent).toBe("old");
+    expect(findExpoShell(container)).toBe(first);
+
+    const committed = stage.commit();
+    expect(committed).toBe(stage.shell);
+    expect(committed.host.isConnected).toBe(true);
+    expect(committed.host.hasAttribute("inert")).toBe(false);
+    expect(committed.host.hasAttribute("aria-hidden")).toBe(false);
+    expect(first.host.isConnected).toBe(false);
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(lifecycleState).toEqual([{ candidateConnected: true, oldConnected: true, inert: true }]);
+    expect(findExpoShell(container)).toBe(committed);
+    expect(container.querySelectorAll(EXPO_HOST_TAG)).toHaveLength(1);
+  });
+
+  it("abort는 미커밋 후보만 지우고 이전 등록과 DOM은 그대로 둔다", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const first = mount({ container })!;
+    first.renderRoot.textContent = "old";
+    first.ready();
+    const cleanup = vi.fn();
+    first.addCleanup(cleanup);
+
+    const stage = stageExpoShell({
+      container, pageId: "pg1", theme: THEME, origin: ORIGIN, doc: document,
+    })!;
+    stage.abort();
+
+    expect(stage.shell.host.isConnected).toBe(false);
+    expect(first.host.isConnected).toBe(true);
+    expect(first.renderRoot.textContent).toBe("old");
+    expect(cleanup).not.toHaveBeenCalled();
+    expect(findExpoShell(container)).toBe(first);
+  });
+
+  it("attach가 실패하면 후보만 정리하고 이전 shell은 계속 활성 상태다", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const first = mount({ container })!;
+    first.renderRoot.textContent = "old";
+    first.ready();
+    const oldCleanup = vi.fn();
+    first.addCleanup(oldCleanup);
+
+    const stage = stageExpoShell({
+      container, pageId: "pg1", theme: THEME, origin: ORIGIN, doc: document,
+    })!;
+    const candidateCleanup = vi.fn();
+    stage.shell.addCleanup(candidateCleanup);
+    stage.addAttach(() => { throw new Error("attach failed"); });
+
+    expect(() => stage.commit()).toThrow("attach failed");
+    expect(stage.shell.host.isConnected).toBe(false);
+    expect(candidateCleanup).toHaveBeenCalledTimes(1);
+    expect(first.host.isConnected).toBe(true);
+    expect(first.renderRoot.textContent).toBe("old");
+    expect(oldCleanup).not.toHaveBeenCalled();
+    expect(findExpoShell(container)).toBe(first);
+  });
+
+  it("ready가 실패해도 이전 registry를 지우지 않는다", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const first = mount({ container })!;
+    first.ready();
+    const stage = stageExpoShell({
+      container, pageId: "pg1", theme: THEME, origin: ORIGIN, doc: document,
+    })!;
+    vi.spyOn(stage.shell, "ready").mockImplementation(() => { throw new Error("ready failed"); });
+
+    expect(() => stage.commit()).toThrow("ready failed");
+    expect(stage.shell.host.isConnected).toBe(false);
+    expect(first.host.isConnected).toBe(true);
+    expect(findExpoShell(container)).toBe(first);
   });
 });
 

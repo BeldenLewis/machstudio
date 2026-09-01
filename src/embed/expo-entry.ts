@@ -130,16 +130,17 @@ function render(instance: Instance, script: HTMLScriptElement | null): void {
     instance.warningTimer = null;
   }
   const previousHandle = instance.handle;
-  instance.handle = null;
+  const nextHandle = mountExpo({ container, payload: instance.payload });
+  if (!nextHandle) {
+    warn("마운트하지 못했습니다: " + instanceKey(instance.payload));
+    return;
+  }
+  instance.handle = nextHandle;
+  // mountExpo의 shell commit이 성공한 뒤에만 이전 observer/timer까지 정리한다.
   try {
     previousHandle?.destroy();
   } catch (error) {
     warn("이전 마운트 정리 실패", error);
-  }
-  instance.handle = mountExpo({ container, payload: instance.payload });
-  if (!instance.handle) {
-    warn("마운트하지 못했습니다: " + instanceKey(instance.payload));
-    return;
   }
   reportIfInvisible(instance, container);
 }

@@ -11,7 +11,7 @@
  * 준비 표시는 `finally` 에서 켜진다 — 안 그러면 그들 홈페이지에 영구히 빈 칸이 남는다.
  */
 import { expoThemeVars } from "@/lib/expo/css";
-import { mountExpoShell, type ExpoShellHandle } from "@/lib/expo/shadow";
+import { stageExpoShell, type ExpoShellHandle } from "@/lib/expo/shadow";
 import { renderExpoSections } from "@/lib/expo/view-page";
 import { reportExpoSeen } from "@/lib/expo/seen";
 import { attachExpoPreviewBridge } from "@/lib/expo/preview-bridge";
@@ -97,7 +97,7 @@ export function mountExpo(options: ExpoMountOptions): ExpoMountHandle | null {
   let destroyed = false;
 
   const build = (): boolean => {
-    const next = mountExpoShell({
+    const stage = stageExpoShell({
       container,
       pageId: payload.pageId,
       sectionId: payload.sectionId ?? null,
@@ -105,8 +105,8 @@ export function mountExpo(options: ExpoMountOptions): ExpoMountHandle | null {
       origin: payload.origin,
       doc,
     });
-    if (!next) return false;
-    shell = next;
+    if (!stage) return false;
+    const next = stage.shell;
 
     try {
       // 연결 확인 상태에서는 내용을 한 글자도 그리지 않는다.
@@ -130,63 +130,48 @@ export function mountExpo(options: ExpoMountOptions): ExpoMountHandle | null {
       next.addCleanup(() => output.dispose());
 
       for (const node of output.nodes) next.renderRoot.appendChild(node);
-      // 예약은 **붙은 뒤**다.
-      output.attach();
-    } catch (error) {
-      warn("구획을 그리는 중 오류", error);
-    } finally {
-      /**
-       * **항상** 켠다. 렌더러 하나가 던졌다고 감춰 두면 파트너 홈페이지에 영구히
-       * 빈 칸이 남는다. rAF·IntersectionObserver 뒤로 미루지도 않는다 — 배경 탭에서는
-       * 둘 다 안 돌아서 방문자가 탭을 볼 때까지 구획이 안 보인다.
-       */
-      next.ready();
-    }
+      // 폼 예약과 plugin attach는 candidate가 문서에 연결된 staging 상태에서만 실행한다.
+      stage.addAttach(() => output.attach());
 
-    /**
-     * "코드가 실제로 붙었다" 를 한 번 알린다 — 운영자가 아임웹에 붙여 넣고 나서
-     * 확인할 방법이 이것뿐이다. **미리보기에서는 절대 보내지 않는다**: 운영자가
-     * 편집기를 열어 본 것이 "붙어 있음" 으로 기록되면 그 배지가 거짓이 된다.
-     *
-     * 내용이 없는 연결 확인 상태(발행됐지만 공개 스위치가 꺼짐)에서도 보낸다 —
-     * 그게 이 값의 뜻이다: 붙어 있는지이지, 보이는지가 아니다.
-     */
-    if (mode === "live" || mode === "standalone") {
-      reportExpoSeen({ origin: payload.origin, pageId: payload.pageId, sectionId: payload.sectionId ?? null });
+      if (mode === "live" || mode === "standalone") {
+        stage.addAttach(() => {
+          reportExpoSeen({ origin: payload.origin, pageId: payload.pageId, sectionId: payload.sectionId ?? null });
+        });
+      } else {
+        stage.addAttach(() => {
+          const parentOrigin = payload.preview?.parentOrigin;
+          const channel = payload.preview?.channel;
+          if (!parentOrigin || !channel) return;
+
+          const bridge = attachExpoPreviewBridge({
+            parentOrigin,
+            channel,
+            pageId: payload.pageId,
+            onTheme: (theme) => next.applyTheme(theme),
+          });
+          if (!bridge) return;
+          next.addCleanup(() => bridge.destroy());
+
+          next.renderRoot.addEventListener("click", (event) => {
+            const target = event.target as Element | null;
+            const section = target?.closest?.(".msx-section") as HTMLElement | null;
+            const sid = section?.getAttribute("data-msx-sid");
+            if (sid) bridge.notifySelect(sid);
+          }, { signal: next.signal });
+
+          if (allowCustomCode && payload.preview?.codeDigest) {
+            bridge.notifyCustomCodeReady(payload.preview.codeDigest);
+          }
+        });
+      }
+
+      shell = stage.commit();
       return true;
+    } catch (error) {
+      stage.abort();
+      warn("구획을 그리는 중 오류", error);
+      return false;
     }
-
-    /**
-     * 미리보기 전용 통로. **라이브에서는 이 아래로 오지 않는다** — 구획 클릭이 편집기로
-     * 새어 나가거나 부모가 색을 바꿀 수 있는 경로를 방문자 화면에 두지 않는다.
-     */
-    const parentOrigin = payload.preview?.parentOrigin;
-    const channel = payload.preview?.channel;
-    if (!parentOrigin || !channel) return true;
-
-    const bridge = attachExpoPreviewBridge({
-      parentOrigin,
-      channel,
-      pageId: payload.pageId,
-      // 색만 바꾼다 — 저장하지 않는다.
-      onTheme: (theme) => next.applyTheme(theme),
-    });
-    if (!bridge) return true;
-    next.addCleanup(() => bridge.destroy());
-
-    // 구획을 누르면 편집기가 그 구획으로 이동한다. 기본 동작은 막지 않는다.
-    next.renderRoot.addEventListener("click", (event) => {
-      const target = event.target as Element | null;
-      const section = target?.closest?.(".msx-section") as HTMLElement | null;
-      const sid = section?.getAttribute("data-msx-sid");
-      if (sid) bridge.notifySelect(sid);
-    }, { signal: next.signal });
-
-    // 붙여넣은 코드를 실제로 실행한 경우에만 알린다 — 편집기가 그 후보에 대해서만 발행을 연다.
-    if (allowCustomCode && payload.preview?.codeDigest) {
-      bridge.notifyCustomCodeReady(payload.preview.codeDigest);
-    }
-    return true;
   };
 
   if (!build()) return null;

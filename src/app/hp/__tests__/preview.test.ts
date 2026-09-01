@@ -427,8 +427,32 @@ describe("사전등록 소스 확인", () => {
     prismaMock.collectSource.findMany.mockResolvedValue([]);
     expect(bootArgs(await (await get()).text())).not.toContain("src-other");
     expect(prismaMock.collectSource.findMany.mock.calls[0][0].where).toMatchObject({
-      projectId: "p1", deletedAt: null, mode: "builder",
+      id: { in: ["src-other"] }, projectId: "p1", deletedAt: null, mode: "builder",
     });
+  });
+
+  it("같은 프로젝트의 살아 있는 builder 소스는 유지한다", async () => {
+    prismaMock.expoSite.findFirst.mockResolvedValue(site({
+      pages: [{
+        id: "pg1", isHome: true, sortOrder: 0,
+        draft: { sections: [{ sid: SID, type: "register-form", variant: "inline", enabled: true, embedEnabled: false, design: {}, content: { sourceRef: "src-owned" } }] },
+        published: null, imwebUrl: null, deletedAt: null,
+      }],
+    }));
+    prismaMock.collectSource.findMany.mockResolvedValue([{ id: "src-owned" }]);
+    expect(bootArgs(await (await get()).text())).toContain("src-owned");
+  });
+
+  it("소스 확인 조회가 실패하면 허용 집합을 비운다", async () => {
+    prismaMock.expoSite.findFirst.mockResolvedValue(site({
+      pages: [{
+        id: "pg1", isHome: true, sortOrder: 0,
+        draft: { sections: [{ sid: SID, type: "register-form", variant: "inline", enabled: true, embedEnabled: false, design: {}, content: { sourceRef: "src-owned" } }] },
+        published: null, imwebUrl: null, deletedAt: null,
+      }],
+    }));
+    prismaMock.collectSource.findMany.mockRejectedValue(new Error("catalog unavailable"));
+    expect(bootArgs(await (await get()).text())).not.toContain("src-owned");
   });
 
   it("V2 해석 결과를 미리보기 런타임에 싣는다", async () => {
@@ -450,5 +474,7 @@ describe("사전등록 소스 확인", () => {
     expect(args).toContain('"campaigns":[{"id":"apply","label":"참가기업 모집","active":true}]');
     expect(args).toContain('"destinations":[{"id":"contact","label":"문의","action":{"type":"anchor","target":"contact"}}]');
     expect(args).not.toContain('"startsAt"');
+    expect(args).not.toContain('"endsAt"');
+    expect(args).not.toContain('"override"');
   });
 });

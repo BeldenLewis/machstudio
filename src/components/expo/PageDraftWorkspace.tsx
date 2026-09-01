@@ -316,6 +316,11 @@ export function PageDraftWorkspace({
             pageTitle={state.title}
             hasPublished={state.page.hasPublished}
             liveAt={state.page.liveAt}
+            imwebUrl={state.page.imwebUrl}
+            lastSeenAt={state.page.lastSeenAt}
+            lastSeenOrigin={state.page.lastSeenOrigin}
+            publishedAt={state.page.publishedAt}
+            updatedAt={state.page.updatedAt}
             readiness={state.page.readiness}
             snippets={state.page.snippets}
             canPublish={permissions.canPublish}

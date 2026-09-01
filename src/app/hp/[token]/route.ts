@@ -227,7 +227,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
     sections: resolved.sections,
     campaigns: resolved.campaigns,
     destinations: resolved.destinations,
-    ...(resolved.event ? { event: resolved.event } : {}),
     // 초안인지 발행본인지가 화면 문구의 축이다 — 둘 다 저장·추적을 끈다.
     mode: wantPublished ? "preview-published" : "preview-draft",
     preview: {

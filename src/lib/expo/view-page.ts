@@ -201,13 +201,9 @@ export function renderExpoSections(
     nodes,
 
     attach() {
-      for (const fn of deferred.splice(0)) {
-        try {
-          fn();
-        } catch {
-          // 한 섹션의 폼이 안 붙어도 나머지 구획은 보여야 한다.
-        }
-      }
+      // staged shell이 실패를 포착해 이전 화면을 보존한다. 여기서 삼키면 반쯤 붙은
+      // 후보가 성공으로 commit되어 이전 화면까지 사라진다.
+      for (const fn of deferred.splice(0)) fn();
     },
 
     dispose() {
