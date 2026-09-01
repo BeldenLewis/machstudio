@@ -21,6 +21,23 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const projectId = url.searchParams.get("projectId");
+
+  /**
+   * 명시한 프로젝트는 목록을 읽기 전에 확인한다. 미배정 MEMBER 에게 빈 목록을 주면
+   * 프로젝트가 존재한다는 신호가 되므로, URL 로 특정한 자원과 같이 404 로 숨긴다.
+   */
+  let projectPermissions = deriveExpoPermissions(null, null);
+  if (projectId) {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, workspaceId: true },
+    });
+    if (!project) return authFailure({ kind: "not-found" });
+    const access = requireProjectAccess(guard.ctx.workspaceRole(project.workspaceId), guard.ctx.projectRole(project.id));
+    if (!access.ok) return authFailure(access.failure);
+    projectPermissions = deriveExpoPermissions(guard.ctx.workspaceRole(project.workspaceId), guard.ctx.projectRole(project.id));
+  }
+
   const sites = await prisma.expoSite.findMany({
     where: {
       deletedAt: null,
@@ -39,17 +56,6 @@ export async function GET(request: Request) {
    * 사이트에서 유도할 수 없으므로, 전시를 지정한 경우 그 프로젝트의 소속에서 뽑는다.
    * 전시를 안 지정했으면(워크스페이스 전체 보기) 만들기 대상이 정해지지 않았으므로 닫는다.
    */
-  let projectPermissions = deriveExpoPermissions(null, null);
-  if (projectId) {
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
-      select: { workspaceId: true },
-    });
-    if (project && canAccessExpoProject(guard.ctx.workspaceRole(project.workspaceId), guard.ctx.projectRole(projectId))) {
-      projectPermissions = deriveExpoPermissions(guard.ctx.workspaceRole(project.workspaceId), guard.ctx.projectRole(projectId));
-    }
-  }
-
   /**
    * 화면이 뷰어에게 **눌러도 실패할 버튼**을 보여주지 않게 하는 값들.
    * 권한 판정 자체는 모든 서비스·라우트가 자기 자리에서 다시 한다 — 숨기기는 인가가 아니다.

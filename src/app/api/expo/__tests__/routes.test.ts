@@ -302,6 +302,16 @@ describe("역할 — 화면이 숨긴 것은 API 도 막는다", () => {
     expect(prismaMock.expoSite.update).not.toHaveBeenCalled();
   });
 
+  it("PROJECT EDITOR 는 미리보기 토큰을 재발급할 수 없다", async () => {
+    asMember();
+    asProjectRole("EDITOR");
+    prismaMock.expoSite.findFirst.mockResolvedValue(site);
+    const { POST } = await import("@/app/api/expo/[siteId]/regenerate-preview-token/route");
+    const res = await POST(write({}), { params: Promise.resolve({ siteId: "s1" }) });
+    expect(res.status).toBe(403);
+    expect(prismaMock.expoSite.update).not.toHaveBeenCalled();
+  });
+
   it("MEMBER 는 사이트를 지울 수 없다", async () => {
     asMember();
     prismaMock.expoSite.findFirst.mockResolvedValue(site);
@@ -394,6 +404,16 @@ describe("프로젝트 목록 노출", () => {
     const { GET } = await import("@/app/api/expo/route");
     const body = await (await GET(read())).json();
     expect(body.sites.map((site: { id: string }) => site.id)).toEqual(["s1"]);
+  });
+
+  it("명시한 미배정 프로젝트는 빈 목록이 아니라 404 로 숨긴다", async () => {
+    prismaMock.workspaceMember.findMany.mockResolvedValue([{ workspaceId: "w1", role: "MEMBER" }]);
+    prismaMock.projectMember.findMany.mockResolvedValue([{ projectId: "p1", role: "VIEWER" }]);
+    prismaMock.project.findUnique.mockResolvedValue({ id: "p2", workspaceId: "w1" });
+    const { GET } = await import("@/app/api/expo/route");
+    const res = await GET(new Request("https://machstudio.vercel.app/api/expo?projectId=p2"));
+    expect(res.status).toBe(404);
+    expect(prismaMock.expoSite.findMany).not.toHaveBeenCalled();
   });
 });
 

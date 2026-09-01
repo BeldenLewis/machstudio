@@ -23,8 +23,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ sit
   const access = requireProjectAccess(guard.ctx.workspaceRole(owned.value.workspaceId), guard.ctx.projectRole(owned.value.projectId));
   if (!access.ok) return authFailure(access.failure);
 
-  // 재발급은 이미 나눠 준 미리보기 링크를 전부 끊는다 — `canPublish` 쪽이다.
-  if (!deriveExpoPermissions(guard.ctx.workspaceRole(owned.value.workspaceId), guard.ctx.projectRole(owned.value.projectId)).canPublish) {
+  // 재발급은 이미 나눠 준 미리보기 링크를 전부 끊는다 — 사이트 관리 권한이 필요하다.
+  if (!deriveExpoPermissions(guard.ctx.workspaceRole(owned.value.workspaceId), guard.ctx.projectRole(owned.value.projectId)).canManageSite) {
     return authFailure({ kind: "forbidden" });
   }
 
