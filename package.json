@@ -9,6 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:expo-browser": "playwright test tests/expo-browser",
+    "test:expo-browser:chromium": "playwright test tests/expo-browser --project=chromium-desktop --project=chromium-mobile",
     "build:landing-runtime": "node scripts/build-landing-runtime.mjs",
     "build:competition-runtime": "node scripts/build-competition-runtime.mjs",
     "build:competition-vote-runtime": "node scripts/build-competition-vote-runtime.mjs",
@@ -58,6 +60,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.51.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",

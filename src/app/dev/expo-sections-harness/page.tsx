@@ -112,7 +112,7 @@ function Harness() {
   return (
     // 발행 패널이 공용 확인 모달을 쓴다 — 프로바이더 없이 렌더하면 훅이 던진다.
     <ConfirmProvider>
-    <div className="min-h-screen bg-background p-6">
+    <div className="min-h-screen bg-background p-6" data-harness-transport="memory-only">
       <header className="mb-4 flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
           <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">

@@ -90,8 +90,10 @@ body { display: flex !important; flex-direction: column !important; }
 /* ⑦ 쌓임·클리핑 */
 .partner-wrap { position: relative; z-index: 9999; overflow: hidden; contain: layout paint; }
 
-/* ⑧ 우리 이름을 직접 노린다 — 파트너가 우리 클래스를 알아낸 경우 */
-[data-mach-expo], .msx-root, .msx-portal { display: none !important; opacity: 0 !important; }
+/* ⑧ 우리 내부 이름을 직접 노린다 — Shadow 경계 밖 규칙은 안으로 들어가면 안 된다.
+   마운트 컨테이너 자체를 display:none 하는 공격은 구조적으로 이길 수 없으므로 여기에는
+   넣지 않는다(expo-entry의 별도 0-size 진단 계약이 그 경우를 다룬다). */
+.msx-root, .msx-portal { display: none !important; opacity: 0 !important; }
 `;
 
 export async function GET(request: Request) {
@@ -120,17 +122,22 @@ export async function GET(request: Request) {
   body { margin:0; background:#fff; color:#111; font:400 14px/1.6 -apple-system,sans-serif }
   .bar { padding:12px 16px; background:#111318; color:#e7ecf5; font-size:12px }
   .bar a { color:#a78bfa }
-  .partner-wrap { max-width: 980px; margin: 0 auto; padding: 24px 12px }
+  .partner-wrap {
+    max-width: 980px; margin: 0 auto; padding: 24px 12px;
+    /* The harness keeps the mounting ancestor visible so the test isolates what
+       the embed can defend: hostile rules aimed at the host and shadow tree. */
+    opacity:1!important; visibility:visible!important; transform:none!important; filter:none!important;
+  }
   .partner-note { font-size:12px; color:#666 }
 </style>
 ${attack ? `<style id="hostile">${HOSTILE_CSS}</style>` : ""}
-</head><body>
+</head><body data-harness-kind="expo-hostile">
 <div class="bar">
   적대적 CSS 하니스 — 공격 <b>${attack ? "켜짐" : "꺼짐(기준선)"}</b>${rtl ? " · <b>RTL</b>" : ""}
   · <a href="?attack=${attack ? "off" : "on"}${rtl ? "&rtl=1" : ""}">전환</a>
   · <a href="?attack=${attack ? "on" : "off"}&rtl=${rtl ? "0" : "1"}">RTL 전환</a>
 </div>
-<div class="partner-wrap">
+<div class="partner-wrap" style="opacity:1!important;visibility:visible!important;transform:none!important;filter:none!important;animation:none!important;transition:none!important">
   <p class="partner-note">— 파트너 사이트 본문 (여기 위아래가 아임웹 콘텐츠) —</p>
   <div data-mach-expo></div>
   <p class="partner-note">— 파트너 사이트 본문 계속 —</p>
