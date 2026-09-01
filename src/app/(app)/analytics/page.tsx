@@ -28,8 +28,8 @@ export default function AnalyticsFoldersPage() {
     setLoading(true);
     try {
       const response = await fetch(`/api/ad-performance/folders?workspaceId=${workspace.id}&projectId=${currentProject.id}`);
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || `광고 성과 폴더를 불러오지 못했습니다. (${response.status})`);
       setFolders(data.folders ?? []);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "광고 성과 폴더를 불러오지 못했습니다.");
@@ -49,8 +49,8 @@ export default function AnalyticsFoldersPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, workspaceId: workspace.id, projectId: currentProject.id }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || `폴더를 만들지 못했습니다. (${response.status})`);
       toast.success("광고 성과 폴더를 만들었습니다.");
       setOpen(false);
       setForm({ name: "", description: "", reportStart: `${new Date().getFullYear()}-01-01`, reportEnd: today });
