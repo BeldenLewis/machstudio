@@ -106,7 +106,7 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
         <div className="min-w-[210px] flex-[1.15_1_0%] print:min-w-0">
           <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground print:mb-1 print:text-[9px]">
             <Route className="h-3.5 w-3.5 print:h-2.5 print:w-2.5" />
-            유입경로
+            유입경로(사전등록)
           </div>
           <DonutChart data={data.utmBySource} channelColors={channelColors} onColorChange={onChannelColorChange} />
         </div>
