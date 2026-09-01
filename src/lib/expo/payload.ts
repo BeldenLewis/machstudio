@@ -14,6 +14,7 @@ import { localize, type Localized } from "@/lib/collect-form-config";
 import { resolveCampaignStates } from "@/lib/expo/campaign";
 import { resolveDestinations } from "@/lib/expo/destination";
 import { sectionDef } from "@/lib/expo/registry";
+import { resolvePluginContent } from "@/lib/expo/plugin-content";
 import type { ExpoPageConfigV2, ExpoSection, ExpoEventConfig, ResolvedCampaignState, ResolvedDestination, SlotDef } from "@/lib/expo/types";
 
 /** 내부 참조를 풀 때 필요한 최소 정보 — 레코드를 통째로 받지 않는다. */
@@ -114,21 +115,30 @@ export function buildExpoPayload(config: ExpoPageConfigV2, ctx: ResolveContext):
   const byId = new Map(ctx.pages.map((p) => [p.id, p]));
   const issues: PayloadIssue[] = [];
 
-  const out = config.sections.map((section) => {
+  const out: ResolvedPayload["sections"] = [];
+  for (const section of config.sections) {
     const def = sectionDef(section.type);
-    const content: Record<string, unknown> = {};
-    for (const slot of def?.slots ?? []) {
-      const v = resolveSlot(slot, section.content[slot.key], ctx, byId, section.sid, issues);
-      if (v !== undefined) content[slot.key] = v;
+    if (!def) continue;
+    let content: Record<string, unknown> = {};
+    if (def.normalize) {
+      const resolved = resolvePluginContent(section.content, ctx.locale);
+      if (resolved && typeof resolved === "object" && !Array.isArray(resolved)) {
+        content = resolved as Record<string, unknown>;
+      }
+    } else {
+      for (const slot of def.slots) {
+        const v = resolveSlot(slot, section.content[slot.key], ctx, byId, section.sid, issues);
+        if (v !== undefined) content[slot.key] = v;
+      }
     }
-    return {
+    out.push({
       sid: section.sid,
       type: section.type,
       variant: section.variant,
       design: section.design,
       content,
-    };
-  });
+    });
+  }
 
   const settings = config.settings;
   return {

@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { normalizeExpoPage } from "@/lib/expo/config";
 import {
   derivePageState, hasContent, homePageDefaults, renderableSections,
   slugFromTitle, standaloneSection,
 } from "@/lib/expo/model";
+import { sectionDef } from "@/lib/expo/registry";
+import type { SectionPlugin } from "@/lib/expo/types";
 
 /**
  * **무엇이 공개로 나가고 무엇이 안 나가는가.**
@@ -20,8 +22,23 @@ const sec = (n: number, over: Record<string, unknown> = {}) => ({
 });
 
 const published = (sections: unknown[]) => normalizeExpoPage({ sections });
+const textblockPlugin = sectionDef("textblock") as SectionPlugin;
+afterEach(() => {
+  delete textblockPlugin.normalize;
+  delete textblockPlugin.hasContent;
+});
 
 describe("hasContent — 이중 게이트의 '내용 있음'", () => {
+  it("plugin explicit predicate에 위임한다", () => {
+    textblockPlugin.normalize = (content) => content as Record<string, unknown>;
+    textblockPlugin.hasContent = (section) => Array.isArray(section.content.rows) && section.content.rows.length > 0;
+    const [section] = normalizeExpoPage({ sections: [{
+      sid: uid(21), type: "textblock", variant: "prose", content: { rows: [{ name: "연사" }] },
+    }] }).sections;
+    expect(hasContent(section)).toBe(true);
+    expect(hasContent({ ...section, content: { rows: [] } })).toBe(false);
+  });
+
   it("필수 슬롯이 차야 내용이 있다", () => {
     const [filled] = normalizeExpoPage({ sections: [sec(1)] }).sections;
     expect(hasContent(filled)).toBe(true);

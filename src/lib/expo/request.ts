@@ -10,10 +10,16 @@
  * 그래서 여기서는 **어느 칸이 왜 안 되는지**를 구조화해서 돌려준다.
  */
 import { EXPO_LIMITS, sectionDef } from "@/lib/expo/registry";
-import { isSid } from "@/lib/expo/config";
+import { isSid, normalizeCampaigns, normalizeDestinations } from "@/lib/expo/config";
 import { isSafePublicUrl } from "@/lib/expo/destination";
 import { topicParticle } from "@/lib/korean";
-import { EXPO_V2_RULES, type SlotDef } from "@/lib/expo/types";
+import {
+  EXPO_V2_RULES,
+  type ExpoPageConfigV2,
+  type ExpoSection,
+  type IssueSeverity,
+  type SlotDef,
+} from "@/lib/expo/types";
 
 export interface FieldError {
   /** `sections[2].content.title` 처럼 어느 칸인지 — 편집기가 그 카드로 데려간다. */
@@ -27,8 +33,11 @@ export interface FieldError {
     /** 한 페이지에 하나만 되는 구획이 두 번 — 정규화가 뒤엣것을 버린다. */
     | "duplicate-singleton"
     /** 릴리스 승인 전이라 밖으로 내보내는 스위치를 켤 수 없다. 끄는 것은 언제나 된다. */
-    | "launch-locked" | "invalid-schema" | "duplicate-id" | "invalid-date" | "invalid-action" | "invalid-url";
+    | "launch-locked" | "invalid-schema" | "duplicate-id" | "invalid-date" | "invalid-action" | "invalid-url"
+    | (string & {});
   message: string;
+  /** plugin issue의 공개/발행 심각도. 기존 write 오류는 이 값을 생략한다. */
+  severity?: IssueSeverity;
   /**
    * 어느 구획인지. 편집기가 `data-expo-sid` 로 카드를 찾아 데려간다 —
    * `path` 의 인덱스로 역산하면 그 사이 배열이 바뀌었을 때 엉뚱한 카드를 가리킨다.
@@ -293,6 +302,10 @@ export function validatePageDraft(raw: unknown): ValidateResult {
    */
   const seenSids = new Set<string>();
   const usedSingletons = new Set<string>();
+  const settings = obj(src.settings);
+  const campaigns = new Map(normalizeCampaigns(settings.campaigns).map((item) => [item.id, item]));
+  const destinations = new Map(normalizeDestinations(settings.destinations).map((item) => [item.id, item]));
+  const config = src as unknown as ExpoPageConfigV2;
 
   sections.slice(0, EXPO_LIMITS.sectionsPerPage).forEach((raw, i) => {
     const s = obj(raw);
@@ -331,8 +344,33 @@ export function validatePageDraft(raw: unknown): ValidateResult {
     }
 
     const content = obj(s.content);
-    for (const slot of def.slots) {
-      validateSlot(slot, content[slot.key], `${at}.content.${slot.key}`, errors);
+    if (def.validate) {
+      let pluginIssues = [] as ReturnType<NonNullable<typeof def.validate>>;
+      try {
+        pluginIssues = def.validate(s as unknown as ExpoSection, {
+          config,
+          sectionIndex: i,
+          campaigns,
+          destinations,
+        });
+      } catch {
+        pluginIssues = [{
+          path: "", code: "invalid-shape", message: "구획 내용의 모양이 올바르지 않아요",
+          severity: "error",
+        }];
+      }
+      for (const issue of Array.isArray(pluginIssues) ? pluginIssues : []) {
+        const relative = typeof issue.path === "string" ? issue.path.replace(/^\.+/, "") : "";
+        errors.push({
+          ...issue,
+          path: relative ? `${at}.content.${relative}` : `${at}.content`,
+          sid,
+        });
+      }
+    } else {
+      for (const slot of def.slots) {
+        validateSlot(slot, content[slot.key], `${at}.content.${slot.key}`, errors);
+      }
     }
     // 슬롯 오류에도 어느 카드인지 실어 준다 — path 인덱스 역산은 배열이 바뀌면 어긋난다.
     for (const e of errors) if (e.sid === undefined && e.path.startsWith(`${at}.`)) e.sid = sid;

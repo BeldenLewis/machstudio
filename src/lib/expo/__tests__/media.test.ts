@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   collectExpoMediaUrls, copyExpoMedia, expoSitePrefix, expoTemplatePrefix, expoUrlCodec,
   isSafeExpoPrefix, isUnderExpoPrefix, purgeExpoMediaPrefix, rewriteExpoMediaUrls,
   type ExpoStorage, type MediaCarrier,
 } from "@/lib/expo/media";
+import { sectionDef } from "@/lib/expo/registry";
+import type { SectionPlugin } from "@/lib/expo/types";
 
 /**
  * 템플릿 미디어의 수명 분리.
@@ -20,6 +22,8 @@ const url = (path: string) => codec.publicUrl(path);
 
 const SITE = expoSitePrefix("ws1", "site1");
 const TEMPLATE = expoTemplatePrefix("ws1", "tpl1");
+const textblockPlugin = sectionDef("textblock") as SectionPlugin;
+afterEach(() => { delete textblockPlugin.normalize; });
 
 interface FakeOptions {
   objects?: string[];
@@ -151,6 +155,39 @@ const sections = (): MediaCarrier[] => [
 ];
 
 describe("미디어 주소 수집", () => {
+  it("plugin nested image/video의 url·originalUrl·poster를 걷는다", () => {
+    textblockPlugin.normalize = (content) => content as Record<string, unknown>;
+    const pluginSections: MediaCarrier[] = [{
+      type: "textblock",
+      content: {
+        rows: [{
+          image: { kind: "image", url: "https://cdn.example.com/a.webp", originalUrl: "https://cdn.example.com/a-original.webp" },
+          video: {
+            kind: "video", url: "https://cdn.example.com/talk.mp4",
+            poster: { kind: "image", url: "https://cdn.example.com/poster.webp" },
+          },
+        }],
+        code: '<img src="https://cdn.example.com/in-code.webp">',
+      },
+    }];
+    expect(collectExpoMediaUrls(pluginSections)).toEqual([
+      "https://cdn.example.com/a.webp",
+      "https://cdn.example.com/a-original.webp",
+      "https://cdn.example.com/talk.mp4",
+      "https://cdn.example.com/poster.webp",
+    ]);
+
+    const out = rewriteExpoMediaUrls(pluginSections, new Map([
+      ["https://cdn.example.com/poster.webp", "https://cdn.example.com/poster-new.webp"],
+      ["https://cdn.example.com/in-code.webp", "https://cdn.example.com/should-not-appear.webp"],
+    ]));
+    const content = out[0].content as Record<string, unknown>;
+    const row = (content.rows as Array<Record<string, unknown>>)[0];
+    expect(((row.video as Record<string, unknown>).poster as Record<string, unknown>).url)
+      .toBe("https://cdn.example.com/poster-new.webp");
+    expect(content.code).toContain("https://cdn.example.com/in-code.webp");
+  });
+
   it("리스트 안쪽까지 재귀로 걷고, 중복은 한 번만 센다", () => {
     expect(collectExpoMediaUrls(sections())).toEqual([
       url("ws1/expo/site1/hero.jpg"),

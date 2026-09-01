@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { EXPO_LIMITS } from "@/lib/expo/registry";
+import { afterEach, describe, expect, it } from "vitest";
+import { EXPO_LIMITS, sectionDef } from "@/lib/expo/registry";
 import { validatePageDraft, validateTemplateSnapshot } from "@/lib/expo/request";
 import { normalizeExpoPage } from "@/lib/expo/config";
+import type { SectionPlugin, ValidateContext } from "@/lib/expo/types";
 
 /**
  * **자르기와 거절의 차이.**
@@ -13,8 +14,43 @@ import { normalizeExpoPage } from "@/lib/expo/config";
 
 const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const draft = (sections: unknown[]) => ({ schemaVersion: 2, sections });
+const textblockPlugin = sectionDef("textblock") as SectionPlugin;
+afterEach(() => { delete textblockPlugin.validate; });
 
 describe("정상 입력은 통과한다", () => {
+  it("plugin issue 경로를 content 아래로 붙이고 immutable sid와 registry context를 공급한다", () => {
+    let seen: ValidateContext | null = null;
+    textblockPlugin.validate = (_section, context) => {
+      seen = context;
+      return [{
+        path: "rows[0].name", code: "required", message: "이름이 필요해요", severity: "error",
+        sid: uid(999),
+      }];
+    };
+    const sid = uid(41);
+    const r = validatePageDraft({
+      schemaVersion: 2,
+      settings: {
+        campaigns: [{ id: "apply", label: "신청", startsAt: "2027-01-01T00:00:00+09:00", endsAt: "2027-02-01T00:00:00+09:00", override: "auto", enabled: true }],
+        destinations: [{ id: "contact", label: "문의", action: { type: "url", href: "https://example.com" }, enabled: true }],
+      },
+      sections: [{ sid, type: "textblock", variant: "prose", content: { rows: [{}] } }],
+    });
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors).toContainEqual(expect.objectContaining({
+      path: "sections[0].content.rows[0].name",
+      code: "required",
+      severity: "error",
+      sid,
+    }));
+    const context = seen as ValidateContext | null;
+    expect(context?.sectionIndex).toBe(0);
+    expect(context?.config.sections[0].sid).toBe(sid);
+    expect(context?.campaigns.get("apply")?.label).toBe("신청");
+    expect(context?.destinations.get("contact")?.label).toBe("문의");
+  });
+
   it("보통의 페이지", () => {
     const r = validatePageDraft(draft([
       { sid: uid(1), type: "kv", variant: "column", content: { title: "제목" } },

@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { normalizeExpoPage } from "@/lib/expo/config";
-import type { ExpoSection } from "@/lib/expo/types";
+import type { ExpoSection, SectionPlugin } from "@/lib/expo/types";
 import { renderableSections } from "@/lib/expo/model";
 import { buildExpoPayload, collectInternalPageIds, collectSourceRefs } from "@/lib/expo/payload";
+import { sectionDef } from "@/lib/expo/registry";
 
 /**
  * 공개로 나가는 **유일한 경계**. 여기서 새면 파트너 사이트에 그대로 실린다.
@@ -26,8 +27,33 @@ const ctx = (pages: Array<{ id: string; imwebUrl: string | null; deletedAt?: Dat
   pages: pages.map((p) => ({ ...p, deletedAt: p.deletedAt ?? null })),
   now: new Date("2027-01-01T00:00:00.000Z"),
 });
+const textblockPlugin = sectionDef("textblock") as SectionPlugin;
+afterEach(() => {
+  delete textblockPlugin.normalize;
+  delete textblockPlugin.hasContent;
+});
 
 describe("로케일 — 저장은 맵, 페이로드는 문자열", () => {
+  it("plugin canonical content를 모두 보존하고 localized maps를 재귀로 푼다", () => {
+    textblockPlugin.normalize = (content) => content as Record<string, unknown>;
+    textblockPlugin.hasContent = () => true;
+    const page = normalizeExpoPage({ sections: [{
+      sid: uid(51), type: "textblock", variant: "prose",
+      content: {
+        heading: { ko: "연사", en: "Speakers" },
+        rows: [{ name: { ko: "홍길동", en: "Gildong Hong" }, image: { kind: "image", url: "https://cdn.example.com/a.webp" } }],
+      },
+    }] });
+    const out = buildExpoPayload(page, ctx([], "ko"));
+
+    expect(out.sections[0].content).toEqual({
+      heading: "연사",
+      rows: [{ name: "홍길동", image: { kind: "image", url: "https://cdn.example.com/a.webp" } }],
+    });
+    expect(JSON.stringify(out)).not.toContain("normalize");
+    expect(JSON.stringify(out)).not.toContain("hasContent");
+  });
+
   it("요청 로케일의 문자열만 나간다", () => {
     const sections = normalizeExpoPage({ sections: [{
       sid: uid(1), type: "kv", variant: "column",

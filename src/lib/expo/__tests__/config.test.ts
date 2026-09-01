@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { EXPO_SECTIONS, EXPO_LIMITS, sectionDef } from "@/lib/expo/registry";
 import { normalizeExpoPage, normalizeExpoTheme, newSection } from "@/lib/expo/config";
-import { EXPO_V2_RULES } from "@/lib/expo/types";
+import { EXPO_V2_RULES, type SectionPlugin } from "@/lib/expo/types";
 
 /**
  * 정규화는 **총 함수**다 — 저장된 JSON 은 무엇이든 올 수 있고(직접 고친 값, 옛 버전,
@@ -14,6 +14,8 @@ import { EXPO_V2_RULES } from "@/lib/expo/types";
 const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 const page = (sections: unknown[]) => normalizeExpoPage({ sections });
+const textblockPlugin = sectionDef("textblock") as SectionPlugin;
+afterEach(() => { delete textblockPlugin.normalize; });
 
 describe("카탈로그 — W1 의 6타입", () => {
   it("타입과 변형이 계획과 정확히 같다", () => {
@@ -74,6 +76,34 @@ describe("Expo V2 설정", () => {
 });
 
 describe("정규화 — 던지지 않는다", () => {
+  it("plugin normalize가 canonical nested content를 보존하고 stored context를 받는다", () => {
+    const modes: string[] = [];
+    textblockPlugin.normalize = (content, context) => {
+      modes.push(context.mode);
+      const source = content as Record<string, unknown>;
+      return { heading: source.heading, rows: source.rows };
+    };
+    const sid = uid(31);
+    const out = page([{
+      sid, type: "textblock", variant: "prose",
+      content: { heading: { ko: "연사" }, rows: [{ name: { ko: "홍길동" } }], dropped: true },
+    }]);
+
+    expect(modes).toEqual(["stored"]);
+    expect(out.sections[0]).toMatchObject({
+      sid,
+      content: { heading: { ko: "연사" }, rows: [{ name: { ko: "홍길동" } }] },
+    });
+    expect(out.sections[0].content).not.toHaveProperty("dropped");
+  });
+
+  it("plugin normalize가 malformed stored content에서 던져도 섹션만 건너뛴다", () => {
+    textblockPlugin.normalize = () => { throw new Error("malformed row"); };
+    const raw = { sections: [{ sid: uid(32), type: "textblock", variant: "prose", content: { rows: [null] } }] };
+    expect(() => normalizeExpoPage(raw)).not.toThrow();
+    expect(normalizeExpoPage(raw).sections).toEqual([]);
+  });
+
   it("무엇을 넣어도 페이지 모양이 나온다", () => {
     for (const bad of [null, undefined, 0, "", "문자열", [], { sections: null }, { sections: "x" }, { sections: [null, 1, "a"] }]) {
       expect(() => normalizeExpoPage(bad)).not.toThrow();

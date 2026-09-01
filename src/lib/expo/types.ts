@@ -3,6 +3,9 @@
  * 어드민·서버·임베드 번들이 같은 파일을 읽는다(collect-form-config 와 같은 계약).
  */
 import type { Localized } from "@/lib/collect-form-config";
+import type { ComponentType } from "react";
+import type { LinkTarget } from "@/lib/expo/payload";
+import type { PayloadSection } from "@/lib/expo/view-sections";
 
 export type { Localized };
 
@@ -154,6 +157,66 @@ export interface FieldIssue {
   message: string;
   severity: IssueSeverity;
   sid?: string;
+}
+
+/** 플러그인 정규화는 저장·쓰기·공개 경계 중 어디서 호출됐는지 명시적으로 받는다. */
+export interface NormalizeContext {
+  locale?: string;
+  mode: "stored" | "draft-write" | "public";
+}
+
+/** 플러그인 검증이 페이지의 다른 registry 참조를 조회하는 순수 컨텍스트. */
+export interface ValidateContext {
+  config: ExpoPageConfigV2;
+  sectionIndex: number;
+  campaigns: ReadonlyMap<string, CampaignConfig>;
+  destinations: ReadonlyMap<string, DestinationConfig>;
+}
+
+/** 브라우저 플러그인 렌더러가 받는 값. React 런타임과 무관한 DOM 계약이다. */
+export interface SectionRenderContext {
+  locale: string;
+  campaigns: ReadonlyMap<string, ResolvedCampaignState>;
+  destinations: ReadonlyMap<string, ResolvedDestination>;
+  mode: "live" | "preview-draft" | "preview-published" | "standalone";
+  reducedMotion: boolean;
+  doc: Document;
+}
+
+export interface SectionRenderResult {
+  node: HTMLElement;
+  attach?(): void;
+  dispose?(): void;
+}
+
+export type SectionRenderer = (
+  section: PayloadSection,
+  context: SectionRenderContext,
+) => SectionRenderResult | null;
+
+/** Task 12의 client-only registry가 editor를 덧씌운다. 공용 plugin 객체에는 넣지 않는다. */
+export interface SectionEditorProps {
+  siteId: string;
+  locale: string;
+  sources: readonly { id: string; name: string; isActive: boolean }[];
+  pages: readonly LinkTarget[];
+  section: ExpoSection;
+  config: ExpoPageConfigV2;
+  issues: readonly FieldIssue[];
+  canEdit: boolean;
+  onChange(next: ExpoSection): void;
+}
+
+/**
+ * 슬롯 기반 W1 계약의 순수 확장. 모든 hook은 선택 사항이므로 기존 SectionDef가 그대로
+ * 동작하며, React 참조는 import type이라 공용 registry/runtime bundle에 남지 않는다.
+ */
+export interface SectionPlugin extends SectionDef {
+  normalize?(content: unknown, context: NormalizeContext): Record<string, unknown>;
+  validate?(section: ExpoSection, context: ValidateContext): FieldIssue[];
+  hasContent?(section: ExpoSection): boolean;
+  render?: SectionRenderer;
+  editor?: ComponentType<SectionEditorProps>;
 }
 
 export const EXPO_V2_RULES = {
