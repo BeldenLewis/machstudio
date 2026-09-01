@@ -32,7 +32,7 @@ export function AudienceLinksEditor(props: SectionEditorProps) {
               onChange={(rows) => patchGroup(groupIndex, { items: rows.map((row, order) => ({ ...row, order })) })}
               renderRow={(row, index) => <div className="grid min-w-0 gap-2">
                 <LocalizedField label={`${index + 1}번 링크 문구`} value={row.label} locale={props.locale} disabled={!props.canEdit} onChange={(label) => patchRow(index, { label })} />
-                <ExpoMediaUploadField siteId={props.siteId} kind="image" label={`${index + 1}번 링크 아이콘`} fieldPath={`[${index}].icon.url`} value={row.icon} disabled={!props.canEdit} onChange={(next) => patchRow(index, { icon: next?.kind === "image" ? next : undefined })} />
+                <ExpoMediaUploadField siteId={props.siteId} kind="image" label={`${index + 1}번 링크 아이콘`} fieldPath={`groups[${groupIndex}].items[${index}].icon.url`} value={row.icon} disabled={!props.canEdit} onChange={(next) => patchRow(index, { icon: next?.kind === "image" ? next : undefined })} />
                 <DestinationPicker label={`${index + 1}번 링크 목적지`} destinations={props.config.settings?.destinations ?? []} value={row.destinationId} disabled={!props.canEdit} onChange={(destinationId) => patchRow(index, { destinationId })} />
                 <CampaignPicker label={`${index + 1}번 링크 캠페인`} campaigns={props.config.settings?.campaigns ?? []} value={row.campaignIds} disabled={!props.canEdit} onChange={(campaignIds) => patchRow(index, { campaignIds })} />
                 <Toggle label={`${index + 1}번 링크 공개`} checked={row.enabled} disabled={!props.canEdit} onChange={(enabled) => patchRow(index, { enabled })} />

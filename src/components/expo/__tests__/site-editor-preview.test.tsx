@@ -819,6 +819,38 @@ describe("발행 준비 문제", () => {
     expect(document.activeElement?.getAttribute("data-field-path")).toBe("[0].symbol.url");
   });
 
+  it("중첩 Audience 그룹 미디어 오류는 다른 그룹이 아니라 정확한 아이콘 입력에 포커스한다", async () => {
+    const target = {
+      sid: "88888888-8888-4888-8888-888888888888",
+      type: "audience-links", variant: "split", enabled: true, embedEnabled: false,
+      design: {}, content: { groups: ["exhibitor", "visitor"].map((audience, groupIndex) => ({
+        audience, title: { ko: audience }, variant: groupIndex === 0 ? "light" : "dark",
+        items: [{
+          id: `${audience}-link`, label: { ko: `${audience} 링크` }, destinationId: "",
+          campaignIds: [], order: 0, enabled: true,
+          icon: { kind: "image", url: `https://cdn.example.com/${audience}.png`, decorative: true },
+        }],
+      })) },
+    };
+    pageBody.draft = { schemaVersion: 2, sections: [target] };
+    pageBody.hasPublished = true;
+    pageBody.exportSections = [{ sid: target.sid, label: "대상 링크" }];
+    nextExportFailure = { issues: [{
+      path: "sections[0].content.groups[1].items[0].icon.url",
+      code: "standalone-media-public-https", message: "참관객 아이콘 주소가 필요해요.",
+      severity: "error", sid: target.sid,
+    }] };
+
+    await render();
+    await click(buttonByText("대상 링크 HTML 다운로드"));
+
+    const visitorIcon = host.querySelector<HTMLInputElement>(
+      'input[data-field-path="groups[1].items[0].icon.url"]',
+    );
+    expect(visitorIcon).toBeTruthy();
+    expect(document.activeElement).toBe(visitorIcon);
+  });
+
   it("페이지 설정 백업 오류는 오류 문구가 아니라 해당 입력에 포커스한다", async () => {
     const target = {
       sid: "44444444-4444-4444-8444-444444444444",
@@ -872,6 +904,51 @@ describe("발행 준비 문제", () => {
     expect(document.activeElement?.getAttribute("aria-label")).toBe("외부 영상 HTTPS 주소");
     expect(document.activeElement?.getAttribute("data-field-path")).toBe("video.url");
     expect(host.textContent).toContain("공개 영상 주소가 필요해요.");
+  });
+
+  it("Hero readiness originalUrl이 먼저 있어도 export url은 안정적인 영상 입력에 포커스한다", async () => {
+    const target = {
+      sid: "99999999-9999-4999-8999-999999999999",
+      type: "campaign-hero", variant: "default", enabled: true, embedEnabled: false,
+      design: {}, content: {
+        typingLines: [{ ko: "STK 2027" }], accessibleHeadline: { ko: "STK 2027" }, ctas: [],
+        video: {
+          kind: "video", url: "http://127.0.0.1/private.mp4", originalUrl: "http://127.0.0.1/original.mp4",
+          mimeType: "video/mp4", rightsStatus: "confirmed",
+        },
+      },
+    };
+    pageBody.draft = { schemaVersion: 2, sections: [target] };
+    pageBody.hasPublished = true;
+    pageBody.exportSections = [{ sid: target.sid, label: "Hero divergence" }];
+    pageBody.readiness = {
+      canPublish: false, canGoLive: false,
+      publishIssues: [{
+        path: "sections[0].content.video.originalUrl", code: "unsafe-original",
+        message: "원본 영상 주소를 확인해 주세요.", severity: "error", sid: target.sid,
+      }],
+      liveIssues: [], notes: [],
+    };
+    nextExportFailure = { issues: [{
+      path: "sections[0].content.video.url", code: "standalone-media-public-https",
+      message: "공개 영상 주소가 필요해요.", severity: "error", sid: target.sid,
+    }] };
+
+    await render();
+    await click(buttonByText("Hero divergence HTML 다운로드"));
+
+    const videoUrl = host.querySelector<HTMLInputElement>('input[data-field-path="video.url"]');
+    expect(videoUrl).toBeTruthy();
+    expect(document.activeElement).toBe(videoUrl);
+
+    nextExportFailure = { issues: [{
+      path: "sections[0].content.video.originalUrl", code: "standalone-media-public-https",
+      message: "공개 원본 영상 주소가 필요해요.", severity: "error", sid: target.sid,
+    }] };
+    const pageTitle = host.querySelector<HTMLInputElement>('input[aria-label="페이지 제목"]');
+    await act(async () => { pageTitle?.focus(); });
+    await click(buttonByText("Hero divergence HTML 다운로드"));
+    expect(document.activeElement).toBe(videoUrl);
   });
 
   it("초안에 없는 published-only sid 오류가 현재 초안 편집기를 비우지 않는다", async () => {

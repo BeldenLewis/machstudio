@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { ImagePlus, Loader2, RotateCcw, X } from "lucide-react";
 import { Field, FINISH, R } from "@/components/ui/primitives";
 import { isSafePublicUrl } from "@/lib/expo/destination";
@@ -47,6 +47,7 @@ export function ExpoMediaUploadField({
   const [error, setError] = useState<string | null>(null);
   const [retryFile, setRetryFile] = useState<File | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const externalInputId = useId();
   const latest = useRef({ value, onChange });
 
   useEffect(() => { latest.current = { value, onChange }; }, [value, onChange]);
@@ -162,8 +163,9 @@ export function ExpoMediaUploadField({
       <div className="flex items-end gap-1.5">
         <div className="min-w-0 flex-1">
           <Field
+            id={externalInputId}
             aria-label={label ? `${label} 주소` : `외부 ${noun} HTTPS 주소`}
-            data-field-path={issues[0]?.path ?? fieldPath}
+            data-field-path={fieldPath ?? issues[0]?.path}
             value={externalUrl}
             onChange={(event) => {
               const next = event.target.value;
@@ -212,7 +214,7 @@ export function ExpoMediaUploadField({
       {progress ? <p role="status" className="text-[11px] text-muted-foreground">{progress}</p> : null}
       {error ? <p role="alert" className="text-[11px] text-[var(--destructive)]">{error}</p> : null}
       {issues.map((issue, index) => (
-        <p key={`${issue.code}:${issue.path}:${index}`} role={issue.severity === "error" ? "alert" : "status"} className="text-[11px] text-[var(--destructive)]">
+        <p key={`${issue.code}:${issue.path}:${index}`} role={issue.severity === "error" ? "alert" : "status"} data-field-path={issue.path} data-field-focus-target={externalInputId} className="text-[11px] text-[var(--destructive)]">
           {issue.message}
         </p>
       ))}
