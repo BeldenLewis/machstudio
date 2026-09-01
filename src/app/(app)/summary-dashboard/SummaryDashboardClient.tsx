@@ -69,7 +69,20 @@ export default function SummaryDashboardClient() {
   }
 
   return (
-    <div className="space-y-4 p-4 sm:p-6 lg:p-8">
+    <div className="summary-dashboard-print space-y-4 p-4 sm:p-6 lg:p-8 print:space-y-2 print:p-0">
+      {/*
+        세로 A4 유지. 도넛/스파크라인은 화면·인쇄가 같은 recharts 컴포넌트를 쓰고 크기만
+        print: 로 줄인다 — 인쇄용으로 별도 마크업을 갈아 끼우는 방식(CSS 토글, JS 분기 둘 다)은
+        인쇄 미리보기가 전환을 반영하지 않아 반복적으로 실패했다. 갈아 끼울 게 없으면
+        어긋날 수도 없다. 여기 남은 건 페이지 크기/여백뿐이다.
+      */}
+      <style>{`
+        @media print {
+          @page { size: A4 portrait; margin: 10mm; }
+          /* 넓은 화면(>=1024px)에서 인쇄하면 lg:ml-64 사이드바 여백이 인쇄에도 남을 수 있다 — 항상 0으로 고정한다. */
+          main { margin: 0 !important; }
+        }
+      `}</style>
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between print:hidden">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold">요약 대시보드</h1>
@@ -105,8 +118,8 @@ export default function SummaryDashboardClient() {
 
       {/* 인쇄에만 보이는 보고서 헤더 — 화면 UI 없이 제목·생성 시각만 문서에 남긴다 */}
       <div className="hidden print:block">
-        <h1 className="text-xl font-semibold">요약 대시보드</h1>
-        {printedAtLabel && <p className="mt-0.5 text-xs text-muted-foreground">{printedAtLabel}</p>}
+        <h1 className="text-base font-semibold">요약 대시보드</h1>
+        {printedAtLabel && <p className="mt-0.5 text-[10px] text-muted-foreground">{printedAtLabel}</p>}
       </div>
 
       {loading && !reports ? (
@@ -124,7 +137,7 @@ export default function SummaryDashboardClient() {
           </p>
         </div>
       ) : (
-        <div className="space-y-4 print:space-y-3">
+        <div className="space-y-4 print:space-y-2">
           {reports.map((report) => (
             <div key={report.project.id} className="break-inside-avoid">
               <ProjectSummaryCard data={report} channelColors={channelColors} onChannelColorChange={setChannelColorOverride} />

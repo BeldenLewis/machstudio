@@ -24,6 +24,8 @@ export interface CollectColumn {
   label: string;
   type: string;
   isRequired: boolean;
+  /** 프로젝트 대시보드에 값 분포 카드로 보일지. 빌더형 파생 열은 항상 true(§ 아래 push). */
+  showInDashboard: boolean;
   sortOrder: number;
 }
 
@@ -70,6 +72,7 @@ export function collectColumnsFor(source: {
       label: label || key,
       type,
       isRequired: required,
+      showInDashboard: true,
       sortOrder: out.length,
     });
   };

@@ -487,6 +487,10 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
   const [marketingText, setMarketingText] = useState(initial.marketingText);
   const [privacyBody, setPrivacyBody] = useState(initial.privacyBody);
   const [marketingBody, setMarketingBody] = useState(initial.marketingBody);
+  const [privacyBodyMode, setPrivacyBodyMode] = useState(initial.privacyBodyMode);
+  const [marketingBodyMode, setMarketingBodyMode] = useState(initial.marketingBodyMode);
+  const [privacyLinkUrl, setPrivacyLinkUrl] = useState(initial.privacyLinkUrl);
+  const [marketingLinkUrl, setMarketingLinkUrl] = useState(initial.marketingLinkUrl);
   const [privacyDefaultChecked, setPrivacyDefaultChecked] = useState(initial.privacyDefaultChecked);
   const [marketingDefaultChecked, setMarketingDefaultChecked] = useState(initial.marketingDefaultChecked);
   const [successCta, setSuccessCta] = useState(initial.successCta);
@@ -556,6 +560,10 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
               marketingText: marketingText.trim() || initial.marketingText,
               privacyBody: privacyBody.trim(),
               marketingBody: marketingBody.trim(),
+              privacyBodyMode,
+              marketingBodyMode,
+              privacyLinkUrl: privacyLinkUrl.trim(),
+              marketingLinkUrl: marketingLinkUrl.trim(),
               privacyDefaultChecked,
               marketingDefaultChecked,
               submitLabel: submitLabel.trim() || initial.submitLabel,
@@ -582,7 +590,7 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
     } catch { return false; }
   };
   const { state: saveState, retry } = useAutosave(
-    { fields, privacyText, marketingText, privacyBody, marketingBody, privacyDefaultChecked, marketingDefaultChecked, submitLabel, successCta, successRedirectUrl, deadline, liveReg },
+    { fields, privacyText, marketingText, privacyBody, marketingBody, privacyBodyMode, marketingBodyMode, privacyLinkUrl, marketingLinkUrl, privacyDefaultChecked, marketingDefaultChecked, submitLabel, successCta, successRedirectUrl, deadline, liveReg },
     save,
   );
   // 표시는 껍데기 한 곳에서 그린다(만들기 화면당 1개) — 저장 경로는 그대로 각자.
@@ -710,12 +718,13 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
             <div>
               <label htmlFor={`${uid}-privacy`} className="text-xs text-muted-foreground mb-1 block">개인정보 동의 문구</label>
               <input id={`${uid}-privacy`} value={privacyText} onChange={(e) => setPrivacyText(e.target.value)} className={inputCls} />
-              <ConsentBodyField
+              <div className="my-2 flex w-fit rounded-lg bg-secondary p-0.5 shadow-sm" role="tablist">{(["text", "link"] as const).map((mode) => <button key={mode} type="button" role="tab" aria-selected={privacyBodyMode === mode} onClick={() => setPrivacyBodyMode(mode)} className={`rounded-md px-2.5 py-1 text-[10px] font-semibold ${privacyBodyMode === mode ? "bg-background shadow-sm" : "text-muted-foreground"}`}>{mode === "text" ? "텍스트" : "링크"}</button>)}</div>
+              {privacyBodyMode === "link" ? <input type="url" value={privacyLinkUrl} onChange={(e) => setPrivacyLinkUrl(e.target.value)} placeholder="https://..." aria-label="개인정보처리방침 링크" className={inputCls} /> : <ConsentBodyField
                 label="개인정보 수집·이용"
                 value={privacyBody}
                 onChange={setPrivacyBody}
                 template={webinar.workspace?.privacyBodyTemplate}
-              />
+              />}
               <label className="flex items-center gap-2 text-xs text-muted-foreground mt-2 select-none">
                 <Switch checked={privacyDefaultChecked} onChange={setPrivacyDefaultChecked} label="개인정보 동의 기본 체크" />
                 폼 진입 시 기본으로 체크해두기
@@ -724,12 +733,13 @@ export default function RegistrationFormTab({ webinar, onSilentUpdate, confirmLi
             <div>
               <label htmlFor={`${uid}-marketing`} className="text-xs text-muted-foreground mb-1 block">마케팅 동의 문구</label>
               <input id={`${uid}-marketing`} value={marketingText} onChange={(e) => setMarketingText(e.target.value)} className={inputCls} />
-              <ConsentBodyField
+              <div className="my-2 flex w-fit rounded-lg bg-secondary p-0.5 shadow-sm" role="tablist">{(["text", "link"] as const).map((mode) => <button key={mode} type="button" role="tab" aria-selected={marketingBodyMode === mode} onClick={() => setMarketingBodyMode(mode)} className={`rounded-md px-2.5 py-1 text-[10px] font-semibold ${marketingBodyMode === mode ? "bg-background shadow-sm" : "text-muted-foreground"}`}>{mode === "text" ? "텍스트" : "링크"}</button>)}</div>
+              {marketingBodyMode === "link" ? <input type="url" value={marketingLinkUrl} onChange={(e) => setMarketingLinkUrl(e.target.value)} placeholder="https://..." aria-label="마케팅 동의 링크" className={inputCls} /> : <ConsentBodyField
                 label="마케팅 정보 수신"
                 value={marketingBody}
                 onChange={setMarketingBody}
                 template={webinar.workspace?.marketingBodyTemplate}
-              />
+              />}
               <label className="flex items-center gap-2 text-xs text-muted-foreground mt-2 select-none">
                 <Switch checked={marketingDefaultChecked} onChange={setMarketingDefaultChecked} label="마케팅 동의 기본 체크" />
                 폼 진입 시 기본으로 체크해두기

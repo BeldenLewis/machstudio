@@ -148,6 +148,10 @@ model Project {
   dashboardShareEnabled      Boolean   @default(false)
   dashboardSharePasswordHash String?
   ga4PropertyId              String?
+  /// 작년 웹사이트의 GA4 속성 — 대개 이번 해와 다른 속성이다(행사마다 새 GA4 속성을 만듦).
+  /// 설정하면 홈페이지·사전등록 페이지 방문에도 "전년 동일 D구간" 비교가 붙는다(양쪽 소스에
+  /// 행사 일자가 있어야 계산됨 — resolveCollectEventPair 와 같은 전제).
+  ga4PreviousYearPropertyId  String?
   ga4RegistrationPagePath    String?
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
@@ -302,15 +306,18 @@ model CollectSource {
 }
 
 model FieldMapping {
-  id         String   @id @default(cuid())
-  sourceId   String
-  index      Int
-  key        String
-  label      String
-  type       String   @default("text") // text | select | checkbox | radio
-  isRequired Boolean  @default(false)
-  sortOrder  Int      @default(0)
-  createdAt  DateTime @default(now())
+  id              String   @id @default(cuid())
+  sourceId        String
+  index           Int
+  key             String
+  label           String
+  type            String   @default("text") // text | select | checkbox | radio
+  isRequired      Boolean  @default(false)
+  /// 프로젝트 대시보드에 이 필드의 값 분포(막대 그래프)를 보여줄지. 기본 true — 운영자가
+  /// "필요없는 건 알아서 끄겠지" 라는 전제로, 새 필드는 일단 보이고 안 쓸 것만 끈다.
+  showInDashboard Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
 
   /// 이 필드를 DOM 에서 어떻게 찾을 것인가 — "id" | "name". null 이면 **위치 인덱스**로 찾는다.
   ///

@@ -3,7 +3,7 @@
 /**
  * 폼 빌더가 공유하는 **항목 형식 어휘**.
  *
- * 웨비나 등록 폼과 사전등록 빌더가 같은 6가지 형식을 쓴다. 여기 없이 각자 두면 한쪽에 형식을
+ * 웨비나 등록 폼과 사전등록 빌더가 같은 형식들을 쓴다. 여기 없이 각자 두면 한쪽에 형식을
  * 추가했을 때 다른 쪽이 조용히 뒤처지고, 같은 형식의 이름이 화면마다 달라진다
  * (예전 "복수 선택"/"다중 선택" 이 그렇게 갈렸다).
  *
@@ -15,7 +15,7 @@
  * 형식 어휘와 그 선택 UI 지 카드의 겉모습이 아니다 — 그래서 그 둘만 공유한다.
  */
 import { useEffect, useRef, useState, type ElementType } from "react";
-import { AlignLeft, CircleDot, ListChecks, ListPlus, Mail, Phone, SquareCheck } from "lucide-react";
+import { AlignLeft, CircleDot, Hash, ListChecks, ListPlus, Mail, Phone, SquareCheck } from "lucide-react";
 import { FINISH, R } from "@/components/ui/primitives";
 import { CHOICE_FIELD_TYPES, type WebinarFieldType } from "@/lib/webinar-config";
 
@@ -32,6 +32,7 @@ export const REG_TYPE_META: Record<BuilderFieldType, { label: string; desc: stri
   text: { label: "텍스트", desc: "한 줄 입력", icon: AlignLeft },
   email: { label: "이메일", desc: "이메일 주소", icon: Mail },
   tel: { label: "전화번호", desc: "숫자만", icon: Phone },
+  number: { label: "숫자", desc: "숫자만 입력", icon: Hash },
   select: { label: "드롭다운", desc: "하나만 선택", icon: ListChecks },
   radio: { label: "라디오", desc: "1개 선택 · 바로 표시", icon: CircleDot },
   multiple: { label: "복수 선택", desc: "여러 개 선택", icon: ListPlus },
@@ -39,7 +40,7 @@ export const REG_TYPE_META: Record<BuilderFieldType, { label: string; desc: stri
 };
 
 // 선택형 셋(드롭다운·라디오·복수 선택)을 붙여 둔다 — 고를 때 비교하게 되는 묶음이다.
-export const REG_TYPE_ORDER: BuilderFieldType[] = ["text", "email", "tel", "select", "radio", "multiple", "checkbox"];
+export const REG_TYPE_ORDER: BuilderFieldType[] = ["text", "email", "tel", "number", "select", "radio", "multiple", "checkbox"];
 
 /**
  * 선택지를 쓰는 유형 — 옵션 편집·기타 허용·최대 개수가 여기 걸린다.

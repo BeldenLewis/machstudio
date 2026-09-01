@@ -377,6 +377,7 @@ describe("validateSubmission — 런타임과 서버가 같이 부른다", () =>
     fields: [
       { key: "email", type: "email", required: true },
       { key: "phone", type: "tel" },
+      { key: "seats", type: "number" },
       { key: "topic", type: "select", options: ["A", "B"] },
       { key: "tags", type: "multiple", options: ["x", "y", "z"], maxSelect: 2 },
     ],
@@ -397,6 +398,12 @@ describe("validateSubmission — 런타임과 서버가 같이 부른다", () =>
     expect(run({ email: "a@b.co", phone: "" })).toEqual([]);
     expect(run({ email: "not-an-email" })).toContain("email:invalid_email");
     expect(run({ email: "a@b.co", phone: "123" })).toContain("phone:invalid_phone");
+  });
+
+  it("숫자 항목은 숫자 아닌 값을 거부한다", () => {
+    expect(run({ email: "a@b.co", seats: "abc" })).toContain("seats:invalid_number");
+    expect(run({ email: "a@b.co", seats: "3" })).toEqual([]);
+    expect(run({ email: "a@b.co", seats: "" })).toEqual([]);
   });
 
   it("최대 선택 개수를 넘기면 잡는다", () => {

@@ -134,7 +134,7 @@ export default function CompetitionDetailPage({ params }: { params: Promise<{ sl
         <p className="mt-1 font-mono text-xs text-muted-foreground">/{competition.slug}</p>
       </div>
 
-      <div className="flex flex-wrap gap-1 border-b border-border">
+      <div className="sticky top-0 z-10 flex flex-wrap gap-1 border-b border-border bg-background">
         {TABS.map(({ id, label, icon: Icon }) => {
           const active = tab === id;
           return (
