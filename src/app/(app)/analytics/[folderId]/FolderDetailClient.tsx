@@ -29,7 +29,7 @@ export default function FolderDetailClient({ folderId }: { folderId: string }) {
   const [account, setAccount] = useState({ platform: "META", accountId: "", accountName: "" });
   const [syncing, setSyncing] = useState(false);
 
-  useEffect(() => { (async () => { try { const response = await fetch(`/api/ad-performance/folders/${folderId}`); const data = await response.json(); if (!response.ok) throw new Error(data.error); setFolder(data.folder); setProject(data.project); } catch (error) { toast.error(error instanceof Error ? error.message : "폴더를 불러오지 못했습니다."); } finally { setLoading(false); } })(); }, [folderId]);
+  useEffect(() => { (async () => { try { const response = await fetch(`/api/ad-performance/folders/${folderId}`); const data = await response.json().catch(() => null); if (!response.ok) throw new Error(data?.error || `폴더를 불러오지 못했습니다. (${response.status})`); setFolder(data.folder); setProject(data.project); } catch (error) { toast.error(error instanceof Error ? error.message : "폴더를 불러오지 못했습니다."); } finally { setLoading(false); } })(); }, [folderId]);
 
   const loadData = useCallback(async () => {
     if (tab === "overview" || tab === "connections") return;
@@ -37,7 +37,7 @@ export default function FolderDetailClient({ folderId }: { folderId: string }) {
     const params = new URLSearchParams({ level: tab, sourceType: source });
     if (scope.campaignId) params.set("campaignId", scope.campaignId);
     if (scope.adGroupId) params.set("adGroupId", scope.adGroupId);
-    try { const response = await fetch(`/api/ad-performance/folders/${folderId}/data?${params}`); const data = await response.json(); if (!response.ok) throw new Error(data.error); setRows(data.rows ?? []); }
+    try { const response = await fetch(`/api/ad-performance/folders/${folderId}/data?${params}`); const data = await response.json().catch(() => null); if (!response.ok) throw new Error(data?.error || `성과 데이터를 불러오지 못했습니다. (${response.status})`); setRows(data.rows ?? []); }
     catch (error) { toast.error(error instanceof Error ? error.message : "성과 데이터를 불러오지 못했습니다."); }
     finally { setDataLoading(false); }
   }, [folderId, tab, source, scope]);
@@ -55,7 +55,7 @@ export default function FolderDetailClient({ folderId }: { folderId: string }) {
     if (!folder || !account.accountId.trim() || !account.accountName.trim()) return;
     const mediaAccounts = [...(folder.mediaAccounts ?? []), { ...account, accountId: account.accountId.trim(), accountName: account.accountName.trim() }];
     const response = await fetch(`/api/ad-performance/folders/${folderId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaAccounts }) });
-    const data = await response.json(); if (!response.ok) return toast.error(data.error);
+    const data = await response.json().catch(() => null); if (!response.ok) return toast.error(data?.error || `광고 계정을 연결하지 못했습니다. (${response.status})`);
     setFolder(data.folder); setAccount({ platform: "META", accountId: "", accountName: "" }); toast.success("광고 계정을 연결했습니다.");
   }
 
@@ -63,8 +63,8 @@ export default function FolderDetailClient({ folderId }: { folderId: string }) {
     setSyncing(true);
     try {
       const response = await fetch(`/api/ad-performance/folders/${folderId}/sync`, { method: "POST" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || `Meta 동기화에 실패했습니다. (${response.status})`);
       toast.success(`Meta 성과 ${Number(data.rowCount).toLocaleString()}행을 동기화했습니다.`);
       if (tab !== "overview" && tab !== "connections") await loadData();
     } catch (error) { toast.error(error instanceof Error ? error.message : "Meta 동기화에 실패했습니다."); }
