@@ -86,9 +86,13 @@ export default function SummaryDashboardClient() {
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between print:hidden">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold">요약 대시보드</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            진행중인 프로젝트의 사전등록 현황을 한눈에 모아봅니다
-          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
+            <p className="text-sm">진행중인 프로젝트의 사전등록 현황을 한눈에 모아봅니다</p>
+            <p className="flex items-center gap-1.5 text-xs">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-violet-500 shadow-sm" />
+              범례의 색상 원을 클릭하면 채널 색상을 바꿀 수 있어요
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <motion.button
