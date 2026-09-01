@@ -220,6 +220,8 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
           {(["privacy", "marketing", "thirdParty"] as const).map((kind) => {
             const textKey = kind === "privacy" ? "privacyText" : kind === "marketing" ? "marketingText" : "thirdPartyText";
             const bodyKey = kind === "privacy" ? "privacyBody" : kind === "marketing" ? "marketingBody" : "thirdPartyBody";
+            const modeKey = kind === "privacy" ? "privacyBodyMode" : kind === "marketing" ? "marketingBodyMode" : "thirdPartyBodyMode";
+            const linkKey = kind === "privacy" ? "privacyLinkUrl" : kind === "marketing" ? "marketingLinkUrl" : "thirdPartyLinkUrl";
             const checkedKey = kind === "privacy" ? "privacyDefaultChecked" : kind === "marketing" ? "marketingDefaultChecked" : "thirdPartyDefaultChecked";
             const meta = CONSENT_KIND_META[kind];
             // privacy·marketing 은 항상 폼에 뜬다(끌 수 없다). 제3자 제공만 대회마다 있고 없고가
@@ -254,7 +256,10 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                   onChange={(e) => update({ [textKey]: e.target.value } as Partial<typeof form>)}
                   className={FIELD_CLS}
                 />
-                <ConsentBodyField
+                <div className="flex w-fit rounded-lg bg-secondary p-0.5 shadow-sm" role="tablist">
+                  {(["text", "link"] as const).map((mode) => <button key={mode} type="button" role="tab" aria-selected={form[modeKey] === mode} onClick={() => update({ [modeKey]: mode } as Partial<typeof form>)} className={`rounded-md px-2.5 py-1 text-[10px] font-semibold transition-colors ${form[modeKey] === mode ? "bg-background shadow-sm" : "text-muted-foreground"}`}>{mode === "text" ? "텍스트" : "링크"}</button>)}
+                </div>
+                {form[modeKey] === "link" ? <input type="url" value={form[linkKey]} onChange={(e) => update({ [linkKey]: e.target.value } as Partial<typeof form>)} placeholder="https://..." aria-label={`${kind} 링크`} className={FIELD_CLS} /> : <ConsentBodyField
                   value={form[bodyKey]}
                   org={org}
                   locale={legalLocale}
@@ -263,7 +268,7 @@ export default function EntryFormTab({ competition, patch, workspaceId }: Props)
                   ariaLabel={`${kind} 전문`}
                   rows={3}
                   className={`${FIELD_CLS} h-auto resize-y py-2`}
-                />
+                />}
               </div>
             );
           })}

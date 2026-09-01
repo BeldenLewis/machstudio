@@ -322,6 +322,15 @@ export const COLLECT_FORM_CSS = `
 }
 .msf-terms-head{font-size:15px;font-weight:700;padding:16px 18px;border-bottom:1px solid var(--msf-line)}
 .msf-terms-body{padding:18px;overflow-y:auto;font-size:13px;line-height:1.7;color:var(--msf-muted);white-space:pre-wrap}
+.msf-terms-body :where(p,div,blockquote,pre,ul,ol,table){margin:0 0 12px;padding:0}
+.msf-terms-body :where(h2,h3,h4){margin:16px 0 8px;color:var(--msf-fg);font-weight:700;line-height:1.4}
+.msf-terms-body h2{font-size:16px}.msf-terms-body h3{font-size:15px}.msf-terms-body h4{font-size:14px}
+.msf-terms-body :where(ul,ol){padding-left:20px}.msf-terms-body ul{list-style:disc}.msf-terms-body ol{list-style:decimal}
+.msf-terms-body li{margin:3px 0;list-style:inherit}.msf-terms-body a{color:var(--msf-accent);text-decoration:underline;text-underline-offset:2px}
+.msf-terms-body blockquote{padding-left:12px;border-left:3px solid var(--msf-line)}
+.msf-terms-body table{width:100%;border-collapse:collapse;font-size:12px}.msf-terms-body :where(th,td){padding:8px;border:1px solid var(--msf-line);text-align:left;vertical-align:top}
+.msf-terms-body th{color:var(--msf-fg);background:var(--msf-soft);font-weight:700}
+.msf-terms-body pre{overflow-x:auto;padding:10px;background:var(--msf-soft);border-radius:8px;white-space:pre-wrap}
 .msf-terms-actions{display:flex;gap:8px;padding:14px 18px;border-top:1px solid var(--msf-line)}
 .msf-terms-actions button{
   flex:1;font:inherit;font-size:14px;font-weight:700;cursor:pointer;

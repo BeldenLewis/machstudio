@@ -52,7 +52,7 @@ async function computeRows(competitionId: string, round: { id: string; kind: str
       where: { roundId: round.id },
       select: { entryId: true, judgeId: true, total: true, submitted: true },
     }),
-    prisma.competitionJudge.findMany({ where: { competitionId }, select: { id: true, weight: true } }),
+    prisma.competitionJudge.findMany({ where: { competitionId, roundKind: round.kind }, select: { id: true, weight: true } }),
   ]);
 
   const criteria = normalizeCriteria(round.judgeCriteria);

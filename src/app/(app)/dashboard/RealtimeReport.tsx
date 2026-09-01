@@ -90,6 +90,17 @@ export interface RealtimeReportData {
     total: number;
     items: Array<{ label: string; count: number; percent: number }>;
   }>;
+  /**
+   * '필드' 탭 "통계" 토글이 켜진 필드마다 값 분포 카드 하나 — composition(고정 후보 4종)과
+   * 달리 프로젝트가 실제로 수집하는 필드 그대로다. 값이 하나도 없으면(전부 빈 값) 그
+   * 필드는 아예 빠진다 — dashboard-report route.ts computeFieldStats.
+   */
+  fieldStats: Array<{
+    key: string;
+    label: string;
+    total: number;
+    items: Array<{ label: string; count: number; percent: number }>;
+  }>;
   cumulativeTrend: Array<{
     date: string;
     label: string;
@@ -907,6 +918,21 @@ export default function RealtimeReport({ data, loading, rangeLabel }: Props) {
 
         <UtmBreakdownSection data={data} />
       </div>
+
+      {data.fieldStats.length > 0 && (
+        <section className="rounded-[24px] border border-border bg-background p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <BarChart3 className="w-4 h-4 text-violet-500" />
+            <h3 className="text-sm font-semibold">필드별 통계</h3>
+          </div>
+          <p className="text-xs text-muted-foreground mb-4">
+            수집 소스의 &ldquo;필드&rdquo; 탭에서 &ldquo;통계&rdquo; 토글로 켜고 끌 수 있어요.
+          </p>
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {data.fieldStats.map((section) => <CompositionSection key={section.key} section={section} />)}
+          </div>
+        </section>
+      )}
 
       <EmailDomainSection items={data.emailDomainTop} total={data.emailDomainTotal} />
     </section>

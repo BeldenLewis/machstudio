@@ -784,9 +784,21 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
       projectId,
       id: effectiveFilters.sourceId ?? "__no_active_collect_source__",
     },
-    select: { id: true, fieldMappings: { select: { key: true, label: true } } },
+    select: { id: true, fieldMappings: { select: { key: true, label: true, type: true, showInDashboard: true } } },
   });
-  const compositionKeys = resolveCompositionKeys(sourceFields);
+  /**
+   * 운영자가 '필드' 탭에서 "통계" 를 켠 필드 — 프로젝트마다 수집 필드가 다 다르므로,
+   * VISITOR_DIMENSIONS 같은 고정 후보 목록으로는 못 커버한다. 기본값이 true 라(스키마 주석)
+   * 새 필드는 자동으로 여기 잡히고, 운영자가 안 쓸 것만 끈다.
+   */
+  const dashboardFields = new Map<string, { label: string; type: string }>();
+  for (const src of sourceFields) {
+    for (const fm of src.fieldMappings) {
+      if (!fm.showInDashboard || dashboardFields.has(fm.key)) continue;
+      dashboardFields.set(fm.key, { label: fm.label || fm.key, type: fm.type });
+    }
+  }
+  const compositionKeys = Array.from(new Set([...resolveCompositionKeys(sourceFields), ...dashboardFields.keys()]));
 
   const [yesterdayCount, todayCount, cumulativeCount, rangeCount, previousRangeCount, cumulativeBeforeRange, previousTotalCount, previousPaceCount, previousRangeMatchedCount, heatmapRecords, utmGroups, heatmapRows, cumulativeDailyRows, utmTrendRows] = await Promise.all([
     prisma.collectRecord.count({ where: buildWhere({ ...baseParams, from: yesterdayStart, lt: todayStart }) }),
@@ -872,6 +884,30 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
     const items = topEntriesBySectionMax(counts, 5);
     return { key: dimension.key, label: dimension.label, items, total: Array.from(counts.values()).reduce((sum, count) => sum + count, 0) };
   }).filter((section) => section.items.length > 0).slice(0, 4);
+
+  /**
+   * 필드별 통계 — '필드' 탭 "통계" 토글이 켜진 필드마다 값 분포 카드 하나.
+   * composition 과 달리 후보 키워드로 추측하지 않는다 — FieldMapping.key 를 그대로 쓴다.
+   * 체크박스형(콤마로 이어붙인 다중 선택)도 splitValues 로 항목별로 갈라서 센다.
+   */
+  const fieldStats = Array.from(dashboardFields.entries()).map(([key, meta]) => {
+    const counts = new Map<string, number>();
+    for (const record of heatmapRecords as unknown as CompositionRecord[]) {
+      const data = record.data && typeof record.data === "object" && !Array.isArray(record.data)
+        ? (record.data as Record<string, unknown>)
+        : {};
+      for (const value of splitValues(data[key])) {
+        counts.set(value, (counts.get(value) ?? 0) + 1);
+      }
+    }
+    const items = topEntriesBySectionMax(counts, 8);
+    return {
+      key,
+      label: meta.label,
+      items,
+      total: Array.from(counts.values()).reduce((sum, count) => sum + count, 0),
+    };
+  }).filter((section) => section.items.length > 0);
 
   // Email domain TOP 10
   const emailDomainCounts = new Map<string, number>();
@@ -1127,6 +1163,7 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
     },
     funnel,
     composition,
+    fieldStats,
     emailDomainTop,
     emailDomainTotal,
     dedup,

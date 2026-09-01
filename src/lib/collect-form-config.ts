@@ -87,6 +87,14 @@ export interface CollectField {
   maxSelect?: number;
   /** select·multiple 전용 — '기타(직접입력)'. 켜면 저장 값이 선택지 밖 자유 문장이 된다. */
   allowOther?: boolean;
+  /**
+   * 티켓 화면(`/t/{regNo}`)·완료 화면·QR 카드에도 이 항목의 답을 보여준다. 기본 꺼짐 —
+   * 두 화면은 "다른 문항 답변은 절대 넣지 않는다"는 최소 노출 원칙(§10.2)이 있어서,
+   * 노출은 운영자가 항목별로 명시적으로 켠 것만 예외로 둔다(예: 동반 인원 수 — 현장에서
+   * 인원을 확인해야 하는 값). 선택지·연락처처럼 이미 최소 노출 규칙에 걸려 있는 값을
+   * 굳이 다시 켜도 위험하지 않다 — 운영자 책임하에 켠 값이라 그대로 보여준다.
+   */
+  showOnTicket?: boolean;
 }
 
 /**
@@ -139,6 +147,8 @@ export interface CollectNotice {
   title: Localized;
   /** 줄바꿈을 보존해 표시한다(AGENTS.md). */
   body: Localized;
+  /** 본문을 일반 텍스트 또는 안전하게 제한된 HTML로 표시한다. */
+  bodyFormat: "text" | "html";
   mode: NoticeMode;
   /** 길면 접고 "자세히". */
   collapsible: boolean;
@@ -157,6 +167,9 @@ export interface CollectConsentItem {
   label: Localized;
   /** "자세히" 팝업 본문. 줄바꿈 보존. */
   body: Localized;
+  /** 본문을 일반 텍스트 또는 안전하게 제한된 HTML로 표시한다. */
+  bodyFormat: "text" | "link";
+  linkUrl: string;
   /**
    * 기본 체크. **기본값 false 다**(설계 §7).
    * 필수 동의는 어차피 체크해야 제출되므로 사전 체크의 실익이 없고, GDPR 관할(파리)에서는
@@ -275,10 +288,10 @@ export const EMPTY_FORM_CONFIG: CollectFormConfig = {
   notices: [],
   validation: { defaultCountry: "US", onDuplicate: "block" },
   consent: {
-    privacy: { enabled: true, label: {}, body: {}, defaultChecked: false },
-    marketing: { enabled: false, label: {}, body: {}, defaultChecked: false },
+    privacy: { enabled: true, label: {}, body: {}, bodyFormat: "text", linkUrl: "", defaultChecked: false },
+    marketing: { enabled: false, label: {}, body: {}, bodyFormat: "text", linkUrl: "", defaultChecked: false },
     // 마케팅과 같은 이유로 기본 꺼짐 — 모든 행사가 제3자에게 정보를 제공하는 건 아니다.
-    thirdParty: { enabled: false, label: {}, body: {}, defaultChecked: false },
+    thirdParty: { enabled: false, label: {}, body: {}, bodyFormat: "text", linkUrl: "", defaultChecked: false },
   },
   completion: { redirectUrlTemplate: "", showQr: true },
   confirmationEmail: {
@@ -372,6 +385,8 @@ function normalizeField(raw: unknown, index: number, locale: string): CollectFie
     enabled: r.enabled !== false,
     options,
     ...normalizeChoiceExtras(r, options.length),
+    // 기존 QR 표시 토글 값은 더 이상 사용하지 않는다.
+    showOnTicket: false,
   };
 }
 
@@ -399,6 +414,7 @@ function normalizeNotice(raw: unknown, index: number, locale: string): CollectNo
     placement: NOTICE_PLACEMENTS.includes(placement) ? placement : "top",
     title: toLocalized(r.title, locale),
     body: toLocalized(r.body, locale),
+    bodyFormat: r.bodyFormat === "html" ? "html" : "text",
     mode: NOTICE_MODES.includes(mode) ? mode : "notice",
     collapsible: r.collapsible === true,
   };
@@ -410,6 +426,8 @@ function normalizeConsentItem(raw: unknown, locale: string, fallback: CollectCon
     enabled: r.enabled === undefined ? fallback.enabled : r.enabled !== false,
     label: toLocalized(r.label, locale),
     body: toLocalized(r.body, locale),
+    bodyFormat: r.bodyFormat === "link" ? "link" : "text",
+    linkUrl: str(r.linkUrl),
     // 명시적으로 true 일 때만 사전 체크한다 — 기본은 항상 미체크(설계 §7).
     defaultChecked: r.defaultChecked === true,
   };
@@ -426,6 +444,9 @@ function normalizeConsentItem(raw: unknown, locale: string, fallback: CollectCon
  * 느슨한 값("2026", "Dec 5")도 막는다 — Date.parse 는 그것들도 그럴싸한 시각으로 만들어
  * 오타 하나가 진짜 접수 창이 돼 버린다(의도는 null = 제한 없음이다).
  */
+/** 숫자 항목(type: "number") 검증 — 자릿수만, 부호·소수점 없음(런타임이 타이핑 시점에 이미 걸러낸다). */
+const NUMERIC_ONLY = /^[0-9]+$/;
+
 const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 /** datetime-local 이 내는 모양 — 오프셋이 없다. */
 const NAIVE_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
@@ -669,7 +690,7 @@ function isOnFormPlacement(placement: NoticePlacement): boolean {
 export interface SubmissionIssue {
   /** 어느 항목의 문제인가. 폼이 이 key 아래에 인라인으로 붙인다(AGENTS.md). */
   key: string;
-  code: "required" | "invalid_email" | "invalid_phone" | "unknown_key" | "too_many" | "not_an_option" | "consent_required";
+  code: "required" | "invalid_email" | "invalid_phone" | "invalid_number" | "unknown_key" | "too_many" | "not_an_option" | "consent_required";
 }
 
 /**
@@ -723,6 +744,48 @@ export function visibleFields(config: CollectFormConfig, values: Record<string, 
 export function canonicalBranchValue(config: CollectFormConfig, chosen: string): string {
   if (!config.branch.enabled || !chosen) return chosen;
   return resolveBranchGroup(config, chosen)?.value ?? chosen;
+}
+
+const COMPANION_FIELD_PATTERNS = [
+  /companion/i,
+  /accompany(?:ing|ied)?/i,
+  /동반\s*(?:자|인원|아동|어린이)?\s*(?:수|인원)?/,
+];
+
+const COMPANION_COUNT_PATTERNS = [
+  /how\s+many/i,
+  /(?:number|count)\s+of/i,
+  /companions?\s*(?:count|number)?$/i,
+  /(?:동반|아동|어린이).*(?:몇\s*명|인원\s*수|명\s*수|수)/,
+];
+
+function companionFieldScore(field: CollectField): number {
+  const candidates = [field.key, ...Object.values(field.label)].map(String);
+  if (!candidates.some((value) => COMPANION_FIELD_PATTERNS.some((pattern) => pattern.test(value)))) return -1;
+
+  // An explicit operator choice always wins. Otherwise prefer a question that asks for a count;
+  // prose such as an age option's "must be accompanied by a companion" must not become the count.
+  if (field.showOnTicket) return 3;
+  if (candidates.some((value) => COMPANION_COUNT_PATTERNS.some((pattern) => pattern.test(value)))) return 2;
+  if (field.type === "number") return 1;
+  return 0;
+}
+
+/** 동반자 수 문항을 자동으로 찾아 1명 이상일 때만 티켓용 표시 값을 만든다. */
+export function companionTicketExtras(
+  config: CollectFormConfig,
+  data: Record<string, unknown>,
+): Array<{ label: string; value: string }> {
+  const field = config.fields
+    .map((candidate) => ({ candidate, score: companionFieldScore(candidate) }))
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score)[0]?.candidate;
+  if (!field) return [];
+
+  const raw = data[field.key];
+  const count = typeof raw === "number" ? raw : Number.parseInt(String(raw ?? "").trim(), 10);
+  if (!Number.isFinite(count) || count < 1) return [];
+  return [{ label: "Companions", value: String(Math.floor(count)) }];
 }
 
 /**
@@ -789,6 +852,10 @@ export function validateSubmission(
     const telCountry = deps.countryFor?.(f.key) || config.validation.defaultCountry;
     if (f.type === "tel" && !deps.isValidPhone(safeStr(raw).trim(), telCountry)) {
       issues.push({ key: f.key, code: "invalid_phone" });
+    }
+    // 숫자만 — 국가별 규칙이 없는 단순 자릿수 검증이라 tel 처럼 의존성을 주입받지 않고 여기서 바로 본다.
+    if (f.type === "number" && !NUMERIC_ONLY.test(safeStr(raw).trim())) {
+      issues.push({ key: f.key, code: "invalid_number" });
     }
     if (f.type === "multiple") {
       const arr = Array.isArray(raw) ? raw : [raw];

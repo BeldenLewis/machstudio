@@ -182,6 +182,7 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
     showQr: boolean;
     maskedEmail: string;
     maskedPhone: string;
+    extras: Array<{ label: string; value: string }>;
   }): void {
     clearNode(resultHost);
     // 결과 카드로 데려간다 — 긴 페이지에서는 결과가 화면 밖에 그려질 수 있다.
@@ -209,6 +210,7 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
       ["Phone", view.maskedPhone],
       ["E-mail", view.maskedEmail],
     ].filter(([, value]) => !!value) as [string, string][];
+    for (const extra of view.extras) rows.push([extra.label, extra.value]);
 
     if (view.showQr) {
       /**
@@ -249,6 +251,7 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
             visitorType: view.visitorType,
             maskedEmail: view.maskedEmail,
             maskedPhone: view.maskedPhone,
+            extras: view.extras,
             accentColor: config.theme.accentColor,
           }).catch(() => window.alert("We couldn't save the ticket image. Please take a screenshot instead.")); },
         }, COPY.saveImage);
@@ -329,6 +332,7 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
       renderResult({
         registrationNo: PREVIEW_REG_NO, name: "Jane Doe", visitorType: "Buyer",
         showQr: config.lookup.showQr, maskedEmail: "j•••@example.com", maskedPhone: "•••••• 1234",
+        extras: [{ label: "Companions", value: "2" }],
       });
       return;
     }
@@ -353,6 +357,7 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
         | {
             found?: boolean; registrationNo?: string; name?: string; visitorType?: string;
             showQr?: boolean; maskedEmail?: string; maskedPhone?: string;
+            extras?: Array<{ label: string; value: string }>;
           }
         | null;
       if (!res.ok || !data) { showBanner(COPY.networkError); return; }
@@ -364,6 +369,7 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
         showQr: data.showQr !== false,
         maskedEmail: data.maskedEmail ?? "",
         maskedPhone: data.maskedPhone ?? "",
+        extras: data.extras ?? [],
       });
     } catch {
       if (!destroyed) showBanner(COPY.networkError);

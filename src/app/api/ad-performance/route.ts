@@ -110,6 +110,7 @@ function withDerivedMetrics<T extends {
   impressions: number;
   clicks: number;
   conversions: number;
+  purchaseValue?: number;
 }>(row: T) {
   return {
     ...row,
@@ -118,6 +119,7 @@ function withDerivedMetrics<T extends {
     cpc: row.clicks > 0 ? row.cost / row.clicks : 0,
     cpm: row.impressions > 0 ? (row.cost / row.impressions) * 1000 : 0,
     costPerConversion: row.conversions > 0 ? row.cost / row.conversions : 0,
+    roas: row.cost > 0 ? (row.purchaseValue ?? 0) / row.cost : 0,
   };
 }
 
@@ -249,7 +251,7 @@ export async function GET(request: Request) {
     // Aggregate totals (single row, no data transfer)
     prisma.adPerformanceRecord.aggregate({
       where,
-      _sum: { cost: true, impressions: true, clicks: true, conversions: true, reach: true },
+      _sum: { cost: true, impressions: true, clicks: true, conversions: true, reach: true, purchaseValue: true },
     }),
 
     // Media summary: group by sourceType
@@ -303,6 +305,7 @@ export async function GET(request: Request) {
     clicks: totalsAgg._sum.clicks ?? 0,
     conversions: totalsAgg._sum.conversions ?? 0,
     reach: totalsAgg._sum.reach ?? 0,
+    purchaseValue: totalsAgg._sum.purchaseValue ?? 0,
   };
 
   const mediaSummary = mediaSummaryGroups

@@ -37,17 +37,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
     });
   }
 
-  // 심사 대상 라운드 — 예선/본선 중 심사 항목이 설정된 쪽을 쓴다. 둘 다면 본선 우선(진행 순서).
-  const rounds = await prisma.competitionRound.findMany({
-    where: { competitionId: judge.competitionId },
-    orderBy: { sortOrder: "asc" },
+  // 심사 대상 라운드 — 등록할 때 고른 라운드(judge.roundKind) 그대로. 예선·본선을 각각
+  // 다른 심사위원단이 보는 대회가 흔해서, 심사위원 단위 배정이지 대회 전체 설정이 아니다.
+  const round = await prisma.competitionRound.findUnique({
+    where: { competitionId_kind: { competitionId: judge.competitionId, kind: judge.roundKind } },
   });
-  const round =
-    rounds.find((r) => r.kind === "final" && normalizeCriteria(r.judgeCriteria).length > 0) ??
-    rounds.find((r) => normalizeCriteria(r.judgeCriteria).length > 0) ??
-    rounds[0];
 
-  if (!round) return NextResponse.json({ error: "심사할 라운드가 없어요." }, { status: 404 });
+  if (!round) return NextResponse.json({ error: "배정된 라운드를 찾을 수 없어요." }, { status: 404 });
 
   const criteria = normalizeCriteria(round.judgeCriteria);
 

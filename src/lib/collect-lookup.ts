@@ -9,7 +9,7 @@
  */
 import { toE164, isSupportedCountry } from "@/lib/collect-phone";
 import { isValidCollectEmail, normalizeEmail } from "@/lib/collect-submit";
-import type { CollectFormConfig, Localized } from "@/lib/collect-form-config";
+import { companionTicketExtras, type CollectFormConfig, type Localized } from "@/lib/collect-form-config";
 
 /** 조회 입력 — 설정에 따라 둘 중 하나만 쓰일 수도 있다. */
 export interface LookupInput {
@@ -79,6 +79,12 @@ export interface TicketView {
   /** 티켓을 주운 사람이 원문을 알 수 없도록 가린 본인 확인용 연락처. */
   maskedEmail: string;
   maskedPhone: string;
+  /**
+   * 운영자가 항목별로 `showOnTicket` 을 켠 답만 담는다(예: 동반 인원 수).
+   * 기본은 빈 배열 — §10.2 최소 노출 원칙의 명시적 예외라 운영자가 켠 것만 나간다.
+   * 값이 빈 항목은 빼서(§공통 "빈 껍데기 노출 금지") 화면에 빈 줄이 뜨지 않는다.
+   */
+  extras: Array<{ label: string; value: string }>;
 }
 
 /** 조회 화면에 내보내는 것 — **이게 전부다**(§10.2 "표시 정보는 최소화"). */
@@ -110,6 +116,8 @@ export interface LookupView {
    */
   maskedEmail: string;
   maskedPhone: string;
+  /** 현장 확인용으로 티켓에 노출되는 동반 인원. 다른 제출 답변은 포함하지 않는다. */
+  extras: Array<{ label: string; value: string }>;
 }
 
 /**
@@ -180,12 +188,17 @@ export function buildLookupView(
   };
 
   return {
-    ...base,
+    // base 를 통째로 펼치지 않는다 — base(TicketView)에는 운영자가 켠 extras 가 실릴 수 있는데,
+    // 이 화면은 이메일 하나만 아는 사람에게도 `or` 로 열린다(§10.2). extras 는 번호를 이미
+    // 손에 쥔 사람만 보는 티켓 화면(buildTicketView) 전용 예외라 여기까지 새면 안 된다.
+    name: base.name,
+    visitorType: base.visitorType,
     // 화면이 안 쓰는 값은 내보내지도 않는다(lookup-mount 는 showQr 가 false 면 번호를 그리지 않는다).
     registrationNo: config.lookup.showQr ? base.registrationNo : null,
     showQr: config.lookup.showQr,
     maskedEmail: maskEmail(pick("email")),
     maskedPhone: maskPhone(pick("tel")),
+    extras: base.extras,
   };
 }
 
@@ -219,11 +232,15 @@ export function buildTicketView(
     return field ? str(data[field.key]) : "";
   };
 
+  // showOnTicket 을 켠 항목만, 값이 있을 때만 — 빈 값을 그대로 보내면 화면에 빈 줄이 생긴다.
+  const extras = companionTicketExtras(config, data);
+
   return {
     registrationNo: record.registrationNo,
     name,
     visitorType,
     maskedEmail: maskEmail(pick("email")),
     maskedPhone: maskPhone(pick("tel")),
+    extras,
   };
 }
