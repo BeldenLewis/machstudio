@@ -1,9 +1,16 @@
-export type SourceType = "GOOGLE" | "META" | "LINKEDIN" | "MANUAL";
+export type SourceType = "GOOGLE" | "META" | "TIKTOK" | "LINKEDIN" | "MANUAL";
 export type SourceChoice = "AUTO" | SourceType;
 
 export type AdColumnKey =
   | "campaignName"
+  | "campaignId"
   | "adGroupName"
+  | "adGroupId"
+  | "adName"
+  | "adId"
+  | "creativeName"
+  | "creativeId"
+  | "thumbnailUrl"
   | "reportDate"
   | "reportStart"
   | "reportEnd"
@@ -26,7 +33,14 @@ export type ColumnMapping = Partial<Record<AdColumnKey, number>>;
 export interface NormalizedAdRow {
   sourceType?: SourceType;
   campaignName: string;
+  campaignId?: string | null;
   adGroupName?: string | null;
+  adGroupId?: string | null;
+  adName?: string | null;
+  adId?: string | null;
+  creativeName?: string | null;
+  creativeId?: string | null;
+  thumbnailUrl?: string | null;
   reportDate?: string | null;
   reportStart?: string | null;
   reportEnd?: string | null;
@@ -64,6 +78,13 @@ export interface SheetAnalysis {
 }
 
 export const AD_COLUMN_FIELDS: Array<{ key: AdColumnKey; label: string; required?: boolean; hint?: string }> = [
+  { key: "campaignId", label: "캠페인 ID" },
+  { key: "adGroupId", label: "광고 세트/그룹 ID" },
+  { key: "adName", label: "광고 이름" },
+  { key: "adId", label: "광고 ID" },
+  { key: "creativeName", label: "소재 이름" },
+  { key: "creativeId", label: "소재 ID" },
+  { key: "thumbnailUrl", label: "소재 썸네일 URL" },
   { key: "campaignName", label: "광고 캠페인", required: true, hint: "캠페인명" },
   { key: "adGroupName", label: "광고세트/그룹", hint: "Meta 광고세트, Google 광고그룹" },
   { key: "reportDate", label: "일자", hint: "일자별 리포트용" },
@@ -85,6 +106,13 @@ export const AD_COLUMN_FIELDS: Array<{ key: AdColumnKey; label: string; required
 ];
 
 export const FIELD_ALIASES: Record<AdColumnKey, string[]> = {
+  campaignId: ["캠페인 ID", "Campaign ID", "campaign_id"],
+  adGroupId: ["광고 세트 ID", "광고 그룹 ID", "Ad set ID", "Ad group ID", "adset_id", "ad_group_id"],
+  adName: ["광고 이름", "광고명", "Ad name", "Ad Name"],
+  adId: ["광고 ID", "Ad ID", "ad_id"],
+  creativeName: ["소재 이름", "소재명", "Creative name", "Asset name"],
+  creativeId: ["소재 ID", "Creative ID", "Asset ID", "creative_id"],
+  thumbnailUrl: ["썸네일 URL", "Thumbnail URL", "thumbnail_url", "Image URL"],
   campaignName: ["캠페인", "캠페인 이름", "캠페인명", "Campaign", "Campaign name", "Campaign Name"],
   adGroupName: ["광고그룹", "광고 그룹", "광고그룹 이름", "광고 세트 이름", "광고 세트", "광고세트", "Ad group", "Ad group name", "Ad set", "Ad set name"],
   reportDate: ["일", "날짜", "일자", "기간", "시작일(UTC 시간)", "Date", "Day", "Date range"],
@@ -310,7 +338,14 @@ export function parseMappedRows(analysis: SheetAnalysis): ParsedPreview {
     return {
       sourceType: analysis.sourceType,
       campaignName,
+      campaignId: cellText(row, analysis.mapping, "campaignId") || null,
       adGroupName: cellText(row, analysis.mapping, "adGroupName") || null,
+      adGroupId: cellText(row, analysis.mapping, "adGroupId") || null,
+      adName: cellText(row, analysis.mapping, "adName") || null,
+      adId: cellText(row, analysis.mapping, "adId") || null,
+      creativeName: cellText(row, analysis.mapping, "creativeName") || null,
+      creativeId: cellText(row, analysis.mapping, "creativeId") || null,
+      thumbnailUrl: cellText(row, analysis.mapping, "thumbnailUrl") || null,
       reportDate: toDateKey(cellText(row, analysis.mapping, "reportDate")),
       reportStart: toDateKey(cellText(row, analysis.mapping, "reportStart")),
       reportEnd: toDateKey(cellText(row, analysis.mapping, "reportEnd")),

@@ -81,6 +81,7 @@ model Workspace {
   webinarEmbedSites    WebinarEmbedSite[]
   adPerformanceImports AdPerformanceImportBatch[]
   adPerformanceRecords AdPerformanceRecord[]
+  adPerformanceFolders AdPerformanceFolder[]
   competitions         Competition[]
   expoSites            ExpoSite[]
   expoTemplates        ExpoTemplate[]
@@ -167,6 +168,7 @@ model Project {
   webinarEmbedSites    WebinarEmbedSite[]
   adPerformanceImports AdPerformanceImportBatch[]
   adPerformanceRecords AdPerformanceRecord[]
+  adPerformanceFolders AdPerformanceFolder[]
   competitions         Competition[]
   expoSites            ExpoSite[]
 }
@@ -176,6 +178,7 @@ model AdPerformanceImportBatch {
   workspaceId  String
   projectId    String
   uploadedById String?
+  folderId     String?
   sourceType   String
   sourceName   String?
   fileName     String
@@ -187,10 +190,37 @@ model AdPerformanceImportBatch {
   workspace  Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project    Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
   uploadedBy User?                 @relation("AdPerformanceUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  folder     AdPerformanceFolder?  @relation(fields: [folderId], references: [id], onDelete: Cascade)
   records    AdPerformanceRecord[]
 
   @@index([workspaceId, createdAt(sort: Desc)])
   @@index([projectId, createdAt(sort: Desc)])
+  @@index([folderId, createdAt(sort: Desc)])
+}
+
+/// 행사·프로모션 하나의 광고 성과 작업 공간. 매체 연결은 JSON 배열로 보존해
+/// Meta로 시작하되 Google/TikTok 계정을 같은 폴더에 추가할 수 있다.
+model AdPerformanceFolder {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  projectId     String
+  name          String
+  description   String?
+  reportStart   DateTime
+  reportEnd     DateTime
+  currency      String    @default("KRW")
+  timezone      String    @default("Asia/Seoul")
+  mediaAccounts Json      @default("[]")
+  lastSyncedAt  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  workspace Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  imports   AdPerformanceImportBatch[]
+  records   AdPerformanceRecord[]
+
+  @@index([workspaceId, projectId, updatedAt(sort: Desc)])
 }
 
 model AdPerformanceRecord {
@@ -198,9 +228,19 @@ model AdPerformanceRecord {
   batchId           String
   workspaceId       String
   projectId         String
+  folderId          String?
   sourceType        String
+  accountId         String?
+  accountName       String?
+  campaignId        String?
   campaignName      String
+  adGroupId         String?
   adGroupName       String?
+  adId              String?
+  adName            String?
+  creativeId        String?
+  creativeName      String?
+  thumbnailUrl      String?
   reportDate        DateTime?
   reportStart       DateTime?
   reportEnd         DateTime?
@@ -224,11 +264,14 @@ model AdPerformanceRecord {
   batch     AdPerformanceImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
   workspace Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project   Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  folder    AdPerformanceFolder?     @relation(fields: [folderId], references: [id], onDelete: Cascade)
 
   @@index([batchId])
   @@index([projectId, reportDate])
   @@index([projectId, campaignName])
   @@index([projectId, resultBucket])
+  @@index([folderId, reportDate])
+  @@index([folderId, sourceType, campaignId])
 }
 
 model UTMPreset {
