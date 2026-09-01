@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  EXPO_READINESS_MESSAGES, hasUnpublishedChanges, liveIssues, pageReadiness,
+  contentWarnings, EXPO_READINESS_MESSAGES, hasUnpublishedChanges, liveIssues, pageReadiness,
   publishErrors, sectionSnippetIssues,
 } from "@/lib/expo/readiness";
 import { normalizeExpoPage } from "@/lib/expo/config";
@@ -43,6 +43,38 @@ describe("발행할 수 있는가 — draft 를 본다", () => {
     expect(publishErrors(cfg([sec(1, { enabled: false })]))).toEqual([expect.objectContaining({
       path: "sections", code: "no-renderable-section", severity: "error",
     })]);
+  });
+});
+
+describe("blocking publish errors and non-blocking content warnings", () => {
+  it("keeps warning severity and section identity separate from publish errors", () => {
+    const hero = {
+      sid: uid(8), type: "campaign-hero", variant: "default", enabled: true, content: {
+        typingLines: [{ ko: "STK 2027" }],
+        video: {
+          kind: "video", url: "https://cdn.example.com/hero.mp4", originalUrl: "https://cdn.example.com/hero-original.mp4",
+          mimeType: "video/mp4", rightsStatus: "unconfirmed",
+        },
+        ctas: [],
+      },
+    };
+    const config = { schemaVersion: 2, sections: [hero] };
+    expect(publishErrors(config)).toEqual([]);
+    expect(contentWarnings(config)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "sections[0].content.video.rightsStatus", severity: "warning", sid: uid(8) }),
+      expect.objectContaining({ path: "sections[0].content.ctas", severity: "warning", sid: uid(8) }),
+    ]));
+  });
+
+  it("returns strict structural failures and unsafe destination URLs as blocking errors", () => {
+    const config = {
+      schemaVersion: 2,
+      settings: { destinations: [{ id: "unsafe", label: "unsafe", action: { type: "url", href: "javascript:alert(1)" }, enabled: true }] },
+      sections: [sec(1)],
+    };
+    expect(publishErrors(config)).toContainEqual(expect.objectContaining({
+      path: "settings.destinations[0].action.href", code: "invalid-url", severity: "error",
+    }));
   });
 });
 

@@ -184,10 +184,10 @@ describe("그리지 않는 것", () => {
     expect(renderStaticSection(section({ type: "nope" }))).toBeNull();
   });
 
-  it("카탈로그의 여섯 타입을 빠짐없이 다룬다", () => {
+  it("W1 정적 네 타입만 다루고 STK 플러그인은 전용 렌더러 전까지 넘긴다", () => {
     const handled = EXPO_SECTIONS.filter((d) => isStaticSectionType(d.type)).map((d) => d.type);
     expect(handled.sort()).toEqual(["cardgrid", "kv", "textblock", "toolbox"]);
-    expect(EXPO_SECTIONS).toHaveLength(6);
+    expect(EXPO_SECTIONS).toHaveLength(12);
   });
 });
 

@@ -17,10 +17,11 @@ const page = (sections: unknown[]) => normalizeExpoPage({ sections });
 const textblockPlugin = sectionDef("textblock") as SectionPlugin;
 afterEach(() => { delete textblockPlugin.normalize; });
 
-describe("카탈로그 — W1 의 6타입", () => {
+describe("카탈로그 — W1 6타입과 STK 6타입", () => {
   it("타입과 변형이 계획과 정확히 같다", () => {
     expect(EXPO_SECTIONS.map((s) => s.type)).toEqual([
       "kv", "textblock", "cardgrid", "toolbox", "register-form", "custom-code",
+      "campaign-hero", "exhibition-grid", "audience-links", "speaker-carousel", "sponsor-marquee", "cta-band",
     ]);
     const variants = Object.fromEntries(EXPO_SECTIONS.map((s) => [s.type, s.variants.map((v) => v.id)]));
     expect(variants).toEqual({
@@ -30,6 +31,12 @@ describe("카탈로그 — W1 의 6타입", () => {
       "toolbox": ["tiles", "strip"],
       "register-form": ["inline", "cta"],
       "custom-code": ["boxed", "full"],
+      "campaign-hero": ["default"],
+      "exhibition-grid": ["default"],
+      "audience-links": ["default"],
+      "speaker-carousel": ["default"],
+      "sponsor-marquee": ["default"],
+      "cta-band": ["default"],
     });
   });
 

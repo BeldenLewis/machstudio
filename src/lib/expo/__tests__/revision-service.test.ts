@@ -239,6 +239,25 @@ describe("publishPageRevision", () => {
     }));
     expect(db.events).not.toContain("update-page");
   });
+
+  it("does not turn content warnings into a 422", async () => {
+    const warningOnlyHero = snapshot([{
+      sid: uid(1), type: "campaign-hero", variant: "default", enabled: true, embedEnabled: false, content: {
+        typingLines: [{ ko: "STK 2027" }],
+        video: {
+          kind: "video", url: "https://cdn.example.com/hero.mp4", originalUrl: "https://cdn.example.com/hero-original.mp4",
+          mimeType: "video/mp4", rightsStatus: "unconfirmed",
+        },
+        ctas: [],
+      },
+    }]);
+    const db = new FakeRevisionDb(page({ draft: warningOnlyHero }));
+
+    const result = await db.transaction((tx) => publishPageRevision(tx, input()));
+
+    expect(result.ok).toBe(true);
+    expect(db.events).toContain("update-page");
+  });
 });
 
 describe("rollbackPageRevision", () => {

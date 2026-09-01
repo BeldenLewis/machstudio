@@ -2,7 +2,6 @@ import { Prisma } from "@/generated/prisma";
 import { normalizeExpoPage } from "@/lib/expo/config";
 import { hasContent } from "@/lib/expo/model";
 import { EXPO_READINESS_MESSAGES, publishErrors } from "@/lib/expo/readiness";
-import { validatePageDraft } from "@/lib/expo/request";
 import { snapshotDigest } from "@/lib/expo/snapshot-digest";
 import type { ExpoPageConfigV2, FieldIssue } from "@/lib/expo/types";
 
@@ -39,8 +38,6 @@ type LockedPage = {
 };
 
 function asFieldIssues(raw: unknown): FieldIssue[] {
-  const strict = validatePageDraft(raw);
-  if (!strict.ok) return strict.errors.map((error) => ({ ...error, severity: "error" as const }));
   return publishErrors(raw);
 }
 

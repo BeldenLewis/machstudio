@@ -139,6 +139,13 @@ export function expoSourceFiles(root) {
     join(root, "src/lib/expo/font.ts"),
     join(root, "src/lib/expo/css.ts"),
     join(root, "src/lib/expo/registry.ts"),
+    join(root, "src/lib/expo/sections/types.ts"),
+    join(root, "src/lib/expo/sections/campaign-hero.ts"),
+    join(root, "src/lib/expo/sections/exhibition-grid.ts"),
+    join(root, "src/lib/expo/sections/audience-links.ts"),
+    join(root, "src/lib/expo/sections/speaker-carousel.ts"),
+    join(root, "src/lib/expo/sections/sponsor-marquee.ts"),
+    join(root, "src/lib/expo/sections/cta-band.ts"),
     join(root, "src/lib/expo/shell-css.ts"),
     // 마운트 자리 표시 상수를 스니펫 만드는 쪽과 공유한다 — 각자 적어 두면 한쪽만
     // 고쳐지는 날 코드는 붙었는데 런타임이 그 자리를 못 찾는다(snippet.ts 참고).

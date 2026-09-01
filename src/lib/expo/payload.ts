@@ -121,7 +121,13 @@ export function buildExpoPayload(config: ExpoPageConfigV2, ctx: ResolveContext):
     if (!def) continue;
     let content: Record<string, unknown> = {};
     if (def.normalize) {
-      const resolved = resolvePluginContent(section.content, ctx.locale);
+      let publicContent: Record<string, unknown>;
+      try {
+        publicContent = def.normalize(section.content, { mode: "public", locale: ctx.locale });
+      } catch {
+        continue;
+      }
+      const resolved = resolvePluginContent(publicContent, ctx.locale);
       if (resolved && typeof resolved === "object" && !Array.isArray(resolved)) {
         content = resolved as Record<string, unknown>;
       }
