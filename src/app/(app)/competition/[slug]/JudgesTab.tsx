@@ -11,6 +11,8 @@ import { normalizeCriteria, type JudgeCriterion } from "@/lib/competition-scorin
 import type { CompetitionDetail } from "./page";
 import type { RoundDto } from "./VoteSettingsTab";
 
+type JudgeRoundKind = "prelim" | "final";
+
 interface Judge {
   id: string;
   name: string;
@@ -18,11 +20,14 @@ interface Judge {
   affiliation: string | null;
   accessToken: string;
   weight: number;
+  roundKind: JudgeRoundKind;
   hasPassword: boolean;
   savedCount: number;
   submittedCount: number;
   lastSeenAt: string | null;
 }
+
+const ROUND_KIND_LABEL: Record<JudgeRoundKind, string> = { prelim: "예선", final: "본선" };
 
 export default function JudgesTab({
   competition,
@@ -37,7 +42,9 @@ export default function JudgesTab({
   const [judges, setJudges] = useState<Judge[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", affiliation: "" });
+  const [form, setForm] = useState<{ name: string; email: string; affiliation: string; roundKind: JudgeRoundKind }>({
+    name: "", email: "", affiliation: "", roundKind: "final",
+  });
   const [creating, setCreating] = useState(false);
   /** 발급된 비밀번호는 이 화면에서만 보인다 — 저장은 해시라 다시 못 본다. */
   const [issued, setIssued] = useState<Record<string, string>>({});
@@ -72,8 +79,9 @@ export default function JudgesTab({
       if (!res.ok) { toast.error(data.error ?? "추가 실패"); return; }
       setJudges((prev) => [...prev, data.judge]);
       setIssued((prev) => ({ ...prev, [data.judge.id]: data.password }));
-      setForm({ name: "", email: "", affiliation: "" });
-      toast.success("심사위원을 추가했어요 — 비밀번호를 지금 전달하세요");
+      // roundKind 는 남겨둔다 — 같은 라운드 심사위원을 여러 명 연달아 등록하는 게 보통이다.
+      setForm((f) => ({ ...f, name: "", email: "", affiliation: "" }));
+      toast.success(`${ROUND_KIND_LABEL[data.judge.roundKind as JudgeRoundKind]} 심사위원을 추가했어요 — 비밀번호를 지금 전달하세요`);
     } finally {
       setCreating(false);
     }
@@ -115,6 +123,22 @@ export default function JudgesTab({
     toast.success("새 링크를 발급했어요");
   };
 
+  const changeRound = async (judge: Judge, roundKind: JudgeRoundKind) => {
+    if (judge.roundKind === roundKind) return;
+    setJudges((prev) => prev.map((j) => (j.id === judge.id ? { ...j, roundKind } : j)));
+    const res = await fetch(`/api/competitions/${competition.id}/judges/${judge.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roundKind }),
+    });
+    if (!res.ok) {
+      setJudges((prev) => prev.map((j) => (j.id === judge.id ? { ...j, roundKind: judge.roundKind } : j)));
+      toast.error("배정 변경 실패");
+      return;
+    }
+    toast.success(`${ROUND_KIND_LABEL[roundKind]} 심사위원으로 옮겼어요`);
+  };
+
   const removeJudge = async (judge: Judge) => {
     const ok = await confirm({
       title: `${judge.name} 심사위원을 삭제할까요?`,
@@ -136,10 +160,27 @@ export default function JudgesTab({
       <section className={`bg-background p-5 ${R.panel} ${FINISH.s1}`}>
         <h2 className="text-sm font-semibold">심사위원</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          심사위원마다 다른 링크와 비밀번호를 발급해요. <b>모든 심사위원이 전 참가작을 심사합니다.</b>
+          심사위원마다 다른 링크와 비밀번호를 발급해요. <b>배정된 라운드의 전 참가작을 심사합니다.</b>
         </p>
 
-        <div className="mt-4 grid gap-2 md:grid-cols-[1fr_1fr_1fr_auto]">
+        <div className="mt-4 flex items-center gap-1.5">
+          <span className="text-[11px] font-medium text-muted-foreground">배정 라운드</span>
+          <div className="flex gap-1">
+            {(["prelim", "final"] as const).map((value) => (
+              <button
+                key={value}
+                onClick={() => setForm((f) => ({ ...f, roundKind: value }))}
+                className={`px-2.5 py-1 text-[11px] transition-colors ${R.control} ${
+                  form.roundKind === value ? "bg-violet-500 text-white" : "bg-secondary text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {ROUND_KIND_LABEL[value]} 심사
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-2 grid gap-2 md:grid-cols-[1fr_1fr_1fr_auto]">
           <input
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -188,6 +229,7 @@ export default function JudgesTab({
                 onResetPassword={() => resetPassword(judge)}
                 onRotateLink={() => rotateLink(judge)}
                 onRemove={() => removeJudge(judge)}
+                onChangeRound={(kind) => changeRound(judge, kind)}
               />
             ))
           )}
@@ -198,13 +240,14 @@ export default function JudgesTab({
 }
 
 function JudgeRow({
-  judge, issuedPassword, onResetPassword, onRotateLink, onRemove,
+  judge, issuedPassword, onResetPassword, onRotateLink, onRemove, onChangeRound,
 }: {
   judge: Judge;
   issuedPassword?: string;
   onResetPassword: () => void;
   onRotateLink: () => void;
   onRemove: () => void;
+  onChangeRound: (kind: JudgeRoundKind) => void;
 }) {
   const [copied, setCopied] = useState(false);
   // 이번 승인 범위 밖인 심사위원 초대 링크는 현재 host 동작을 유지한다.
@@ -229,6 +272,20 @@ function JudgeRow({
             {judge.email ?? "이메일 없음"}
             {judge.lastSeenAt ? ` · 최근 접속 ${formatKst(judge.lastSeenAt)}` : " · 접속 기록 없음"}
           </p>
+        </div>
+
+        <div className={`flex shrink-0 gap-0.5 bg-secondary p-0.5 ${R.control}`}>
+          {(["prelim", "final"] as const).map((value) => (
+            <button
+              key={value}
+              onClick={() => onChangeRound(value)}
+              className={`px-2 py-1 text-[11px] transition-colors ${R.control} ${
+                judge.roundKind === value ? "bg-violet-500 text-white" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {ROUND_KIND_LABEL[value]}
+            </button>
+          ))}
         </div>
 
         <button

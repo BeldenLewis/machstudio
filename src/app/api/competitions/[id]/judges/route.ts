@@ -35,7 +35,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     orderBy: { createdAt: "asc" },
     select: {
       id: true, name: true, email: true, affiliation: true, accessToken: true,
-      weight: true, lastSeenAt: true, createdAt: true,
+      weight: true, roundKind: true, lastSeenAt: true, createdAt: true,
       // 해시는 내려보내지 않는다 — 설정 여부만 알면 화면이 그려진다.
       passwordHash: true,
       _count: { select: { scores: true } },
@@ -76,6 +76,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   // 비밀번호는 항상 설정한다 — 링크만으로 열리면 메신저·화면 공유로 새어 나간다.
   // 운영자가 비워 두면 우리가 만들어서 **한 번만** 돌려준다(해시만 저장하므로 다시 못 본다).
   const password = typeof body.password === "string" && body.password.trim() ? body.password.trim() : generatePassword();
+  const roundKind = body.roundKind === "prelim" ? "prelim" : "final";
 
   const judge = await prisma.competitionJudge.create({
     data: {
@@ -86,6 +87,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       accessToken: randomBytes(16).toString("base64url"),
       passwordHash: hashSharePassword(password),
       weight: typeof body.weight === "number" && body.weight >= 1 ? Math.floor(body.weight) : 1,
+      roundKind,
     },
   });
 
@@ -98,7 +100,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   return NextResponse.json(
     {
-      judge: { id: judge.id, name: judge.name, email: judge.email, affiliation: judge.affiliation, accessToken: judge.accessToken, weight: judge.weight, hasPassword: true, savedCount: 0, submittedCount: 0, lastSeenAt: null },
+      judge: { id: judge.id, name: judge.name, email: judge.email, affiliation: judge.affiliation, accessToken: judge.accessToken, weight: judge.weight, roundKind: judge.roundKind, hasPassword: true, savedCount: 0, submittedCount: 0, lastSeenAt: null },
       // 이 응답에서만 평문을 준다. 저장은 해시라 나중에는 재설정만 가능하다.
       password,
     },
