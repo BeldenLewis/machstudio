@@ -49,9 +49,9 @@ export async function POST(request: Request) {
   if (!membership) return NextResponse.json({ error: "워크스페이스가 없어요" }, { status: 403 });
 
   const body = await request.json().catch(() => ({}));
-  const { path, mimeType, size, originalName, width, height, durationSec } = body as {
+  const { path, mimeType, size, originalName, width, height, durationSec, groupLabel } = body as {
     path?: unknown; mimeType?: unknown; size?: unknown; originalName?: unknown;
-    width?: unknown; height?: unknown; durationSec?: unknown;
+    width?: unknown; height?: unknown; durationSec?: unknown; groupLabel?: unknown;
   };
 
   const validationError = validateMediaUpload({ mimeType, size });
@@ -101,6 +101,8 @@ export async function POST(request: Request) {
       width: typeof width === "number" && Number.isFinite(width) ? Math.round(width) : null,
       height: typeof height === "number" && Number.isFinite(height) ? Math.round(height) : null,
       durationSec: typeof durationSec === "number" && Number.isFinite(durationSec) ? Math.round(durationSec) : null,
+      // 그룹을 보던 중에 올렸으면 그 그룹으로 바로 들어간다 — 매번 업로드 뒤에 다시 묶지 않아도 된다.
+      groupLabel: typeof groupLabel === "string" && groupLabel.trim() ? groupLabel.trim().slice(0, 80) : null,
     },
     include: {
       createdBy: { select: { name: true, email: true } },

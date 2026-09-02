@@ -122,7 +122,9 @@ export type ActivityAction =
   | "competition.award_deleted"
   | "competition.result_published"
   | "media.uploaded"
-  | "media.deleted";
+  | "media.deleted"
+  | "media.bulk_deleted"
+  | "media.bulk_grouped";
 
 export async function logActivity(args: {
   workspaceId: string;

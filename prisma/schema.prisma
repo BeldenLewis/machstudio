@@ -701,6 +701,10 @@ model MediaAsset {
   height       Int?
   /// 동영상에서만 채운다.
   durationSec  Int?
+  /// 자유 문자열 그룹(폴더 아님, 정규화된 테이블도 아님) — 업로드 뒤에 묶어서 정리하는 용도.
+  /// null = 미분류. 이름은 어디에도 미리 정의되지 않는다: 이 라벨을 쓰는 자산이 하나도
+  /// 없어지면 그 그룹은 그냥 화면에서 사라진다(별도 삭제·정리 로직이 필요 없다).
+  groupLabel   String?
   createdAt    DateTime @default(now())
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -709,6 +713,7 @@ model MediaAsset {
 
   @@index([workspaceId, createdAt(sort: Desc)])
   @@index([projectId, createdAt(sort: Desc)])
+  @@index([workspaceId, groupLabel])
 }
 
 model Webinar {
