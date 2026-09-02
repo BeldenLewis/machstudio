@@ -120,7 +120,9 @@ export type ActivityAction =
   | "competition.final_order_updated"
   | "competition.award_saved"
   | "competition.award_deleted"
-  | "competition.result_published";
+  | "competition.result_published"
+  | "media.uploaded"
+  | "media.deleted";
 
 export async function logActivity(args: {
   workspaceId: string;

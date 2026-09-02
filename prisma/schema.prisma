@@ -40,6 +40,7 @@ model User {
   notificationPrefs    NotificationPref[]
   projectMemberships   ProjectMember[]
   adPerformanceImports AdPerformanceImportBatch[] @relation("AdPerformanceUploader")
+  mediaAssets          MediaAsset[]
 }
 
 model Workspace {
@@ -87,6 +88,7 @@ model Workspace {
   competitions         Competition[]
   expoSites            ExpoSite[]
   expoTemplates        ExpoTemplate[]
+  mediaAssets          MediaAsset[]
 }
 
 model WorkspaceMember {
@@ -175,6 +177,7 @@ model Project {
   metaAdConnection     MetaAdConnection?
   competitions         Competition[]
   expoSites            ExpoSite[]
+  mediaAssets          MediaAsset[]
 }
 
 model AdPerformanceImportBatch {
@@ -672,6 +675,40 @@ model ShortLink {
 
   @@index([workspaceId, createdAt(sort: Desc)])
   @@index([createdById, createdAt(sort: Desc)])
+}
+
+/// 마하스튜디오 업로드 — 사진(webp 포함)·동영상을 올려 공개 URL 을 받는다.
+/// 특정 웨비나·대회·홈페이지에 매이지 않는 워크스페이스 공용 자료실이다(다른 자산 업로드는
+/// 전부 그 소유 엔티티에 종속돼 있어, 팀이 로고·클립처럼 여러 화면에 재사용할 값을 둘 곳이 없었다).
+/// projectId 는 선택 — 프로젝트로 정리하고 싶으면 걸고, 워크스페이스 전체에 걸쳐 쓸 것은 비워 둔다.
+model MediaAsset {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  projectId    String?
+  createdById  String
+  /// "image" | "video" — kindForMimeType() 이 mimeType 에서 판정해 저장한다.
+  kind         String
+  /// 버킷 안의 경로. 삭제 때 이 값으로 오브젝트를 지운다.
+  path         String   @unique
+  /// getPublicUrl 의 캐시본 — 매번 다시 계산하지 않는다(버킷이 바뀌지 않는 한 안정적).
+  url          String
+  mimeType     String
+  /// 바이트.
+  size         Int
+  originalName String
+  /// 이미지에서만 채운다 — 브라우저가 업로드 전에 잰다.
+  width        Int?
+  height       Int?
+  /// 동영상에서만 채운다.
+  durationSec  Int?
+  createdAt    DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@index([projectId, createdAt(sort: Desc)])
 }
 
 model Webinar {
