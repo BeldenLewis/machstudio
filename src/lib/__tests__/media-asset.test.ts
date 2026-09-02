@@ -49,6 +49,20 @@ describe("kindForMimeType / extensionForMimeType", () => {
   });
 });
 
+/**
+ * **버킷을 만들기도 전에 실패하던 사고.** 동영상 상한을 200MB 로 뒀더니
+ * `createBucket({ fileSizeLimit: "200MB" })` 자체가 이 Supabase 프로젝트의 전역 업로드
+ * 상한(대시보드 설정, 기본 50MB)에 막혀 413 으로 거절당했다 — 버킷이 아예 안 만들어지니
+ * 모든 업로드가 "업로드 준비에 실패했어요" 로 죽었다(사진도 포함, 버킷 자체가 없어서).
+ * 실측(2026-09-02): 52MB 는 되고 53MB 부터 막힌다. 상한을 다시 올릴 일이 생기면
+ * **코드보다 먼저 Supabase 프로젝트 설정을 올려야 한다** — 여기서 그 사실을 못박는다.
+ */
+describe("동영상 상한은 이 프로젝트가 실제로 받아 주는 값 안에 있다", () => {
+  it("Supabase 프로젝트 전역 상한(실측 52MB) 을 넘지 않는다", () => {
+    expect(MEDIA_VIDEO_MAX_BYTES).toBeLessThanOrEqual(52 * 1024 * 1024);
+  });
+});
+
 describe("validateMediaUpload — 총 함수, 던지지 않는다", () => {
   it("정상 사진·동영상은 통과", () => {
     expect(validateMediaUpload({ mimeType: "image/webp", size: 1024 })).toBeNull();

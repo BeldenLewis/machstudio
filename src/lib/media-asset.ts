@@ -31,8 +31,18 @@ const VIDEO_TYPES: Record<string, string> = {
 
 /** 사진 상한 — 고해상도 스크린샷·webp 무손실도 넉넉히 들어가게. */
 export const MEDIA_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
-/** 동영상 상한 — 서버를 거치지 않으므로 Vercel 4.5MB 제약이 없다. 짧은 클립·데모 기준. */
-export const MEDIA_VIDEO_MAX_BYTES = 200 * 1024 * 1024;
+/**
+ * 동영상 상한 — **Vercel 이 아니라 Supabase 프로젝트의 전역 업로드 상한**에 맞춘다.
+ *
+ * 서버를 거치지 않으니 4.5MB 요청 본문 제약은 없지만, Supabase Storage 는 프로젝트
+ * 단위로 업로드 크기 상한을 따로 두고(대시보드 설정, 기본 50MB) 그건 버킷의
+ * `fileSizeLimit` 을 아무리 크게 잡아도 못 넘는다 — `createBucket` 이 그 순간
+ * "The object exceeded the maximum allowed size"(413) 로 버킷 생성 자체를 거절한다.
+ * 실측(2026-09-02, 이 프로젝트): 52MB 는 되고 53MB 부터 막힌다. 기존 `webinar-assets`
+ * 버킷이 쓰는 값(webinar-asset-bucket.ts)과 맞춰 50MB 로 둔다 — 이미 검증된 값이다.
+ * 더 큰 동영상이 필요해지면 코드가 아니라 Supabase 프로젝트 설정을 먼저 올려야 한다.
+ */
+export const MEDIA_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
 
 export const MEDIA_ACCEPT = [...Object.keys(IMAGE_TYPES), ...Object.keys(VIDEO_TYPES)].join(",");
 export const MEDIA_ALLOWED_MIME_TYPES = [...Object.keys(IMAGE_TYPES), ...Object.keys(VIDEO_TYPES)];
