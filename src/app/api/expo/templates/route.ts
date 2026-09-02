@@ -14,7 +14,8 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { guardExpoRoute, readJsonBody, authFailure, fieldErrors, asJson } from "@/lib/expo/route-guard";
-import { requireOwnedSite } from "@/lib/expo/auth";
+import { requireOwnedSite, requireProjectAccess } from "@/lib/expo/auth";
+import { deriveExpoPermissions } from "@/lib/expo/permissions";
 import { copyExpoMedia, expoSitePrefix, expoTemplatePrefix } from "@/lib/expo/media";
 import { createExpoStorage } from "@/lib/expo/storage";
 import {
@@ -22,21 +23,35 @@ import {
 } from "@/lib/expo/template-service";
 import { EXPO_LIMITS } from "@/lib/expo/registry";
 import { validateTemplateSnapshot } from "@/lib/expo/request";
+import { builtInExpoPresets, isBuiltInExpoPresetId } from "@/lib/expo/presets";
 
 export async function GET(request: Request) {
   const guard = await guardExpoRoute(request);
   if (!guard.ok) return guard.response;
+  const presets = builtInExpoPresets();
+  const builtInIds = presets.map((preset) => preset.id);
 
   // 스냅샷은 싣지 않는다 — 목록에 담으면 응답이 수 MB 가 되고 화면이 쓰지도 않는다.
   const templates = await prisma.expoTemplate.findMany({
-    where: { workspaceId: { in: guard.ctx.memberWorkspaceIds } },
+    where: { workspaceId: { in: guard.ctx.memberWorkspaceIds }, id: { notIn: builtInIds } },
     select: { id: true, workspaceId: true, name: true, description: true, snapshot: true, createdAt: true },
     orderBy: { createdAt: "desc" },
     take: 200,
   });
 
   return NextResponse.json({
-    templates: templates.map((t) => {
+    templates: [
+      ...presets.map((preset) => ({
+        id: preset.id,
+        name: preset.name,
+        description: preset.description,
+        contentMode: "full" as const,
+        pageCount: 1,
+        createdAt: null,
+        builtIn: true,
+        canManage: false,
+      })),
+      ...templates.filter((template) => !isBuiltInExpoPresetId(template.id)).map((t) => {
       const snap = (t.snapshot ?? {}) as { contentMode?: string; pages?: unknown[] };
       return {
         id: t.id,
@@ -45,9 +60,11 @@ export async function GET(request: Request) {
         contentMode: snap.contentMode === "full" ? "full" : "design",
         pageCount: Array.isArray(snap.pages) ? snap.pages.length : 0,
         createdAt: t.createdAt,
+        builtIn: false,
         canManage: guard.ctx.workspaceRole(t.workspaceId) !== "MEMBER",
       };
-    }),
+      }),
+    ],
   });
 }
 
@@ -69,6 +86,11 @@ export async function POST(request: Request) {
   });
   const owned = requireOwnedSite(site, guard.ctx.userId, guard.ctx.memberWorkspaceIds);
   if (!owned.ok) return authFailure(owned.failure);
+  const access = requireProjectAccess(guard.ctx.workspaceRole(owned.value.workspaceId), guard.ctx.projectRole(owned.value.projectId));
+  if (!access.ok) return authFailure(access.failure);
+  if (!deriveExpoPermissions(guard.ctx.workspaceRole(owned.value.workspaceId), guard.ctx.projectRole(owned.value.projectId)).canEdit) {
+    return authFailure({ kind: "forbidden" });
+  }
 
   const pages = await prisma.expoPage.findMany({
     where: { siteId: owned.value.id, deletedAt: null },

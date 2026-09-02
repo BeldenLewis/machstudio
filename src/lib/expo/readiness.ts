@@ -14,7 +14,14 @@
 import { hasContent } from "@/lib/expo/model";
 import { normalizeExpoPage } from "@/lib/expo/config";
 import { sectionDef } from "@/lib/expo/registry";
-import type { ExpoSection } from "@/lib/expo/types";
+import { validatePageDraft } from "@/lib/expo/request";
+import { campaignHeroPublishIssues, campaignHeroWarnings } from "@/lib/expo/sections/campaign-hero";
+import { exhibitionGridPublishIssues, exhibitionGridWarnings } from "@/lib/expo/sections/exhibition-grid";
+import { audienceLinksPublishIssues, audienceLinksWarnings } from "@/lib/expo/sections/audience-links";
+import { speakerCarouselPublishIssues, speakerCarouselWarnings } from "@/lib/expo/sections/speaker-carousel";
+import { sponsorMarqueePublishIssues, sponsorMarqueeWarnings } from "@/lib/expo/sections/sponsor-marquee";
+import { ctaBandPublishIssues, ctaBandWarnings } from "@/lib/expo/sections/cta-band";
+import type { ExpoSection, FieldIssue, ValidateContext } from "@/lib/expo/types";
 
 export type ReadinessCode =
   | "no-sections"
@@ -72,16 +79,81 @@ export interface PageReadinessInput {
 /**
  * **발행할 수 있는가.** draft 를 본다 — 발행은 draft 를 밖에 내보낼 사본으로 굳히는 일이다.
  */
-export function publishIssues(draftRaw: unknown): ReadinessIssue[] {
-  const { sections } = normalizeExpoPage(draftRaw);
-  if (sections.length === 0) return [issue("no-sections")];
-
-  const out: ReadinessIssue[] = [];
-  for (const s of sections) {
-    if (s.enabled && !hasContent(s)) out.push(issue("empty-enabled-section", s.sid));
+export function publishErrors(draftRaw: unknown): FieldIssue[] {
+  if (draftRaw && typeof draftRaw === "object" && !Array.isArray(draftRaw)
+    && Array.isArray((draftRaw as { sections?: unknown }).sections)
+    && (draftRaw as { sections: unknown[] }).sections.length === 0) {
+    return [{ ...issue("no-sections"), path: "sections", severity: "error" }];
   }
-  if (!sections.some((s) => s.enabled && hasContent(s))) out.push(issue("no-renderable-section"));
+  const strict = validatePageDraft(draftRaw);
+  if (!strict.ok) return strict.errors.map((error) => ({ ...error, severity: "error" as const }));
+
+  const config = normalizeExpoPage(draftRaw);
+  const { sections } = config;
+  if (sections.length === 0) return [{ ...issue("no-sections"), path: "sections", severity: "error" }];
+
+  const campaigns = new Map((config.settings?.campaigns ?? []).map((campaign) => [campaign.id, campaign]));
+  const destinations = new Map((config.settings?.destinations ?? []).map((destination) => [destination.id, destination]));
+
+  const out: FieldIssue[] = [];
+  for (const [index, s] of sections.entries()) {
+    if (s.enabled && !hasContent(s)) {
+      out.push({
+        ...issue("empty-enabled-section", s.sid),
+        path: `sections[${index}].content`,
+        severity: "error",
+      });
+    }
+    if (s.enabled) {
+      const context: ValidateContext = { config, sectionIndex: index, campaigns, destinations };
+      const relative = sectionPublishIssues(s, context);
+      out.push(...relative.map((entry) => qualifyPluginIssue(entry, index, s.sid)));
+    }
+  }
+  if (!sections.some((s) => s.enabled && hasContent(s))) {
+    out.push({ ...issue("no-renderable-section"), path: "sections", severity: "error" });
+  }
   return out;
+}
+
+function qualifyPluginIssue(entry: FieldIssue, index: number, sid: string): FieldIssue {
+  const base = `sections[${index}]`;
+  const clean = entry.path.trim().replace(/^\.+/, "");
+  const path = !clean ? `${base}.content`
+    : clean === "content" || clean.startsWith("content.") ? `${base}.${clean}`
+      : `${base}.content.${clean}`;
+  return { ...entry, path, sid };
+}
+
+function sectionPublishIssues(section: ExpoSection, context: ValidateContext): FieldIssue[] {
+  switch (section.type) {
+    case "campaign-hero": return campaignHeroPublishIssues(section, context);
+    case "exhibition-grid": return exhibitionGridPublishIssues(section, context);
+    case "audience-links": return audienceLinksPublishIssues(section, context);
+    case "speaker-carousel": return speakerCarouselPublishIssues(section, context);
+    case "sponsor-marquee": return sponsorMarqueePublishIssues(section, context);
+    case "cta-band": return ctaBandPublishIssues(section, context);
+    default: return [];
+  }
+}
+
+function sectionWarnings(section: ExpoSection): FieldIssue[] {
+  switch (section.type) {
+    case "campaign-hero": return campaignHeroWarnings(section);
+    case "exhibition-grid": return exhibitionGridWarnings(section);
+    case "audience-links": return audienceLinksWarnings(section);
+    case "speaker-carousel": return speakerCarouselWarnings(section);
+    case "sponsor-marquee": return sponsorMarqueeWarnings(section);
+    case "cta-band": return ctaBandWarnings(section);
+    default: return [];
+  }
+}
+
+/** 콘텐츠 품질 안내. 이 배열은 발행 트랜잭션의 거절 분기로 전달하지 않는다. */
+export function contentWarnings(configRaw: unknown): FieldIssue[] {
+  const config = normalizeExpoPage(configRaw);
+  return config.sections.flatMap((section, index) =>
+    sectionWarnings(section).map((entry) => qualifyPluginIssue(entry, index, section.sid)));
 }
 
 /**
@@ -127,7 +199,7 @@ export function hasUnpublishedChanges(input: Pick<PageReadinessInput, "published
 
 /** 페이지 카드 한 장이 보여줄 것 전부. */
 export function pageReadiness(input: PageReadinessInput) {
-  const publish = publishIssues(input.draft);
+  const publish = publishErrors(input.draft);
   const live = liveIssues(input.published);
   const stale = hasUnpublishedChanges(input);
   const extra: ReadinessIssue[] = [];

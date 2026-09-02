@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { EXPO_LIMITS } from "@/lib/expo/registry";
+import { afterEach, describe, expect, it } from "vitest";
+import { EXPO_LIMITS, sectionDef } from "@/lib/expo/registry";
 import { validatePageDraft, validateTemplateSnapshot } from "@/lib/expo/request";
 import { normalizeExpoPage } from "@/lib/expo/config";
+import type { SectionPlugin, ValidateContext } from "@/lib/expo/types";
 
 /**
  * **자르기와 거절의 차이.**
@@ -12,9 +13,74 @@ import { normalizeExpoPage } from "@/lib/expo/config";
  */
 
 const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-const draft = (sections: unknown[]) => ({ sections });
+const draft = (sections: unknown[]) => ({ schemaVersion: 2, sections });
+const textblockPlugin = sectionDef("textblock") as SectionPlugin;
+afterEach(() => { delete textblockPlugin.validate; });
 
 describe("정상 입력은 통과한다", () => {
+  it("plugin issue 경로를 content 아래로 붙이고 immutable sid와 registry context를 공급한다", () => {
+    let seen: ValidateContext | null = null;
+    textblockPlugin.validate = (_section, context) => {
+      seen = context;
+      return [{
+        path: "rows[0].name", code: "required", message: "이름이 필요해요", severity: "error",
+        sid: uid(999),
+      }];
+    };
+    const sid = uid(41);
+    const r = validatePageDraft({
+      schemaVersion: 2,
+      settings: {
+        campaigns: [{ id: "apply", label: "신청", startsAt: "2027-01-01T00:00:00+09:00", endsAt: "2027-02-01T00:00:00+09:00", override: "auto", enabled: true }],
+        destinations: [{ id: "contact", label: "문의", action: { type: "url", href: "https://example.com" }, enabled: true }],
+      },
+      sections: [{ sid, type: "textblock", variant: "prose", content: { rows: [{}] } }],
+    });
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors).toContainEqual(expect.objectContaining({
+      path: "sections[0].content.rows[0].name",
+      code: "required",
+      severity: "error",
+      sid,
+    }));
+    const context = seen as ValidateContext | null;
+    expect(context?.sectionIndex).toBe(0);
+    expect(context?.config.sections[0].sid).toBe(sid);
+    expect(context?.campaigns.get("apply")?.label).toBe("신청");
+    expect(context?.destinations.get("contact")?.label).toBe("문의");
+  });
+
+  it("plugin relative/content/absolute/empty 경로와 malformed issue를 현재 섹션에 안전하게 맞춘다", () => {
+    textblockPlugin.validate = () => ([
+      { path: "rows[0].name", code: "relative", message: "relative", severity: "error", sid: uid(999) },
+      { path: "content.rows[1].name", code: "content", message: "content", severity: "warning", sid: uid(999) },
+      { path: "sections[99].content.rows[2].name", code: "absolute", message: "absolute", severity: "error", sid: uid(999) },
+      { path: "", code: "empty", message: "empty", severity: "error", sid: uid(999) },
+      null,
+    ] as unknown as ReturnType<NonNullable<SectionPlugin["validate"]>>);
+    const sid = uid(42);
+    const raw = draft([{ sid, type: "textblock", variant: "prose", content: { rows: [{}, {}, {}] } }]);
+
+    expect(() => validatePageDraft(raw)).not.toThrow();
+    const result = validatePageDraft(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.map((issue) => issue.path)).toEqual([
+      "sections[0].content.rows[0].name",
+      "sections[0].content.rows[1].name",
+      "sections[0].content.rows[2].name",
+      "sections[0].content",
+      "sections[0].content",
+    ]);
+    expect(result.errors.map((issue) => issue.sid)).toEqual([sid, sid, sid, sid, sid]);
+    expect(result.errors[4]).toMatchObject({
+      code: "invalid-shape",
+      message: "구획 검증 결과의 모양이 올바르지 않아요",
+      severity: "error",
+    });
+  });
+
   it("보통의 페이지", () => {
     const r = validatePageDraft(draft([
       { sid: uid(1), type: "kv", variant: "column", content: { title: "제목" } },
@@ -230,6 +296,40 @@ describe("쓰기가 막는다 — 정규화가 조용히 버리던 것들", () =
     if (!r.ok) {
       expect(r.errors).toHaveLength(51);
       expect(r.errors[50].message).toContain("50건이 더 있어요");
+    }
+  });
+});
+
+describe("V2 설정 검증", () => {
+  const v2 = (settings: Record<string, unknown>) => ({ schemaVersion: 2, settings, sections: [] });
+
+  it("모르는 스키마와 잘못된 캠페인 시간을 정확한 경로로 막는다", () => {
+    const legacyWrite = validatePageDraft({ sections: [] });
+    expect(legacyWrite.ok).toBe(false);
+    if (!legacyWrite.ok) expect(legacyWrite.errors).toContainEqual(expect.objectContaining({ path: "schemaVersion", code: "invalid-schema" }));
+
+    const unknown = validatePageDraft({ schemaVersion: 3, sections: [] });
+    expect(unknown.ok).toBe(false);
+    if (!unknown.ok) expect(unknown.errors).toContainEqual(expect.objectContaining({ path: "schemaVersion", code: "invalid-schema" }));
+
+    const badDate = validatePageDraft(v2({ campaigns: [{
+      id: "apply", label: "신청", startsAt: "2027-02-01T00:00:00+09:00", endsAt: "2027-01-01T00:00:00+09:00", override: "auto", enabled: true,
+    }] }));
+    expect(badDate.ok).toBe(false);
+    if (!badDate.ok) expect(badDate.errors).toContainEqual(expect.objectContaining({ path: "settings.campaigns[0].endsAt", code: "invalid-date" }));
+  });
+
+  it("중복 목적지와 안전하지 않은 동작을 막는다", () => {
+    const result = validatePageDraft(v2({ destinations: [
+      { id: "contact", label: "문의", action: { type: "url", href: "https://example.com" }, enabled: true },
+      { id: "contact", label: "중복", action: { type: "url", href: "https://user:pass@example.com" }, enabled: true },
+      { id: "download", label: "다운로드", action: { type: "download", href: "http://127.0.0.1/file" }, enabled: true },
+    ] }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContainEqual(expect.objectContaining({ path: "settings.destinations[1].id", code: "duplicate-id" }));
+      expect(result.errors).toContainEqual(expect.objectContaining({ path: "settings.destinations[1].action.href", code: "invalid-url" }));
+      expect(result.errors).toContainEqual(expect.objectContaining({ path: "settings.destinations[2].action.href", code: "invalid-url" }));
     }
   });
 });

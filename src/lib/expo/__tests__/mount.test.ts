@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mountExpo, type ExpoRuntimePayload } from "@/lib/expo/mount";
-import { EXPO_HOST_TAG } from "@/lib/expo/shadow";
+import { EXPO_HOST_TAG, mountExpoShell } from "@/lib/expo/shadow";
 import { resetExpoPortal } from "@/lib/expo/overlay";
-import { resetFormTargets } from "@/lib/collect-form/target-registry";
+import {
+  formTargetKey, getFormTarget, registerFormTarget, resetFormTargets, unregisterFormTarget,
+} from "@/lib/collect-form/target-registry";
 import { resetExpoFontRegistry } from "@/lib/expo/font";
 import { resetExpoSeen } from "@/lib/expo/seen";
 import { scrollLockDepth, unlockScroll } from "@/lib/dom/scroll-lock";
@@ -62,6 +64,7 @@ beforeEach(() => {
   resetExpoFontRegistry(globalThis as never);
   delete (globalThis as Record<string, unknown>).__MACH_EXPO_MOUNTS_V1__;
   delete (globalThis as Record<string, unknown>).__MACH_EXPO_SHEET_V1__;
+  delete (window as unknown as Record<string, unknown>).__MACH_EXPO_FORM_INSTANCE_SEQUENCE_V1__;
   while (scrollLockDepth() > 0) unlockScroll();
 });
 
@@ -123,6 +126,92 @@ describe("깨끗한 페이지", () => {
   it("떼어진 컨테이너에는 붙지 않는다", () => {
     expect(mountExpo({ container: document.createElement("div"), payload: payload() })).toBeNull();
   });
+
+  it("STK plugin도 같은 Shadow runtime과 destination map으로 그린다", () => {
+    const { container } = host();
+    mount({
+      container,
+      payload: payload({
+        destinations: [{ id: "overview", label: "소개", action: { type: "anchor", target: "overview" } }],
+        sections: [{
+          sid: SID, type: "exhibition-grid", variant: "default", design: {}, content: {
+            heading: "하위 전시",
+            items: [{ id: "robotics", title: "Robotics", accentToken: "robotics", destinationId: "overview", order: 0, enabled: true }],
+          },
+        }],
+      }),
+    });
+    const shadow = container.querySelector(EXPO_HOST_TAG)!.shadowRoot!;
+    expect(shadow.querySelector("[data-type='exhibition-grid'] .msx-exhibition-item")?.textContent).toContain("Robotics");
+  });
+
+  it("mode를 생략한 섹션 단독 공개 payload도 live analytics를 쓴다", () => {
+    const seen = vi.fn();
+    document.addEventListener("msx:destination", seen);
+    const dataLayer: unknown[] = [];
+    Object.assign(window, { dataLayer });
+    const { container } = host();
+    mount({
+      container,
+      payload: payload({
+        sectionId: SID,
+        destinations: [{ id: "overview", label: "소개", action: { type: "anchor", target: "overview" }, analytics: { eventName: "select_content" } }],
+        sections: [{ sid: SID, type: "cta-band", variant: "default", design: {}, content: {
+          headline: "Join", audience: "all", ctas: [{ id: "join", label: "Join", destinationId: "overview", variant: "primary", audience: "all", campaignIds: [], priority: 0, fallback: true, enabled: true }],
+        } }],
+      }),
+    });
+    const action = container.querySelector(EXPO_HOST_TAG)!.shadowRoot!.querySelector<HTMLAnchorElement>(".msx-cta-action")!;
+    expect(action.getAttribute("href")).toBe("#overview");
+    action.click();
+    expect(seen).toHaveBeenCalledTimes(1);
+    expect(dataLayer).toEqual([{
+      event: "select_content",
+      content_id: undefined,
+      destination_id: "overview",
+    }]);
+    document.removeEventListener("msx:destination", seen);
+    delete (window as Window & { dataLayer?: unknown }).dataLayer;
+  });
+
+  it("standalone은 명시한 내보내기에서만 analytics를 쓰지 않는다", () => {
+    const seen = vi.fn();
+    document.addEventListener("msx:destination", seen);
+    const dataLayer: unknown[] = [];
+    Object.assign(window, { dataLayer });
+    const { container } = host();
+    mount({
+      container,
+      payload: payload({
+        sectionId: SID,
+        mode: "standalone",
+        destinations: [{ id: "overview", label: "소개", action: { type: "anchor", target: "overview" }, analytics: { eventName: "select_content" } }],
+        sections: [{ sid: SID, type: "cta-band", variant: "default", design: {}, content: {
+          headline: "Join", audience: "all", ctas: [{ id: "join", label: "Join", destinationId: "overview", variant: "primary", audience: "all", campaignIds: [], priority: 0, fallback: true, enabled: true }],
+        } }],
+      }),
+    });
+    container.querySelector(EXPO_HOST_TAG)!.shadowRoot!
+      .querySelector<HTMLAnchorElement>(".msx-cta-action")!.click();
+    expect(seen).not.toHaveBeenCalled();
+    expect(dataLayer).toEqual([]);
+    document.removeEventListener("msx:destination", seen);
+    delete (window as Window & { dataLayer?: unknown }).dataLayer;
+  });
+
+  it("destroy가 Hero typing timer까지 같은 lifecycle에서 정리한다", () => {
+    const clear = vi.spyOn(window, "clearTimeout");
+    const { container } = host();
+    const handle = mount({
+      container,
+      payload: payload({ sections: [{ sid: SID, type: "campaign-hero", variant: "default", design: {}, content: {
+        accessibleHeadline: "STK 2027", typingLines: ["STK 2027", "Future"],
+        typing: { enabled: true, speedMs: 50, holdMs: 500 }, ctas: [],
+      } }] }),
+    });
+    handle?.destroy();
+    expect(clear).toHaveBeenCalled();
+  });
 });
 
 describe("등록 폼 구획", () => {
@@ -141,6 +230,108 @@ describe("등록 폼 구획", () => {
     expect(script.src).toBe("https://mach.example.com/f/src-1");
     // 스크립트는 Shadow 안에 넣지 않는다 — 그러면 currentScript 가 null 이다.
     expect(shadow.querySelector("script")).toBeNull();
+  });
+
+  it("인라인 attach는 후보 root가 문서에 연결된 뒤 실행된다", () => {
+    const append = document.head.appendChild.bind(document.head);
+    const connected: boolean[] = [];
+    vi.spyOn(document.head, "appendChild").mockImplementation(((node: Node) => {
+      const key = (node as HTMLScriptElement).dataset?.msFormTarget;
+      const target = key ? getFormTarget(key) : null;
+      connected.push(Boolean(target?.container.getRootNode() instanceof ShadowRoot
+        && (target.container.getRootNode() as ShadowRoot).host.isConnected));
+      return append(node);
+    }) as typeof document.head.appendChild);
+
+    const { container } = host();
+    mount({ container, payload: payload({ sections: [formSection("inline")] }) });
+    expect(connected).toEqual([true]);
+  });
+
+  it("같은 소스의 성공 재마운트 뒤에는 새 후보 예약만 남는다", () => {
+    const { container } = host();
+    const first = mount({ container, payload: payload({ sections: [formSection("inline")] }) })!;
+    const key = document.head.querySelector<HTMLScriptElement>("script[data-ms-form-target]")!
+      .dataset.msFormTarget!;
+    const oldTarget = getFormTarget(key)!;
+
+    const second = mount({ container, payload: payload({ sections: [formSection("inline")] }) });
+    const nextKey = document.head.querySelector<HTMLScriptElement>("script[data-ms-form-target]")!
+      .dataset.msFormTarget!;
+    const nextTarget = getFormTarget(nextKey);
+
+    expect(second).not.toBeNull();
+    expect(nextKey).not.toBe(key);
+    expect(getFormTarget(key)).toBeNull();
+    expect(nextTarget).not.toBeNull();
+    expect(nextTarget).not.toBe(oldTarget);
+    expect((nextTarget!.container.getRootNode() as ShadowRoot).host.isConnected).toBe(true);
+    first.destroy();
+    second?.destroy();
+  });
+
+  it("같은 소스의 attach 실패는 이전 예약을 그대로 복원한다", () => {
+    const { container } = host();
+    const first = mount({ container, payload: payload({ sections: [formSection("inline")] }) })!;
+    const key = document.head.querySelector<HTMLScriptElement>("script[data-ms-form-target]")!
+      .dataset.msFormTarget!;
+    const oldTarget = getFormTarget(key)!;
+    const append = document.head.appendChild.bind(document.head);
+    vi.spyOn(document.head, "appendChild").mockImplementation(((node: Node) => {
+      if ((node as HTMLScriptElement).dataset?.msFormTarget) {
+        throw new Error("form script attach failed");
+      }
+      return append(node);
+    }) as typeof document.head.appendChild);
+
+    let failed: ReturnType<typeof mount> = null;
+    try {
+      failed = mount({ container, payload: payload({ sections: [formSection("inline")] }) });
+    } finally {
+      vi.mocked(document.head.appendChild).mockRestore();
+    }
+
+    expect(failed).toBeNull();
+    expect(getFormTarget(key)).toBe(oldTarget);
+    expect((oldTarget.container.getRootNode() as ShadowRoot).host.isConnected).toBe(true);
+    first.destroy();
+  });
+
+  it("pre-ea3f632 shell의 무조건 cleanup도 mixed-version 후보 예약을 지우지 않는다", () => {
+    const { container } = host();
+    const legacy = mountExpoShell({
+      container,
+      pageId: "pg1",
+      theme: THEME,
+      origin: "https://mach.example.com",
+      doc: document,
+    })!;
+    const legacySlot = document.createElement("div");
+    legacy.renderRoot.appendChild(legacySlot);
+    legacy.ready();
+    const legacyKey = formTargetKey({
+      sourceId: "src-1", view: "form", mode: "live", instanceKey: `pg1:page:${SID}`,
+    });
+    registerFormTarget(legacyKey, {
+      container: legacySlot,
+      styleRoot: legacy.root,
+      mode: "live",
+      disposeSignal: legacy.signal,
+    });
+    // pre-ea3f632 form-bridge closure는 record identity를 모르고 같은 key를 무조건 지웠다.
+    legacy.addCleanup(() => unregisterFormTarget(legacyKey));
+
+    const next = mount({ container, payload: payload({ sections: [formSection("inline")] }) });
+    const candidateKey = document.head.querySelector<HTMLScriptElement>("script[data-ms-form-target]")!
+      .dataset.msFormTarget!;
+
+    expect(next).not.toBeNull();
+    expect(candidateKey).not.toBe(legacyKey);
+    expect(getFormTarget(legacyKey)).toBeNull();
+    expect(getFormTarget(candidateKey)).not.toBeNull();
+    expect((getFormTarget(candidateKey)!.container.getRootNode() as ShadowRoot).host.isConnected).toBe(true);
+    expect(legacy.host.isConnected).toBe(false);
+    next?.destroy();
   });
 
   it("안내 문구의 줄바꿈을 보존한다", () => {
@@ -249,6 +440,137 @@ describe("실패해도 파트너 페이지를 깨지 않는다", () => {
     mount({ container, payload: payload({ sections: [] }) });
     const root = container.querySelector(EXPO_HOST_TAG)!.shadowRoot!.querySelector<HTMLElement>(".msx-root")!;
     expect(root.getAttribute("data-msx-ready")).toBe("1");
+  });
+
+  it("STK 렌더가 던지면 후보만 정리하고 이전 DOM·listener·폼 예약을 유지한다", () => {
+    const { container } = host();
+    const first = mount({
+      container, payload: payload({ sections: [
+        {
+          sid: SID, type: "register-form", variant: "inline", design: {},
+          content: { sourceRef: "src-1", heading: "이전 인라인 폼" },
+        },
+        {
+          sid: SID2, type: "register-form", variant: "cta", design: {},
+          content: { sourceRef: "src-1", heading: "이전 폼" },
+        },
+      ] }),
+    })!;
+    const oldHost = container.querySelector<HTMLElement>(EXPO_HOST_TAG)!;
+    const oldButton = oldHost.shadowRoot!.querySelector<HTMLButtonElement>(".msx-btn")!;
+    const oldKey = document.head.querySelector<HTMLScriptElement>("script[data-ms-form-target]")!
+      .dataset.msFormTarget!;
+    const oldTarget = getFormTarget(oldKey)!;
+    const abort = vi.spyOn(window.AbortController.prototype, "abort");
+
+    const createElement = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation(((tag: string, options?: ElementCreationOptions) => {
+      if (tag === "a") throw new Error("STK renderer failed");
+      return createElement(tag, options);
+    }) as typeof document.createElement);
+    let failed: ReturnType<typeof mount> = null;
+    try {
+      failed = mount({
+        container,
+        payload: payload({ sections: [
+          { sid: SID, type: "speaker-carousel", variant: "default", design: {}, content: {
+            heading: "후보 발표자",
+            categories: [{ id: "robotics", label: "Robotics", gradientToken: "robotics", badgeToken: "robotics", order: 0, enabled: true }],
+            speakers: [{ id: "speaker-1", name: "Kim", categoryId: "robotics", order: 0, enabled: true }],
+          } },
+          { sid: SID2, type: "sponsor-marquee", variant: "default", design: {}, content: {
+            groups: [{ id: "partners", title: "Partners", marquee: false, order: 0 }],
+            sponsors: [{ id: "sponsor-1", groupId: "partners", name: "Sponsor", homepageUrl: "https://example.com", order: 0, enabled: true }],
+          } },
+        ] }),
+      });
+    } finally {
+      vi.mocked(document.createElement).mockRestore();
+    }
+    expect(failed).toBeNull();
+
+    expect(container.querySelector(EXPO_HOST_TAG)).toBe(oldHost);
+    expect(oldHost.isConnected).toBe(true);
+    expect(oldHost.shadowRoot!.textContent).toContain("이전 폼");
+    expect(getFormTarget(oldKey)).toBe(oldTarget);
+    // 후보 shell + 먼저 완성된 speaker plugin만 정확히 정리한다.
+    expect(abort).toHaveBeenCalledTimes(2);
+    oldButton.click();
+    expect(document.body.querySelector("mach-expo-overlay")).not.toBeNull();
+
+    const second = mount({
+      container,
+      payload: payload({ sections: [{ sid: SID, type: "textblock", variant: "prose", design: {}, content: { body: "새 화면" } }] }),
+    });
+    expect(second).not.toBeNull();
+    expect(oldHost.isConnected).toBe(false);
+    expect(container.querySelector(EXPO_HOST_TAG)!.shadowRoot!.textContent).toContain("새 화면");
+    expect(document.body.querySelector("mach-expo-overlay")).toBeNull();
+    first.destroy();
+    second?.destroy();
+  });
+
+  it("Hero가 timer와 listener를 만든 뒤 실패해도 자체 자원과 후보만 한 번 정리한다", () => {
+    const { container } = host();
+    const destinations = [{
+      id: "overview", label: "소개", action: { type: "anchor" as const, target: "overview" },
+      analytics: { eventName: "select_content" },
+    }];
+    const first = mount({
+      container,
+      payload: payload({
+        destinations,
+        sections: [{ sid: SID, type: "cta-band", variant: "default", design: {}, content: {
+          headline: "이전 화면", audience: "all",
+          ctas: [{ label: "이전 CTA", destinationId: "overview", audience: "all", campaignIds: [], priority: 0, fallback: true, enabled: true }],
+        } }],
+      }),
+    })!;
+    const oldHost = container.querySelector<HTMLElement>(EXPO_HOST_TAG)!;
+    const oldAction = oldHost.shadowRoot!.querySelector<HTMLAnchorElement>(".msx-cta-action")!;
+    const abort = vi.spyOn(window.AbortController.prototype, "abort");
+    const clear = vi.spyOn(window, "clearTimeout");
+    const analytics = vi.fn();
+    document.addEventListener("msx:destination", analytics);
+
+    let candidateAction: HTMLAnchorElement | null = null;
+    const createElement = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation(((tag: string, options?: ElementCreationOptions) => {
+      if (tag === "section") throw new Error("Hero shell failed");
+      const node = createElement(tag, options);
+      if (tag === "a") candidateAction = node as HTMLAnchorElement;
+      return node;
+    }) as typeof document.createElement);
+    let failed: ReturnType<typeof mount> = null;
+    try {
+      failed = mount({
+        container,
+        payload: payload({
+          destinations,
+          sections: [{ sid: SID2, type: "campaign-hero", variant: "default", design: {}, content: {
+            accessibleHeadline: "후보 Hero", typingLines: ["후보 Hero", "Future"],
+            typing: { enabled: true, speedMs: 50, holdMs: 500 },
+            ctas: [{ label: "후보 CTA", destinationId: "overview", audience: "all", campaignIds: [], priority: 0, fallback: true, enabled: true }],
+          } }],
+        }),
+      });
+    } finally {
+      vi.mocked(document.createElement).mockRestore();
+    }
+
+    expect(failed).toBeNull();
+    expect(container.querySelector(EXPO_HOST_TAG)).toBe(oldHost);
+    expect(oldHost.shadowRoot!.textContent).toContain("이전 화면");
+    expect(abort).toHaveBeenCalledTimes(2);
+    expect(clear).toHaveBeenCalledTimes(1);
+
+    candidateAction!.click();
+    expect(analytics).not.toHaveBeenCalled();
+    oldAction.click();
+    expect(analytics).toHaveBeenCalledTimes(1);
+
+    document.removeEventListener("msx:destination", analytics);
+    first.destroy();
   });
 });
 

@@ -22,7 +22,7 @@
  * 옛 값이 남은 배포는 자동으로 닫힌다. **부분 적용된 스키마 위에서 코드가 도는 것**이
  * 아무것도 안 도는 것보다 나쁘기 때문이다.
  */
-export const EXPO_SCHEMA_CAPABILITY_VERSION = "20260821-v1";
+export const EXPO_SCHEMA_CAPABILITY_VERSION = "20260901-v2";
 
 export interface ExpoCapabilities {
   /** 어드민 목록·편집기 */

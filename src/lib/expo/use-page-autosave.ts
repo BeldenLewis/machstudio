@@ -34,7 +34,7 @@ export type { AutosaveState };
 /** 서버 응답을 이 세 가지로 좁혀서 받는다 — 훅이 HTTP 를 알 필요는 없다. */
 export type ExpoSaveOutcome =
   /** 저장됨. `revision` 은 서버가 올린 새 번호다. */
-  | { kind: "saved"; revision: number }
+  | { kind: "saved"; revision: number; codeDigest?: string }
   /** 그 사이 다른 곳에서 저장했다. `revision` 은 서버의 현재 번호. */
   | { kind: "conflict"; revision: number }
   /** 네트워크·5xx. 재시도해도 되는 실패다. */
@@ -44,6 +44,9 @@ export type ExpoSaveOutcome =
    * `failed` 와 달리 **재시도가 아니라 사람이 고칠 일**이다. 이유를 화면에 올린다.
    */
   | { kind: "rejected"; errors: ExpoRejection[] };
+
+/** transport 교체 중 끝난 이전 요청. 서버 응답이 아니라 draft owner가 만든 경계 표식이다. */
+type AutosaveSaveOutcome = ExpoSaveOutcome | { kind: "stale"; retry: boolean };
 
 /** 어느 칸이 왜 안 되는지. `request.ts` 의 `FieldError` 와 같은 모양이다. */
 export interface ExpoRejection {
@@ -73,7 +76,7 @@ export interface UsePageAutosaveOptions<T> {
   /** 서버가 준 최초 번호. */
   initialRevision: number;
   /** 실제 전송. 번호는 훅이 꺼내 넘긴다. */
-  save: (value: T, revision: number) => Promise<ExpoSaveOutcome>;
+  save: (value: T, revision: number) => Promise<AutosaveSaveOutcome>;
   debounceMs?: number;
   /** 뷰어에게는 **아무 핸들러도 붙지 않는다.** 타이머도 리스너도 만들지 않는다. */
   enabled?: boolean;
@@ -203,7 +206,7 @@ export function usePageAutosave<T>(options: UsePageAutosaveOptions<T>): PageAuto
         const sendingPage = anchorRef.current.pageId;
         setState("saving");
 
-        let outcome: ExpoSaveOutcome;
+        let outcome: AutosaveSaveOutcome;
         try {
           outcome = await saveRef.current(valueRef.current, anchorRef.current.revision);
         } catch {
@@ -212,6 +215,12 @@ export function usePageAutosave<T>(options: UsePageAutosaveOptions<T>): PageAuto
 
         // 응답이 오는 동안 페이지가 바뀌었으면 그 결과를 새 페이지에 적용하지 않는다.
         if (anchorRef.current.pageId !== sendingPage) return "clean";
+
+        if (outcome.kind === "stale") {
+          followUpRef.current = false;
+          if (outcome.retry) continue;
+          return "clean";
+        }
 
         if (outcome.kind === "conflict") {
           /**

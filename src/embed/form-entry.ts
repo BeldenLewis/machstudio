@@ -18,7 +18,7 @@ import { mountCollectForm, type CollectFormHandle } from "@/lib/collect-form/mou
 import { mountCollectLookup, type LookupHandle } from "@/lib/collect-form/lookup-mount";
 import { normalizeCollectForm } from "@/lib/collect-form-config";
 import {
-  getFormTarget, isPreviewMode, unregisterFormTarget, type FormTargetRecord,
+  getFormTarget, isPreviewMode, unregisterOwnedFormTarget, type FormTargetRecord,
 } from "@/lib/collect-form/target-registry";
 
 export interface FormBootConfig {
@@ -241,7 +241,7 @@ function watchTargetLifetime(inst: Instance): void {
     inst.observer = null;
     inst.handle?.destroy();
     inst.handle = null;
-    unregisterFormTarget(target.key);
+    unregisterOwnedFormTarget(target.key, target.record);
     delete registry()[target.key];
   };
 

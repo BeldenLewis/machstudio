@@ -14,8 +14,8 @@
  * ── 두 겹 ─────────────────────────────────────────────────────────────
  * ① `Sec-Fetch-Site` — 브라우저가 붙이고 스크립트가 위조할 수 없다. 가장 믿을 만하다.
  * ② `Origin` — 위 헤더가 없는 오래된 브라우저·프록시 대비.
- * 그리고 본문은 `application/json` 만 받는다. 폼 전송(`text/plain`·`multipart`)은
- * 프리플라이트 없이 교차 출처로 날아올 수 있는 형식이라 애초에 거절한다.
+ * 기본 본문은 `application/json` 만 받는다. 격리 세션 이전 W1 multipart 라우트만 호출부가
+ * 명시적으로 그 형식을 허용하며, 그 경우에도 Sec-Fetch-Site/Origin 검사는 그대로 먼저 돈다.
  */
 
 import { getPublicAppOrigin } from "@/lib/app-url";
@@ -38,6 +38,7 @@ const JSON_TYPES = ["application/json"];
 export function guardWriteOrigin(
   request: { headers: { get(name: string): string | null } },
   allowedOrigins: readonly string[] = [],
+  allowedContentTypes: readonly string[] = JSON_TYPES,
 ): OriginGuardResult {
   // ① 브라우저가 붙이는 값 — 스크립트가 못 바꾼다.
   const site = request.headers.get("sec-fetch-site");
@@ -73,7 +74,7 @@ export function guardWriteOrigin(
   const rawType = request.headers.get("content-type");
   if (rawType !== null) {
     const contentType = rawType.split(";")[0].trim().toLowerCase();
-    if (!JSON_TYPES.includes(contentType)) return { ok: false, failure: "bad-media-type" };
+    if (!allowedContentTypes.includes(contentType)) return { ok: false, failure: "bad-media-type" };
   }
 
   return { ok: true };

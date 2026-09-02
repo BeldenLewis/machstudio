@@ -25,7 +25,7 @@ vi.mock("@/lib/ratelimit", () => ({
 }));
 vi.mock("@/lib/expo/schema-probe", () => ({ probeExpoSchema: () => probe() }));
 
-const SCHEMA_VERSION = "20260821-v1";
+const SCHEMA_VERSION = "20260901-v2";
 const CANONICAL = "https://machstudio.example.com";
 const SID = "11111111-1111-1111-1111-111111111111";
 const CODE_SID = "22222222-2222-2222-2222-222222222222";
@@ -256,6 +256,34 @@ describe("초안과 발행본", () => {
   });
 });
 
+describe("캠페인 미리보기 가정", () => {
+  function campaignSite() {
+    const config = {
+      schemaVersion: 2,
+      settings: { campaigns: [
+        { id: "exhibitor-recruitment", label: "참가기업", startsAt: "2020-01-01T00:00:00Z", endsAt: "2030-01-01T00:00:00Z", override: "force-off", enabled: true },
+        { id: "visitor-registration", label: "참관객", startsAt: "2020-01-01T00:00:00Z", endsAt: "2030-01-01T00:00:00Z", override: "force-off", enabled: true },
+      ] },
+      sections: [section()],
+    };
+    return site({ pages: [{ id: "pg1", isHome: true, sortOrder: 0, draft: config, published: config, imwebUrl: null, deletedAt: null }] });
+  }
+
+  it("whitelisted both 상태만 두 캠페인을 강제로 켠다", async () => {
+    prismaMock.expoSite.findFirst.mockResolvedValue(campaignSite());
+    const args = bootArgs(await (await get("?campaignState=both")).text());
+    expect(args).toContain('"exhibitor-recruitment","label":"참가기업","active":true');
+    expect(args).toContain('"visitor-registration","label":"참관객","active":true');
+  });
+
+  it("모르는 query 값은 안전하게 무시한다", async () => {
+    prismaMock.expoSite.findFirst.mockResolvedValue(campaignSite());
+    const args = bootArgs(await (await get("?campaignState=unknown")).text());
+    expect(args).toContain('"exhibitor-recruitment","label":"참가기업","active":false');
+    expect(args).toContain('"visitor-registration","label":"참관객","active":false');
+  });
+});
+
 describe("컨테이너 폭", () => {
   /** 아임웹 콘텐츠 폭 흉내 — 실측 1410/1440·360/390. */
   it("기본은 표준 폭이다", async () => {
@@ -399,7 +427,54 @@ describe("사전등록 소스 확인", () => {
     prismaMock.collectSource.findMany.mockResolvedValue([]);
     expect(bootArgs(await (await get()).text())).not.toContain("src-other");
     expect(prismaMock.collectSource.findMany.mock.calls[0][0].where).toMatchObject({
-      projectId: "p1", deletedAt: null, mode: "builder",
+      id: { in: ["src-other"] }, projectId: "p1", deletedAt: null, mode: "builder",
     });
+  });
+
+  it("같은 프로젝트의 살아 있는 builder 소스는 유지한다", async () => {
+    prismaMock.expoSite.findFirst.mockResolvedValue(site({
+      pages: [{
+        id: "pg1", isHome: true, sortOrder: 0,
+        draft: { sections: [{ sid: SID, type: "register-form", variant: "inline", enabled: true, embedEnabled: false, design: {}, content: { sourceRef: "src-owned" } }] },
+        published: null, imwebUrl: null, deletedAt: null,
+      }],
+    }));
+    prismaMock.collectSource.findMany.mockResolvedValue([{ id: "src-owned" }]);
+    expect(bootArgs(await (await get()).text())).toContain("src-owned");
+  });
+
+  it("소스 확인 조회가 실패하면 허용 집합을 비운다", async () => {
+    prismaMock.expoSite.findFirst.mockResolvedValue(site({
+      pages: [{
+        id: "pg1", isHome: true, sortOrder: 0,
+        draft: { sections: [{ sid: SID, type: "register-form", variant: "inline", enabled: true, embedEnabled: false, design: {}, content: { sourceRef: "src-owned" } }] },
+        published: null, imwebUrl: null, deletedAt: null,
+      }],
+    }));
+    prismaMock.collectSource.findMany.mockRejectedValue(new Error("catalog unavailable"));
+    expect(bootArgs(await (await get()).text())).not.toContain("src-owned");
+  });
+
+  it("V2 해석 결과를 미리보기 런타임에 싣는다", async () => {
+    prismaMock.expoSite.findFirst.mockResolvedValue(site({
+      pages: [{
+        id: "pg1", isHome: true, sortOrder: 0,
+        draft: {
+          schemaVersion: 2,
+          settings: {
+            campaigns: [{ id: "apply", label: "참가기업 모집", startsAt: "2020-01-01T00:00:00+09:00", endsAt: "2030-01-01T00:00:00+09:00", override: "auto", enabled: true }],
+            destinations: [{ id: "contact", label: "문의", action: { type: "anchor", target: "contact" }, enabled: true }],
+          },
+          sections: [section()],
+        },
+        published: null, imwebUrl: null, deletedAt: null,
+      }],
+    }));
+    const args = bootArgs(await (await get()).text());
+    expect(args).toContain('"campaigns":[{"id":"apply","label":"참가기업 모집","active":true}]');
+    expect(args).toContain('"destinations":[{"id":"contact","label":"문의","action":{"type":"anchor","target":"contact"}}]');
+    expect(args).not.toContain('"startsAt"');
+    expect(args).not.toContain('"endsAt"');
+    expect(args).not.toContain('"override"');
   });
 });

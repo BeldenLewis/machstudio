@@ -142,9 +142,11 @@ describe("구획 추가", () => {
       .toEqual(latest.map((s) => s.type));
   });
 
-  it("뷰어에게는 카탈로그를 보여주지 않는다", async () => {
-    await render([], false);
+  it("뷰어에게는 카탈로그·정렬·삭제 컨트롤을 보여주지 않는다", async () => {
+    await render([newSection("textblock")], false);
     expect(buttonByText("본문")).toBeUndefined();
+    expect(host.querySelector('button[aria-label*="순서 변경"]')).toBeNull();
+    expect(host.querySelector('button[aria-label*="구획 삭제"]')).toBeNull();
   });
 });
 
@@ -204,7 +206,10 @@ describe("이미지 슬롯", () => {
     expect(latest[0].content.media).toMatchObject({ kind: "image", url: "https://cdn.example.com/a.jpg" });
     // 정규화를 통과해도 살아남는가 — 이게 진짜 확인해야 할 것이다.
     const saved = normalizeExpoPage({ sections: stripExpoRowKeys(latest) }).sections[0];
-    expect(saved.content.media).toEqual({ kind: "image", url: "https://cdn.example.com/a.jpg" });
+    expect(saved.content.media).toEqual({
+      kind: "image", url: "https://cdn.example.com/a.jpg",
+      originalUrl: "https://cdn.example.com/a.jpg", decorative: false,
+    });
   });
 
   it("대체 텍스트만 적고 주소가 없으면 정규화가 버린다는 것을 화면이 숨기지 않는다", async () => {
@@ -288,6 +293,19 @@ describe("목록 슬롯", () => {
     await click(buttonByText("카드 추가"));
     expect(findRowKeyLeak(stripExpoRowKeys(latest))).toBeNull();
   });
+
+  it("read-only nested rows and variant/design controls cannot mutate", async () => {
+    const text = newSection("textblock");
+    const cards = cardgrid();
+    const original = structuredClone([text, cards]);
+    await render([text, cards], false);
+
+    expect(host.querySelector('button[aria-label="카드 순서 변경 — 끌거나 포커스 후 방향키"]')).toBeNull();
+    expect(host.querySelector('button[aria-label="카드 삭제"]')).toBeNull();
+    expect(host.querySelector('[role="tablist"][aria-label="본문 형태"]')).toBeNull();
+    expect(host.querySelector('[role="tablist"][aria-label="카드 배경"]')).toBeNull();
+    expect(latest).toEqual(original);
+  });
 });
 
 describe("구획 스위치", () => {
@@ -323,6 +341,20 @@ describe("카탈로그에 없는 타입", () => {
   });
 });
 
+describe("STK client editor registry", () => {
+  it.each([
+    ["campaign-hero", "campaign-hero-editor"],
+    ["exhibition-grid", "exhibition-grid-editor"],
+    ["audience-links", "audience-links-editor"],
+    ["speaker-carousel", "speaker-carousel-editor"],
+    ["sponsor-marquee", "sponsor-marquee-editor"],
+    ["cta-band", "cta-band-editor"],
+  ])("%s 구획은 전용 편집기로 보낸다", async (type, testId) => {
+    await render([newSection(type)]);
+    expect(host.querySelector(`[data-testid="${testId}"]`)).toBeTruthy();
+  });
+});
+
 /**
  * 올리는 동안에도 화면은 살아 있다 — 그 사이의 편집이 **되돌아가면 안 된다.**
  *
@@ -333,12 +365,31 @@ describe("카탈로그에 없는 타입", () => {
 describe("이미지를 올리는 동안", () => {
   /** 응답을 테스트가 원할 때 풀 수 있는 업로드. */
   function deferredUpload() {
-    let release: ((url: string) => void) | null = null;
-    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => {
-      release = (url) => resolve({ ok: true, status: 201, json: async () => ({ url }) } as Response);
-    }));
+    let releaseSession: (() => void) | null = null;
+    let finalUrl = "";
+    const sessionWait = new Promise<void>((resolve) => { releaseSession = resolve; });
+    const fetchMock = vi.fn(async (target: string | URL | Request) => {
+      const url = String(target);
+      if (url.endsWith("/media/session")) {
+        await sessionWait;
+        return { ok: true, status: 201, json: async () => ({
+          path: "ws/expo-quarantine/site/user/a.jpg", signedUrl: "https://storage.example.com/signed", token: "one-use",
+        }) } as Response;
+      }
+      if (url === "https://storage.example.com/signed") return { ok: true, status: 200 } as Response;
+      return { ok: true, status: 201, json: async () => ({
+        kind: "image", url: finalUrl, originalUrl: `${finalUrl}?original=1`,
+        mimeType: "image/webp", width: 1200, height: 800, bytes: 100,
+      }) } as Response;
+    });
     vi.stubGlobal("fetch", fetchMock);
-    return { release: (url: string) => release!(url) };
+    return {
+      release: async (url: string) => {
+        finalUrl = url;
+        releaseSession!();
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+      },
+    };
   }
 
   it("같은 구획의 다른 칸에 친 글을 되돌리지 않는다", async () => {
@@ -358,7 +409,7 @@ describe("이미지를 올리는 동안", () => {
     expect((latest[0].content.heading as Record<string, string>).ko).toBe("빛의 시간");
 
     // 응답 도착.
-    await act(async () => { upload.release("https://cdn.example.com/a.jpg"); });
+    await act(async () => { await upload.release("https://cdn.example.com/a.jpg"); });
 
     expect(latest[0].content.media).toMatchObject({ url: "https://cdn.example.com/a.jpg" });
     // 여기가 핵심 — 올리는 동안 친 글이 살아 있어야 한다.
@@ -378,7 +429,7 @@ describe("이미지를 올리는 동안", () => {
     });
 
     await type(field<HTMLInputElement>('input[aria-label="이미지 대체 텍스트"]'), "전시 전경");
-    await act(async () => { upload.release("https://cdn.example.com/a.jpg"); });
+    await act(async () => { await upload.release("https://cdn.example.com/a.jpg"); });
 
     expect(latest[0].content.media).toMatchObject({
       kind: "image", url: "https://cdn.example.com/a.jpg", alt: "전시 전경",

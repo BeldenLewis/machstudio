@@ -61,7 +61,7 @@ describe("Shadow 경계를 넘는 선택자가 없다", () => {
   });
 
   it("모든 규칙이 .msx- 로 시작하거나 그 안에 있다", () => {
-    const outside = selectors().filter((s) => !s.includes(".msx-"));
+    const outside = selectors().filter((s) => !s.includes(".msx-") && !/^(?:from|to|\d+%)$/.test(s));
     expect(outside).toEqual([]);
   });
 });
@@ -116,6 +116,28 @@ describe("생성물이 원본과 갈라지지 않았다", () => {
    */
   it("자손 결합자를 지우지 않는다", () => {
     expect(EXPO_SHELL_CSS).toContain(".msx-root :focus-visible");
+  });
+
+  it("STK 승인 팔레트와 CTA 시각 토큰을 포함한다", () => {
+    expect(EXPO_SHELL_CSS).toContain("#0B0C0E");
+    expect(EXPO_SHELL_CSS).toContain("#2F9B63");
+    expect(EXPO_SHELL_CSS).toContain("#3468D9");
+    expect(EXPO_SHELL_CSS).toContain("#65D5BD");
+    expect(EXPO_SHELL_CSS).toContain(".msx-cta-band-section");
+    expect(EXPO_SHELL_CSS).toContain("border-radius: 0");
+  });
+
+  it("모바일 공용 section padding이 full-bleed Hero/CTA를 다시 좁히지 않는다", () => {
+    const mobile = raw.slice(raw.indexOf("@media (max-width: 600px)"));
+    expect(mobile).toMatch(/\.msx-hero-section\s*,\s*\.msx-cta-band-section\s*\{\s*padding:\s*0/);
+  });
+
+  it("연사 정보 gradient 위에 흰 글자 대비를 보장하는 neutral scrim을 둔다", () => {
+    expect(raw).toMatch(/\.msx-speaker-info\s*\{[\s\S]*?background:\s*linear-gradient\(rgba\(11, 12, 14, 0\.52\)/);
+  });
+
+  it("어두운 audience 카드의 포커스 링은 밝은 dark text 토큰을 쓴다", () => {
+    expect(raw).toMatch(/\.msx-audience-group\[data-variant="dark"\]\s+:focus-visible\s*\{\s*outline-color:\s*var\(--msx-dark-text\)/);
   });
 
   it("주석은 임베드로 나가지 않는다", () => {

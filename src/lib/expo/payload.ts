@@ -11,8 +11,12 @@
  * 그러지 않으면 빈 문자열이 되고, 그 자리는 이행 현황에서 "링크가 아직 안 걸렸다" 로 보인다.
  */
 import { localize, type Localized } from "@/lib/collect-form-config";
+import { resolveCampaignStates } from "@/lib/expo/campaign";
+import { resolveDestinations } from "@/lib/expo/destination";
 import { sectionDef } from "@/lib/expo/registry";
-import type { ExpoSection, SlotDef } from "@/lib/expo/types";
+import { resolvePluginContent } from "@/lib/expo/plugin-content";
+import type { ExpoPageConfigV2, ExpoSection, ExpoEventConfig, ResolvedCampaignState, ResolvedDestination, SlotDef } from "@/lib/expo/types";
+import type { PayloadSection } from "@/lib/expo/view-sections";
 
 /** 내부 참조를 풀 때 필요한 최소 정보 — 레코드를 통째로 받지 않는다. */
 export interface LinkTarget {
@@ -26,6 +30,9 @@ export interface ResolveContext {
   locale: string;
   /** **같은 사이트의** 페이지들만 넣는다 — 남의 사이트 주소가 새는 경로를 원천 차단한다. */
   pages: LinkTarget[];
+  /** Server time; never let the browser decide a campaign schedule. */
+  now: Date;
+  forcedCampaigns?: Readonly<Record<string, boolean>>;
 }
 
 /** 페이로드에서 발견한, 운영자가 손봐야 할 자리. */
@@ -36,7 +43,10 @@ export interface PayloadIssue {
 }
 
 export interface ResolvedPayload {
-  sections: Array<Record<string, unknown>>;
+  event?: ExpoEventConfig;
+  campaigns: ResolvedCampaignState[];
+  destinations: ResolvedDestination[];
+  sections: Array<PayloadSection & Record<string, unknown>>;
   issues: PayloadIssue[];
 }
 
@@ -102,27 +112,49 @@ function resolveSlot(
  * 내부 페이지 id 는 호출부가 한 번에 모아 넘긴다(`ctx.pages`) — 섹션마다 DB 를 두드리면
  * 페이지 하나에 수십 번 쿼리가 나간다.
  */
-export function buildExpoPayload(sections: ExpoSection[], ctx: ResolveContext): ResolvedPayload {
+export function buildExpoPayload(config: ExpoPageConfigV2, ctx: ResolveContext): ResolvedPayload {
   const byId = new Map(ctx.pages.map((p) => [p.id, p]));
   const issues: PayloadIssue[] = [];
 
-  const out = sections.map((section) => {
+  const out: ResolvedPayload["sections"] = [];
+  for (const section of config.sections) {
     const def = sectionDef(section.type);
-    const content: Record<string, unknown> = {};
-    for (const slot of def?.slots ?? []) {
-      const v = resolveSlot(slot, section.content[slot.key], ctx, byId, section.sid, issues);
-      if (v !== undefined) content[slot.key] = v;
+    if (!def) continue;
+    let content: Record<string, unknown> = {};
+    if (def.normalize) {
+      let publicContent: Record<string, unknown>;
+      try {
+        publicContent = def.normalize(section.content, { mode: "public", locale: ctx.locale });
+      } catch {
+        continue;
+      }
+      const resolved = resolvePluginContent(publicContent, ctx.locale);
+      if (resolved && typeof resolved === "object" && !Array.isArray(resolved)) {
+        content = resolved as Record<string, unknown>;
+      }
+    } else {
+      for (const slot of def.slots) {
+        const v = resolveSlot(slot, section.content[slot.key], ctx, byId, section.sid, issues);
+        if (v !== undefined) content[slot.key] = v;
+      }
     }
-    return {
+    out.push({
       sid: section.sid,
       type: section.type,
       variant: section.variant,
       design: section.design,
       content,
-    };
-  });
+    });
+  }
 
-  return { sections: out, issues };
+  const settings = config.settings;
+  return {
+    ...(settings?.event ? { event: settings.event } : {}),
+    campaigns: resolveCampaignStates(settings?.campaigns ?? [], ctx.now, ctx.forcedCampaigns),
+    destinations: resolveDestinations(settings?.destinations ?? []),
+    sections: out,
+    issues,
+  };
 }
 
 /**

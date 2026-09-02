@@ -3,6 +3,9 @@
  * 어드민·서버·임베드 번들이 같은 파일을 읽는다(collect-form-config 와 같은 계약).
  */
 import type { Localized } from "@/lib/collect-form-config";
+import type { ComponentType } from "react";
+import type { LinkTarget } from "@/lib/expo/payload";
+import type { PayloadSection } from "@/lib/expo/view-sections";
 
 export type { Localized };
 
@@ -85,9 +88,158 @@ export interface ExpoTheme {
 }
 
 /** 페이지의 편집 상태(draft)와 발행 스냅샷(published)이 같은 모양이다. */
-export interface ExpoPageConfig {
+export type CampaignOverride = "auto" | "force-on" | "force-off";
+export type AudienceId = "all" | "exhibitor" | "visitor";
+export type CampaignPreviewMode = "current" | "exhibitor" | "visitor" | "both" | "ended";
+
+export interface CampaignConfig {
+  id: string;
+  label: string;
+  startsAt: string;
+  endsAt: string;
+  override: CampaignOverride;
+  enabled: boolean;
+}
+
+export type DestinationAction =
+  | { type: "url"; href: string; newTab?: boolean }
+  | { type: "anchor"; target: string }
+  | { type: "download"; href: string }
+  | { type: "imweb-modal"; modalId: string; fallbackHref?: string };
+
+export interface DestinationConfig {
+  id: string;
+  label: string;
+  action: DestinationAction;
+  analytics?: { eventName: string; contentId?: string };
+  enabled: boolean;
+}
+
+export interface ExpoEventConfig {
+  edition: number;
+  startsAt: string;
+  endsAt: string;
+  facts?: { companies?: number; sessions?: number; booths?: number };
+}
+
+export interface ExpoPageConfigV2 {
+  schemaVersion: 2;
+  preset?: string;
+  settings?: {
+    event?: ExpoEventConfig;
+    campaigns?: CampaignConfig[];
+    destinations?: DestinationConfig[];
+  };
   sections: ExpoSection[];
 }
+
+/** V2 is the sole in-memory page shape; V1 is promoted during normalization. */
+export type ExpoPageConfig = ExpoPageConfigV2;
+
+export interface ResolvedCampaignState {
+  id: string;
+  label: string;
+  active: boolean;
+}
+
+export interface ResolvedDestination {
+  id: string;
+  label: string;
+  action: DestinationAction;
+  analytics?: { eventName: string; contentId?: string };
+}
+
+export type IssueSeverity = "error" | "warning";
+
+export interface FieldIssue {
+  path: string;
+  code: string;
+  message: string;
+  severity: IssueSeverity;
+  sid?: string;
+}
+
+/** 플러그인 정규화는 저장·쓰기·공개 경계 중 어디서 호출됐는지 명시적으로 받는다. */
+export interface NormalizeContext {
+  locale?: string;
+  mode: "stored" | "draft-write" | "public";
+}
+
+/** 플러그인 검증이 페이지의 다른 registry 참조를 조회하는 순수 컨텍스트. */
+export interface ValidateContext {
+  config: ExpoPageConfigV2;
+  sectionIndex: number;
+  campaigns: ReadonlyMap<string, CampaignConfig>;
+  destinations: ReadonlyMap<string, DestinationConfig>;
+}
+
+/** 브라우저 플러그인 렌더러가 받는 값. React 런타임과 무관한 DOM 계약이다. */
+export interface SectionRenderContext {
+  locale: string;
+  campaigns: ReadonlyMap<string, ResolvedCampaignState>;
+  destinations: ReadonlyMap<string, ResolvedDestination>;
+  mode: "live" | "preview-draft" | "preview-published" | "standalone";
+  reducedMotion: boolean;
+  doc: Document;
+}
+
+export interface SectionRenderResult {
+  node: HTMLElement;
+  attach?(): void;
+  dispose?(): void;
+}
+
+/** Mach 서버 없이 파일 하나에서 도는 복구용 런타임의 닫힌 payload. */
+export interface StandaloneExpoRuntimePayload {
+  pageId: string;
+  sectionId?: string | null;
+  theme: ExpoTheme;
+  sections: PayloadSection[];
+  locale: string;
+  /** Export 시각에 굳힌 id → 활성 boolean. 일정·label·override는 artifact에 싣지 않는다. */
+  campaigns: Record<string, boolean>;
+  destinations: ResolvedDestination[];
+  mode: "standalone";
+}
+
+export type SectionRenderer = (
+  section: PayloadSection,
+  context: SectionRenderContext,
+) => SectionRenderResult | null;
+
+/** Task 12의 client-only registry가 editor를 덧씌운다. 공용 plugin 객체에는 넣지 않는다. */
+export interface SectionEditorProps {
+  siteId: string;
+  locale: string;
+  sources: readonly { id: string; name: string; isActive: boolean }[];
+  pages: readonly LinkTarget[];
+  section: ExpoSection;
+  config: ExpoPageConfigV2;
+  issues: readonly FieldIssue[];
+  canEdit: boolean;
+  onChange(next: ExpoSection): void;
+}
+
+/**
+ * 슬롯 기반 W1 계약의 순수 확장. 모든 hook은 선택 사항이므로 기존 SectionDef가 그대로
+ * 동작하며, React 참조는 import type이라 공용 registry/runtime bundle에 남지 않는다.
+ */
+export interface SectionPlugin extends SectionDef {
+  normalize?(content: unknown, context: NormalizeContext): Record<string, unknown>;
+  validate?(section: ExpoSection, context: ValidateContext): FieldIssue[];
+  hasContent?(section: ExpoSection): boolean;
+  render?: SectionRenderer;
+  editor?: ComponentType<SectionEditorProps>;
+}
+
+export const EXPO_V2_RULES = {
+  id: /^[a-z][a-z0-9-]{0,63}$/,
+  anchorOrModal: /^[A-Za-z][A-Za-z0-9_-]{0,127}$/,
+  analyticsEvent: /^[A-Za-z][A-Za-z0-9_]{0,63}$/,
+  timezoneSuffix: /(Z|[+-]\d{2}:\d{2})$/,
+  maxRows: 100,
+  maxVisibleCtas: 2,
+} as const;
 
 /** 운영자가 보는 페이지 상태. 판정은 `derivePageState` 한 곳에서만 한다. */
 export type ExpoPageState = "draft" | "published" | "live";

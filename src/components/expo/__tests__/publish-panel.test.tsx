@@ -30,7 +30,7 @@ const PAGE_ID = "pg1";
 let host: HTMLDivElement;
 let root: Root;
 let posts: Array<{ url: string; body: unknown }> = [];
-let nextResponse: { ok: boolean; status: number; body: unknown } = { ok: true, status: 200, body: {} };
+let nextResponse: { ok: boolean; status: number; body: unknown; contentType?: string; disposition?: string } = { ok: true, status: 200, body: {} };
 const onChanged = vi.fn();
 
 const READY = { canPublish: true, canGoLive: true, publishIssues: [], liveIssues: [], notes: [] };
@@ -55,6 +55,13 @@ function stubFetch() {
       ok: nextResponse.ok,
       status: nextResponse.status,
       json: async () => nextResponse.body,
+      blob: async () => new Blob([typeof nextResponse.body === "string" ? nextResponse.body : JSON.stringify(nextResponse.body)], {
+        type: nextResponse.contentType ?? "application/json",
+      }),
+      headers: new Headers({
+        ...(nextResponse.contentType ? { "content-type": nextResponse.contentType } : {}),
+        ...(nextResponse.disposition ? { "content-disposition": nextResponse.disposition } : {}),
+      }),
     } as Response;
   }));
 }
@@ -73,6 +80,7 @@ async function render(over: Partial<Parameters<typeof ExpoPublishPanel>[0]> = {}
           liveAt={null}
           readiness={READY}
           snippets={SNIPPETS}
+          exportSections={[]}
           canPublish
           onChanged={onChanged}
           {...over}
@@ -107,6 +115,17 @@ afterEach(async () => {
 });
 
 describe("발행", () => {
+  it("연결 상태 경고를 보여 주되 발행을 막지 않는다", async () => {
+    await render({
+      imwebUrl: "https://smarttechkorea.com/214",
+      lastSeenAt: "2026-09-01T02:59:00.000Z",
+      lastSeenOrigin: "https://other.example",
+      now: new Date("2026-09-01T03:00:00.000Z"),
+    });
+    expect(host.textContent).toContain("다른 주소");
+    expect(panelButton("발행하기")?.disabled).toBe(false);
+  });
+
   it("아직 발행 전이면 초안이라고 말한다", async () => {
     await render();
     expect(host.textContent).toContain("초안");
@@ -272,6 +291,114 @@ describe("권한", () => {
     expect(host.querySelector('button[role="switch"]')).toBeNull();
     // 코드는 그대로 볼 수 있다 — 붙이는 일에 발행 권한이 필요하지는 않다.
     expect(host.querySelector('button[aria-label="페이지 통짜 코드 복사"]')).toBeTruthy();
+  });
+});
+
+describe("백업 HTML", () => {
+  beforeEach(() => {
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:standalone"),
+      revokeObjectURL: vi.fn(),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    nextResponse = {
+      ok: true,
+      status: 200,
+      body: "<!doctype html>",
+      contentType: "text/html; charset=utf-8",
+      disposition: 'attachment; filename="mach-expo-page-pg1-r7.html"',
+    };
+  });
+
+  it("campaign freeze warning and whole-page download are adjacent", async () => {
+    await render({ hasPublished: true });
+    expect(host.textContent).toContain("백업 HTML의 캠페인 상태는 다운로드 시점으로 고정됩니다. 일정이 바뀌면 다시 다운로드하세요.");
+    await click(panelButton("전체 HTML 다운로드"));
+    expect(posts.at(-1)).toEqual({ url: "/api/expo/pages/pg1/export", body: { scope: "page" } });
+    expect(URL.createObjectURL).toHaveBeenCalled();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:standalone");
+  });
+
+  it("uses authoritative published export sections instead of draft snippet sections", async () => {
+    await render({
+      hasPublished: true,
+      exportSections: [{ sid: "published-sid", label: "발행 키비주얼" }],
+      snippets: {
+        ok: true,
+        page: SNIPPETS.page,
+        sections: [{
+          sid: "draft-sid", label: "초안 본문", snippet: { code: "<script></script>", src: "https://x/h/pg1/draft-sid" }, issues: [],
+        }],
+      },
+    });
+    expect(panelButton("초안 본문 HTML 다운로드")).toBeUndefined();
+    await click(panelButton("발행 키비주얼 HTML 다운로드"));
+    expect(posts.at(-1)).toEqual({ url: "/api/expo/pages/pg1/export", body: { scope: "section", sid: "published-sid" } });
+  });
+
+  it("shows structured export errors beside the affected scope", async () => {
+    const onFocusExportIssue = vi.fn();
+    nextResponse = {
+      ok: false,
+      status: 422,
+      body: { issues: [{ path: "scope.sid", sid: "s1", code: "standalone-unsupported", message: "이 구획은 백업 HTML로 내보낼 수 없어요." }] },
+    };
+    await render({
+      hasPublished: true,
+      exportSections: [{ sid: "s1", label: "폼" }],
+      onFocusExportIssue,
+      snippets: {
+        ok: true,
+        page: SNIPPETS.page,
+        sections: [{ sid: "s1", label: "폼", snippet: { code: "", src: "" }, issues: [] }],
+      },
+    });
+    await click(panelButton("폼 HTML 다운로드"));
+    expect(host.textContent).toContain("이 구획은 백업 HTML로 내보낼 수 없어요.");
+    expect(toastError).toHaveBeenCalledWith("이 구획은 백업 HTML로 내보낼 수 없어요.");
+    expect(onFocusExportIssue).toHaveBeenCalledWith(expect.objectContaining({ path: "scope.sid", sid: "s1" }));
+    expect(host.querySelector('[data-field-path="scope.sid"]')).toBeTruthy();
+  });
+
+  it("keeps every visible scope issue synchronized when another export starts", async () => {
+    const onExportIssuesChange = vi.fn();
+    const onFocusExportIssue = vi.fn();
+    await render({
+      hasPublished: true,
+      exportSections: [{ sid: "s1", label: "본문" }],
+      onExportIssuesChange,
+      onFocusExportIssue,
+    });
+    nextResponse = {
+      ok: false, status: 422,
+      body: { issues: [{ path: "sections[0].content.media.url", sid: "s1", code: "section-error", message: "구획 오류", severity: "error" }] },
+    };
+    await click(panelButton("본문 HTML 다운로드"));
+    nextResponse = {
+      ok: false, status: 422,
+      body: { issues: [{ path: "settings.destinations[0].action.fallbackHref", code: "page-error", message: "페이지 오류", severity: "error" }] },
+    };
+    await click(panelButton("전체 HTML 다운로드"));
+
+    expect(onExportIssuesChange).toHaveBeenLastCalledWith(expect.arrayContaining([
+      expect.objectContaining({ code: "section-error" }),
+      expect.objectContaining({ code: "page-error" }),
+    ]));
+    await click([...host.querySelectorAll("button")].find((button) => button.textContent === "구획 오류"));
+    expect(onFocusExportIssue).toHaveBeenLastCalledWith(expect.objectContaining({ code: "section-error", sid: "s1" }));
+    expect(onExportIssuesChange).toHaveBeenLastCalledWith(expect.arrayContaining([
+      expect.objectContaining({ code: "section-error" }),
+      expect.objectContaining({ code: "page-error" }),
+    ]));
+  });
+
+  it("does not render backup controls without publish permission or a published snapshot", async () => {
+    await render({ canPublish: false, hasPublished: true });
+    expect(panelButton("전체 HTML 다운로드")).toBeUndefined();
+    await act(async () => { root.unmount(); });
+    host.remove();
+    await render({ hasPublished: false });
+    expect(panelButton("전체 HTML 다운로드")?.disabled).toBe(true);
   });
 });
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  EXPO_READINESS_MESSAGES, hasUnpublishedChanges, liveIssues, pageReadiness,
-  publishIssues, sectionSnippetIssues,
+  contentWarnings, EXPO_READINESS_MESSAGES, hasUnpublishedChanges, liveIssues, pageReadiness,
+  publishErrors, sectionSnippetIssues,
 } from "@/lib/expo/readiness";
 import { normalizeExpoPage } from "@/lib/expo/config";
 
@@ -21,22 +21,60 @@ const codes = (issues: Array<{ code: string }>) => issues.map((i) => i.code);
 
 describe("발행할 수 있는가 — draft 를 본다", () => {
   it("섹션이 없으면 막고 이유를 준다", () => {
-    expect(codes(publishIssues({ sections: [] }))).toEqual(["no-sections"]);
+    expect(publishErrors({ sections: [] })).toEqual([expect.objectContaining({
+      path: "sections", code: "no-sections", severity: "error",
+    })]);
   });
 
   it("켜진 섹션이 하나라도 내용이 있으면 발행할 수 있다", () => {
-    expect(publishIssues(cfg([sec(1)]))).toEqual([]);
+    expect(publishErrors(cfg([sec(1)]))).toEqual([]);
   });
 
   /** 켜 놓고 비워 둔 섹션은 나가지 않는다 — 발행 전에 알려 준다. */
   it("켜져 있는데 빈 섹션을 짚어 준다", () => {
-    const out = publishIssues(cfg([sec(1), sec(2, { content: {} })]));
+    const out = publishErrors(cfg([sec(1), sec(2, { content: {} })]));
     expect(codes(out)).toContain("empty-enabled-section");
-    expect(out.find((i) => i.code === "empty-enabled-section")?.sid).toBe(uid(2));
+    expect(out.find((i) => i.code === "empty-enabled-section")).toEqual(expect.objectContaining({
+      path: "sections[1].content", severity: "error", sid: uid(2),
+    }));
   });
 
   it("전부 꺼져 있으면 내보낼 게 없다고 말한다", () => {
-    expect(codes(publishIssues(cfg([sec(1, { enabled: false })])))).toContain("no-renderable-section");
+    expect(publishErrors(cfg([sec(1, { enabled: false })]))).toEqual([expect.objectContaining({
+      path: "sections", code: "no-renderable-section", severity: "error",
+    })]);
+  });
+});
+
+describe("blocking publish errors and non-blocking content warnings", () => {
+  it("keeps warning severity and section identity separate from publish errors", () => {
+    const hero = {
+      sid: uid(8), type: "campaign-hero", variant: "default", enabled: true, content: {
+        typingLines: [{ ko: "STK 2027" }],
+        video: {
+          kind: "video", url: "https://cdn.example.com/hero.mp4", originalUrl: "https://cdn.example.com/hero-original.mp4",
+          mimeType: "video/mp4", rightsStatus: "unconfirmed",
+        },
+        ctas: [],
+      },
+    };
+    const config = { schemaVersion: 2, sections: [hero] };
+    expect(publishErrors(config)).toEqual([]);
+    expect(contentWarnings(config)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "sections[0].content.video.rightsStatus", severity: "warning", sid: uid(8) }),
+      expect.objectContaining({ path: "sections[0].content.ctas", severity: "warning", sid: uid(8) }),
+    ]));
+  });
+
+  it("returns strict structural failures and unsafe destination URLs as blocking errors", () => {
+    const config = {
+      schemaVersion: 2,
+      settings: { destinations: [{ id: "unsafe", label: "unsafe", action: { type: "url", href: "javascript:alert(1)" }, enabled: true }] },
+      sections: [sec(1)],
+    };
+    expect(publishErrors(config)).toContainEqual(expect.objectContaining({
+      path: "settings.destinations[0].action.href", code: "invalid-url", severity: "error",
+    }));
   });
 });
 

@@ -54,6 +54,9 @@ export function slotHasContent(def: SlotDef, value: unknown): boolean {
 export function hasContent(section: ExpoSection): boolean {
   const def = sectionDef(section.type);
   if (!def) return false;
+  if (def.hasContent) {
+    try { return def.hasContent(section); } catch { return false; }
+  }
   const required = def.slots.filter((s) => s.required);
   if (required.length > 0) return required.every((s) => slotHasContent(s, section.content[s.key]));
   return def.slots.some((s) => slotHasContent(s, section.content[s.key]));
@@ -124,7 +127,7 @@ export function homePageDefaults(locale = "ko") {
     title: locale === "ko" ? "홈" : "Home",
     isHome: true,
     sortOrder: 0,
-    draft: { sections: [] } satisfies ExpoPageConfig,
+    draft: { schemaVersion: 2, sections: [] } satisfies ExpoPageConfig,
   };
 }
 

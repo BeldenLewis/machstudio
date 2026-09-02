@@ -27,7 +27,7 @@ vi.mock("@/lib/ratelimit", () => ({
 }));
 vi.mock("@/lib/expo/schema-probe", () => ({ probeExpoSchema: () => probe() }));
 
-const SCHEMA_VERSION = "20260821-v1";
+const SCHEMA_VERSION = "20260901-v2";
 const CANONICAL = "https://machstudio.example.com";
 const SID = "11111111-1111-1111-1111-111111111111";
 
@@ -195,6 +195,7 @@ describe("⑤ 조회와 게이트", () => {
   it("공개 중인 페이지는 구획을 실어 보낸다", async () => {
     const args = bootArgs(await (await get({ pageId: "pg1" })).text());
     expect(args).toContain("제목");
+    expect(args).toContain('"mode":"live"');
     expect(args).not.toContain("connectionOnly");
   });
 
@@ -219,6 +220,7 @@ describe("구획 단독", () => {
     const args = bootArgs(await (await get({ pageId: "pg1", sid: SID })).text());
     expect(args).toContain("히어로");
     expect(args).toContain(`"sectionId":"${SID}"`);
+    expect(args).toContain('"mode":"live"');
   });
 
   it("발행본에 없는 sid 는 404", async () => {
@@ -252,7 +254,7 @@ describe("사전등록 소스 확인", () => {
     expect(args).not.toContain("src-other");
     // 같은 프로젝트인지 서버가 직접 확인한다.
     expect(prismaMock.collectSource.findMany.mock.calls[0][0].where).toMatchObject({
-      projectId: "p1", deletedAt: null, mode: "builder",
+      id: { in: ["src-other"] }, projectId: "p1", deletedAt: null, mode: "builder",
     });
   });
 
@@ -260,6 +262,82 @@ describe("사전등록 소스 확인", () => {
     prismaMock.expoPage.findFirst.mockResolvedValue(withForm());
     prismaMock.collectSource.findMany.mockResolvedValue([{ id: "src-other" }]);
     expect(bootArgs(await (await get({ pageId: "pg1" })).text())).toContain("src-other");
+  });
+
+  it("소스 확인 조회가 실패해도 참조를 비운다", async () => {
+    prismaMock.expoPage.findFirst.mockResolvedValue(withForm());
+    prismaMock.collectSource.findMany.mockRejectedValue(new Error("catalog unavailable"));
+    expect(bootArgs(await (await get({ pageId: "pg1" })).text())).not.toContain("src-other");
+  });
+
+  it("서버에서 해석한 V2 행사·캠페인·목적지를 런타임에 싣는다", async () => {
+    prismaMock.expoPage.findFirst.mockResolvedValue(page({
+      published: {
+        schemaVersion: 2,
+        settings: {
+          event: { edition: 2027, startsAt: "2027-06-01T00:00:00+09:00", endsAt: "2027-06-03T00:00:00+09:00" },
+          campaigns: [{ id: "apply", label: "참가기업 모집", startsAt: "2020-01-01T00:00:00+09:00", endsAt: "2030-01-01T00:00:00+09:00", override: "auto", enabled: true }],
+          destinations: [{ id: "contact", label: "문의", action: { type: "anchor", target: "contact" }, enabled: true }],
+        },
+        sections: [{ sid: SID, type: "kv", variant: "column", enabled: true, embedEnabled: false, design: {}, content: { title: { ko: "제목" } } }],
+      },
+    }));
+    const args = bootArgs(await (await get({ pageId: "pg1" })).text());
+    expect(args).toContain('"campaigns":[{"id":"apply","label":"참가기업 모집","active":true}]');
+    expect(args).toContain('"destinations":[{"id":"contact","label":"문의","action":{"type":"anchor","target":"contact"}}]');
+    // 행사 일정도 런타임이 소비하지 않는다. 저장 문자열을 스크립트에 싣지 않는다.
+    expect(args).not.toContain('"event"');
+    expect(args).not.toContain('"override"');
+    expect(args).not.toContain('"startsAt"');
+    expect(args).not.toContain('"endsAt"');
+  });
+});
+
+describe("라이브 캠페인 해석", () => {
+  const campaignPage = () => page({
+    published: {
+      schemaVersion: 2,
+      settings: {
+        campaigns: [{
+          id: "apply", label: "참가기업 모집",
+          startsAt: "2026-09-01T03:00:00.000Z", endsAt: "2026-09-01T04:00:00.000Z",
+          override: "auto", enabled: true,
+        }],
+      },
+      sections: [{
+        sid: SID, type: "kv", variant: "column", enabled: true, embedEnabled: false,
+        design: {}, content: { title: { ko: "제목" } },
+      }],
+    },
+  });
+
+  it("campaignState query를 무시하고 서버 시각만 사용한다", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-09-01T02:59:59.000Z"));
+      prismaMock.expoPage.findFirst.mockResolvedValue(campaignPage());
+      const args = bootArgs(await (await get(
+        { pageId: "pg1" },
+        req("https://machstudio.example.com/h/pg1?campaignState=both"),
+      )).text());
+      expect(args).toContain('"id":"apply","label":"참가기업 모집","active":false');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("같은 발행본도 활성 경계를 지나면 ETag가 바뀐다", async () => {
+    vi.useFakeTimers();
+    try {
+      prismaMock.expoPage.findFirst.mockResolvedValue(campaignPage());
+      vi.setSystemTime(new Date("2026-09-01T02:59:59.000Z"));
+      const before = await get({ pageId: "pg1" });
+      vi.setSystemTime(new Date("2026-09-01T03:00:00.000Z"));
+      const active = await get({ pageId: "pg1" });
+      expect(before.headers.get("ETag")).not.toBe(active.headers.get("ETag"));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -293,7 +371,7 @@ describe("캐시 검증자", () => {
     const res = await get({ pageId: "pg1" });
     expect(res.headers.get("ETag")).toMatch(/^W\/"[\w-]{27}"$/);
     expect(res.headers.get("Cache-Control")).toBe("public, max-age=0, must-revalidate");
-    expect(res.headers.get("CDN-Cache-Control")).toContain("stale-while-revalidate=86400");
+    expect(res.headers.get("CDN-Cache-Control")).toBe("public, s-maxage=30, stale-while-revalidate=30");
   });
 
   it("같은 ETag 면 304 다", async () => {
@@ -301,6 +379,11 @@ describe("캐시 검증자", () => {
     const res = await get({ pageId: "pg1" }, req("https://machstudio.example.com/h/pg1", { "if-none-match": etag }));
     expect(res.status).toBe(304);
     expect(await res.text()).toBe("");
+    expect(res.headers.get("Cache-Control")).toBe("public, max-age=0, must-revalidate");
+    expect(res.headers.get("CDN-Cache-Control")).toBe("public, s-maxage=30, stale-while-revalidate=30");
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(res.headers.get("X-Robots-Tag")).toBe("noindex");
   });
 
   it("파트너 사이트에서 받아 갈 수 있다", async () => {

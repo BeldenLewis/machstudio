@@ -195,6 +195,8 @@ export interface EditableListProps<T> {
   renderRow: (ctx: EditableRowCtx<T>) => ReactNode;
   /** 순서가 의미 있으면 true — 드래그 핸들 + 방향키 재정렬이 함께 붙는다. */
   reorderable?: boolean;
+  /** 행마다 구분되는 드래그 안내. 없으면 기존 공통 문구를 쓴다. */
+  handleLabel?: (item: T) => string;
   /** 이 항목은 지울 수 없다. "card" 에서는 같은 폭의 빈 자리로 레이아웃을 유지한다. */
   removable?: (item: T) => boolean;
   /** 0개일 때 보여줄 것. 0개에 도달할 수 없는 목록(항상 병합되는 시스템 항목 등)은 생략. */
@@ -348,7 +350,7 @@ function Row<T>({
 
 export function EditableList<T>({
   listId, itemNoun, items, onChange, rowKey, makeItem, addLabel, renderRow,
-  reorderable = false, removable, emptyState, maxRows,
+  reorderable = false, handleLabel, removable, emptyState, maxRows,
   rowChrome = "card", renderAdd, autoFocusNewRow = false, onPendingRemoveChange,
 }: EditableListProps<T>) {
   // 삭제 유예 중인 행 — 화면에서만 숨긴다(배열은 유예가 끝날 때 바뀐다).
@@ -506,7 +508,7 @@ export function EditableList<T>({
           reorderable={reorderable}
           chrome={rowChrome}
           itemNoun={itemNoun}
-          handleLabel={`${itemNoun} 순서 변경 — 끌거나 포커스 후 방향키`}
+          handleLabel={handleLabel?.(item) ?? `${itemNoun} 순서 변경 — 끌거나 포커스 후 방향키`}
           canRemove={!removable || removable(item)}
           onRequestRemove={() => requestRemove(key)}
           claimFocus={claimFocus}

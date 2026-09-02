@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const prismaMock = {
   workspaceMember: { findMany: vi.fn() },
+  projectMember: { findMany: vi.fn() },
   expoSite: { findFirst: vi.fn(), create: vi.fn() },
   expoPage: { findMany: vi.fn(), create: vi.fn() },
   expoTemplate: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
@@ -36,7 +37,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { g
 vi.mock("@/lib/expo/schema-probe", () => ({ probeExpoSchema: () => probe() }));
 vi.mock("@/lib/expo/storage", () => ({ createExpoStorage: () => storageMock }));
 
-const SCHEMA_VERSION = "20260821-v1";
+const SCHEMA_VERSION = "20260901-v2";
 const SID_KV = "11111111-1111-1111-1111-111111111111";
 const SID_FORM = "22222222-2222-2222-2222-222222222222";
 const HERO = `${BASE}w1/expo/site1/hero.jpg`;
@@ -88,6 +89,7 @@ beforeEach(() => {
   probe.mockResolvedValue(true);
   getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
   prismaMock.workspaceMember.findMany.mockResolvedValue([{ workspaceId: "w1", role: "ADMIN" }]);
+  prismaMock.projectMember.findMany.mockResolvedValue([]);
   prismaMock.expoSite.findFirst.mockResolvedValue({
     id: "site1", workspaceId: "w1", projectId: "proj1", theme: { accent: "#123456" }, siteUrl: null,
   });
@@ -164,6 +166,13 @@ describe("사이트를 템플릿으로 저장", () => {
     expect(res.status).toBe(404);
     expect(prismaMock.expoTemplate.create).not.toHaveBeenCalled();
   });
+
+  it("배정되지 않은 MEMBER 는 자기 워크스페이스 사이트도 템플릿으로 저장할 수 없다", async () => {
+    prismaMock.workspaceMember.findMany.mockResolvedValue([{ workspaceId: "w1", role: "MEMBER" }]);
+    prismaMock.projectMember.findMany.mockResolvedValue([]);
+    expect((await post({ siteId: "site1", name: "x" })).status).toBe(404);
+    expect(prismaMock.expoTemplate.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("저장이 실패하면 이번 작업이 만든 것만 되돌린다", () => {
@@ -201,7 +210,21 @@ describe("목록", () => {
     const { GET } = await import("@/app/api/expo/templates/route");
     await GET(read());
     expect(prismaMock.expoTemplate.findMany.mock.calls[0][0].where)
-      .toEqual({ workspaceId: { in: ["w1"] } });
+      .toEqual({ workspaceId: { in: ["w1"] }, id: { notIn: ["stk-home-v1"] } });
+  });
+
+  it("예약 id를 take 전에 제외해 정상 템플릿 200개 슬롯을 모두 돌려준다", async () => {
+    prismaMock.expoTemplate.findMany.mockResolvedValue(Array.from({ length: 200 }, (_, index) => ({
+      id: `t${index}`, workspaceId: "w1", name: `정상 행 ${index}`, description: null,
+      snapshot: {}, createdAt: new Date(index),
+    })));
+    const { GET } = await import("@/app/api/expo/templates/route");
+    const body = await (await GET(read())).json();
+    expect(prismaMock.expoTemplate.findMany.mock.calls[0][0]).toMatchObject({
+      where: { workspaceId: { in: ["w1"] }, id: { notIn: ["stk-home-v1"] } },
+      take: 200,
+    });
+    expect(body.templates.filter((template: { builtIn: boolean }) => !template.builtIn)).toHaveLength(200);
   });
 
   it("MEMBER 에게는 관리 권한이 없다고 알려 준다", async () => {
@@ -211,7 +234,28 @@ describe("목록", () => {
     ]);
     const { GET } = await import("@/app/api/expo/templates/route");
     const body = await (await GET(read())).json();
-    expect(body.templates[0]).toMatchObject({ contentMode: "full", pageCount: 1, canManage: false });
+    expect(body.templates.find((template: { id: string }) => template.id === "t1"))
+      .toMatchObject({ contentMode: "full", pageCount: 1, canManage: false });
+  });
+
+  it("기본 제공 STK 프리셋을 DB 템플릿 앞에 불변 항목으로 합친다", async () => {
+    prismaMock.expoTemplate.findMany.mockResolvedValue([]);
+    const { GET } = await import("@/app/api/expo/templates/route");
+    const body = await (await GET(read())).json();
+    expect(body.templates[0]).toMatchObject({
+      id: "stk-home-v1", builtIn: true, contentMode: "full", pageCount: 1, canManage: false,
+    });
+  });
+
+  it("예약 id로 위조한 DB 행은 기본 제공 목록에 중복 노출하지 않는다", async () => {
+    prismaMock.expoTemplate.findMany.mockResolvedValue([
+      { id: "stk-home-v1", workspaceId: "w1", name: "위조 행", description: null, snapshot: {}, createdAt: new Date() },
+      { id: "t1", workspaceId: "w1", name: "정상 행", description: null, snapshot: {}, createdAt: new Date() },
+    ]);
+    const { GET } = await import("@/app/api/expo/templates/route");
+    const body = await (await GET(read())).json();
+    expect(body.templates.filter((template: { id: string }) => template.id === "stk-home-v1")).toHaveLength(1);
+    expect(body.templates.map((template: { id: string }) => template.id)).toContain("t1");
   });
 });
 
@@ -256,6 +300,28 @@ describe("이름 변경·영구 삭제는 워크스페이스 관리자만", () =
     expect((await GET(read(), p("t9"))).status).toBe(404);
     expect((await PATCH(patch({ name: "x" }), p("t9"))).status).toBe(404);
     expect((await DELETE(del(), p("t9"))).status).toBe(404);
+  });
+
+  it("기본 제공 프리셋은 같은 id의 DB 행이 있어도 이름 변경·삭제할 수 없다", async () => {
+    prismaMock.expoTemplate.findFirst.mockResolvedValue({
+      id: "stk-home-v1", workspaceId: "w1", name: "위조 행", description: null, snapshot: {}, createdAt: new Date(),
+    });
+    const { PATCH, DELETE } = await import("@/app/api/expo/templates/[templateId]/route");
+    expect((await PATCH(patch({ name: "새 이름" }), p("stk-home-v1"))).status).toBe(404);
+    expect((await DELETE(del(), p("stk-home-v1"))).status).toBe(404);
+    expect(prismaMock.expoTemplate.update).not.toHaveBeenCalled();
+    expect(prismaMock.expoTemplate.delete).not.toHaveBeenCalled();
+  });
+
+  it("기본 제공 프리셋 상세 조회는 같은 id의 DB 행을 읽지 않는다", async () => {
+    prismaMock.expoTemplate.findFirst.mockResolvedValue({
+      id: "stk-home-v1", workspaceId: "w1", name: "위조 행", description: null, snapshot: {}, createdAt: new Date(),
+    });
+    const { GET } = await import("@/app/api/expo/templates/[templateId]/route");
+    expect((await GET(read(), p("stk-home-v1"))).status).toBe(404);
+    expect(prismaMock.expoTemplate.findFirst).not.toHaveBeenCalled();
+    expect(prismaMock.expoTemplate.update).not.toHaveBeenCalled();
+    expect(prismaMock.expoTemplate.delete).not.toHaveBeenCalled();
   });
 });
 
@@ -370,9 +436,17 @@ describe("템플릿에서 새 사이트를 만든다", () => {
   it("남의 워크스페이스 전시로는 만들 수 없다", async () => {
     prismaMock.project.findUnique.mockResolvedValue({ id: "proj9", workspaceId: "w9" });
     const res = await instantiate({ projectId: "proj9", name: "새 전시" });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
     expect(storageMock.copy).not.toHaveBeenCalled();
+  });
+
+  it("배정되지 않은 MEMBER 는 목적지 프로젝트를 추측할 수 없다", async () => {
+    prismaMock.workspaceMember.findMany.mockResolvedValue([{ workspaceId: "w1", role: "MEMBER" }]);
+    prismaMock.projectMember.findMany.mockResolvedValue([]);
+    const res = await instantiate({ projectId: "proj2", name: "새 전시" });
+    expect(res.status).toBe(404);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 
   it("남의 워크스페이스 템플릿은 없는 것으로 답한다", async () => {
@@ -403,5 +477,27 @@ describe("템플릿에서 새 사이트를 만든다", () => {
     const copiedTo = storageMock.copy.mock.calls[0][1];
     expect(storageMock.remove).toHaveBeenCalledWith([copiedTo]);
     expect(storageMock.remove.mock.calls[0][0]).not.toContain("w1/expo-templates/t1/a.jpg");
+  });
+
+  it("기본 제공 STK 프리셋은 DB 템플릿·Storage를 읽지 않고 같은 프로젝트 권한으로 만든다", async () => {
+    prismaMock.project.findUnique.mockResolvedValue({ id: "proj2", workspaceId: "w1" });
+    const res = await instantiate({ projectId: "proj2", name: "STK 2027" }, "stk-home-v1");
+    expect(res.status).toBe(201);
+    expect(prismaMock.expoTemplate.findFirst).not.toHaveBeenCalled();
+    expect(storageMock.copy).not.toHaveBeenCalled();
+    const draft = prismaMock.expoPage.create.mock.calls[0][0].data.draft;
+    expect(draft.preset).toBe("stk-home-v1");
+    expect(draft.sections.map((section: { type: string }) => section.type)).toEqual([
+      "campaign-hero", "exhibition-grid", "audience-links", "speaker-carousel", "sponsor-marquee", "cta-band",
+    ]);
+  });
+
+  it("기본 제공 STK 프리셋도 목적지 프로젝트 접근 권한을 우회하지 않는다", async () => {
+    prismaMock.workspaceMember.findMany.mockResolvedValue([{ workspaceId: "w1", role: "MEMBER" }]);
+    prismaMock.projectMember.findMany.mockResolvedValue([]);
+    prismaMock.project.findUnique.mockResolvedValue({ id: "proj2", workspaceId: "w1" });
+    const res = await instantiate({ projectId: "proj2", name: "STK 2027" }, "stk-home-v1");
+    expect(res.status).toBe(404);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 });

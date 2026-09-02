@@ -45,3 +45,40 @@ jobs:
       # 이 안에 번들 stale 검사(src/lib/__tests__/embed-runtime.test.ts)가 들어 있다.
       - name: 테스트
         run: npx vitest run --exclude '.worktrees/**' src
+
+  expo-browser:
+    needs: verify
+    # Baselines carry Playwright's `darwin` suffix. Pin the Darwin image so
+    # `macos-latest` upgrades cannot silently change screenshot rasterization.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # package-lock pins @playwright/test/playwright/playwright-core 1.51.1;
+      # npm ci and the local npx binary keep browser revisions in that lockstep.
+      - run: npm ci
+
+      # Next가 하니스 모듈만 컴파일해도 Prisma 타입 import를 해석할 수 있어야 한다.
+      # 클라이언트 생성은 DB 연결을 만들지 않으며 이 job에는 어떤 비밀값도 주지 않는다.
+      - name: Prisma 클라이언트 생성
+        run: npx prisma generate
+
+      - name: Chromium과 WebKit 설치
+        run: npx playwright install chromium webkit
+
+      - name: DB 없는 Expo 브라우저 검증
+        run: npm run test:expo-browser
+
+      - name: 실패 스크린샷과 trace 업로드
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expo-browser-failure-artifacts
+          path: test-results/expo-browser
+          if-no-files-found: ignore
+          retention-days: 7

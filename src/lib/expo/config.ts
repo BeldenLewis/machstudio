@@ -19,7 +19,12 @@ import { toLocalized, type Localized } from "@/lib/collect-form-config";
 import { safeHttpUrl } from "@/lib/webinar-config";
 import { normalizeHexColor } from "@/lib/color";
 import { EXPO_LIMITS, resolveVariant, sectionDef } from "@/lib/expo/registry";
-import type { ExpoPageConfig, ExpoSection, ExpoTheme, SlotDef } from "@/lib/expo/types";
+import { isSafePublicUrl } from "@/lib/expo/destination";
+import type {
+  CampaignConfig, DestinationAction, DestinationConfig, ExpoEventConfig,
+  ExpoPageConfigV2, ExpoSection, ExpoTheme, SlotDef,
+} from "@/lib/expo/types";
+import { EXPO_V2_RULES } from "@/lib/expo/types";
 
 /** 기본 테마 — 색이 없어 화면이 깨지는 것보다 낫다. */
 export const EXPO_DEFAULT_THEME: ExpoTheme = { accent: "#1f3a5f", lightBg: "#ffffff", darkBg: "#111318" };
@@ -28,6 +33,11 @@ const obj = (v: unknown): Record<string, unknown> =>
   v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
 const str = (v: unknown): string => (typeof v === "string" ? v : v == null ? "" : String(v));
+const isIsoTimestamp = (value: unknown): value is string =>
+  typeof value === "string" && EXPO_V2_RULES.timezoneSuffix.test(value) && Number.isFinite(Date.parse(value));
+const isV2Id = (value: unknown): value is string => typeof value === "string" && EXPO_V2_RULES.id.test(value);
+const isAnchorOrModal = (value: unknown): value is string =>
+  typeof value === "string" && EXPO_V2_RULES.anchorOrModal.test(value);
 
 /** UUID 모양인가 — 형식만 본다(버전까지 따지면 옛 값이 통째로 날아간다). */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -88,8 +98,17 @@ function normalizeSlot(def: SlotDef, raw: unknown): unknown {
       if (m.kind !== "image") return undefined;
       const url = safeHttpUrl(m.url);
       if (!url) return undefined;
+      const originalUrl = safeHttpUrl(m.originalUrl);
+      const mimeType = ["image/jpeg", "image/png", "image/webp"].includes(str(m.mimeType)) ? str(m.mimeType) : "";
+      const width = typeof m.width === "number" && Number.isFinite(m.width) && m.width > 0 ? m.width : undefined;
+      const height = typeof m.height === "number" && Number.isFinite(m.height) && m.height > 0 ? m.height : undefined;
       const alt = str(m.alt).slice(0, EXPO_LIMITS.textChars);
-      return alt ? { kind: "image", url, alt } : { kind: "image", url };
+      return {
+        kind: "image", url,
+        ...(originalUrl ? { originalUrl } : {}), ...(mimeType ? { mimeType } : {}),
+        ...(width ? { width } : {}), ...(height ? { height } : {}),
+        ...(alt ? { alt } : {}), ...(typeof m.decorative === "boolean" ? { decorative: m.decorative } : {}),
+      };
     }
 
     case "link": {
@@ -134,11 +153,22 @@ function normalizeSection(raw: unknown): ExpoSection | null {
   const def = sectionDef(str(s.type));
   if (!def) return null;                        // 모르는 타입은 버린다
 
-  const content: Record<string, unknown> = {};
-  const srcContent = obj(s.content);
-  for (const slot of def.slots) {
-    const v = normalizeSlot(slot, srcContent[slot.key]);
-    if (v !== undefined) content[slot.key] = v;
+  let content: Record<string, unknown>;
+  if (def.normalize) {
+    try {
+      const normalized = def.normalize(s.content, { mode: "stored" });
+      if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) return null;
+      content = normalized;
+    } catch {
+      return null;
+    }
+  } else {
+    const srcContent = obj(s.content);
+    content = {};
+    for (const slot of def.slots) {
+      const v = normalizeSlot(slot, srcContent[slot.key]);
+      if (v !== undefined) content[slot.key] = v;
+    }
   }
 
   const design: Record<string, string> = {};
@@ -166,7 +196,88 @@ function normalizeSection(raw: unknown): ExpoSection | null {
  * 다중성·배치 규칙(kv 는 하나이고 맨 위, toolbox·register-form 은 하나)도 여기서 강제한다 —
  * 렌더가 그 규칙을 다시 확인하지 않아도 되게.
  */
-export function normalizeExpoPage(raw: unknown): ExpoPageConfig {
+export function normalizeCampaigns(raw: unknown): CampaignConfig[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CampaignConfig[] = [];
+  const seen = new Set<string>();
+  for (const item of raw.slice(0, EXPO_V2_RULES.maxRows)) {
+    const source = obj(item);
+    const id = str(source.id).trim();
+    const label = str(source.label).trim().slice(0, EXPO_LIMITS.textChars);
+    const startsAt = str(source.startsAt);
+    const endsAt = str(source.endsAt);
+    const override = source.override;
+    if (!isV2Id(id) || !label || seen.has(id) || !isIsoTimestamp(startsAt) || !isIsoTimestamp(endsAt)
+      || Date.parse(endsAt) <= Date.parse(startsAt)
+      || (override !== "auto" && override !== "force-on" && override !== "force-off")
+      || typeof source.enabled !== "boolean") continue;
+    seen.add(id);
+    out.push({ id, label, startsAt, endsAt, override, enabled: source.enabled });
+  }
+  return out;
+}
+
+function normalizeDestinationAction(raw: unknown): DestinationAction | null {
+  const action = obj(raw);
+  if (action.type === "url") {
+    if (!isSafePublicUrl(action.href)) return null;
+    return typeof action.newTab === "boolean" ? { type: "url", href: action.href, newTab: action.newTab } : { type: "url", href: action.href };
+  }
+  if (action.type === "download") {
+    return isSafePublicUrl(action.href) ? { type: "download", href: action.href } : null;
+  }
+  if (action.type === "anchor") {
+    return isAnchorOrModal(action.target) ? { type: "anchor", target: action.target } : null;
+  }
+  if (action.type === "imweb-modal") {
+    if (!isAnchorOrModal(action.modalId)) return null;
+    if (action.fallbackHref !== undefined && !isSafePublicUrl(action.fallbackHref)) return null;
+    return typeof action.fallbackHref === "string"
+      ? { type: "imweb-modal", modalId: action.modalId, fallbackHref: action.fallbackHref }
+      : { type: "imweb-modal", modalId: action.modalId };
+  }
+  return null;
+}
+
+export function normalizeDestinations(raw: unknown): DestinationConfig[] {
+  if (!Array.isArray(raw)) return [];
+  const out: DestinationConfig[] = [];
+  const seen = new Set<string>();
+  for (const item of raw.slice(0, EXPO_V2_RULES.maxRows)) {
+    const source = obj(item);
+    const id = str(source.id).trim();
+    const label = str(source.label).trim().slice(0, EXPO_LIMITS.textChars);
+    const action = normalizeDestinationAction(source.action);
+    if (!isV2Id(id) || !label || seen.has(id) || !action || typeof source.enabled !== "boolean") continue;
+    const analyticsSource = obj(source.analytics);
+    const eventName = str(analyticsSource.eventName);
+    const contentId = clampBytes(str(analyticsSource.contentId).trim(), 64);
+    const analytics = EXPO_V2_RULES.analyticsEvent.test(eventName)
+      ? { eventName, ...(contentId ? { contentId } : {}) }
+      : undefined;
+    seen.add(id);
+    out.push({ id, label, action, ...(analytics ? { analytics } : {}), enabled: source.enabled });
+  }
+  return out;
+}
+
+function normalizeEvent(raw: unknown): ExpoEventConfig | undefined {
+  const event = obj(raw);
+  const edition = Number(event.edition);
+  const startsAt = str(event.startsAt);
+  const endsAt = str(event.endsAt);
+  if (!Number.isInteger(edition) || edition < 1 || !isIsoTimestamp(startsAt) || !isIsoTimestamp(endsAt)
+    || Date.parse(endsAt) <= Date.parse(startsAt)) return undefined;
+  const factsSource = obj(event.facts);
+  const facts = Object.fromEntries(
+    (["companies", "sessions", "booths"] as const)
+      .map((key) => [key, Number(factsSource[key])] as const)
+      .filter(([, value]) => Number.isInteger(value) && value >= 0),
+  );
+  return { edition, startsAt, endsAt, ...(Object.keys(facts).length ? { facts } : {}) };
+}
+
+export function normalizeExpoPage(raw: unknown): ExpoPageConfigV2 {
   const src = obj(raw);
   const list = Array.isArray(src.sections) ? src.sections : [];
 
@@ -191,7 +302,24 @@ export function normalizeExpoPage(raw: unknown): ExpoPageConfig {
   // 키비주얼은 맨 위에 온다 — 저장 순서가 어긋나 있어도 화면에서 바로잡는다.
   const pinned = sections.filter((s) => sectionDef(s.type)?.pinnedFirst);
   const rest = sections.filter((s) => !sectionDef(s.type)?.pinnedFirst);
-  return { sections: [...pinned, ...rest] };
+  const settingsRaw = obj(src.settings);
+  const event = normalizeEvent(settingsRaw.event);
+  const campaigns = normalizeCampaigns(settingsRaw.campaigns);
+  const destinations = normalizeDestinations(settingsRaw.destinations);
+  const settings = {
+    ...(event ? { event } : {}),
+    ...(campaigns.length ? { campaigns } : {}),
+    ...(destinations.length ? { destinations } : {}),
+  };
+  const preset = typeof src.preset === "string" && src.preset.trim()
+    ? clampBytes(src.preset.trim(), 128)
+    : undefined;
+  return {
+    schemaVersion: 2,
+    ...(preset ? { preset } : {}),
+    ...(Object.keys(settings).length ? { settings } : {}),
+    sections: [...pinned, ...rest],
+  };
 }
 
 export function normalizeExpoTheme(raw: unknown): ExpoTheme {

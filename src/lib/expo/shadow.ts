@@ -88,6 +88,14 @@ export interface ExpoShellHandle {
   destroy(): void;
 }
 
+export interface ExpoShellStage {
+  shell: ExpoShellHandle;
+  /** 문서 연결 뒤, 공개 전 실행할 lifecycle. */
+  addAttach(fn: () => void): void;
+  commit(): ExpoShellHandle;
+  abort(): void;
+}
+
 /** 리셋을 **넣기 전에** 바른다 — 안 그러면 첫 레이아웃 한 번을 파트너 규칙으로 맞는다. */
 function createHost(doc: Document, pageId: string, sectionId?: string | null): HTMLElement {
   const host = doc.createElement(EXPO_HOST_TAG);
@@ -140,154 +148,206 @@ function applyTokens(renderRoot: HTMLElement, theme: ExpoTheme): void {
  * **던지지 않는다.** 못 세우면 `null` 이다 — 파트너가 우리를 동기적으로 부르는 경우
  * 예외가 그들의 남은 초기화 코드를 중단시킨다.
  */
+function createShellHandle(options: ExpoShellOptions, host: HTMLElement): ExpoShellHandle {
+  const doc = options.doc ?? document;
+  const view = doc.defaultView as (Window & typeof globalThis) | null;
+  if (!view) throw new Error("missing-window");
+  const { container, theme } = options;
+
+  host.setAttribute("style", EXPO_HOST_RESET_CSS);
+  const root = host.shadowRoot ?? host.attachShadow({ mode: "open", delegatesFocus: false });
+  const styleMode = ensureExpoStyles(root, view);
+  const renderRoot = root.querySelector<HTMLElement>("." + EXPO_RENDER_ROOT_CLASS)
+    ?? createRenderRoot(doc);
+  applyTokens(renderRoot, theme);
+  if (!renderRoot.parentNode) root.appendChild(renderRoot);
+
+  const controller = new AbortController();
+  const cleanups: Array<() => void> = [];
+  let destroyed = false;
+
+  const runCleanups = () => {
+    while (cleanups.length > 0) {
+      const fn = cleanups.pop()!;
+      try {
+        fn();
+      } catch (error) {
+        warn("정리 중 오류", error);
+      }
+    }
+  };
+
+  const handle: ExpoShellHandle = {
+    host,
+    root,
+    renderRoot,
+    styleMode,
+    signal: controller.signal,
+
+    ready() {
+      renderRoot.setAttribute("data-msx-ready", "1");
+    },
+
+    applyTheme(next: ExpoTheme) {
+      applyTokens(renderRoot, next);
+    },
+
+    reset(nextTheme?: ExpoTheme) {
+      host.setAttribute("style", EXPO_HOST_RESET_CSS);
+      runCleanups();
+      clearNode(renderRoot);
+      renderRoot.setAttribute("data-msx-ready", "0");
+      applyTokens(renderRoot, nextTheme ?? theme);
+    },
+
+    addCleanup(fn: () => void) {
+      cleanups.push(fn);
+    },
+
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      try {
+        renderRoot.setAttribute("data-msx-ready", "0");
+      } catch (error) {
+        warn("숨김 실패", error);
+      }
+      runCleanups();
+      controller.abort();
+      try {
+        clearNode(renderRoot);
+      } catch (error) {
+        warn("내용 정리 실패", error);
+      }
+      try {
+        host.remove();
+      } catch (error) {
+        warn("호스트 정리 실패", error);
+      }
+      // 미커밋 후보가 이전 shell의 등록을 지우면 실패 보존 계약이 깨진다.
+      if (registry().get(container) === handle) registry().delete(container);
+    },
+  };
+  return handle;
+}
+
+/** 기존 직접 호출 계약. 런타임 교체는 stageExpoShell을 사용한다. */
 export function mountExpoShell(options: ExpoShellOptions): ExpoShellHandle | null {
   const doc = options.doc ?? (typeof document !== "undefined" ? document : null);
-  if (!doc) return null;
+  if (!doc || !options.container?.isConnected || !doc.defaultView) return null;
   const { container, pageId, theme } = options;
   const sectionId = options.sectionId ?? null;
-
-  // 떼어진 컨테이너에 붙이면 아무도 못 찾는 보이지 않는 구획이 생긴다.
-  if (!container || !container.isConnected) return null;
-
-  const view = doc.defaultView as (Window & typeof globalThis) | null;
-  if (!view) return null;
+  let created: HTMLElement | null = null;
 
   try {
     const previous = findExpoShell(container);
     if (previous) {
-      const sameTarget = previous.host.getAttribute("data-msx-section") === (sectionId ?? null);
+      const sameTarget = previous.host.getAttribute("data-msx-section") === sectionId;
       if (previous.host.isConnected && sameTarget) {
-        // 재진입 — 같은 자리를 다시 쓴다. 시트도 폰트도 다시 받지 않는다.
         previous.reset(theme);
         return previous;
       }
-      // 대상이 달라졌으면 통째로 버린다 — 옛 design 속성이 남으면 섞인 화면이 된다.
       previous.destroy();
     }
 
-    /**
-     * 등록부가 없어도 지난 로드의 호스트가 남아 있을 수 있다(다른 번들이 만든 것).
-     * 그걸 새로 만들면 컨테이너 안에 호스트가 둘이 된다.
-     */
     const adopted = container.querySelector<HTMLElement>(`${EXPO_HOST_TAG}[${EXPO_HOST_MARK}]`);
     const host = adopted ?? createHost(doc, pageId, sectionId);
-    // 파트너 스크립트가 그 사이 style 을 지웠거나 고쳤을 수 있다 — 무조건 다시 바른다.
-    host.setAttribute("style", EXPO_HOST_RESET_CSS);
-    if (!adopted) container.appendChild(host);
-
-    // **맨손 attachShadow 를 절대 쓰지 않는다** — 두 번째 호출은 던진다.
-    const root = host.shadowRoot ?? host.attachShadow({ mode: "open", delegatesFocus: false });
-
-    /**
-     * 시트를 **렌더 루트보다 먼저** 붙인다. `[data-msx-ready="0"]{visibility:hidden}`
-     * 게이트는 시트가 살아 있어야 동작한다 — 순서가 바뀌면 느린 파트너 페이지에서
-     * 스타일 없는 전폭 16px 콘텐츠가 한 프레임 보인다.
-     */
-    const styleMode = ensureExpoStyles(root, view);
-
-    const renderRoot = root.querySelector<HTMLElement>("." + EXPO_RENDER_ROOT_CLASS)
-      ?? createRenderRoot(doc);
-    applyTokens(renderRoot, theme);
-    if (!renderRoot.parentNode) root.appendChild(renderRoot);
-
-    /**
-     * 서체는 **기다리지 않는다.** 문서 전역 약속이고 최대 4초까지 걸린다 — 기다리면
-     * 느린 회선에서 구획이 4초간 감춰진 채 남는다. `display:swap` 과 폴백 스택이 덮는다.
-     */
+    if (!adopted) {
+      created = host;
+      container.appendChild(host);
+    }
+    const handle = createShellHandle({ ...options, doc }, host);
     void ensureExpoFont(options.origin);
-
-    const controller = new AbortController();
-    const cleanups: Array<() => void> = [];
-    let destroyed = false;
-
-    const runCleanups = () => {
-      /**
-       * **역순**이다. 포털은 보통 마지막에 열리므로 역순이면 가장 먼저 닫힌다 —
-       * 그게 중요하다. 포털을 안 닫고 떠나면 파트너의 `<body>` 가
-       * `position:fixed; top:-1234px` 로 남아 **그들의 사이트 전체가 스크롤되지 않는다.**
-       */
-      while (cleanups.length > 0) {
-        const fn = cleanups.pop()!;
-        try {
-          fn();
-        } catch (error) {
-          warn("정리 중 오류", error);
-        }
-      }
-    };
-
-    const handle: ExpoShellHandle = {
-      host,
-      root,
-      renderRoot,
-      styleMode,
-      signal: controller.signal,
-
-      ready() {
-        renderRoot.setAttribute("data-msx-ready", "1");
-      },
-
-      applyTheme(next: ExpoTheme) {
-        applyTokens(renderRoot, next);
-      },
-
-      reset(nextTheme?: ExpoTheme) {
-        /**
-         * 파트너 스크립트가 그 사이 `style` 을 지웠거나 고쳤을 수 있다. 재진입은
-         * 호스트가 위젯을 다시 그린 뒤에 오는 것이 보통이라, 그 확률이 낮지 않다.
-         * 무조건 다시 바른다 — 덧붙이지 않고 **덮어쓴다**.
-         */
-        host.setAttribute("style", EXPO_HOST_RESET_CSS);
-        /**
-         * 정리를 **비우기보다 먼저** 돌린다.
-         *
-         * `attachExpoForm` 은 특정 컨테이너 요소에 자리를 예약해 뒀다. DOM 을 먼저
-         * 비우면, 날아오던 `/f/{sourceId}` 스크립트가 도착해 예약을 찾고 → 컨테이너가
-         * 떼어진 것을 보고 → 예약을 지우고 → **문서 탐색 경로로 떨어진다.** 그러면
-         * 폼이 다른 섹션이나 라이브 등록 자리에 앉는다(중복 제출).
-         */
-        runCleanups();
-        clearNode(renderRoot);
-        renderRoot.setAttribute("data-msx-ready", "0");
-        applyTokens(renderRoot, nextTheme ?? theme);
-      },
-
-      addCleanup(fn: () => void) {
-        cleanups.push(fn);
-      },
-
-      destroy() {
-        // 호스트가 두 번 부른다.
-        if (destroyed) return;
-        destroyed = true;
-        try {
-          // 시트가 아직 붙어 있는 동안 감춘다 — 눈앞에서 해체되는 걸 보이지 않게.
-          renderRoot.setAttribute("data-msx-ready", "0");
-          runCleanups();
-          controller.abort();
-          clearNode(renderRoot);
-          /**
-           * ShadowRoot 는 떼어낼 수 없다 — 호스트를 지우는 것이 유일한 방법이다.
-           * 파트너 컨테이너는 지우지도, 청소하지도 않는다.
-           */
-          host.remove();
-        } catch (error) {
-          warn("정리 실패", error);
-        } finally {
-          registry().delete(container);
-        }
-        /**
-         * 공용 시트와 폰트 약속은 **놓지 않는다.** 둘 다 이 문서의 다른 섹션들과
-         * 공유하는 문서 단위 단일체다 — 한 섹션이 치우면 다음 마운트가 8KB 를 다시
-         * 파싱하고 폰트를 다시 받는다.
-         */
-      },
-    };
-
     registry().set(container, handle);
     return handle;
   } catch (error) {
+    created?.remove();
     warn("껍데기를 세우지 못했어요", error);
     return null;
   }
+}
+
+const EXPO_STAGED_HOST_CSS = EXPO_HOST_RESET_CSS + [
+  "position:absolute!important",
+  "left:-100000px!important",
+  "top:0!important",
+  "width:1px!important",
+  "height:1px!important",
+  "overflow:hidden!important",
+  "visibility:hidden!important",
+  "pointer-events:none!important",
+].join(";") + ";";
+
+/** 새 shell을 분리 조립하고 lifecycle 성공 뒤에만 기존 shell과 교체한다. */
+export function stageExpoShell(options: ExpoShellOptions): ExpoShellStage | null {
+  const doc = options.doc ?? (typeof document !== "undefined" ? document : null);
+  if (!doc || !options.container?.isConnected || !doc.defaultView) return null;
+  const { container, pageId } = options;
+  const sectionId = options.sectionId ?? null;
+  const previous = findExpoShell(container);
+  const orphan = previous ? null
+    : container.querySelector<HTMLElement>(`${EXPO_HOST_TAG}[${EXPO_HOST_MARK}]`);
+  const host = createHost(doc, pageId, sectionId);
+  let shell: ExpoShellHandle;
+  try {
+    shell = createShellHandle({ ...options, doc }, host);
+  } catch (error) {
+    host.remove();
+    warn("후보 껍데기를 세우지 못했어요", error);
+    return null;
+  }
+
+  const attachments: Array<() => void> = [];
+  let committed = false;
+  let aborted = false;
+
+  const abortCandidate = () => {
+    if (committed || aborted) return;
+    aborted = true;
+    shell.destroy();
+  };
+
+  return {
+    shell,
+
+    addAttach(fn: () => void) {
+      if (!committed && !aborted) attachments.push(fn);
+    },
+
+    commit() {
+      if (committed) return shell;
+      if (aborted) throw new Error("expo-stage-aborted");
+      if (!container.isConnected) {
+        abortCandidate();
+        throw new Error("expo-container-detached");
+      }
+
+      const oldHost = previous?.host.parentElement === container ? previous.host : orphan;
+      host.setAttribute("style", EXPO_STAGED_HOST_CSS);
+      host.setAttribute("inert", "");
+      host.setAttribute("aria-hidden", "true");
+      if (oldHost) container.insertBefore(host, oldHost);
+      else container.appendChild(host);
+
+      try {
+        for (const attach of attachments.splice(0)) attach();
+        shell.ready();
+        // 같은 동기 commit 안에서 공개·등록 교체·이전 정리를 끝내 paint 사이 공백을 없앤다.
+        host.setAttribute("style", EXPO_HOST_RESET_CSS);
+        host.removeAttribute("inert");
+        host.removeAttribute("aria-hidden");
+        registry().set(container, shell);
+        committed = true;
+        if (previous) previous.destroy();
+        else orphan?.remove();
+        void ensureExpoFont(options.origin);
+        return shell;
+      } catch (error) {
+        abortCandidate();
+        throw error;
+      }
+    },
+
+    abort: abortCandidate,
+  };
 }

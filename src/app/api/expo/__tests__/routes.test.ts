@@ -14,11 +14,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const prismaMock = {
   workspaceMember: { findMany: vi.fn() },
+  projectMember: { findMany: vi.fn() },
   expoSite: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
-  expoPage: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+  expoPage: {
+    findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn(),
+    updateManyAndReturn: vi.fn(),
+  },
+  expoPageRevision: {
+    aggregate: vi.fn(), findFirst: vi.fn(), create: vi.fn(), findMany: vi.fn(), deleteMany: vi.fn(),
+  },
   project: { findUnique: vi.fn() },
   collectSource: { findFirst: vi.fn(), findMany: vi.fn() },
-  $transaction: vi.fn(async (ops: unknown[]) => ops),
+  $transaction: vi.fn(),
   $queryRaw: vi.fn(),
 };
 const getUser = vi.fn();
@@ -28,7 +35,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser } }) }));
 vi.mock("@/lib/expo/schema-probe", () => ({ probeExpoSchema: () => probe() }));
 
-const SCHEMA_VERSION = "20260821-v1";
+const SCHEMA_VERSION = "20260901-v2";
 
 /** 우리 화면에서 온 JSON 쓰기 요청. */
 const write = (body: unknown, headers: Record<string, string> = {}) =>
@@ -48,6 +55,23 @@ beforeEach(() => {
   probe.mockResolvedValue(true);
   getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
   prismaMock.workspaceMember.findMany.mockResolvedValue([{ workspaceId: "w1", role: "OWNER" }]);
+  prismaMock.projectMember.findMany.mockResolvedValue([]);
+  prismaMock.$queryRaw.mockResolvedValue([{ id: "pg1" }]);
+  prismaMock.expoPage.findUnique.mockImplementation(async () => {
+    const latest = prismaMock.expoPage.findFirst.mock.results.at(-1);
+    return latest ? await latest.value : null;
+  });
+  prismaMock.expoPageRevision.aggregate.mockResolvedValue({ _max: { sequence: null } });
+  prismaMock.expoPageRevision.findFirst.mockResolvedValue(null);
+  prismaMock.expoPageRevision.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
+    id: "rev-created", createdAt: new Date(), ...data,
+  }));
+  prismaMock.expoPageRevision.findMany.mockResolvedValue([]);
+  prismaMock.expoPageRevision.deleteMany.mockResolvedValue({ count: 0 });
+  prismaMock.$transaction.mockImplementation(async (work: unknown) =>
+    typeof work === "function"
+      ? (work as (tx: typeof prismaMock) => Promise<unknown>)(prismaMock)
+      : work);
 });
 
 describe("① 기능 게이트가 첫 줄", () => {
@@ -137,7 +161,7 @@ describe("④ 소유권 — 남의 것은 404", () => {
     const { POST } = await import("@/app/api/expo/route");
 
     const res = await POST(write({ projectId: "p9", name: "새 사이트" }));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
     expect(prismaMock.expoSite.create).not.toHaveBeenCalled();
   });
 });
@@ -205,13 +229,65 @@ describe("draft 저장 — 편집 충돌", () => {
 
   it("번호가 맞으면 저장한다", async () => {
     prismaMock.expoPage.findFirst.mockResolvedValue(page);
-    prismaMock.expoPage.update.mockResolvedValue({ id: "pg1", draftRevision: 8 });
+    prismaMock.expoPage.updateManyAndReturn.mockResolvedValue([{
+      id: "pg1", slug: "home", title: "홈", imwebUrl: null, draftRevision: 8, updatedAt: new Date(),
+    }]);
     const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
 
-    const res = await PATCH(patch({ draft: { sections: [] }, draftRevision: 7 }),
+    const res = await PATCH(patch({ draft: { schemaVersion: 2, sections: [] }, draftRevision: 7 }),
       { params: Promise.resolve({ pageId: "pg1" }) });
     expect(res.status).toBe(200);
-    expect(prismaMock.expoPage.update).toHaveBeenCalled();
+    expect(prismaMock.expoPage.updateManyAndReturn).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        id: "pg1", siteId: "s1", deletedAt: null, draftRevision: 7,
+        site: { deletedAt: null },
+      }),
+      data: expect.objectContaining({ draftRevision: { increment: 1 } }),
+    }));
+  });
+
+  it("동일한 번호의 두 요청 중 하나만 원자적으로 저장한다", async () => {
+    let stored = { ...page, draft: { schemaVersion: 2, sections: [] }, draftRevision: 7 };
+    let initialReads = 0;
+    let releaseReads!: () => void;
+    const bothRead = new Promise<void>((resolve) => { releaseReads = resolve; });
+    prismaMock.expoPage.findFirst.mockImplementation(async () => {
+      if (initialReads < 2) {
+        initialReads += 1;
+        const captured = structuredClone(stored);
+        if (initialReads === 2) releaseReads();
+        await bothRead;
+        return captured;
+      }
+      return structuredClone(stored);
+    });
+    prismaMock.expoPage.updateManyAndReturn.mockImplementation(async ({ where, data }) => {
+      if (stored.draftRevision !== where.draftRevision) return [];
+      stored = {
+        ...stored,
+        draft: structuredClone(data.draft),
+        draftRevision: stored.draftRevision + Number(data.draftRevision.increment),
+      };
+      return [{
+        id: stored.id, slug: stored.slug, title: stored.title, imwebUrl: stored.imwebUrl,
+        draftRevision: stored.draftRevision, updatedAt: stored.updatedAt,
+      }];
+    });
+    const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
+    const firstDraft = { schemaVersion: 2, sections: [], preset: "first" };
+    const secondDraft = { schemaVersion: 2, sections: [], preset: "second" };
+
+    const responses = await Promise.all([
+      PATCH(patch({ draft: firstDraft, draftRevision: 7 }), { params: Promise.resolve({ pageId: "pg1" }) }),
+      PATCH(patch({ draft: secondDraft, draftRevision: 7 }), { params: Promise.resolve({ pageId: "pg1" }) }),
+    ]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    const conflict = responses.find((response) => response.status === 409)!;
+    expect(await conflict.json()).toMatchObject({ draft: stored.draft, draftRevision: 8 });
+    expect(stored.draftRevision).toBe(8);
+    expect(stored.draft).toEqual(expect.objectContaining({ preset: expect.stringMatching(/^(first|second)$/) }));
+    expect(prismaMock.expoPage.updateManyAndReturn).toHaveBeenCalledTimes(2);
   });
 
   /** 409 에 **최신 값을 함께** 준다 — 화면이 그걸로 다시 읽는다. 자동 재시도는 안 한다. */
@@ -219,12 +295,12 @@ describe("draft 저장 — 편집 충돌", () => {
     prismaMock.expoPage.findFirst.mockResolvedValue(page);
     const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
 
-    const res = await PATCH(patch({ draft: { sections: [] }, draftRevision: 3 }),
+    const res = await PATCH(patch({ draft: { schemaVersion: 2, sections: [] }, draftRevision: 3 }),
       { params: Promise.resolve({ pageId: "pg1" }) });
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.draftRevision).toBe(7);
-    expect(body.draft).toEqual({ sections: [] });
+    expect(body.draft).toEqual({ schemaVersion: 2, sections: [] });
     expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
   });
 
@@ -234,7 +310,7 @@ describe("draft 저장 — 편집 충돌", () => {
     const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
 
     const res = await PATCH(patch({
-      draft: { sections: [{
+      draft: { schemaVersion: 2, sections: [{
         sid: "00000000-0000-4000-8000-000000000001",
         type: "kv", variant: "column", content: { title: "가".repeat(600) },
       }] },
@@ -269,13 +345,15 @@ describe("역할 — 화면이 숨긴 것은 API 도 막는다", () => {
 
   const asMember = () =>
     prismaMock.workspaceMember.findMany.mockResolvedValue([{ workspaceId: "w1", role: "MEMBER" }]);
+  const asProjectRole = (role: "VIEWER" | "EDITOR" | "ADMIN") =>
+    prismaMock.projectMember.findMany.mockResolvedValue([{ projectId: "p1", role }]);
 
   it("MEMBER 는 발행할 수 없다", async () => {
     asMember();
     prismaMock.expoPage.findFirst.mockResolvedValue(page);
     const { POST } = await import("@/app/api/expo/pages/[pageId]/publish/route");
     const res = await POST(write({}), { params: Promise.resolve({ pageId: "pg1" }) });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
     expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
   });
 
@@ -285,12 +363,22 @@ describe("역할 — 화면이 숨긴 것은 API 도 막는다", () => {
     prismaMock.expoPage.findFirst.mockResolvedValue(page);
     const { POST } = await import("@/app/api/expo/pages/[pageId]/live/route");
     const res = await POST(write({ live: false }), { params: Promise.resolve({ pageId: "pg1" }) });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
     expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
   });
 
   it("MEMBER 는 미리보기 토큰을 재발급할 수 없다", async () => {
     asMember();
+    prismaMock.expoSite.findFirst.mockResolvedValue(site);
+    const { POST } = await import("@/app/api/expo/[siteId]/regenerate-preview-token/route");
+    const res = await POST(write({}), { params: Promise.resolve({ siteId: "s1" }) });
+    expect(res.status).toBe(404);
+    expect(prismaMock.expoSite.update).not.toHaveBeenCalled();
+  });
+
+  it("PROJECT EDITOR 는 미리보기 토큰을 재발급할 수 없다", async () => {
+    asMember();
+    asProjectRole("EDITOR");
     prismaMock.expoSite.findFirst.mockResolvedValue(site);
     const { POST } = await import("@/app/api/expo/[siteId]/regenerate-preview-token/route");
     const res = await POST(write({}), { params: Promise.resolve({ siteId: "s1" }) });
@@ -303,7 +391,7 @@ describe("역할 — 화면이 숨긴 것은 API 도 막는다", () => {
     prismaMock.expoSite.findFirst.mockResolvedValue(site);
     const { DELETE } = await import("@/app/api/expo/[siteId]/route");
     const res = await DELETE(write({}), { params: Promise.resolve({ siteId: "s1" }) });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
     expect(prismaMock.expoSite.update).not.toHaveBeenCalled();
   });
 
@@ -312,7 +400,7 @@ describe("역할 — 화면이 숨긴 것은 API 도 막는다", () => {
     prismaMock.expoPage.findFirst.mockResolvedValue(page);
     const { DELETE } = await import("@/app/api/expo/pages/[pageId]/route");
     const res = await DELETE(write({}), { params: Promise.resolve({ pageId: "pg1" }) });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
     expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
   });
 
@@ -322,32 +410,130 @@ describe("역할 — 화면이 숨긴 것은 API 도 막는다", () => {
     prismaMock.expoSite.findFirst.mockResolvedValue(site);
     const { PATCH } = await import("@/app/api/expo/[siteId]/route");
     const res = await PATCH(write({ theme: { accent: "#ff0000" } }), { params: Promise.resolve({ siteId: "s1" }) });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
     expect(prismaMock.expoSite.update).not.toHaveBeenCalled();
   });
 
   /** 초안 편집은 MEMBER 도 된다 — 좁히려다 편집까지 막으면 안 된다. */
   it("MEMBER 도 초안은 저장할 수 있다", async () => {
     asMember();
+    asProjectRole("EDITOR");
     prismaMock.expoPage.findFirst.mockResolvedValue(page);
-    prismaMock.expoPage.update.mockResolvedValue({ id: "pg1", draftRevision: 4 });
+    prismaMock.expoPage.updateManyAndReturn.mockResolvedValue([{
+      id: "pg1", slug: "home", title: "홈", imwebUrl: null, draftRevision: 4, updatedAt: new Date(),
+    }]);
     const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
     const res = await PATCH(
-      write({ draft: { sections: [] }, draftRevision: 3 }),
+      write({ draft: { schemaVersion: 2, sections: [] }, draftRevision: 3 }),
       { params: Promise.resolve({ pageId: "pg1" }) },
     );
     expect(res.status).toBe(200);
-    expect(prismaMock.expoPage.update).toHaveBeenCalled();
+    expect(prismaMock.expoPage.updateManyAndReturn).toHaveBeenCalled();
   });
 
   /** 사이트 이름 바꾸기도 편집 쪽이다. */
   it("MEMBER 도 사이트 이름은 바꿀 수 있다", async () => {
     asMember();
+    asProjectRole("EDITOR");
     prismaMock.expoSite.findFirst.mockResolvedValue(site);
     prismaMock.expoSite.update.mockResolvedValue({ ...site });
     const { PATCH } = await import("@/app/api/expo/[siteId]/route");
     const res = await PATCH(write({ name: "새 이름" }), { params: Promise.resolve({ siteId: "s1" }) });
     expect(res.status).toBe(200);
+  });
+
+  it("PROJECT EDITOR 는 발행을 시도할 수 있다", async () => {
+    asMember();
+    asProjectRole("EDITOR");
+    prismaMock.expoPage.findFirst.mockResolvedValue(page);
+    const { POST } = await import("@/app/api/expo/pages/[pageId]/publish/route");
+    // 빈 초안이라 검증은 실패하지만, 권한 때문에 거절된 것은 아니다.
+    expect((await POST(write({}), { params: Promise.resolve({ pageId: "pg1" }) })).status).toBe(422);
+  });
+
+  it("PROJECT ADMIN 은 사이트를 지울 수 있다", async () => {
+    asMember();
+    asProjectRole("ADMIN");
+    prismaMock.expoSite.findFirst.mockResolvedValue(site);
+    prismaMock.expoSite.update.mockResolvedValue({ ...site });
+    const { DELETE } = await import("@/app/api/expo/[siteId]/route");
+    expect((await DELETE(write({}), { params: Promise.resolve({ siteId: "s1" }) })).status).toBe(200);
+  });
+
+  it("PROJECT VIEWER 는 쓰지 못한다", async () => {
+    asMember();
+    asProjectRole("VIEWER");
+    prismaMock.expoPage.findFirst.mockResolvedValue(page);
+    const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
+    expect((await PATCH(write({ title: "x" }), { params: Promise.resolve({ pageId: "pg1" }) })).status).toBe(403);
+  });
+});
+
+describe("프로젝트 목록 노출", () => {
+  it("배정되지 않은 프로젝트 사이트를 목록에서 숨긴다", async () => {
+    prismaMock.workspaceMember.findMany.mockResolvedValue([{ workspaceId: "w1", role: "MEMBER" }]);
+    prismaMock.projectMember.findMany.mockResolvedValue([{ projectId: "p1", role: "VIEWER" }]);
+    prismaMock.expoSite.findMany.mockResolvedValue([
+      { id: "s1", workspaceId: "w1", projectId: "p1", name: "보이는 사이트", siteUrl: null, updatedAt: new Date(), _count: { pages: 1 } },
+      { id: "s2", workspaceId: "w1", projectId: "p2", name: "숨긴 사이트", siteUrl: null, updatedAt: new Date(), _count: { pages: 1 } },
+    ]);
+    const { GET } = await import("@/app/api/expo/route");
+    const body = await (await GET(read())).json();
+    expect(body.sites.map((site: { id: string }) => site.id)).toEqual(["s1"]);
+  });
+
+  it("명시한 미배정 프로젝트는 빈 목록이 아니라 404 로 숨긴다", async () => {
+    prismaMock.workspaceMember.findMany.mockResolvedValue([{ workspaceId: "w1", role: "MEMBER" }]);
+    prismaMock.projectMember.findMany.mockResolvedValue([{ projectId: "p1", role: "VIEWER" }]);
+    prismaMock.project.findUnique.mockResolvedValue({ id: "p2", workspaceId: "w1" });
+    const { GET } = await import("@/app/api/expo/route");
+    const res = await GET(new Request("https://machstudio.vercel.app/api/expo?projectId=p2"));
+    expect(res.status).toBe(404);
+    expect(prismaMock.expoSite.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("살아 있는 부모 사이트 경계", () => {
+  const knownPage = {
+    id: "pg-deleted-site", siteId: "deleted-site", slug: "known", title: "알려진 페이지",
+    isHome: false, sortOrder: 1, draft: { schemaVersion: 2, sections: [] }, draftRevision: 3,
+    published: null, publishedAt: null, liveAt: null, imwebUrl: null, updatedAt: new Date(),
+    site: { id: "deleted-site", workspaceId: "w1", projectId: "p1", deletedAt: new Date() },
+  };
+  const activeOnly = async (args: { where?: { site?: { deletedAt?: null } } }) =>
+    args.where?.site?.deletedAt === null ? null : knownPage;
+
+  it.each([
+    ["읽기", async () => {
+      const { GET } = await import("@/app/api/expo/pages/[pageId]/route");
+      return GET(read(), { params: Promise.resolve({ pageId: knownPage.id }) });
+    }],
+    ["편집", async () => {
+      const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
+      return PATCH(write({ title: "수정" }), { params: Promise.resolve({ pageId: knownPage.id }) });
+    }],
+    ["삭제", async () => {
+      const { DELETE } = await import("@/app/api/expo/pages/[pageId]/route");
+      return DELETE(write({}), { params: Promise.resolve({ pageId: knownPage.id }) });
+    }],
+    ["공개 전환", async () => {
+      const { POST } = await import("@/app/api/expo/pages/[pageId]/live/route");
+      return POST(write({ live: false }), { params: Promise.resolve({ pageId: knownPage.id }) });
+    }],
+    ["발행", async () => {
+      const { POST } = await import("@/app/api/expo/pages/[pageId]/publish/route");
+      return POST(write({}), { params: Promise.resolve({ pageId: knownPage.id }) });
+    }],
+  ])("부모가 소프트 삭제된 알려진 page id의 %s를 404로 숨긴다", async (_label, invoke) => {
+    prismaMock.expoPage.findFirst.mockImplementation(activeOnly);
+    const response = await invoke();
+    expect(response.status).toBe(404);
+    expect(prismaMock.expoPage.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: knownPage.id, deletedAt: null, site: { deletedAt: null } }),
+    }));
+    expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
+    expect(prismaMock.expoPage.updateManyAndReturn).not.toHaveBeenCalled();
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 });
 
@@ -413,6 +599,7 @@ describe("페이지 상세 — 내보내기 정보", () => {
   const page = {
     id: "pg1", siteId: "s1", slug: "home", title: "홈", isHome: true, sortOrder: 0,
     draftRevision: 3, publishedAt: null, liveAt: null, imwebUrl: null, updatedAt: new Date(),
+    lastSeenAt: new Date("2026-09-01T02:59:00.000Z"), lastSeenOrigin: "https://smarttechkorea.com",
     site: { id: "s1", workspaceId: "w1", projectId: "p1" },
     draft: { sections: [] }, published: null,
   };
@@ -428,6 +615,12 @@ describe("페이지 상세 — 내보내기 정보", () => {
     const { body } = await get();
     expect(body.page.readiness.canPublish).toBe(false);
     expect(body.page.readiness.publishIssues[0].code).toBe("no-sections");
+  });
+
+  it("연결 진단용 최근 시각과 origin을 함께 준다", async () => {
+    const { body } = await get();
+    expect(body.page.lastSeenAt).toBe("2026-09-01T02:59:00.000Z");
+    expect(body.page.lastSeenOrigin).toBe("https://smarttechkorea.com");
   });
 
   it("발행 전에는 공개도 못 켠다고 말한다", async () => {
@@ -476,18 +669,42 @@ describe("페이지 상세 — 내보내기 정보", () => {
     // 아직 발행 전이라 붙여도 안 나온다 — 그 사유가 함께 온다.
     expect(body.page.snippets.sections[0].issues[0].code).toBe("not-published");
   });
+
+  it("백업 HTML 구획은 발행본에서 만들고 embedEnabled와 초안 차이를 무시한다", async () => {
+    const publishedSid = "11111111-1111-4111-8111-111111111111";
+    const draftOnlySid = "22222222-2222-4222-8222-222222222222";
+    const { body } = await get({
+      draft: { schemaVersion: 2, sections: [{
+        sid: draftOnlySid, type: "textblock", variant: "prose", enabled: true, embedEnabled: true,
+        design: {}, content: { body: { ko: "아직 발행하지 않은 초안" } },
+      }] },
+      published: { schemaVersion: 2, sections: [{
+        sid: publishedSid, type: "kv", variant: "column", enabled: true, embedEnabled: false,
+        design: {}, content: { title: { ko: "발행된 키비주얼" } },
+      }] },
+    });
+
+    expect(body.page.exportSections).toEqual([{ sid: publishedSid, label: "키비주얼" }]);
+  });
 });
 
 describe("발행·공개", () => {
   const base = { id: "pg1", siteId: "s1", site: { id: "s1", workspaceId: "w1", projectId: "p1" } };
 
   it("내보낼 섹션이 없으면 발행을 막고 이유를 준다", async () => {
-    prismaMock.expoPage.findFirst.mockResolvedValue({ ...base, draft: { sections: [] } });
+    prismaMock.expoPage.findFirst.mockResolvedValue({
+      ...base, draft: { schemaVersion: 2, sections: [] }, published: null, liveAt: null,
+    });
     const { POST } = await import("@/app/api/expo/pages/[pageId]/publish/route");
 
     const res = await POST(write({}), { params: Promise.resolve({ pageId: "pg1" }) });
     expect(res.status).toBe(422);
-    expect((await res.json()).issues[0].code).toBe("no-sections");
+    const body = await res.json();
+    expect(body.code).toBe("publish-readiness-failed");
+    expect(body.issues[0]).toEqual(expect.objectContaining({
+      path: "sections", code: "no-sections", severity: "error",
+    }));
+    expect(prismaMock.$transaction).toHaveBeenCalledOnce();
     expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
   });
 
@@ -556,13 +773,15 @@ describe("릴리스 잠금", () => {
   it("따로 내보내기를 새로 켜는 발행을 막는다", async () => {
     const sid = "00000000-0000-4000-8000-000000000001";
     prismaMock.expoPage.findFirst.mockResolvedValue({
-      ...base, draft: { sections: [sec(sid, true)] }, published: { sections: [sec(sid, false)] },
+      ...base, draft: { schemaVersion: 2, sections: [sec(sid, true)] },
+      published: { schemaVersion: 2, sections: [sec(sid, false)] }, liveAt: null,
     });
     const { POST } = await import("@/app/api/expo/pages/[pageId]/publish/route");
 
     const res = await POST(write({}), { params: Promise.resolve({ pageId: "pg1" }) });
     expect(res.status).toBe(422);
     const body = await res.json();
+    expect(body.code).toBe("public-embed-release-disabled");
     expect(body.issues[0].code).toBe("launch-locked-embed");
     expect(body.issues[0].sid).toBe(sid);
     expect(prismaMock.expoPage.update).not.toHaveBeenCalled();
@@ -572,7 +791,8 @@ describe("릴리스 잠금", () => {
   it("이미 켜져 있던 구획은 다시 발행해도 막지 않는다", async () => {
     const sid = "00000000-0000-4000-8000-000000000001";
     prismaMock.expoPage.findFirst.mockResolvedValue({
-      ...base, draft: { sections: [sec(sid, true)] }, published: { sections: [sec(sid, true)] },
+      ...base, draft: { schemaVersion: 2, sections: [sec(sid, true)] },
+      published: { schemaVersion: 2, sections: [sec(sid, true)] }, liveAt: null,
     });
     prismaMock.expoPage.update.mockResolvedValue({ id: "pg1" });
     const { POST } = await import("@/app/api/expo/pages/[pageId]/publish/route");
@@ -584,7 +804,8 @@ describe("릴리스 잠금", () => {
   it("따로 내보내기를 끄는 발행은 막지 않는다", async () => {
     const sid = "00000000-0000-4000-8000-000000000001";
     prismaMock.expoPage.findFirst.mockResolvedValue({
-      ...base, draft: { sections: [sec(sid, false)] }, published: { sections: [sec(sid, true)] },
+      ...base, draft: { schemaVersion: 2, sections: [sec(sid, false)] },
+      published: { schemaVersion: 2, sections: [sec(sid, true)] }, liveAt: null,
     });
     prismaMock.expoPage.update.mockResolvedValue({ id: "pg1" });
     const { POST } = await import("@/app/api/expo/pages/[pageId]/publish/route");
@@ -600,7 +821,7 @@ describe("릴리스 잠금", () => {
     const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
 
     const res = await PATCH(
-      write({ draft: { sections: [sec(sid, true)] }, draftRevision: 3 }, { }),
+      write({ draft: { schemaVersion: 2, sections: [sec(sid, true)] }, draftRevision: 3 }, { }),
       { params: Promise.resolve({ pageId: "pg1" }) },
     );
     expect(res.status).toBe(422);
@@ -614,12 +835,14 @@ describe("릴리스 잠금", () => {
     prismaMock.expoPage.findFirst.mockResolvedValue({
       ...base, draft: { sections: [sec(sid, true)] }, draftRevision: 3,
     });
-    prismaMock.expoPage.update.mockResolvedValue({ id: "pg1", draftRevision: 4 });
+    prismaMock.expoPage.updateManyAndReturn.mockResolvedValue([{
+      id: "pg1", slug: "home", title: "홈", imwebUrl: null, draftRevision: 4, updatedAt: new Date(),
+    }]);
     const { PATCH } = await import("@/app/api/expo/pages/[pageId]/route");
 
     const next = { ...sec(sid, true), content: { body: "고친 본문" } };
     const res = await PATCH(
-      write({ draft: { sections: [next] }, draftRevision: 3 }),
+      write({ draft: { schemaVersion: 2, sections: [next] }, draftRevision: 3 }),
       { params: Promise.resolve({ pageId: "pg1" }) },
     );
     expect(res.status).toBe(200);

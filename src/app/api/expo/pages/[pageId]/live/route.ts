@@ -7,7 +7,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { guardExpoRoute, readJsonBody, authFailure } from "@/lib/expo/route-guard";
-import { requireOwnedPage, requireWorkspaceAdmin } from "@/lib/expo/auth";
+import { requireOwnedPage, requireProjectAccess } from "@/lib/expo/auth";
+import { deriveExpoPermissions } from "@/lib/expo/permissions";
 import { prepareLiveToggle } from "@/lib/expo/site-service";
 import { launchLockIssue, liveIssues } from "@/lib/expo/readiness";
 
@@ -24,7 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ pag
   const live = parsed.body.live;
 
   const page = await prisma.expoPage.findFirst({
-    where: { id: pageId, deletedAt: null },
+    where: { id: pageId, deletedAt: null, site: { deletedAt: null } },
     select: {
       id: true, siteId: true, published: true,
       site: { select: { id: true, workspaceId: true, projectId: true } },
@@ -32,11 +33,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ pag
   });
   const owned = requireOwnedPage(page, guard.ctx.userId, guard.ctx.memberWorkspaceIds);
   if (!owned.ok) return authFailure(owned.failure);
+  const access = requireProjectAccess(guard.ctx.workspaceRole(owned.value.site.workspaceId), guard.ctx.projectRole(owned.value.site.projectId));
+  if (!access.ok) return authFailure(access.failure);
 
   // 공개 스위치도 `canPublish` 다 — 끄는 것까지 포함해서. 남이 켠 것을 아무나 끄면
   // 전시 기간 중에 파트너 사이트가 조용히 빈다.
-  const admin = requireWorkspaceAdmin(guard.ctx.userId, guard.ctx.workspaceRole(owned.value.site.workspaceId));
-  if (!admin.ok) return authFailure(admin.failure);
+  if (!deriveExpoPermissions(guard.ctx.workspaceRole(owned.value.site.workspaceId), guard.ctx.projectRole(owned.value.site.projectId)).canPublish) {
+    return authFailure({ kind: "forbidden" });
+  }
 
   // 켤 때만 막는다 — 끄는 것은 언제나 되어야 한다(되돌리기를 막으면 안 된다).
   if (live) {

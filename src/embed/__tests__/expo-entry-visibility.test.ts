@@ -10,9 +10,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * 전역 transition·transform/filter·타이포 상속(폰트·크기·행간·자간·색·대문자)·body flex·
  * 쌓임/클리핑·빈 div 숨김·CSS 변수(--msx-*) 충돌까지. 그림자 안쪽 계산값이 기준선과 같았다.
  *
- * **못 막는 것이 딱 하나 남는다: 붙여넣은 자리 자체가 숨겨진 경우.** 우리는 그 안에 있어서
- * 구조적으로 못 이긴다. 실측에서도 `[data-mach-expo]{display:none!important}` 하나만 통과했고
- * 호스트가 0×0 이 됐다. 접힌 아코디언·숨은 탭·템플릿 블록에 붙여도 같은 결과다.
+ * **못 막는 것이 딱 하나 남는다: 붙여넣은 자리의 조상이 숨겨진 경우.** 마운트 자리 자체의
+ * 직접 opacity/visibility/display 공격은 인라인 리셋으로 끊는다. 접힌 아코디언·숨은 탭처럼
+ * 더 바깥 조상이 숨겨진 경우는 구조상 이길 수 없으므로 0×0 진단이 계속 필요하다.
  *
  * 막을 수 없으면 **진단할 수 있게** 한다. 그게 이 경고이고, 이 파일은 두 방향을 지킨다:
  * 진짜 안 보일 때 말하는가, 그리고 **멀쩡할 때 조용한가**(거짓 경고는 없느니만 못하다).
@@ -31,9 +31,11 @@ if (typeof CSS === "undefined" || typeof CSS.escape !== "function") {
   });
 }
 
+const mountExpo = vi.hoisted(() => vi.fn(() => ({ destroy: vi.fn() })));
+
 /** 실제 렌더 대신 마운트 성공만 흉내낸다 — 여기서 볼 것은 마운트 뒤의 판정이다. */
 vi.mock("@/lib/expo/mount", () => ({
-  mountExpo: () => ({ destroy: () => {} }),
+  mountExpo,
 }));
 
 const { boot, destroy } = await import("@/embed/expo-entry");
@@ -59,6 +61,7 @@ function mountPoint(size: { width: number; height: number }) {
 
 beforeEach(() => {
   warns.length = 0;
+  mountExpo.mockClear();
   vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
     warns.push(args.map(String).join(" "));
   });
@@ -75,6 +78,33 @@ afterEach(() => {
 const invisibleWarnings = () => warns.filter((w) => w.includes("자리가 보이지 않습니다"));
 
 describe("자리가 없으면 알린다", () => {
+  it("같은 인스턴스를 두 번 boot하면 이전 마운트를 정리하고 destroy는 최신 마운트도 정리한다", () => {
+    mountPoint({ width: 980, height: 802 });
+    boot(payload, null);
+    const first = mountExpo.mock.results[0].value;
+
+    boot(payload, null);
+    const second = mountExpo.mock.results[1].value;
+
+    expect(first.destroy).toHaveBeenCalledTimes(1);
+    expect(second.destroy).not.toHaveBeenCalled();
+    destroy(payload);
+    expect(second.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("DOMContentLoaded 대기 중 destroy하면 뒤늦게 다시 마운트하지 않는다", () => {
+    const readyState = vi.spyOn(document, "readyState", "get").mockReturnValue("loading");
+    mountPoint({ width: 980, height: 802 });
+    boot(payload, null);
+    expect(mountExpo).not.toHaveBeenCalled();
+
+    destroy(payload);
+    document.dispatchEvent(new Event("DOMContentLoaded"));
+
+    expect(mountExpo).not.toHaveBeenCalled();
+    readyState.mockRestore();
+  });
+
   it("호스트가 0×0 이면 경고한다", () => {
     mountPoint({ width: 0, height: 0 });
     boot(payload, null);
@@ -100,6 +130,24 @@ describe("자리가 없으면 알린다", () => {
     boot(payload, null);
     vi.advanceTimersByTime(2000);
     expect(invisibleWarnings()).toEqual([]);
+  });
+
+  it("붙여넣은 자리 자체의 테마 숨김은 풀되 관계없는 인라인 스타일은 보존한다", () => {
+    const host = mountPoint({ width: 980, height: 802 });
+    host.style.setProperty("opacity", "0", "important");
+    host.style.setProperty("visibility", "hidden", "important");
+    host.style.setProperty("transform", "translateY(40px)", "important");
+    host.style.setProperty("filter", "blur(2px)", "important");
+    host.style.setProperty("background-color", "rgb(1, 2, 3)");
+
+    boot(payload, null);
+
+    expect(host.style.getPropertyValue("opacity")).toBe("1");
+    expect(host.style.getPropertyValue("visibility")).toBe("visible");
+    expect(host.style.getPropertyValue("transform")).toBe("none");
+    expect(host.style.getPropertyValue("filter")).toBe("none");
+    expect(host.style.getPropertyPriority("opacity")).toBe("important");
+    expect(host.style.backgroundColor).toBe("rgb(1, 2, 3)");
   });
 
   /**

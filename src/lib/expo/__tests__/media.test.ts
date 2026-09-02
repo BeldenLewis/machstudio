@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   collectExpoMediaUrls, copyExpoMedia, expoSitePrefix, expoTemplatePrefix, expoUrlCodec,
   isSafeExpoPrefix, isUnderExpoPrefix, purgeExpoMediaPrefix, rewriteExpoMediaUrls,
   type ExpoStorage, type MediaCarrier,
 } from "@/lib/expo/media";
+import { sectionDef } from "@/lib/expo/registry";
+import type { SectionPlugin } from "@/lib/expo/types";
 
 /**
  * 템플릿 미디어의 수명 분리.
@@ -20,6 +22,8 @@ const url = (path: string) => codec.publicUrl(path);
 
 const SITE = expoSitePrefix("ws1", "site1");
 const TEMPLATE = expoTemplatePrefix("ws1", "tpl1");
+const textblockPlugin = sectionDef("textblock") as SectionPlugin;
+afterEach(() => { delete textblockPlugin.normalize; });
 
 interface FakeOptions {
   objects?: string[];
@@ -151,6 +155,58 @@ const sections = (): MediaCarrier[] => [
 ];
 
 describe("미디어 주소 수집", () => {
+  it("legacy media 슬롯도 url과 originalUrl을 각각 걷고 치환한다", () => {
+    const derivative = url("ws1/expo/site1/optimized-a.webp");
+    const original = url("ws1/expo/site1/original-a.png");
+    const source: MediaCarrier[] = [{
+      type: "kv",
+      content: { media: { kind: "image", url: derivative, originalUrl: original, alt: "전경" } },
+    }];
+    expect(collectExpoMediaUrls(source)).toEqual([derivative, original]);
+    const rewritten = rewriteExpoMediaUrls(source, new Map([
+      [derivative, url("ws1/expo-templates/tpl1/optimized-new.webp")],
+      [original, url("ws1/expo-templates/tpl1/original-new.png")],
+    ]));
+    expect(rewritten[0].content?.media).toMatchObject({
+      url: url("ws1/expo-templates/tpl1/optimized-new.webp"),
+      originalUrl: url("ws1/expo-templates/tpl1/original-new.png"),
+      alt: "전경",
+    });
+  });
+
+  it("plugin nested image/video의 url·originalUrl·poster를 걷는다", () => {
+    textblockPlugin.normalize = (content) => content as Record<string, unknown>;
+    const pluginSections: MediaCarrier[] = [{
+      type: "textblock",
+      content: {
+        rows: [{
+          image: { kind: "image", url: "https://cdn.example.com/a.webp", originalUrl: "https://cdn.example.com/a-original.webp" },
+          video: {
+            kind: "video", url: "https://cdn.example.com/talk.mp4",
+            poster: { kind: "image", url: "https://cdn.example.com/poster.webp" },
+          },
+        }],
+        code: '<img src="https://cdn.example.com/in-code.webp">',
+      },
+    }];
+    expect(collectExpoMediaUrls(pluginSections)).toEqual([
+      "https://cdn.example.com/a.webp",
+      "https://cdn.example.com/a-original.webp",
+      "https://cdn.example.com/talk.mp4",
+      "https://cdn.example.com/poster.webp",
+    ]);
+
+    const out = rewriteExpoMediaUrls(pluginSections, new Map([
+      ["https://cdn.example.com/poster.webp", "https://cdn.example.com/poster-new.webp"],
+      ["https://cdn.example.com/in-code.webp", "https://cdn.example.com/should-not-appear.webp"],
+    ]));
+    const content = out[0].content as Record<string, unknown>;
+    const row = (content.rows as Array<Record<string, unknown>>)[0];
+    expect(((row.video as Record<string, unknown>).poster as Record<string, unknown>).url)
+      .toBe("https://cdn.example.com/poster-new.webp");
+    expect(content.code).toContain("https://cdn.example.com/in-code.webp");
+  });
+
   it("리스트 안쪽까지 재귀로 걷고, 중복은 한 번만 센다", () => {
     expect(collectExpoMediaUrls(sections())).toEqual([
       url("ws1/expo/site1/hero.jpg"),
@@ -272,14 +328,21 @@ describe("소유한 미디어만 새 접두사로 복사한다", () => {
     expect(result.notCopied.map((n) => n.reason)).toEqual(["foreign-owner", "foreign-owner"]);
   });
 
-  it("모르는 확장자는 손대지 않는다", async () => {
+  it("PNG·SVG·MP4와 원본 주소까지 복사하고 모르는 확장자는 손대지 않는다", async () => {
     const { storage, calls } = fakeStorage();
     const result = await copyExpoMedia(storage, {
-      urls: [url("ws1/expo/site1/a.svg"), url("ws1/expo/site1/noext")],
+      urls: [
+        url("ws1/expo/site1/a.png"), url("ws1/expo/site1/a.svg"),
+        url("ws1/expo/site1/a.mp4"), url("ws1/expo/site1/noext"),
+      ],
       sourcePrefix: SITE, destPrefix: TEMPLATE, newObjectName: sequentialNames(),
     });
-    expect(calls.copy).toEqual([]);
-    expect(result.notCopied.map((n) => n.reason)).toEqual(["unsupported-format", "unsupported-format"]);
+    expect(calls.copy.map((call) => call[1])).toEqual([
+      "ws1/expo-templates/tpl1/new1.png",
+      "ws1/expo-templates/tpl1/new2.svg",
+      "ws1/expo-templates/tpl1/new3.mp4",
+    ]);
+    expect(result.notCopied.map((n) => n.reason)).toEqual(["unsupported-format"]);
   });
 
   it("접두사 모양이 이상하면 아무것도 복사하지 않는다", async () => {

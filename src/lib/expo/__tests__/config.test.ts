@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { EXPO_SECTIONS, EXPO_LIMITS, sectionDef } from "@/lib/expo/registry";
 import { normalizeExpoPage, normalizeExpoTheme, newSection } from "@/lib/expo/config";
+import { EXPO_V2_RULES, type SectionPlugin } from "@/lib/expo/types";
 
 /**
  * 정규화는 **총 함수**다 — 저장된 JSON 은 무엇이든 올 수 있고(직접 고친 값, 옛 버전,
@@ -13,11 +14,14 @@ import { normalizeExpoPage, normalizeExpoTheme, newSection } from "@/lib/expo/co
 const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 const page = (sections: unknown[]) => normalizeExpoPage({ sections });
+const textblockPlugin = sectionDef("textblock") as SectionPlugin;
+afterEach(() => { delete textblockPlugin.normalize; });
 
-describe("카탈로그 — W1 의 6타입", () => {
+describe("카탈로그 — W1 6타입과 STK 6타입", () => {
   it("타입과 변형이 계획과 정확히 같다", () => {
     expect(EXPO_SECTIONS.map((s) => s.type)).toEqual([
       "kv", "textblock", "cardgrid", "toolbox", "register-form", "custom-code",
+      "campaign-hero", "exhibition-grid", "audience-links", "speaker-carousel", "sponsor-marquee", "cta-band",
     ]);
     const variants = Object.fromEntries(EXPO_SECTIONS.map((s) => [s.type, s.variants.map((v) => v.id)]));
     expect(variants).toEqual({
@@ -27,6 +31,12 @@ describe("카탈로그 — W1 의 6타입", () => {
       "toolbox": ["tiles", "strip"],
       "register-form": ["inline", "cta"],
       "custom-code": ["boxed", "full"],
+      "campaign-hero": ["default"],
+      "exhibition-grid": ["default"],
+      "audience-links": ["default"],
+      "speaker-carousel": ["default"],
+      "sponsor-marquee": ["default"],
+      "cta-band": ["default"],
     });
   });
 
@@ -45,11 +55,84 @@ describe("카탈로그 — W1 의 6타입", () => {
   });
 });
 
+describe("Expo V2 설정", () => {
+  it("V1 스냅샷을 sid 변경 없이 V2로 올린다", () => {
+    const sid = uid(11);
+    const normalized = normalizeExpoPage({ sections: [{ sid, type: "textblock", variant: "prose", content: { body: "본문" } }] });
+    expect(normalized.schemaVersion).toBe(2);
+    expect(normalized.sections[0]?.sid).toBe(sid);
+    expect(normalized.settings).toBeUndefined();
+  });
+
+  it("V2 설정은 안전한 구조만 보존한다", () => {
+    const normalized = normalizeExpoPage({
+      schemaVersion: 2,
+      preset: "stk-home-v1",
+      settings: {
+        event: { edition: 2027, startsAt: "2027-06-10T00:00:00+09:00", endsAt: "2027-06-12T00:00:00+09:00", facts: { companies: 500 } },
+        campaigns: [{ id: "visitor-registration", label: "사전등록", startsAt: "2027-01-01T00:00:00+09:00", endsAt: "2027-06-01T00:00:00+09:00", override: "auto", enabled: true }],
+        destinations: [{ id: "apply", label: "신청", action: { type: "url", href: "https://example.com/apply", newTab: true }, enabled: true }],
+      },
+      sections: [],
+    });
+    expect(normalized).toMatchObject({ schemaVersion: 2, preset: "stk-home-v1" });
+    expect(normalized.settings?.campaigns?.[0]?.id).toBe("visitor-registration");
+    expect(normalized.settings?.destinations?.[0]?.action).toEqual({ type: "url", href: "https://example.com/apply", newTab: true });
+    expect(EXPO_V2_RULES.id.test("visitor-registration")).toBe(true);
+  });
+});
+
 describe("정규화 — 던지지 않는다", () => {
+  it("plugin normalize가 canonical nested content를 보존하고 stored context를 받는다", () => {
+    const modes: string[] = [];
+    textblockPlugin.normalize = (content, context) => {
+      modes.push(context.mode);
+      const source = content as Record<string, unknown>;
+      return { heading: source.heading, rows: source.rows };
+    };
+    const sid = uid(31);
+    const out = page([{
+      sid, type: "textblock", variant: "prose",
+      content: { heading: { ko: "연사" }, rows: [{ name: { ko: "홍길동" } }], dropped: true },
+    }]);
+
+    expect(modes).toEqual(["stored"]);
+    expect(out.sections[0]).toMatchObject({
+      sid,
+      content: { heading: { ko: "연사" }, rows: [{ name: { ko: "홍길동" } }] },
+    });
+    expect(out.sections[0].content).not.toHaveProperty("dropped");
+  });
+
+  it("plugin normalize가 malformed stored content에서 던져도 섹션만 건너뛴다", () => {
+    textblockPlugin.normalize = () => { throw new Error("malformed row"); };
+    const raw = { sections: [{ sid: uid(32), type: "textblock", variant: "prose", content: { rows: [null] } }] };
+    expect(() => normalizeExpoPage(raw)).not.toThrow();
+    expect(normalizeExpoPage(raw).sections).toEqual([]);
+  });
+
+  it("plugin normalize에 null과 array content를 raw 그대로 넘겨 감지하고 건너뛴다", () => {
+    const seen: unknown[] = [];
+    textblockPlugin.normalize = (content) => {
+      seen.push(content);
+      if (!content || typeof content !== "object" || Array.isArray(content)) throw new Error("malformed content");
+      return content as Record<string, unknown>;
+    };
+    const raw = { sections: [
+      { sid: uid(33), type: "textblock", variant: "prose", content: null },
+      { sid: uid(34), type: "textblock", variant: "prose", content: [] },
+    ] };
+
+    let normalized: ReturnType<typeof normalizeExpoPage> | undefined;
+    expect(() => { normalized = normalizeExpoPage(raw); }).not.toThrow();
+    expect(normalized?.sections).toEqual([]);
+    expect(seen).toEqual([null, []]);
+  });
+
   it("무엇을 넣어도 페이지 모양이 나온다", () => {
     for (const bad of [null, undefined, 0, "", "문자열", [], { sections: null }, { sections: "x" }, { sections: [null, 1, "a"] }]) {
       expect(() => normalizeExpoPage(bad)).not.toThrow();
-      expect(normalizeExpoPage(bad)).toEqual({ sections: [] });
+      expect(normalizeExpoPage(bad)).toEqual({ schemaVersion: 2, sections: [] });
     }
   });
 
@@ -146,6 +229,20 @@ describe("슬롯 값 정규화", () => {
   });
 
   /** W1 미디어는 이미지만이다 — 영상·YouTube 는 W2. */
+  it("안전 업로드의 originalUrl·MIME·크기·대체 의미를 보존한다", () => {
+    const out = page([{
+      sid: uid(1), type: "kv", variant: "column",
+      content: { title: "t", media: {
+        kind: "image", url: "https://cdn.test/optimized.webp", originalUrl: "https://cdn.test/original.png",
+        mimeType: "image/webp", width: 1400, height: 800, alt: "전시", decorative: false,
+      } },
+    }]);
+    expect(out.sections[0].content.media).toEqual({
+      kind: "image", url: "https://cdn.test/optimized.webp", originalUrl: "https://cdn.test/original.png",
+      mimeType: "image/webp", width: 1400, height: 800, alt: "전시", decorative: false,
+    });
+  });
+
   it("이미지가 아닌 미디어는 버린다", () => {
     const out = page([{
       sid: uid(1), type: "kv", variant: "column",

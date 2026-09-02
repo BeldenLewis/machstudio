@@ -30,12 +30,20 @@ describe("테마 토큰", () => {
 
   it("시트가 쓰는 색 토큰을 빠짐없이 낸다", () => {
     const provided = new Set(Object.keys(expoThemeVars(THEME)));
+    // Task 9 public renderer가 자기 section node에만 얹는 값들이다. 사이트 테마가 아니므로
+    // expoThemeVars가 내보내면 모든 섹션 인스턴스가 같은 count/crop/palette를 공유하게 된다.
+    const sectionLocal = new Set([
+      "--msx-hero-overlay", "--msx-exhibition-columns", "--msx-speaker-badge",
+      "--msx-speaker-badge-ink", "--msx-speaker-surface", "--msx-speaker-gradient-start",
+      "--msx-speaker-gradient-end", "--msx-marquee-duration", "--msx-cta-primary",
+    ]);
     // 시트에서 실제로 참조하는 색 토큰만 추린다(반경·그림자·서체는 시트에 고정값이 있다).
     const referenced = new Set(
       [...EXPO_SHELL_CSS.matchAll(/var\((--msx-[a-z-]+)/g)].map((m) => m[1]),
     );
     const colorTokens = [...referenced].filter((t) =>
-      !["--msx-radius", "--msx-shadow", "--msx-shadow-lifted", "--msx-font"].includes(t));
+      !["--msx-radius", "--msx-shadow", "--msx-shadow-lifted", "--msx-font"].includes(t)
+      && !sectionLocal.has(t));
     expect(colorTokens.filter((t) => !provided.has(t))).toEqual([]);
   });
 

@@ -118,7 +118,7 @@ describe("새어 나가지 않는다", () => {
       { title: { ko: "A" }, link: { label: "보기", href: "https://x.test/a" } },
     ])]);
     const stripped = stripExpoRowKeys(attached);
-    const payload = buildExpoPayload(stripped, { locale: "ko", pages: [] });
+    const payload = buildExpoPayload(normalizeExpoPage({ sections: stripped }), { locale: "ko", pages: [], now: new Date("2027-01-01T00:00:00.000Z") });
     expect(findRowKeyLeak(payload)).toBeNull();
     expect(JSON.stringify(payload)).not.toContain(ROW_KEY);
   });

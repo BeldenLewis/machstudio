@@ -126,6 +126,19 @@ export function requireOwnedTemplate(
 
 /** 워크스페이스 역할 — Prisma 의 `Role` 과 같은 값이다. */
 export type WorkspaceRole = "OWNER" | "ADMIN" | "MEMBER";
+export type ProjectRole = "VIEWER" | "EDITOR" | "ADMIN";
+
+/**
+ * A workspace MEMBER sees a project only through an explicit project membership.
+ * Return 404 for a missing assignment so that a project id cannot be enumerated.
+ */
+export function requireProjectAccess(
+  workspaceRole: WorkspaceRole | null,
+  projectRole: ProjectRole | null,
+): ExpoAuthResult<true> {
+  if (workspaceRole === "OWNER" || workspaceRole === "ADMIN") return ok(true as const);
+  return workspaceRole === "MEMBER" && projectRole !== null ? ok(true as const) : fail("not-found");
+}
 
 /**
  * 워크스페이스 **전역** 자원을 관리해도 되는가 — 템플릿 이름 변경·영구 삭제.

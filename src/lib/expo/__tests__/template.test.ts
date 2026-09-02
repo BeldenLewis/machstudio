@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildExpoTemplate, EXPO_TEMPLATE_VERSION, instantiateExpoTemplate,
+  instantiateBuiltInExpoTemplate,
   type SourcePage,
 } from "@/lib/expo/template";
 
@@ -177,6 +178,19 @@ describe("인스턴스화 — 전부 새로 발급하고 꺼진 채로 시작", 
 
   it("테마는 따라간다", () => {
     expect(instantiateExpoTemplate(twoPageTemplate()).theme.accent).toBe("#ff8500");
+  });
+});
+
+describe("기본 제공 프리셋 인스턴스화", () => {
+  it("STK 프리셋은 홈 한 장으로 만들고 페이지와 구획 신원만 새로 발급한다", () => {
+    let serial = 0;
+    const out = instantiateBuiltInExpoTemplate("stk-home-v1", {
+      randomUUID: () => `00000000-0000-4000-8000-${String(++serial).padStart(12, "0")}`,
+    });
+    expect(out.pages).toHaveLength(1);
+    expect(out.pages[0]).toMatchObject({ slug: "home", title: "STK 2027", isHome: true, parentId: null });
+    expect(out.pages[0].draft.preset).toBe("stk-home-v1");
+    expect(out.pages[0].draft.sections.every((section) => section.embedEnabled === false)).toBe(true);
   });
 });
 

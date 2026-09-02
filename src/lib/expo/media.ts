@@ -23,10 +23,11 @@
  * 조용한 고아 파일보다 이름이 남은 고아 파일이 낫다.
  */
 import { sectionDef } from "@/lib/expo/registry";
+import { collectPluginMediaUrls, rewritePluginMediaUrls } from "@/lib/expo/plugin-content";
 import type { SlotDef } from "@/lib/expo/types";
 
 /** 복사해 갈 수 있는 확장자. 업로드 라우트가 만드는 것과 같은 집합이다. */
-export const EXPO_MEDIA_EXTENSIONS = ["jpg", "jpeg", "png", "webp"] as const;
+export const EXPO_MEDIA_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "svg", "mp4"] as const;
 
 const obj = (v: unknown): Record<string, unknown> =>
   v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -135,10 +136,18 @@ function walkMedia(
     if (value === undefined) continue;
     if (slot.kind === "media") {
       const m = obj(value);
-      const url = str(m.url);
-      if (!url) continue;
-      const next = visit(url);
-      if (next !== undefined) out[slot.key] = { ...m, url: next };
+      let changed = false;
+      const nextMedia = { ...m };
+      for (const key of ["url", "originalUrl"] as const) {
+        const url = str(m[key]);
+        if (!url) continue;
+        const next = visit(url);
+        if (next !== undefined) {
+          nextMedia[key] = next;
+          changed = true;
+        }
+      }
+      if (changed) out[slot.key] = nextMedia;
     } else if (slot.kind === "list" && Array.isArray(value) && slot.itemSlots) {
       out[slot.key] = value.map((row) => walkMedia(slot.itemSlots!, obj(row), visit));
     }
@@ -152,6 +161,10 @@ export function collectExpoMediaUrls(sections: readonly MediaCarrier[]): string[
   for (const section of sections) {
     const def = sectionDef(section.type);
     if (!def || !section.content) continue;
+    if (def.normalize) {
+      for (const url of collectPluginMediaUrls(section.content)) seen.add(url);
+      continue;
+    }
     walkMedia(def.slots, section.content, (url) => {
       seen.add(url);
       return undefined;                               // 수집만 한다
@@ -169,6 +182,9 @@ export function rewriteExpoMediaUrls<S extends MediaCarrier>(
   return sections.map((section) => {
     const def = sectionDef(section.type);
     if (!def || !section.content) return section;
+    if (def.normalize) {
+      return { ...section, content: rewritePluginMediaUrls(section.content, map) };
+    }
     return { ...section, content: walkMedia(def.slots, section.content, (url) => map.get(url)) };
   });
 }

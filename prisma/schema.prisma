@@ -1440,9 +1440,26 @@ model ExpoPage {
   site     ExpoSite   @relation(fields: [siteId], references: [id], onDelete: Cascade)
   parent   ExpoPage?  @relation("ExpoPageTree", fields: [parentId], references: [id], onDelete: Cascade)
   children ExpoPage[] @relation("ExpoPageTree")
+  revisions ExpoPageRevision[]
 
   @@unique([siteId, slug])
   @@index([siteId, sortOrder])
+}
+
+/// 발행 시점의 불변 스냅샷. publishedBy 는 사용자가 사라져도 감사 기록이 남도록 식별자만 저장한다.
+model ExpoPageRevision {
+  id          String   @id @default(cuid())
+  pageId      String
+  sequence    Int
+  snapshot    Json
+  codeDigest  String
+  publishedBy String
+  createdAt   DateTime @default(now())
+
+  page ExpoPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, sequence])
+  @@index([pageId, createdAt(sort: Desc)])
 }
 
 /// 완성된 디자인을 다음 전시가 골라 쓰는 틀. 워크스페이스 소속인 이유가 곧 존재 이유다 —

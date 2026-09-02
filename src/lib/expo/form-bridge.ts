@@ -17,7 +17,7 @@
  * 실행 중에 `currentScript` 가 null 이다. **문서 head 의 클래식 스크립트**여야 한다.
  */
 import {
-  formTargetKey, registerFormTarget, unregisterFormTarget,
+  formTargetKey, leaseFormTarget,
   type FormMountMode, type FormOverlayOpener,
 } from "@/lib/collect-form/target-registry";
 import { acquireExpoPortal } from "@/lib/expo/overlay";
@@ -101,14 +101,15 @@ export function attachExpoForm(options: ExpoFormBridgeOptions): ExpoFormBridgeHa
     ? (onLost) => acquireExpoPortal({ themeVars, sid, onLost, doc })
     : undefined;
 
-  // ① 예약이 먼저다.
-  registerFormTarget(key, {
+  // ① 예약이 먼저다. lease는 staged 실패 때 살아 있는 이전 예약을 복원한다.
+  const target = {
     container: options.container,
     styleRoot: options.styleRoot,
     mode: options.mode,
     disposeSignal: controller.signal,
     overlay,
-  });
+  };
+  const lease = leaseFormTarget(key, target);
 
   // ② 그 다음 스크립트.
   const script = doc.createElement("script");
@@ -121,14 +122,21 @@ export function attachExpoForm(options: ExpoFormBridgeOptions): ExpoFormBridgeHa
   script.addEventListener("load", drop, { once: true });
   script.addEventListener("error", drop, { once: true });
 
-  doc.head.appendChild(script);
+  try {
+    doc.head.appendChild(script);
+  } catch (error) {
+    controller.abort();
+    lease.release();
+    script.remove();
+    throw error;
+  }
 
   return {
     key,
     destroy() {
       // 예약을 먼저 끊는다 — 아직 실행 전인 스크립트가 죽은 자리에 붙지 않게.
       controller.abort();
-      unregisterFormTarget(key);
+      lease.release();
       script.remove();
     },
   };

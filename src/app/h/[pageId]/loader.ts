@@ -25,12 +25,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getClientIp, rateLimitAsync } from "@/lib/ratelimit";
 import { jsonForScript } from "@/lib/script-json";
-import { EXPO_RUNTIME_JS } from "@/generated/expo-runtime";
+import { EXPO_RUNTIME_JS, EXPO_RUNTIME_SRC_HASH } from "@/generated/expo-runtime";
 import { getExpoCapabilities, isExpoPublicEmbedReleaseEnabled } from "@/lib/expo/capability";
 import { probeExpoSchema } from "@/lib/expo/schema-probe";
 import { getRequiredExpoPublicOrigin } from "@/lib/expo/origin";
 import { normalizeExpoTheme } from "@/lib/expo/config";
-import { renderableSections, standaloneSection } from "@/lib/expo/model";
+import { hasContent } from "@/lib/expo/model";
 import { buildExpoPayload, collectInternalPageIds, collectSourceRefs } from "@/lib/expo/payload";
 import { normalizeExpoPage } from "@/lib/expo/config";
 import type { ExpoSection } from "@/lib/expo/types";
@@ -48,9 +48,9 @@ export const SCRIPT_HEADERS = {
 } as const;
 
 /** 엣지가 흡수해도 되는 응답(존재/부재가 한동안 안 바뀐다). */
-const CACHEABLE = {
+export const EXPO_LIVE_CACHE_HEADERS = {
   "Cache-Control": "public, max-age=0, must-revalidate",
-  "CDN-Cache-Control": "public, s-maxage=60, stale-while-revalidate=86400",
+  "CDN-Cache-Control": "public, s-maxage=30, stale-while-revalidate=30",
 } as const;
 
 /** 짧게만 흡수 — 없는 id 난사가 매번 DB 까지 내려가지 않게. */
@@ -122,7 +122,7 @@ export async function serveExpoRuntime(req: Request, target: LoaderTarget): Prom
   } | null = null;
   try {
     row = await prisma.expoPage.findFirst({
-      where: { id: target.pageId, deletedAt: null },
+      where: { id: target.pageId, deletedAt: null, site: { deletedAt: null } },
       select: {
         id: true, published: true, liveAt: true,
         site: { select: { id: true, projectId: true, theme: true, defaultLocale: true, deletedAt: true } },
@@ -151,21 +151,21 @@ export async function serveExpoRuntime(req: Request, target: LoaderTarget): Prom
    * 구획 단독: 페이지의 `liveAt`·`enabled` 를 보지 않는다 — 그게 부분 이행의 정의다.
    *   발행본에 그 sid 가 아예 없으면 404, 있는데 게이트가 닫혀 있으면 연결 확인.
    */
+  const publishedConfig = normalizeExpoPage(row.published);
   let sections: ExpoSection[] = [];
   let connectionOnly = false;
   if (target.sid) {
-    const known = normalizeExpoPage(row.published).sections.some((s) => s.sid === target.sid);
-    if (!known) return script("not found", 404, CACHEABLE_MISS);
-    const one = standaloneSection(row.published, target.sid);
-    if (one) sections = [one];
+    const selected = publishedConfig.sections.find((section) => section.sid === target.sid);
+    if (!selected) return script("not found", 404, CACHEABLE_MISS);
+    if (selected.embedEnabled && hasContent(selected)) sections = [selected];
     else connectionOnly = true;
   } else if (row.liveAt) {
-    sections = renderableSections(row.published);
+    sections = publishedConfig.sections.filter((section) => section.enabled && hasContent(section));
   } else {
     connectionOnly = true;
   }
 
-  let payloadSections: Array<Record<string, unknown>> = [];
+  let resolvedPayload: ReturnType<typeof buildExpoPayload> | null = null;
   if (!connectionOnly && sections.length > 0) {
     /**
      * 내부 링크는 **같은 사이트의 살아 있는 페이지**만 푼다. 형제 페이지를 한 번에
@@ -209,26 +209,36 @@ export async function serveExpoRuntime(req: Request, target: LoaderTarget): Prom
       return { ...section, content: { ...section.content, sourceRef: "" } };
     });
 
-    payloadSections = buildExpoPayload(safe, { locale, pages: siblings }).sections;
+    resolvedPayload = buildExpoPayload({ ...publishedConfig, sections: safe }, { locale, pages: siblings, now: new Date() });
   }
 
   const payload = {
     pageId: row.id,
     ...(target.sid ? { sectionId: target.sid } : {}),
+    // 공개 로더는 통짜와 구획 단독 모두 라이브다. standalone은 내보내기 산출물만 명시한다.
+    mode: "live" as const,
     theme,
     origin,
-    sections: payloadSections,
+    sections: resolvedPayload?.sections ?? [],
+    campaigns: resolvedPayload?.campaigns ?? [],
+    destinations: resolvedPayload?.destinations ?? [],
     ...(connectionOnly ? { connectionOnly: true } : {}),
   };
 
-  const body = `/* mach expo */\n${EXPO_RUNTIME_JS}\n__msExpo.boot(${jsonForScript(payload)}, document.currentScript);\n`;
+  const canonicalPayload = jsonForScript(payload);
+  const body = `/* mach expo */\n${EXPO_RUNTIME_JS}\n__msExpo.boot(${canonicalPayload}, document.currentScript);\n`;
 
   /**
    * ETag 필수 — 검증자가 없으면 브라우저가 재검증을 못 해 낡은 스크립트를 계속 실행한다
    * (랜딩에서 실측: 새 탭에서도 transferSize 0 으로 캐시된 옛 번들이 돌았다).
    */
-  const etag = `W/"${createHash("sha256").update(body).digest("base64url").slice(0, 27)}"`;
-  const cacheHeaders = { ...CACHEABLE, ETag: etag };
+  const etag = `W/"${createHash("sha256")
+    .update(EXPO_RUNTIME_SRC_HASH)
+    .update("\n")
+    .update(canonicalPayload)
+    .digest("base64url")
+    .slice(0, 27)}"`;
+  const cacheHeaders = { ...EXPO_LIVE_CACHE_HEADERS, ETag: etag };
 
   if (req.headers.get("if-none-match") === etag) {
     return new NextResponse(null, { status: 304, headers: { ...SCRIPT_HEADERS, ...cacheHeaders } });

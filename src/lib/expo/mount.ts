@@ -3,21 +3,21 @@
  *
  * ── 두 가지 크기 ──────────────────────────────────────────────────────
  * 페이지 통짜(`pageId:page`)와 섹션 단독(`pageId:{sid}`) — 조립 규칙은 같고 열쇠만
- * 다르다. 열쇠는 재진입에도 **안정**해야 한다: 파트너 사이트에 박힌 스니펫이 그 자리를
- * 다시 부를 때 같은 자리를 찾아야 하고, 폼 예약 열쇠의 접두사도 이 값이다.
+ * 다르다. shell 열쇠는 재진입에도 **안정**해야 한다: 파트너 사이트에 박힌 스니펫이 그
+ * 자리를 다시 부를 때 같은 자리를 찾는다. 폼 예약은 staged 세대를 더 붙여 구 런타임의
+ * cleanup closure가 새 후보의 같은 key를 지울 수 없게 한다.
  *
  * ── 절대 파트너 페이지를 깨지 않는다 ──────────────────────────────────
- * 어떤 실패도 던지지 않는다. 섹션 렌더러 하나가 던져도 **나머지는 보이고**
- * 준비 표시는 `finally` 에서 켜진다 — 안 그러면 그들 홈페이지에 영구히 빈 칸이 남는다.
+ * 어떤 실패도 파트너에게 던지지 않는다. 새 후보 하나라도 실패하면 그 후보만 버리고
+ * 이전 화면과 listener를 그대로 둔다 — 반쪽짜리 후보를 성공으로 교체하지 않는다.
  */
 import { expoThemeVars } from "@/lib/expo/css";
-import { mountExpoShell, type ExpoShellHandle } from "@/lib/expo/shadow";
+import { stageExpoShell, type ExpoShellHandle } from "@/lib/expo/shadow";
 import { renderExpoSections } from "@/lib/expo/view-page";
 import { reportExpoSeen } from "@/lib/expo/seen";
 import { attachExpoPreviewBridge } from "@/lib/expo/preview-bridge";
 import type { PayloadSection } from "@/lib/expo/view-sections";
-import type { FormMountMode } from "@/lib/collect-form/target-registry";
-import type { ExpoTheme } from "@/lib/expo/types";
+import type { ExpoTheme, ResolvedCampaignState, ResolvedDestination, SectionRenderContext } from "@/lib/expo/types";
 
 /** 로더가 스크립트 본문에 실어 보내는 것. */
 export interface ExpoRuntimePayload {
@@ -28,13 +28,16 @@ export interface ExpoRuntimePayload {
   /** 서체·폼 스크립트를 받아 올 절대 주소. 서버가 정한다. */
   origin: string;
   sections: PayloadSection[];
+  locale?: string;
+  campaigns?: ResolvedCampaignState[];
+  destinations?: ResolvedDestination[];
   /**
    * 발행은 됐지만 공개 스위치가 꺼져 있다 — **의도한 호스트만 확보하고 아무것도 안 그린다.**
    * 그래야 운영자가 전환일 전에 스니펫을 미리 붙여 두고 "붙었는지" 를 확인할 수 있다.
    */
   connectionOnly?: boolean;
   /** 부작용을 내도 되는가. 없으면 라이브다. */
-  mode?: FormMountMode;
+  mode?: SectionRenderContext["mode"];
   preview?: {
     allowCustomCode?: boolean;
     /**
@@ -64,6 +67,21 @@ export interface ExpoMountHandle {
 const REMOUNT_LIMIT = 5;
 const REMOUNT_WINDOW_MS = 60_000;
 const REMOUNT_DEBOUNCE_MS = 200;
+const FORM_INSTANCE_SEQUENCE_KEY = "__MACH_EXPO_FORM_INSTANCE_SEQUENCE_V1__";
+
+type FormInstanceSequenceHost = { [FORM_INSTANCE_SEQUENCE_KEY]?: number };
+
+/** 서로 따로 캐시된 Expo IIFE도 같은 문서에서는 절대 같은 후보 form key를 쓰지 않는다. */
+function nextFormInstancePrefix(doc: Document, stablePrefix: string): string {
+  const host = (doc.defaultView ?? globalThis) as unknown as FormInstanceSequenceHost;
+  const current = host[FORM_INSTANCE_SEQUENCE_KEY];
+  const next = typeof current === "number" && Number.isSafeInteger(current)
+    && current >= 0 && current < Number.MAX_SAFE_INTEGER
+    ? current + 1
+    : 1;
+  host[FORM_INSTANCE_SEQUENCE_KEY] = next;
+  return `${stablePrefix}:stage-${next.toString(36)}`;
+}
 
 function warn(message: string, error?: unknown): void {
   try {
@@ -78,13 +96,14 @@ export function mountExpo(options: ExpoMountOptions): ExpoMountHandle | null {
   if (!doc) return null;
 
   const { container, payload } = options;
-  const mode: FormMountMode = payload.mode ?? "live";
+  // mode 생략은 공개 로더의 구·신 혼재에서도 live다. standalone은 export가 명시해야만 된다.
+  const mode: SectionRenderContext["mode"] = payload.mode ?? "live";
   /**
    * 라이브는 자동으로 돈다. 미리보기는 운영자가 **그 세션에서 명시적으로 고른** 경우만 —
    * 미리보기를 열 때마다 남의 추적 스크립트가 발화하면 통계가 오염된다.
    */
-  const allowCustomCode = mode === "live" ? true : payload.preview?.allowCustomCode === true;
-  const instancePrefix = `${payload.pageId}:${payload.sectionId ?? "page"}`;
+  const allowCustomCode = mode === "live" || mode === "standalone" ? true : payload.preview?.allowCustomCode === true;
+  const stableInstancePrefix = `${payload.pageId}:${payload.sectionId ?? "page"}`;
 
   let shell: ExpoShellHandle | null = null;
   let observer: MutationObserver | null = null;
@@ -95,7 +114,7 @@ export function mountExpo(options: ExpoMountOptions): ExpoMountHandle | null {
   let destroyed = false;
 
   const build = (): boolean => {
-    const next = mountExpoShell({
+    const stage = stageExpoShell({
       container,
       pageId: payload.pageId,
       sectionId: payload.sectionId ?? null,
@@ -103,8 +122,9 @@ export function mountExpo(options: ExpoMountOptions): ExpoMountHandle | null {
       origin: payload.origin,
       doc,
     });
-    if (!next) return false;
-    shell = next;
+    if (!stage) return false;
+    const next = stage.shell;
+    const instancePrefix = nextFormInstancePrefix(doc, stableInstancePrefix);
 
     try {
       // 연결 확인 상태에서는 내용을 한 글자도 그리지 않는다.
@@ -112,6 +132,10 @@ export function mountExpo(options: ExpoMountOptions): ExpoMountHandle | null {
       const output = renderExpoSections(list, {
         origin: payload.origin,
         mode,
+        locale: payload.locale ?? "ko",
+        campaigns: new Map((payload.campaigns ?? []).map((row) => [row.id, row])),
+        destinations: new Map((payload.destinations ?? []).map((row) => [row.id, row])),
+        reducedMotion: Boolean(doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches),
         themeVars: expoThemeVars(payload.theme),
         styleRoot: next.root,
         instancePrefix,
@@ -124,63 +148,48 @@ export function mountExpo(options: ExpoMountOptions): ExpoMountHandle | null {
       next.addCleanup(() => output.dispose());
 
       for (const node of output.nodes) next.renderRoot.appendChild(node);
-      // 예약은 **붙은 뒤**다.
-      output.attach();
-    } catch (error) {
-      warn("구획을 그리는 중 오류", error);
-    } finally {
-      /**
-       * **항상** 켠다. 렌더러 하나가 던졌다고 감춰 두면 파트너 홈페이지에 영구히
-       * 빈 칸이 남는다. rAF·IntersectionObserver 뒤로 미루지도 않는다 — 배경 탭에서는
-       * 둘 다 안 돌아서 방문자가 탭을 볼 때까지 구획이 안 보인다.
-       */
-      next.ready();
-    }
+      // 폼 예약과 plugin attach는 candidate가 문서에 연결된 staging 상태에서만 실행한다.
+      stage.addAttach(() => output.attach());
 
-    /**
-     * "코드가 실제로 붙었다" 를 한 번 알린다 — 운영자가 아임웹에 붙여 넣고 나서
-     * 확인할 방법이 이것뿐이다. **미리보기에서는 절대 보내지 않는다**: 운영자가
-     * 편집기를 열어 본 것이 "붙어 있음" 으로 기록되면 그 배지가 거짓이 된다.
-     *
-     * 내용이 없는 연결 확인 상태(발행됐지만 공개 스위치가 꺼짐)에서도 보낸다 —
-     * 그게 이 값의 뜻이다: 붙어 있는지이지, 보이는지가 아니다.
-     */
-    if (mode === "live") {
-      reportExpoSeen({ origin: payload.origin, pageId: payload.pageId, sectionId: payload.sectionId ?? null });
+      if (mode === "live" || mode === "standalone") {
+        stage.addAttach(() => {
+          reportExpoSeen({ origin: payload.origin, pageId: payload.pageId, sectionId: payload.sectionId ?? null });
+        });
+      } else {
+        stage.addAttach(() => {
+          const parentOrigin = payload.preview?.parentOrigin;
+          const channel = payload.preview?.channel;
+          if (!parentOrigin || !channel) return;
+
+          const bridge = attachExpoPreviewBridge({
+            parentOrigin,
+            channel,
+            pageId: payload.pageId,
+            onTheme: (theme) => next.applyTheme(theme),
+          });
+          if (!bridge) return;
+          next.addCleanup(() => bridge.destroy());
+
+          next.renderRoot.addEventListener("click", (event) => {
+            const target = event.target as Element | null;
+            const section = target?.closest?.(".msx-section") as HTMLElement | null;
+            const sid = section?.getAttribute("data-msx-sid");
+            if (sid) bridge.notifySelect(sid);
+          }, { signal: next.signal });
+
+          if (allowCustomCode && payload.preview?.codeDigest) {
+            bridge.notifyCustomCodeReady(payload.preview.codeDigest);
+          }
+        });
+      }
+
+      shell = stage.commit();
       return true;
+    } catch (error) {
+      stage.abort();
+      warn("구획을 그리는 중 오류", error);
+      return false;
     }
-
-    /**
-     * 미리보기 전용 통로. **라이브에서는 이 아래로 오지 않는다** — 구획 클릭이 편집기로
-     * 새어 나가거나 부모가 색을 바꿀 수 있는 경로를 방문자 화면에 두지 않는다.
-     */
-    const parentOrigin = payload.preview?.parentOrigin;
-    const channel = payload.preview?.channel;
-    if (!parentOrigin || !channel) return true;
-
-    const bridge = attachExpoPreviewBridge({
-      parentOrigin,
-      channel,
-      pageId: payload.pageId,
-      // 색만 바꾼다 — 저장하지 않는다.
-      onTheme: (theme) => next.applyTheme(theme),
-    });
-    if (!bridge) return true;
-    next.addCleanup(() => bridge.destroy());
-
-    // 구획을 누르면 편집기가 그 구획으로 이동한다. 기본 동작은 막지 않는다.
-    next.renderRoot.addEventListener("click", (event) => {
-      const target = event.target as Element | null;
-      const section = target?.closest?.(".msx-section") as HTMLElement | null;
-      const sid = section?.getAttribute("data-msx-sid");
-      if (sid) bridge.notifySelect(sid);
-    }, { signal: next.signal });
-
-    // 붙여넣은 코드를 실제로 실행한 경우에만 알린다 — 편집기가 그 후보에 대해서만 발행을 연다.
-    if (allowCustomCode && payload.preview?.codeDigest) {
-      bridge.notifyCustomCodeReady(payload.preview.codeDigest);
-    }
-    return true;
   };
 
   if (!build()) return null;

@@ -19,7 +19,8 @@
 import { normalizeExpoPage, normalizeExpoTheme, newSection } from "@/lib/expo/config";
 import { EXPO_LIMITS, sectionDef } from "@/lib/expo/registry";
 import { slugFromTitle } from "@/lib/expo/model";
-import type { ExpoSection, ExpoTheme, SlotDef } from "@/lib/expo/types";
+import { instantiateBuiltInPreset } from "@/lib/expo/presets";
+import type { ExpoPageConfig, ExpoSection, ExpoTheme, SlotDef } from "@/lib/expo/types";
 
 export const EXPO_TEMPLATE_VERSION = 1;
 
@@ -209,7 +210,7 @@ export interface InstantiatedPage {
   isHome: boolean;
   sortOrder: number;
   parentId: string | null;
-  draft: { sections: ExpoSection[] };
+  draft: ExpoPageConfig;
 }
 
 export interface InstantiateResult {
@@ -218,6 +219,32 @@ export interface InstantiateResult {
   defaultLocale: "ko";
   pages: InstantiatedPage[];
   checklist: { internalLinksNeedReview: boolean };
+}
+
+/**
+ * 기본 제공 프리셋은 DB 스냅샷이 아니다. 승인된 한 페이지 config만 복제하고,
+ * 사이트·페이지 신원은 일반 템플릿과 똑같이 새로 발급한다.
+ */
+export function instantiateBuiltInExpoTemplate(
+  presetId: string,
+  input: { randomUUID?: () => string } = {},
+): InstantiateResult {
+  const randomUUID = input.randomUUID ?? (() => crypto.randomUUID());
+  const draft = instantiateBuiltInPreset(presetId, { randomUUID });
+  return {
+    theme: normalizeExpoTheme({ accent: "#ff4713", lightBg: "#f4f4f4", darkBg: "#0a0a0a" }),
+    defaultLocale: "ko",
+    pages: [{
+      id: randomUUID(),
+      slug: "home",
+      title: "STK 2027",
+      isHome: true,
+      sortOrder: 0,
+      parentId: null,
+      draft,
+    }],
+    checklist: { internalLinksNeedReview: false },
+  };
 }
 
 /**
@@ -297,7 +324,7 @@ export function instantiateExpoTemplate(raw: unknown): InstantiateResult {
       // 부모가 템플릿에 없으면 최상위로 올린다 — 고아 페이지를 만들지 않는다.
       parentId: idOf.get(str(src.parentKey)) ?? null,
       // 마지막으로 정규화를 한 번 더 태운다 — 여기 통과한 것만 저장된다.
-      draft: normalizeExpoPage({ sections }) as { sections: ExpoSection[] },
+      draft: normalizeExpoPage({ sections }),
     };
   });
 

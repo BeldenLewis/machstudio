@@ -127,7 +127,18 @@ export function expoSourceFiles(root) {
     join(root, "src/lib/expo/overlay.ts"),
     join(root, "src/lib/expo/view-page.ts"),
     join(root, "src/lib/expo/view-sections.ts"),
+    join(root, "src/lib/expo/renderers/action.ts"),
+    join(root, "src/lib/expo/renderers/image.ts"),
+    join(root, "src/lib/expo/renderers/lifecycle.ts"),
+    join(root, "src/lib/expo/renderers/campaign-hero.ts"),
+    join(root, "src/lib/expo/renderers/exhibition-grid.ts"),
+    join(root, "src/lib/expo/renderers/audience-links.ts"),
+    join(root, "src/lib/expo/renderers/speaker-carousel.ts"),
+    join(root, "src/lib/expo/renderers/sponsor-marquee.ts"),
+    join(root, "src/lib/expo/renderers/cta-band.ts"),
+    join(root, "src/lib/expo/cta.ts"),
     join(root, "src/lib/expo/custom-code.ts"),
+    join(root, "src/lib/expo/destination.ts"),
     join(root, "src/lib/expo/form-bridge.ts"),
     join(root, "src/lib/expo/seen.ts"),
     join(root, "src/lib/expo/preview-bridge.ts"),
@@ -139,10 +150,18 @@ export function expoSourceFiles(root) {
     join(root, "src/lib/expo/font.ts"),
     join(root, "src/lib/expo/css.ts"),
     join(root, "src/lib/expo/registry.ts"),
+    join(root, "src/lib/expo/sections/types.ts"),
+    join(root, "src/lib/expo/sections/campaign-hero.ts"),
+    join(root, "src/lib/expo/sections/exhibition-grid.ts"),
+    join(root, "src/lib/expo/sections/audience-links.ts"),
+    join(root, "src/lib/expo/sections/speaker-carousel.ts"),
+    join(root, "src/lib/expo/sections/sponsor-marquee.ts"),
+    join(root, "src/lib/expo/sections/cta-band.ts"),
     join(root, "src/lib/expo/shell-css.ts"),
     // 마운트 자리 표시 상수를 스니펫 만드는 쪽과 공유한다 — 각자 적어 두면 한쪽만
     // 고쳐지는 날 코드는 붙었는데 런타임이 그 자리를 못 찾는다(snippet.ts 참고).
     join(root, "src/lib/expo/snippet.ts"),
+    join(root, "src/lib/expo/types.ts"),
     // 공용
     join(root, "src/lib/collect-form/target-registry.ts"),
     join(root, "src/lib/color.ts"),
@@ -150,11 +169,56 @@ export function expoSourceFiles(root) {
     join(root, "src/lib/dom/focus.ts"),
     join(root, "src/lib/dom/scroll-lock.ts"),
     join(root, "src/lib/webinar-config.ts"),
+    join(root, "src/lib/url-safety.ts"),
   ]).sort();
 }
 
 export function expoSourceHash(root) {
   return hashFiles(expoSourceFiles(root));
+}
+
+/**
+ * 복구용 standalone 홈페이지 런타임.
+ * live mount의 seen/preview/font/form/custom-code 모듈은 의도적으로 목록에 없다.
+ * embed-runtime-manifest 테스트가 실제 esbuild 입력과 이 목록을 대조한다.
+ */
+export function standaloneExpoSourceFiles(root) {
+  return ([
+    join(root, "src/embed/expo-standalone-entry.ts"),
+    join(root, "src/lib/collect-form-config.ts"),
+    join(root, "src/lib/color.ts"),
+    join(root, "src/lib/dom/h.ts"),
+    join(root, "src/lib/expo/css.ts"),
+    join(root, "src/lib/expo/cta.ts"),
+    join(root, "src/lib/expo/destination.ts"),
+    join(root, "src/lib/expo/registry.ts"),
+    join(root, "src/lib/expo/renderers/action.ts"),
+    join(root, "src/lib/expo/renderers/audience-links.ts"),
+    join(root, "src/lib/expo/renderers/campaign-hero.ts"),
+    join(root, "src/lib/expo/renderers/cta-band.ts"),
+    join(root, "src/lib/expo/renderers/exhibition-grid.ts"),
+    join(root, "src/lib/expo/renderers/image.ts"),
+    join(root, "src/lib/expo/renderers/lifecycle.ts"),
+    join(root, "src/lib/expo/renderers/speaker-carousel.ts"),
+    join(root, "src/lib/expo/renderers/sponsor-marquee.ts"),
+    join(root, "src/lib/expo/sections/audience-links.ts"),
+    join(root, "src/lib/expo/sections/campaign-hero.ts"),
+    join(root, "src/lib/expo/sections/cta-band.ts"),
+    join(root, "src/lib/expo/sections/exhibition-grid.ts"),
+    join(root, "src/lib/expo/sections/speaker-carousel.ts"),
+    join(root, "src/lib/expo/sections/sponsor-marquee.ts"),
+    join(root, "src/lib/expo/sections/types.ts"),
+    join(root, "src/lib/expo/types.ts"),
+    join(root, "src/lib/expo/view-sections.ts"),
+    join(root, "src/lib/legal-templates/tokens.ts"),
+    join(root, "src/lib/legal-templates/types.ts"),
+    join(root, "src/lib/url-safety.ts"),
+    join(root, "src/lib/webinar-config.ts"),
+  ]).sort();
+}
+
+export function standaloneExpoSourceHash(root) {
+  return hashFiles(standaloneExpoSourceFiles(root));
 }
 
 // ── 대회 3종 ────────────────────────────────────────────────────────────

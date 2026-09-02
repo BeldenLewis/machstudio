@@ -92,6 +92,43 @@ export function registerFormTarget(key: string, record: FormTargetRecord, host?:
   registry(host)[key] = record;
 }
 
+export interface FormTargetLease {
+  /** 이 임대가 아직 현재 예약일 때만 놓고, 살아 있는 이전 예약은 복원한다. */
+  release(): void;
+}
+
+/**
+ * staged remount용 소유권 있는 예약.
+ *
+ * 새 shell은 이전 shell이 살아 있는 동안 같은 안정 key를 먼저 예약한다. 실패하면 이전
+ * 예약을 돌려놓고, 성공 뒤 이전 shell이 정리될 때는 그 정리가 새 예약을 지우지 못해야
+ * 한다. 단순 `register`/`unregister` 쌍으로는 둘을 구분할 수 없어 record identity를 쓴다.
+ */
+export function leaseFormTarget(
+  key: string,
+  record: FormTargetRecord,
+  host?: RegistryHost,
+): FormTargetLease {
+  const reg = registry(host);
+  const previous = reg[key] ?? null;
+  reg[key] = record;
+  let released = false;
+
+  return {
+    release() {
+      if (released) return;
+      released = true;
+      // 이미 다음 소유자가 왔으면 이 임대는 그 예약을 만지지 않는다.
+      if (reg[key] !== record) return;
+      const previousAlive = previous
+        && previous.disposeSignal?.aborted !== true
+        && previous.container.isConnected;
+      if (previousAlive) reg[key] = previous;
+      else delete reg[key];
+    },
+  };
+}
+
 /**
  * 예약을 찾는다. **죽은 자리는 없는 것으로 답한다** — 정리된 섹션에 폼을 붙이면
  * 보이지 않는 곳에 폼이 살아 남아 제출까지 받는다.
@@ -110,6 +147,16 @@ export function getFormTarget(key: string, host?: RegistryHost): FormTargetRecor
 
 export function unregisterFormTarget(key: string, host?: RegistryHost): void {
   delete registry(host)[key];
+}
+
+/** 이전 런타임 정리가 같은 key의 후속 staged 예약을 지우지 못하게 한다. */
+export function unregisterOwnedFormTarget(
+  key: string,
+  record: FormTargetRecord,
+  host?: RegistryHost,
+): void {
+  const reg = registry(host);
+  if (reg[key] === record) delete reg[key];
 }
 
 /** 테스트·재진입 검증용. */

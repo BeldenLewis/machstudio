@@ -25,12 +25,12 @@ import { expoSitePrefix, isUnderExpoPrefix } from "@/lib/expo/media";
 export const EXPO_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 
 export const EXPO_IMAGE_LIMITS = {
-  /** 원본 상한 — Vercel 함수 요청 한도 아래로 잡는다. */
-  sourceBytes: 4 * 1024 * 1024,
+  /** signed upload 원본 상한 — 큰 본문은 Next 라우트를 통과하지 않는다. */
+  sourceBytes: 12 * 1024 * 1024,
   /** 축소 뒤 저장 상한. */
   storedBytes: 1.5 * 1024 * 1024,
   /** 축소 뒤 긴 변. */
-  maxEdge: 1600,
+  maxEdge: 1400,
   /** 디코딩 전에 막는 픽셀 수 — 압축 폭탄 방어. */
   maxPixels: 50_000_000,
 } as const;

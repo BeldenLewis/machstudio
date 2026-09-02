@@ -5,26 +5,22 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { AutosaveScope, AggregateAutosaveIndicator, useReportAutosave } from "@/components/ui/autosave-scope";
-import { Field, FIELD_CLS, FINISH, R, Segmented } from "@/components/ui/primitives";
+import { AutosaveScope, AggregateAutosaveIndicator } from "@/components/ui/autosave-scope";
+import { FINISH, R, Segmented } from "@/components/ui/primitives";
 import { PreviewFrame } from "@/components/ui/PreviewFrame";
 import { ColorField } from "@/components/ui/ColorField";
 import { normalizeHexColor } from "@/lib/color";
 import { EXPO_DEFAULT_THEME, normalizeExpoTheme } from "@/lib/expo/config";
 import { ExpoProjectSync } from "@/components/expo/ExpoProjectSync";
-import { SectionsEditor } from "@/components/expo/SectionEditor";
+import { PageDraftWorkspace } from "@/components/expo/PageDraftWorkspace";
 import { ExpoTemplateSave } from "@/components/expo/ExpoTemplateSave";
 import { ExpoPageTree } from "@/components/expo/ExpoPageTree";
 import { useExpoPreviewChannel } from "@/lib/expo/use-preview-channel";
-import {
-  ExpoPublishPanel,
-  type ExpoReadinessView,
-  type ExpoSnippetsView,
-} from "@/components/expo/ExpoPublishPanel";
-import { attachExpoRowKeys, stripExpoRowKeys } from "@/lib/expo/row-key";
-import { usePageAutosave, type ExpoSaveOutcome } from "@/lib/expo/use-page-autosave";
+import type { ExpoReadinessView, ExpoSnippetsView } from "@/lib/expo/editor-dto";
 import type { ExpoPermissions, ExpoRelease } from "@/lib/expo/permissions";
-import type { ExpoSection, ExpoTheme } from "@/lib/expo/types";
+import type { FlushResult } from "@/lib/expo/use-page-autosave";
+import type { CampaignPreviewMode, ExpoTheme } from "@/lib/expo/types";
+export { forcedCampaignsForPreview } from "@/lib/expo/campaign-preview";
 
 /**
  * 홈페이지 편집 — **탐색 · 편집 · 미리보기 3열**.
@@ -61,23 +57,6 @@ interface SiteInfo {
   theme: ExpoTheme;
 }
 
-interface PageDetail {
-  id: string;
-  slug: string;
-  title: string;
-  imwebUrl: string | null;
-  draft: { sections: ExpoSection[] };
-  draftRevision: number;
-  hasPublished: boolean;
-  liveAt: string | null;
-  /** 붙여넣은 코드의 지문 — 미리보기에서 실행 허가를 요청할 때 그대로 되돌려 보낸다. */
-  codeDigest: string;
-  publishedCodeDigest: string;
-  /** "왜 아직 안 나가는가" — 판정은 서버가 한다(`readiness.ts`). */
-  readiness: ExpoReadinessView;
-  snippets: ExpoSnippetsView;
-}
-
 /**
  * **오른쪽 칸이 알아야 하는 것.** 가운데 칸(폼)에서 위로 올려 흐른다 — 저장 번호도
  * 발행 상태도 페이지 상세에서 오고, 그걸 들고 있는 건 폼 쪽이기 때문이다.
@@ -108,12 +87,6 @@ interface PageStatus {
    */
   saveBlocked: boolean;
 }
-
-/** 부분 갱신 — 어느 페이지 것인지는 항상 있어야 한다. */
-type PageStatusPatch = Partial<PageStatus> & { pageId: string };
-
-const isCompleteStatus = (v: PageStatusPatch): v is PageStatus =>
-  v.readiness !== undefined && v.snippets !== undefined;
 
 export interface ExpoSiteEditorProps {
   siteId: string;
@@ -170,53 +143,10 @@ function EditorBody({ siteId, siteName, permissions, release, previewOrigin }: E
   const [pages, setPages] = useState<PageSummary[] | null>(null);
   const [sources, setSources] = useState<SourceOption[]>([]);
   /**
-   * 페이지별 미리보기 정보. **하나만 들고 있으면 안 된다** — 페이지를 바꾼 뒤에 앞 페이지의
-   * 저장이 늦게 끝나면(fetch 는 언마운트 뒤에도 살아서 resolve 한다) 그 보고가 지금 페이지의
-   * 정보를 덮어써 미리보기가 다시 "준비하는 중" 으로 돌아간다.
-   * 칸을 나눠 두면 늦게 온 보고는 제 칸만 갱신하고 지나간다.
-   *
-   * 이 성질은 **테스트로 못 덮었다** — 지금 하니스로는 페이지 전환을 몰 수 없다
-   * (useSearchParams 목이 router.replace 를 되받지 않는다). 키가 다르면 서로 못 덮는다는
-   * 것이 자료구조에서 바로 나오는 성질이라 그대로 둔다. 전환을 몰 수 있게 되면 검사를 붙일 것.
-   */
-  const [statusByPage, setStatusByPage] = useState<Record<string, PageStatus>>({});
-  /** 발행·공개가 끝났다는 신호. 가운데 칸이 이 번호를 보고 발행 쪽 값만 다시 읽는다. */
-  const [publishNonce, setPublishNonce] = useState(0);
-  /**
    * 삭제 유예(5초) 중인 페이지. 되살아날 수 있는 것을 편집하게 두면 **되살린 뒤 무엇이
    * 남아 있어야 하는지 아무도 모른다** — 그래서 그동안 편집·발행을 잠근다.
    */
   const [pendingPages, setPendingPages] = useState<ReadonlySet<string>>(new Set());
-  /**
-   * 미리보기에서 방금 누른 구획. 편집 열이 그 카드로 스크롤하고 잠깐 표시한다 —
-   * 모든 구획이 이미 인라인으로 펼쳐져 있으므로(D14) 선택 모델을 새로 만들지 않고
-   * **어디를 보라고 가리키기만** 한다.
-   */
-  const [focusedSid, setFocusedSid] = useState<string | null>(null);
-  /**
-   * 잠깐 가리켰다가 놓는다. 타이머를 **여기**(이벤트 핸들러) 두는 이유: 자식이 효과에서
-   * 지우면 효과 안에서 state 를 바꾸게 되고 그건 연쇄 렌더다(react-hooks 규칙).
-   */
-  const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const focusSection = useCallback((sid: string) => {
-    if (focusTimer.current) clearTimeout(focusTimer.current);
-    setFocusedSid(sid);
-    focusTimer.current = setTimeout(() => setFocusedSid(null), 1400);
-  }, []);
-  useEffect(() => () => { if (focusTimer.current) clearTimeout(focusTimer.current); }, []);
-  /**
-   * 보고는 **부분 갱신**이다. 통째로 덮으면 서로 다른 시점의 보고가 서로를 지운다 —
-   * 저장이 끝나 번호가 9가 됐는데, 그 직후 "저장 끝남" 을 알리는 보고가 자기가 아는
-   * 옛 번호(7)로 되돌려 놓는다. 미리보기는 그 번호로 다시 부를지 정하므로 **저장했는데
-   * 미리보기가 안 따라오는** 상태가 된다(실제로 그렇게 만들었다가 테스트가 잡았다).
-   */
-  const reportStatus = useCallback((next: PageStatusPatch) => {
-    setStatusByPage((prev) => {
-      const before = prev[next.pageId];
-      if (!before && !isCompleteStatus(next)) return prev; // 첫 보고는 통째로 온다
-      return { ...prev, [next.pageId]: { ...(before as PageStatus), ...next } };
-    });
-  }, []);
   /** 아직 적용하지 않은 색. null 이면 바꾼 것이 없다. */
   const [stagedTheme, setStagedTheme] = useState<ExpoTheme | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -268,14 +198,59 @@ function EditorBody({ siteId, siteName, permissions, release, previewOrigin }: E
     [pages],
   );
 
-  const selectPage = useCallback((pageId: string) => {
+  const transitionIntent = useRef(0);
+  /** 삭제 유예를 시작한 intent. DELETE 응답 뒤에도 최신 행동일 때만 fallback으로 간다. */
+  const removalIntents = useRef(new Map<string, number>());
+  useEffect(() => {
+    const pendingRemovals = removalIntents.current;
+    // 같은 컴포넌트 인스턴스가 다른 사이트를 받으면 이전 사이트의 await 결과를 모두 폐기한다.
+    transitionIntent.current += 1;
+    pendingRemovals.clear();
+    return () => {
+      // unmount 뒤 끝난 POST/flush도 router나 선택을 바꾸지 못한다.
+      transitionIntent.current += 1;
+      pendingRemovals.clear();
+    };
+  }, [siteId]);
+
+  const beginNavigationIntent = useCallback((): number => {
+    // 더 최신 행동이 시작되면 이전 삭제의 fallback token은 다시 쓰일 수 없다.
+    removalIntents.current.clear();
+    transitionIntent.current += 1;
+    return transitionIntent.current;
+  }, []);
+
+  const flushBeforeTransition = useCallback(async (
+    flush: () => Promise<FlushResult>,
+  ): Promise<boolean> => {
+    const result = await flush();
+    if (result === "clean" || result === "saved" || result === "disabled") return true;
+    if (result === "failed") toast.error("페이지를 저장하지 못했어요. 연결을 확인한 뒤 다시 시도해 주세요.");
+    return false;
+  }, []);
+
+  const commitPageSelection = useCallback((pageId: string, intent: number): boolean => {
+    if (intent !== transitionIntent.current) return false;
     const next = new URLSearchParams(params.toString());
     next.set("page", pageId);
     // `replace` 다 — 페이지를 훑을 때마다 뒤로가기 기록이 쌓이면 목록으로 못 돌아간다.
     router.replace(`?${next.toString()}`, { scroll: false });
+    return true;
   }, [params, router]);
 
-  const addPage = useCallback(async () => {
+  const selectPage = useCallback(async (
+    pageId: string,
+    flush: () => Promise<FlushResult>,
+  ): Promise<boolean> => {
+    if (pageId === selected?.id) return true;
+    const intent = beginNavigationIntent();
+    if (!(await flushBeforeTransition(flush)) || intent !== transitionIntent.current) return false;
+    return commitPageSelection(pageId, intent);
+  }, [beginNavigationIntent, commitPageSelection, flushBeforeTransition, selected?.id]);
+
+  const addPage = useCallback(async (flush: () => Promise<FlushResult>) => {
+    const intent = beginNavigationIntent();
+    if (!(await flushBeforeTransition(flush)) || intent !== transitionIntent.current) return false;
     const res = await fetch(`/api/expo/${encodeURIComponent(siteId)}/pages`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -283,12 +258,30 @@ function EditorBody({ siteId, siteName, permissions, release, previewOrigin }: E
     });
     if (!res.ok) {
       toast.error((await res.json().catch(() => ({}))).error ?? "페이지를 만들지 못했어요");
-      return;
+      return false;
     }
     const { page } = (await res.json()) as { page: { id: string } };
+    // POST가 성공했다면 더 최신 선택이 있어도 목록에는 새 페이지를 반영한다. 자동 삭제하지 않는다.
     reload();
-    selectPage(page.id);
-  }, [siteId, reload, selectPage]);
+    return commitPageSelection(page.id, intent);
+  }, [beginNavigationIntent, commitPageSelection, flushBeforeTransition, siteId, reload]);
+
+  const preparePageRemoval = useCallback(async (
+    pageId: string,
+    flush: () => Promise<FlushResult>,
+  ): Promise<boolean> => {
+    const intent = beginNavigationIntent();
+    if (!(await flushBeforeTransition(flush)) || intent !== transitionIntent.current) return false;
+    removalIntents.current.set(pageId, intent);
+    return true;
+  }, [beginNavigationIntent, flushBeforeTransition]);
+
+  const selectAfterPageRemoval = useCallback((pageId: string, removedPageId: string): boolean => {
+    const intent = removalIntents.current.get(removedPageId);
+    removalIntents.current.delete(removedPageId);
+    if (intent === undefined) return false;
+    return commitPageSelection(pageId, intent);
+  }, [commitPageSelection]);
 
   if (loadError) {
     return (
@@ -312,104 +305,81 @@ function EditorBody({ siteId, siteName, permissions, release, previewOrigin }: E
     );
   }
 
-  const status = selected ? statusByPage[selected.id] ?? null : null;
   /** 지금 보고 있는 페이지가 삭제 유예 중인가. */
   const pendingSelected = Boolean(selected && pendingPages.has(selected.id));
 
   return (
     <Shell siteName={site.name} siteUrl={site.siteUrl}>
-      <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(200px,240px)_minmax(0,1fr)_minmax(280px,380px)]">
-        <div className="space-y-3">
-          <ExpoPageTree
+      <div className="mt-5">
+        {selected ? <PageDraftWorkspace
+          key={selected.id}
+          siteId={siteId}
+          pageId={selected.id}
+          permissions={{
+            ...permissions,
+            canEdit: permissions.canEdit && !pendingSelected,
+            canPublish: permissions.canPublish && !pendingSelected,
+          }}
+          sources={sources}
+          pages={linkTargets}
+          locale={site.defaultLocale || "ko"}
+          embedLocked={!release.publicEmbedEnabled}
+          onSaved={reload}
+          leftTop={(draft) => <ExpoPageTree
             siteId={siteId}
             pages={pages}
-            selectedId={selected?.id ?? null}
+            selectedId={selected.id}
             canEdit={permissions.canEdit}
+            canRename={false}
             canManageSite={permissions.canManageSite}
-            onSelect={selectPage}
-            onAdd={addPage}
+            onSelect={(pageId) => selectPage(pageId, draft.flush)}
+            onSelectAfterRemove={selectAfterPageRemoval}
+            onAdd={() => addPage(draft.flush)}
+            onBeforeRemove={(pageId) => preparePageRemoval(pageId, draft.flush)}
             onReload={reload}
             onPendingChange={setPendingPages}
-          />
-          {/* 색은 `canPublish` 다 — 저장하는 순간 이미 공개된 페이지가 바뀐다. */}
-          {permissions.canPublish ? (
-            <ThemePanel
+          />}
+          leftBottom={<>
+            {permissions.canPublish ? <ThemePanel
               siteId={siteId}
               saved={site.theme}
               staged={stagedTheme}
               onStage={setStagedTheme}
               onApplied={(theme) => {
-                setSite((prev) => (prev ? { ...prev, theme } : prev));
+                setSite((prev) => prev ? { ...prev, theme } : prev);
                 setStagedTheme(null);
               }}
               anyLive={pages.some((page) => page.liveAt)}
-            />
-          ) : null}
-          {/* 템플릿 저장은 `canEdit` 이다 — 새 템플릿을 만들 뿐 이 사이트를 건드리지 않는다. */}
-          {permissions.canEdit ? (
-            <ExpoTemplateSave siteId={siteId} siteName={site.name} />
-          ) : null}
-        </div>
-
-        {selected ? (
-          /**
-           * `key` 가 페이지 id 다. 페이지를 바꾸면 편집기가 통째로 새로 마운트돼
-           * 앞 페이지의 대기 상태가 새 페이지로 넘어올 수 없다.
-           */
-          <PageEditor
-            key={selected.id}
-            pageId={selected.id}
-            siteId={siteId}
-            canEdit={permissions.canEdit && !pendingSelected}
-            sources={sources}
-            linkTargets={linkTargets}
-            locale={site.defaultLocale || "ko"}
-            focusedSid={focusedSid}
-            onFocusSection={focusSection}
-            embedLocked={!release.publicEmbedEnabled}
-            onSaved={reload}
-            onPageStatus={reportStatus}
-            publishNonce={publishNonce}
-          />
-        ) : (
-          <div className={`${R.panel} ${FINISH.s1} bg-card p-5 text-sm text-muted-foreground`}>
-            페이지가 없어요.
-          </div>
-        )}
-
-        {/* 오른쪽 칸 — 보고(미리보기) 나서 내보낸다(발행). 두 개가 붙어 있어야 흐름이 이어진다. */}
-        <div className="space-y-3">
-          {/**
-            * `key` 가 페이지 id 다 — 미리보기 통로의 채널을 페이지마다 새로 발급하기 위해서다.
-            * 안 그러면 앞 페이지의 프레임이 뒤늦게 보낸 메시지가 새 화면에 적용된다.
-            */}
-          <PreviewPane
-            key={selected?.id ?? "none"}
-            previewToken={site.previewToken}
-            pageId={selected?.id ?? null}
-            release={release}
-            info={status}
-            theme={stagedTheme}
-            previewOrigin={previewOrigin}
-            onSelectSection={focusSection}
-          />
-          {status ? (
-            <ExpoPublishPanel
-              pageId={status.pageId}
-              // 이름은 목록에서 — 트리가 고치는 곳이 거기다. `status.pageId` 로 맞춰 읽어야
-              // 페이지를 막 바꾼 순간 **앞 페이지의 상태에 새 페이지의 이름**이 붙지 않는다.
-              pageTitle={pages?.find((p) => p.id === status.pageId)?.title ?? ""}
-              hasPublished={status.hasPublished}
-              liveAt={status.liveAt}
-              readiness={status.readiness}
-              snippets={status.snippets}
-              canPublish={permissions.canPublish && !pendingSelected}
-              launchLocked={!release.publicEmbedEnabled}
-              saveBlocked={status.saveBlocked}
-              onChanged={() => setPublishNonce((n) => n + 1)}
-            />
-          ) : null}
-        </div>
+            /> : null}
+            {permissions.canEdit ? <ExpoTemplateSave siteId={siteId} siteName={site.name} /> : null}
+          </>}
+          renderPreview={(draft) => {
+            const page = draft.page;
+            const info: PageStatus | null = page ? {
+              pageId: page.id,
+              revision: draft.revision,
+              codeDigest: page.codeDigest,
+              publishedCodeDigest: page.publishedCodeDigest,
+              hasPublished: page.hasPublished,
+              liveAt: page.liveAt,
+              readiness: page.readiness,
+              snippets: page.snippets,
+              saveBlocked: draft.saveBlocked,
+            } : null;
+            return <PreviewPane
+              key={selected.id}
+              previewToken={site.previewToken}
+              pageId={selected.id}
+              release={release}
+              info={info}
+              theme={stagedTheme}
+              previewOrigin={previewOrigin}
+              onSelectSection={draft.setSelectedSid}
+            />;
+          }}
+        /> : <div className={`${R.panel} ${FINISH.s1} bg-card p-5 text-sm text-muted-foreground`}>
+          페이지가 없어요.
+        </div>}
       </div>
     </Shell>
   );
@@ -449,317 +419,6 @@ function Shell({
 }
 
 
-interface PageEditorProps {
-  pageId: string;
-  siteId: string;
-  canEdit: boolean;
-  sources: SourceOption[];
-  linkTargets: { id: string; title: string }[];
-  /** 사이트의 defaultLocale — 공개 로더가 이 값으로 글을 읽는다. */
-  locale: string;
-  onSaved: () => void;
-  onPageStatus: (info: PageStatusPatch) => void;
-  /**
-   * 발행·공개가 끝나면 부모가 올리는 번호. 발행 패널이 **오른쪽 칸**에 있어서 한 바퀴
-   * 돌아온다 — 함수를 상태에 담는 대신 번호를 내려보낸다(사이트 다시 읽기와 같은 방식).
-   */
-  publishNonce: number;
-  /** 미리보기에서 누른 구획 — 편집 열이 그 카드로 데려간다. */
-  focusedSid: string | null;
-  /** 거절 안내에서 그 구획으로 데려갈 때 쓴다. 미리보기 클릭과 같은 통로다. */
-  onFocusSection: (sid: string) => void;
-  /** 릴리스 승인 전인가 — 구획의 "따로 내보내기" 를 새로 켜는 것만 잠근다. */
-  embedLocked: boolean;
-}
-
-/** 페이지 하나의 편집 — 기본값과 구획. */
-function PageEditor({
-  pageId, siteId, canEdit, sources, linkTargets, locale, onSaved, onPageStatus, publishNonce,
-  focusedSid, onFocusSection, embedLocked,
-}: PageEditorProps) {
-  const [page, setPage] = useState<PageDetail | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void (async () => {
-      try {
-        const res = await fetch(`/api/expo/pages/${encodeURIComponent(pageId)}`, {
-          signal: controller.signal, cache: "no-store",
-        });
-        if (!res.ok) { setFailed(true); return; }
-        const data = (await res.json()) as { page: PageDetail };
-        setPage({
-          ...data.page,
-          /**
-           * 행 키는 **여기서 한 번만** 붙인다. 렌더마다 붙이면 매번 새 키가 나와
-           * 값이 계속 달라지고 자동저장이 타이핑하지 않아도 끝없이 돈다.
-           */
-          draft: { sections: attachExpoRowKeys(data.page.draft.sections) },
-        });
-      } catch (error) {
-        if ((error as { name?: string })?.name === "AbortError") return;
-        setFailed(true);
-      }
-    })();
-    return () => controller.abort();
-  }, [pageId]);
-
-  /**
-   * 발행·공개 뒤에 **발행 쪽 값만** 다시 읽는다.
-   *
-   * `draft` 는 손대지 않는다 — 편집 중인 내용을 서버 사본으로 덮으면 방금 친 글이
-   * 사라지고, 행 키를 다시 붙이면 타이핑하던 행이 리마운트된다. 발행은 draftRevision 을
-   * 건드리지 않으므로(발행 라우트 주석) 그 번호도 그대로 둔다.
-   */
-  const refreshPublishState = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/expo/pages/${encodeURIComponent(pageId)}`, { cache: "no-store" });
-      if (!res.ok) return;
-      const data = (await res.json()) as { page: PageDetail };
-      setPage((prev) => (prev && prev.id === data.page.id ? {
-        ...prev,
-        hasPublished: data.page.hasPublished,
-        liveAt: data.page.liveAt,
-        publishedCodeDigest: data.page.publishedCodeDigest,
-        readiness: data.page.readiness,
-        snippets: data.page.snippets,
-      } : prev));
-    } catch {
-      /* 실패해도 화면을 깨뜨리지 않는다 — 다음 저장이나 새로고침에 따라온다. */
-    }
-  }, [pageId]);
-
-  /**
-   * 번호가 오르면(=발행·공개가 끝나면) 다시 읽는다. **첫 마운트는 건너뛴다** —
-   * 바로 위 효과가 방금 전부 읽어 왔으므로 같은 요청을 두 번 보내게 된다.
-   */
-  const seenNonce = useRef(publishNonce);
-  useEffect(() => {
-    if (seenNonce.current === publishNonce) return;
-    seenNonce.current = publishNonce;
-    void refreshPublishState();
-  }, [publishNonce, refreshPublishState]);
-
-  if (failed) {
-    return (
-      <div className={`${R.panel} ${FINISH.s1} bg-card p-5 text-sm`}>
-        <p className="font-medium">페이지를 불러오지 못했어요.</p>
-      </div>
-    );
-  }
-  if (!page) {
-    return (
-      <div className={`${R.panel} ${FINISH.s1} flex items-center gap-2 bg-card p-5 text-sm text-muted-foreground`}>
-        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-        불러오는 중…
-      </div>
-    );
-  }
-
-  return (
-    <PageForm
-      page={page}
-      siteId={siteId}
-      canEdit={canEdit}
-      sources={sources}
-      linkTargets={linkTargets}
-      locale={locale}
-      focusedSid={focusedSid}
-      onFocusSection={onFocusSection}
-      embedLocked={embedLocked}
-      onSaved={onSaved}
-      onPageStatus={onPageStatus}
-    />
-  );
-}
-
-function PageForm({
-  page, siteId, canEdit, sources, linkTargets, locale, onSaved, onPageStatus,
-  focusedSid, onFocusSection, embedLocked,
-}: Omit<PageEditorProps, "pageId" | "publishNonce"> & { page: PageDetail }) {
-  /**
-   * 이름은 **왼쪽 트리가 소유한다.** 여기에도 두면 같은 값을 두 곳이 저장하게 되고,
-   * 한쪽이 저장 중일 때 다른 쪽이 옛 값으로 덮는 경합이 생긴다. 트리에서 고치는 것이
-   * 0클릭이라 그쪽이 맞는 자리다(스펙 §페이지 트리).
-   */
-  const [imwebUrl, setImwebUrl] = useState(page.imwebUrl ?? "");
-  const [sections, setSections] = useState<ExpoSection[]>(page.draft.sections);
-
-  /** 자동저장이 보는 값. **행 키가 들어 있다** — 저장 직전에 뗀다. */
-  const value = useMemo(
-    () => ({ imwebUrl, sections }),
-    [imwebUrl, sections],
-  );
-
-  /**
-   * 부모에게 알리는 콜백은 ref 로 잡는다 — 의존성에 넣으면 부모가 렌더될 때마다 `save` 가
-   * 새로 만들어지고, 자동저장 훅이 그걸 보고 기준선을 다시 잡는다. 동기화는 렌더가 아니라
-   * 효과에서 한다(`use-page-autosave.ts` 와 같은 패턴).
-   */
-  const reportRef = useRef(onPageStatus);
-  useEffect(() => { reportRef.current = onPageStatus; }, [onPageStatus]);
-
-  /**
-   * 발행본 쪽 값. **초안 저장(PATCH)은 이걸 바꾸지 않으므로** 저장이 도는 동안은 맞다.
-   *
-   * 다만 **발행(POST .../publish)은 바꾼다.** 지금은 발행 UI 가 없어서(W1 범위 밖) 이
-   * 화면에서 도달할 수 없지만, 발행 버튼이 붙는 순간 여기가 낡는다 — 발행 직후
-   * 미리보기가 옛 발행본 지문으로 "실행 중" 이라고 적힌 채 자리표를 보여 준다.
-   * 그때는 발행 응답에서도 지문을 받아 함께 올려야 한다(페이지 상세는 pageId 가 바뀔
-   * 때만 다시 읽으므로 저절로 갱신되지 않는다).
-   */
-  const { publishedCodeDigest, hasPublished, draftRevision, codeDigest, liveAt, readiness, snippets } = page;
-
-  const save = useCallback(async (
-    next: typeof value, revision: number,
-  ): Promise<ExpoSaveOutcome> => {
-    const res = await fetch(`/api/expo/pages/${encodeURIComponent(page.id)}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        imwebUrl: next.imwebUrl,
-        // 편집기 전용 키는 여기서 뗀다 — 발행 스냅샷과 공개 페이로드에 들어가면 안 된다.
-        draft: { sections: stripExpoRowKeys(next.sections) },
-        draftRevision: revision,
-      }),
-    });
-    if (res.status === 409) {
-      const body = await res.json().catch(() => ({}));
-      return { kind: "conflict", revision: Number(body.draftRevision ?? revision) };
-    }
-    /**
-     * **422 는 재시도해도 되는 실패가 아니다.** 같은 값을 다시 보내면 또 거절이다.
-     * `failed` 로 뭉개면 기준선이 유지된 채 타이핑할 때마다 조용히 다시 시도되고,
-     * 화면에는 이유가 한 글자도 안 뜬다 — 운영자는 저장이 안 된다는 것조차 모른다.
-     */
-    if (res.status === 422) {
-      const body = await res.json().catch(() => ({}));
-      const raw = Array.isArray(body.errors) ? body.errors : [];
-      return {
-        kind: "rejected",
-        errors: raw.map((e: { path?: unknown; message?: unknown; sid?: unknown }) => ({
-          path: typeof e.path === "string" ? e.path : "sections",
-          message: typeof e.message === "string" ? e.message : "저장할 수 없는 값이에요.",
-          sid: typeof e.sid === "string" ? e.sid : undefined,
-        })),
-      };
-    }
-    if (!res.ok) return { kind: "failed" };
-    const body = await res.json().catch(() => ({}));
-    const savedRevision = Number(body.page?.draftRevision ?? revision + 1);
-    // 미리보기는 **저장된 것**을 읽는다 — 번호가 바뀌었으니 다시 불러야 한다.
-    reportRef.current({
-      pageId: page.id,
-      revision: savedRevision,
-      codeDigest: String(body.page?.codeDigest ?? ""),
-      publishedCodeDigest, hasPublished, liveAt, readiness, snippets,
-    });
-    onSaved();
-    return { kind: "saved", revision: savedRevision };
-  }, [page.id, onSaved, publishedCodeDigest, hasPublished, liveAt, readiness, snippets]);
-
-  const autosave = usePageAutosave({
-    pageId: page.id,
-    value,
-    initialRevision: page.draftRevision,
-    save,
-    enabled: canEdit,
-  });
-  useReportAutosave(autosave.state, autosave.retry);
-
-  /** 저장이 끝나야 발행할 수 있다 — 충돌·오류도 같다. */
-  const saveBlocked = autosave.dirty || autosave.conflict !== null || autosave.state === "error";
-
-  /**
-   * 처음 한 번, 그리고 발행 상태가 바뀔 때마다 — 오른쪽 칸이 그걸로 그린다.
-   * **저장 상태는 여기서 보고하지 않는다.** 여기에 넣으면 저장이 끝날 때마다 이 효과가
-   * 다시 돌면서 `page.draftRevision`(마운트 시점의 옛 번호)으로 되돌려 놓는다.
-   */
-  useEffect(() => {
-    reportRef.current({
-      pageId: page.id, revision: draftRevision, codeDigest,
-      publishedCodeDigest, hasPublished, liveAt, readiness, snippets,
-    });
-  }, [page.id, draftRevision, codeDigest, publishedCodeDigest, hasPublished, liveAt, readiness, snippets]);
-
-  /** 저장 상태만 따로. 불리언이라 **전환마다 한 번**이지 타이핑할 때마다가 아니다. */
-  useEffect(() => {
-    reportRef.current({ pageId: page.id, saveBlocked });
-  }, [page.id, saveBlocked]);
-
-
-  return (
-    <div className={`${R.panel} ${FINISH.s1} space-y-5 bg-card p-5`}>
-      {autosave.conflict ? (
-        <div className={`${R.surface} ${FINISH.s2Danger} bg-secondary p-3 text-sm`}>
-          <p className="font-medium">다른 곳에서 먼저 저장했어요.</p>
-          <p className="mt-1 text-muted-foreground">
-            자동저장을 멈췄어요. 지금 화면의 내용은 그대로 있습니다 — 새로고침하면 서버 내용으로
-            바뀌고, 이 화면의 글은 사라져요.
-          </p>
-        </div>
-      ) : null}
-
-      {/**
-        * **저장이 거절됐다.** 409(다른 곳에서 먼저 저장)와 갈라 놓는다 — 그건 기다리면
-        * 풀리지만 이건 값을 고쳐야 풀린다. 값이 바뀌면 이 안내가 저절로 사라지고
-        * 다시 시도된다. 구획을 짚어 주면 그 카드로 데려간다.
-        */}
-      {autosave.rejected ? (
-        <div className={`${R.surface} ${FINISH.s2Danger} bg-secondary p-3 text-sm`}>
-          <p className="font-medium">저장하지 못했어요. 아래를 고치면 다시 저장돼요.</p>
-          <ul className="mt-1.5 space-y-1 text-muted-foreground">
-            {autosave.rejected.map((issue, i) => (
-              <li key={`${issue.path}-${i}`} className="flex items-start gap-1.5">
-                <span aria-hidden className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current" />
-                {issue.sid ? (
-                  <button
-                    type="button"
-                    onClick={() => onFocusSection(issue.sid!)}
-                    className="text-left underline-offset-2 hover:underline"
-                  >
-                    {issue.message}
-                  </button>
-                ) : (
-                  <span>{issue.message}</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      <label className="block">
-        <span className="text-sm font-medium">아임웹 주소</span>
-        <Field
-          value={imwebUrl}
-          onChange={(event) => setImwebUrl(event.target.value)}
-          disabled={!canEdit}
-          placeholder="https://…"
-          className={`mt-1.5 ${FIELD_CLS}`}
-        />
-        <span className="mt-1 block text-xs text-muted-foreground">
-          이 페이지에 대응하는 아임웹 페이지 주소예요. 다른 페이지에서 이 페이지로 거는 링크가
-          이 주소로 풀립니다.
-        </span>
-      </label>
-
-      <SectionsEditor
-        sections={sections}
-        onChange={setSections}
-        canEdit={canEdit}
-        embedLocked={embedLocked}
-        siteId={siteId}
-        sources={sources}
-        pages={linkTargets}
-        locale={locale}
-        focusedSid={focusedSid}
-      />
-    </div>
-  );
-}
-
 /**
  * 오른쪽 칸 — **저장된 것**을 그린다.
  *
@@ -786,6 +445,8 @@ function PreviewPane({
   onSelectSection: (sid: string) => void;
 }) {
   const [showPublished, setShowPublished] = useState(false);
+  /** 미리보기 주소에만 실리는 캠페인 가정. 초안과 자동저장에는 닿지 않는다. */
+  const [campaignMode, setCampaignMode] = useState<CampaignPreviewMode>("current");
   /** 실행을 허가한 지문. 세션 한 번의 판단이라 저장하지 않는다. */
   const [approvedDigest, setApprovedDigest] = useState("");
 
@@ -831,6 +492,7 @@ function PreviewPane({
     if (!previewToken || !pageId || !own) return null;
     const query = new URLSearchParams({ page: pageId });
     if (wantPublished) query.set("published", "1");
+    if (campaignMode !== "current") query.set("campaignState", campaignMode);
     if (codeApproved) {
       query.set("customCode", "run");
       query.set("codeDigest", digest);
@@ -851,7 +513,7 @@ function PreviewPane({
     }
     query.set("channel", channel);
     return `/hp/${encodeURIComponent(previewToken)}?${query.toString()}`;
-  }, [previewToken, pageId, own, wantPublished, codeApproved, digest, channel, initialTheme]);
+  }, [previewToken, pageId, own, wantPublished, campaignMode, codeApproved, digest, channel, initialTheme]);
 
   if (!src) {
     return (
@@ -865,26 +527,43 @@ function PreviewPane({
   return (
     <aside className={`${R.panel} ${FINISH.s1} space-y-2 bg-card p-3`} aria-label="미리보기">
       <PreviewFrame
-        title="미리보기"
+        title="홈페이지 미리보기"
         src={src}
         frameRef={frameRef}
         /* 저장될 때마다 다시 불러온다 — 안 그러면 고친 내용이 영영 안 보인다. */
-        reloadKey={`${own?.revision ?? 0}:${codeApproved ? "code" : "safe"}`}
+        reloadKey={`${own?.revision ?? 0}:${campaignMode}:${codeApproved ? "code" : "safe"}`}
         openLabel="새 탭에서 미리보기 열기"
         note={release.publicEmbedEnabled ? undefined : "공개 전"}
         controls={
           /* 발행본이 실제로 있을 때만 고르게 한다 — 없는 것을 고르는 칸은 고장으로 읽힌다. */
-          own?.hasPublished ? (
-            <Segmented
-              label="무엇을 보는가"
-              value={showPublished ? "published" : "draft"}
-              onChange={(next) => setShowPublished(next === "published")}
-              options={[
-                { value: "draft", label: "초안" },
-                { value: "published", label: "발행본" },
-              ]}
-            />
-          ) : null
+          <div className="flex flex-wrap items-center gap-2">
+            {own?.hasPublished ? (
+              <Segmented
+                label="무엇을 보는가"
+                value={showPublished ? "published" : "draft"}
+                onChange={(next) => setShowPublished(next === "published")}
+                options={[
+                  { value: "draft", label: "초안" },
+                  { value: "published", label: "발행본" },
+                ]}
+              />
+            ) : null}
+            <label className="text-[11px] text-muted-foreground">
+              <span className="sr-only">캠페인 미리보기</span>
+              <select
+                aria-label="캠페인 미리보기"
+                value={campaignMode}
+                onChange={(event) => setCampaignMode(event.target.value as CampaignPreviewMode)}
+                className="min-h-8 rounded-md bg-secondary px-2 text-xs text-foreground"
+              >
+                <option value="current">현재 일정</option>
+                <option value="exhibitor">참가기업만</option>
+                <option value="visitor">참관객만</option>
+                <option value="both">둘 다</option>
+                <option value="ended">둘 다 종료</option>
+              </select>
+            </label>
+          </div>
         }
       />
 

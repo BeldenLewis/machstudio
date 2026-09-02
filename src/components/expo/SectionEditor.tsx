@@ -6,11 +6,12 @@ import { Chip, FINISH, R, Segmented } from "@/components/ui/primitives";
 import { Switch } from "@/components/ui/switch";
 import { EditableList, ROW_KEY } from "@/components/ui/editable-list";
 import { SlotField, type LinkTarget } from "@/components/expo/SlotField";
+import { RegisteredSectionEditor, sectionEditorFor } from "@/components/expo/section-editors/registry";
 import { objectParticle, topicParticle } from "@/lib/korean";
 import { newSection } from "@/lib/expo/config";
 import { hasContent, slotHasContent } from "@/lib/expo/model";
 import { EXPO_LIMITS, EXPO_SECTIONS, sectionDef } from "@/lib/expo/registry";
-import type { ExpoSection, SlotDef } from "@/lib/expo/types";
+import type { ExpoPageConfigV2, ExpoSection, FieldIssue, SlotDef } from "@/lib/expo/types";
 
 /**
  * 구획 편집 — **한 카드 = 한 구획, 값은 그 자리에서 바로 고쳐진다.**
@@ -78,16 +79,24 @@ export interface SectionsEditorProps {
   pages?: readonly LinkTarget[];
   /** 사이트의 defaultLocale — 글이 어느 로케일에 들어가는가. */
   locale: string;
+  /** 전체 페이지 참조 registry — custom editor는 이 same-site draft만 받는다. */
+  config?: ExpoPageConfigV2;
+  issues?: readonly FieldIssue[];
   /**
    * 미리보기에서 누른 구획 — 그 카드로 데려가고 잠깐 테를 두른다.
    * **값을 비우는 것은 부모가 한다**(잠깐 뒤에). 여기서 타이머로 지우면 효과 안에서
    * state 를 바꾸게 되고, 그건 연쇄 렌더를 부른다(react-hooks 규칙).
    */
   focusedSid?: string | null;
+  /** 선택된 한 구획만 조립할 때 카탈로그/목록 제목을 감춘다. */
+  showCatalog?: boolean;
+  showHeading?: boolean;
+  reorderable?: boolean;
 }
 
 export function SectionsEditor({
   sections, onChange, canEdit, embedLocked = false, siteId, sources, pages, locale, focusedSid,
+  config, issues = [], showCatalog = true, showHeading = true, reorderable = true,
 }: SectionsEditorProps) {
   /**
    * 삭제 유예(5초) 중인 구획 — **화면에서만** 사라진 것들이다. 배열에는 그대로 있다.
@@ -101,8 +110,8 @@ export function SectionsEditor({
   const [pendingRemove, setPendingRemove] = useState<ReadonlySet<string>>(new Set());
 
   const commit = useCallback(
-    (next: ExpoSection[]) => onChange(applyPinned(next)),
-    [onChange],
+    (next: ExpoSection[]) => { if (canEdit) onChange(applyPinned(next)); },
+    [canEdit, onChange],
   );
 
   /**
@@ -116,9 +125,11 @@ export function SectionsEditor({
   useEffect(() => {
     if (!focusedSid) return;
     // 못 찾으면(그 사이 지웠다) 아무 일도 하지 않는다.
-    rootRef.current
-      ?.querySelector<HTMLElement>(`[data-expo-sid="${CSS.escape(focusedSid)}"]`)
-      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const target = rootRef.current
+      ?.querySelector<HTMLElement>(`[data-expo-sid="${CSS.escape(focusedSid)}"]`);
+    if (typeof target?.scrollIntoView === "function") {
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
   }, [focusedSid]);
 
   /**
@@ -138,13 +149,13 @@ export function SectionsEditor({
 
   return (
     <section aria-labelledby="expo-sections-heading" ref={rootRef}>
-      <div className="flex items-baseline justify-between gap-2">
+      {showHeading ? <div className="flex items-baseline justify-between gap-2">
         <h2 id="expo-sections-heading" className="text-sm font-semibold">구획</h2>
         {/* 유예로 사라진 것은 빼고 센다 — 안 그러면 5초 동안 화면의 카드 수와 어긋난다. */}
         <span className="text-[11px] text-muted-foreground">
           {sections.length - pendingRemove.size}/{EXPO_LIMITS.sectionsPerPage}
         </span>
-      </div>
+      </div> : <h2 id="expo-sections-heading" className="sr-only">선택한 구획</h2>}
 
       <div className="mt-2">
         <EditableList<ExpoSection>
@@ -153,10 +164,11 @@ export function SectionsEditor({
           items={sections}
           onChange={commit}
           rowKey={(section) => section.sid}
-          reorderable
+          reorderable={canEdit && reorderable}
+          removable={() => canEdit}
           rowChrome="bare"
           maxRows={EXPO_LIMITS.sectionsPerPage}
-          autoFocusNewRow
+          autoFocusNewRow={canEdit}
           onPendingRemoveChange={setPendingRemove}
           emptyState={
             <p className={`${R.surface} bg-secondary/40 p-4 text-center text-[12px] text-muted-foreground`}>
@@ -174,10 +186,12 @@ export function SectionsEditor({
               sources={sources}
               pages={pages}
               locale={locale}
+              config={config ?? { schemaVersion: 2, sections }}
+              issues={issues}
             />
           )}
           renderAdd={({ add, atMax }) =>
-            !canEdit ? null : atMax ? (
+            !showCatalog || !canEdit ? null : atMax ? (
               <p className="text-[11px] text-muted-foreground">
                 한 페이지에 구획은 {EXPO_LIMITS.sectionsPerPage}개까지예요.
               </p>
@@ -192,6 +206,46 @@ export function SectionsEditor({
         />
       </div>
     </section>
+  );
+}
+
+export interface SelectedSectionEditorProps {
+  section: ExpoSection;
+  onChange(next: ExpoSection): void;
+  onRemove(): void;
+  canEdit: boolean;
+  embedLocked?: boolean;
+  siteId: string;
+  sources?: readonly { id: string; name: string; isActive: boolean }[];
+  pages?: readonly LinkTarget[];
+  locale: string;
+  config?: ExpoPageConfigV2;
+  issues?: readonly FieldIssue[];
+}
+
+/**
+ * 기존 구획 편집기를 선택된 sid 한 장에 조립한다. 값 state는 만들지 않고 부모 초안을 바로 고친다.
+ */
+export function SelectedSectionEditor({
+  section, onChange, onRemove, canEdit, embedLocked, siteId, sources, pages, locale, config, issues,
+}: SelectedSectionEditorProps) {
+  return (
+    <SectionsEditor
+      sections={[section]}
+      onChange={(next) => next[0] ? onChange(next[0]) : onRemove()}
+      canEdit={canEdit}
+      embedLocked={embedLocked}
+      siteId={siteId}
+      sources={sources}
+      pages={pages}
+      locale={locale}
+      config={config}
+      issues={issues}
+      focusedSid={section.sid}
+      showCatalog={false}
+      showHeading={false}
+      reorderable={false}
+    />
   );
 }
 
@@ -258,14 +312,19 @@ interface SectionCardProps {
   sources?: readonly { id: string; name: string; isActive: boolean }[];
   pages?: readonly LinkTarget[];
   locale: string;
+  config: ExpoPageConfigV2;
+  issues: readonly FieldIssue[];
   /** 미리보기에서 방금 눌렀다 — 잠깐 테를 둘러 눈이 따라가게 한다. */
   flash?: boolean;
 }
 
 function SectionCard({
-  section, controls, canEdit, embedLocked, siteId, sources, pages, locale, flash,
+  section, controls, canEdit, embedLocked, siteId, sources, pages, locale, config, issues, flash,
 }: SectionCardProps) {
   const def = sectionDef(section.type);
+  const relativeIssues = issues
+    .filter((issue) => !issue.sid || issue.sid === section.sid)
+    .map((issue) => ({ ...issue, path: issue.path.replace(/^sections\[\d+\]\.content\.?/, "") }));
 
   /**
    * 카탈로그에 없는 타입 — 옛 초안에 남아 있을 수 있다. 편집 위젯을 지어낼 수 없으니
@@ -289,12 +348,14 @@ function SectionCard({
   }
 
   const { patch } = controls;
+  const hasCustomEditor = sectionEditorFor(section.type) !== null;
   const filled = hasContent(section);
   const design = def.design ?? {};
   const designKeys = Object.keys(design);
 
   const setSlot = (key: string, value: unknown) =>
-    patch({ content: { ...section.content, [key]: value } });
+    canEdit && patch({ content: { ...section.content, [key]: value } });
+  const applyPatch = (next: Partial<ExpoSection>) => { if (canEdit) patch(next); };
 
   return (
     <div
@@ -320,25 +381,27 @@ function SectionCard({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           {def.variants.length > 1 ? (
             <Knob label="형태">
+              {canEdit ? (
               <Segmented
                 label={`${def.label} 형태`}
                 value={section.variant}
-                onChange={(variant) => patch({ variant })}
+                onChange={(variant) => applyPatch({ variant })}
                 options={def.variants.map((v) => ({ value: v.id, label: v.label }))}
               />
+              ) : <span className="text-xs text-muted-foreground">{def.variants.find((variant) => variant.id === section.variant)?.label ?? section.variant}</span>}
             </Knob>
           ) : null}
           {designKeys.map((key) => (
             <Knob key={key} label={designLabel(key)}>
-              <Segmented
+              {canEdit ? <Segmented
                 label={`${def.label} ${designLabel(key)}`}
                 value={section.design[key] ?? design[key][0]}
-                onChange={(value) => patch({ design: { ...section.design, [key]: value } })}
+                onChange={(value) => applyPatch({ design: { ...section.design, [key]: value } })}
                 options={design[key].map((value) => ({
                   value,
                   label: designValueLabel(key, value),
                 }))}
-              />
+              /> : <span className="text-xs text-muted-foreground">{designValueLabel(key, section.design[key] ?? design[key][0])}</span>}
             </Knob>
           ))}
         </div>
@@ -346,7 +409,17 @@ function SectionCard({
 
       {/* ── 값 ───────────────────────────────────────────────────── */}
       <div className={`space-y-2.5 ${section.enabled ? "" : "opacity-60"}`}>
-        {def.slots.map((slot) =>
+        {hasCustomEditor ? <RegisteredSectionEditor
+          siteId={siteId}
+          locale={locale}
+          sources={sources ?? []}
+          pages={(pages ?? []).map((page) => ({ ...page, imwebUrl: null, deletedAt: null }))}
+          section={section}
+          config={config}
+          issues={relativeIssues}
+          canEdit={canEdit}
+          onChange={(next) => applyPatch(next)}
+        /> : def.slots.map((slot) =>
           slot.kind === "list" ? (
             <ListSlot
               key={slot.key}
@@ -359,6 +432,7 @@ function SectionCard({
               pages={pages}
               locale={locale}
               sid={section.sid}
+              issues={relativeIssues.filter((issue) => issue.path === slot.key || issue.path.startsWith(`${slot.key}[`))}
             />
           ) : (
             <SlotField
@@ -371,6 +445,7 @@ function SectionCard({
               sources={sources}
               pages={pages}
               locale={locale}
+              issues={relativeIssues.filter((issue) => issue.path === slot.key || issue.path.startsWith(`${slot.key}.`))}
             />
           ),
         )}
@@ -389,7 +464,7 @@ function SectionCard({
         <label className="flex items-center gap-1.5 text-[11px]">
           <Switch
             checked={section.enabled}
-            onChange={(enabled) => patch({ enabled })}
+            onChange={(enabled) => applyPatch({ enabled })}
             disabled={!canEdit}
             label={`${def.label} 페이지에 표시`}
           />
@@ -398,7 +473,7 @@ function SectionCard({
         <label className="flex items-center gap-1.5 text-[11px]">
           <Switch
             checked={section.embedEnabled}
-            onChange={(embedEnabled) => patch({ embedEnabled })}
+            onChange={(embedEnabled) => applyPatch({ embedEnabled })}
             // `&& !section.embedEnabled` 가 비대칭이다 — **이미 켠 것은 끌 수 있다.**
             disabled={!canEdit || (embedLocked && !section.embedEnabled)}
             label={`${def.label} 이 구획만 따로 내보내기`}
@@ -448,7 +523,7 @@ function Knob({ label, children }: { label: string; children: ReactNode }) {
  * (editable-list.tsx 가 순수 함수를 따로 빼 둔 이유도 같다). 실제 끌기는 브라우저에서 본다.
  */
 function ListSlot({
-  slot, value, onChange, canEdit, siteId, sources, pages, locale, sid,
+  slot, value, onChange, canEdit, siteId, sources, pages, locale, sid, issues,
 }: {
   slot: SlotDef;
   value: unknown;
@@ -459,6 +534,7 @@ function ListSlot({
   pages?: readonly LinkTarget[];
   locale: string;
   sid: string;
+  issues: readonly FieldIssue[];
 }) {
   const rows = listRows(value);
   const itemSlots = slot.itemSlots ?? [];
@@ -474,11 +550,12 @@ function ListSlot({
           listId={`expo-${sid}-${slot.key}`}
           itemNoun={slot.label}
           items={rows}
-          onChange={onChange}
+          onChange={(next) => { if (canEdit) onChange(next); }}
           rowKey={(row) => row[ROW_KEY] as string}
           makeItem={makeRow}
-          reorderable
-          autoFocusNewRow
+          reorderable={canEdit}
+          removable={() => canEdit}
+          autoFocusNewRow={canEdit}
           maxRows={EXPO_LIMITS.rowsPerList}
           emptyState={
             canEdit ? null : (
@@ -521,13 +598,17 @@ function ListSlot({
                     key={itemSlot.key}
                     def={itemSlot}
                     value={item[itemSlot.key]}
-                    onChange={(next) => patch({ [itemSlot.key]: next })}
+                    onChange={(next) => { if (canEdit) patch({ [itemSlot.key]: next }); }}
                     disabled={!canEdit}
                     siteId={siteId}
                     sources={sources}
                     pages={pages}
                     locale={locale}
                     compact
+                    issues={issues.filter((issue) => {
+                      const path = `${slot.key}[${visibleIndex}].${itemSlot.key}`;
+                      return issue.path === path || issue.path.startsWith(`${path}.`);
+                    })}
                   />
                 ))}
                 {missing.length > 0 ? (

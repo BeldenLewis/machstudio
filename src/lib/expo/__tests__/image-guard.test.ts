@@ -40,6 +40,15 @@ describe("실제 형식을 바이트로 판정한다", () => {
 });
 
 describe("업로드 후보 검사", () => {
+  it("Expo 전용 처리 상한은 원본 12MiB·저장 1.5MiB·긴 변 1400·50MP다", () => {
+    expect(EXPO_IMAGE_LIMITS).toEqual({
+      sourceBytes: 12 * 1024 * 1024,
+      storedBytes: 1.5 * 1024 * 1024,
+      maxEdge: 1400,
+      maxPixels: 50_000_000,
+    });
+  });
+
   it("정상 이미지는 통과", () => {
     expect(checkUploadCandidate({ declaredType: "image/jpeg", bytes: jpeg() })).toBeNull();
     expect(checkUploadCandidate({ declaredType: "image/png; charset=binary", bytes: png() })).toBeNull();
@@ -90,7 +99,7 @@ describe("디코딩 결과 검사", () => {
 
 describe("축소 결과를 다시 잰다", () => {
   it("상한 안이면 통과", () => {
-    expect(checkDownscaled({ bytes: 400_000, width: 1600, height: 900 })).toBeNull();
+    expect(checkDownscaled({ bytes: 400_000, width: 1400, height: 900 })).toBeNull();
   });
 
   /**

@@ -22,10 +22,11 @@ import { EXPO_RUNTIME_JS } from "@/generated/expo-runtime";
 import { EXPO_SCHEMA_CAPABILITY_VERSION, getExpoCapabilities } from "@/lib/expo/capability";
 import { probeExpoSchema } from "@/lib/expo/schema-probe";
 import { getRequiredExpoPublicOrigin } from "@/lib/expo/origin";
-import { normalizeExpoTheme } from "@/lib/expo/config";
+import { normalizeExpoPage, normalizeExpoTheme } from "@/lib/expo/config";
 import { normalizeHexColor } from "@/lib/color";
 import { buildExpoPayload, collectInternalPageIds, collectSourceRefs } from "@/lib/expo/payload";
 import { expoCustomCodeDigest, previewSections } from "@/lib/expo/code-digest";
+import { campaignPreviewMode, forcedCampaignsForPreview } from "@/lib/expo/campaign-preview";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +119,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
   const channel = (url.searchParams.get("channel") ?? "").slice(0, 64);
   const wantsCode = url.searchParams.get("customCode") === "run";
   const requestedDigest = (url.searchParams.get("codeDigest") ?? "").slice(0, 64);
+  const forcedCampaigns = forcedCampaignsForPreview(campaignPreviewMode(url.searchParams.get("campaignState")));
 
   let site: {
     id: string;
@@ -160,6 +162,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
   if (!page) return notFound();
 
   const source = wantPublished ? page.published : page.draft;
+  const config = normalizeExpoPage(source);
   // 무엇을 그릴지는 `previewSections` 한 곳이 정한다 — 편집기가 지문을 계산할 때도
   // 같은 함수를 쓰므로 두 판정이 갈라질 수 없다(code-digest.ts).
   const sections = previewSections(source);
@@ -193,9 +196,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
     return { ...section, content: { ...section.content, sourceRef: "" } };
   });
 
-  const resolved = buildExpoPayload(safe, {
+  const resolved = buildExpoPayload({ ...config, sections: safe }, {
     locale: site.defaultLocale || "ko",
     pages: siblings,
+    now: new Date(),
+    ...(forcedCampaigns ? { forcedCampaigns } : {}),
   });
 
   /**
@@ -220,6 +225,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
     },
     origin,
     sections: resolved.sections,
+    campaigns: resolved.campaigns,
+    destinations: resolved.destinations,
     // 초안인지 발행본인지가 화면 문구의 축이다 — 둘 다 저장·추적을 끈다.
     mode: wantPublished ? "preview-published" : "preview-draft",
     preview: {

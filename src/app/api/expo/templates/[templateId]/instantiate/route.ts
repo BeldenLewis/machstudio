@@ -15,10 +15,12 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { guardExpoRoute, readJsonBody, authFailure, fieldErrors, asJson } from "@/lib/expo/route-guard";
-import { requireMembership, requireOwnedTemplate } from "@/lib/expo/auth";
+import { requireOwnedTemplate, requireProjectAccess } from "@/lib/expo/auth";
+import { deriveExpoPermissions } from "@/lib/expo/permissions";
 import { copyExpoMedia, expoSitePrefix, expoTemplatePrefix } from "@/lib/expo/media";
 import { createExpoStorage } from "@/lib/expo/storage";
-import { applyMediaToPages, planTemplateInstantiate, reconnectChecklist } from "@/lib/expo/template-service";
+import { applyMediaToPages, planBuiltInPresetInstantiate, planTemplateInstantiate, reconnectChecklist } from "@/lib/expo/template-service";
+import { isBuiltInExpoPresetId } from "@/lib/expo/presets";
 
 export async function POST(request: Request, { params }: { params: Promise<{ templateId: string }> }) {
   const { templateId } = await params;
@@ -34,12 +36,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ tem
     return fieldErrors([{ path: "name", code: "required", message: "전시와 홈페이지 이름이 필요해요" }]);
   }
 
-  const row = await prisma.expoTemplate.findFirst({
+  const builtIn = isBuiltInExpoPresetId(templateId);
+  const row = builtIn ? null : await prisma.expoTemplate.findFirst({
     where: { id: templateId },
     select: { id: true, workspaceId: true, snapshot: true },
   });
-  const owned = requireOwnedTemplate(row, guard.ctx.userId, guard.ctx.memberWorkspaceIds);
-  if (!owned.ok) return authFailure(owned.failure);
+  const owned = builtIn ? null : requireOwnedTemplate(row, guard.ctx.userId, guard.ctx.memberWorkspaceIds);
+  if (owned && !owned.ok) return authFailure(owned.failure);
 
   // 목적지 소속은 **프로젝트 레코드**에서 온다 — 클라이언트가 보낸 워크스페이스를 믿지 않는다.
   const project = await prisma.project.findUnique({
@@ -48,12 +51,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ tem
   });
   if (!project) return authFailure({ kind: "not-found" });
 
-  const member = requireMembership(guard.ctx.userId, guard.ctx.memberWorkspaceIds, project.workspaceId);
-  if (!member.ok) return authFailure(member.failure);
+  const access = requireProjectAccess(guard.ctx.workspaceRole(project.workspaceId), guard.ctx.projectRole(project.id));
+  if (!access.ok) return authFailure(access.failure);
+  if (!deriveExpoPermissions(guard.ctx.workspaceRole(project.workspaceId), guard.ctx.projectRole(project.id)).canEdit) {
+    return authFailure({ kind: "forbidden" });
+  }
 
   let plan;
   try {
-    plan = planTemplateInstantiate(row!.snapshot);
+    plan = builtIn ? planBuiltInPresetInstantiate(templateId) : planTemplateInstantiate(row!.snapshot);
   } catch {
     // 스냅샷을 못 읽으면 반쪽짜리 사이트를 만들지 않는다.
     return NextResponse.json({ error: "템플릿을 읽을 수 없어요" }, { status: 422 });
@@ -64,21 +70,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ tem
 
   // ① 사이트 id 를 먼저.
   const siteId = randomUUID();
-  const storage = createExpoStorage();
-
-  // ② 템플릿 → 새 사이트. 템플릿 원본 파일은 남는다(다음 전시도 쓴다).
-  const media = await copyExpoMedia(storage, {
+  // 기본 제공 프리셋에는 Storage 소유권이 없고 운영 미디어도 비어 있다.
+  const storage = builtIn ? null : createExpoStorage();
+  const media = builtIn ? null : await copyExpoMedia(storage!, {
     urls: plan.mediaUrls,
-    sourcePrefix: expoTemplatePrefix(owned.value.workspaceId, owned.value.id),
+    sourcePrefix: expoTemplatePrefix(owned!.value.workspaceId, owned!.value.id),
     destPrefix: expoSitePrefix(project.workspaceId, siteId),
   });
-  if (!media.ok) {
+  if (media && !media.ok) {
     const cleaned = await media.cleanup();
     if (!cleaned.ok) console.error("[expo] 복제 미디어 고아", cleaned.orphans);
     return NextResponse.json({ error: "이미지를 옮기지 못했어요" }, { status: 502 });
   }
 
-  const pages = applyMediaToPages(plan.pages, media.map);
+  const pages = media?.ok ? applyMediaToPages(plan.pages, media.map) : plan.pages;
   // 부모가 자식보다 먼저 들어가야 외래키가 성립한다 — 최상위를 앞으로.
   const ordered = [...pages].sort((a, b) => Number(Boolean(a.parentId)) - Number(Boolean(b.parentId)));
 
@@ -114,8 +119,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ tem
       })),
     ]);
   } catch {
-    const cleaned = await media.cleanup();
-    if (!cleaned.ok) console.error("[expo] 복제 미디어 고아", cleaned.orphans);
+    if (media?.ok) {
+      const cleaned = await media.cleanup();
+      if (!cleaned.ok) console.error("[expo] 복제 미디어 고아", cleaned.orphans);
+    }
     return NextResponse.json({ error: "홈페이지를 만들지 못했어요" }, { status: 500 });
   }
 
@@ -124,7 +131,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tem
     checklist: reconnectChecklist({
       registerFormSections: plan.registerFormSections,
       linksCleared: plan.linksCleared,
-      externalMedia: media.notCopied,
+      externalMedia: media?.ok ? media.notCopied : [],
       needsImwebUrls: true,
     }),
   }, { status: 201 });

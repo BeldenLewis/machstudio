@@ -45,7 +45,10 @@ function stubFetch() {
     if (init?.method === "POST") posts.push({ url, body: json });
     const pick = url.includes("/instantiate") ? instantiateResponse : templateResponse;
     if (url === "/api/expo/templates" && init?.method !== "POST") {
-      return { ok: true, json: async () => ({ templates: [{ id: "t1", name: "지난 전시", description: null, contentMode: "design", pageCount: 3 }] }) } as Response;
+      return { ok: true, json: async () => ({ templates: [
+        { id: "stk-home-v1", name: "STK 2027 홈페이지", description: "승인된 STK 관리 구획", contentMode: "full", pageCount: 1, builtIn: true },
+        { id: "t1", name: "지난 전시", description: null, contentMode: "design", pageCount: 3, builtIn: false },
+      ] }) } as Response;
     }
     return { ok: pick.ok, status: pick.ok ? 201 : 422, json: async () => pick.body } as Response;
   }));
@@ -209,5 +212,17 @@ describe("템플릿에서 시작", () => {
     templateResponse = { ok: true, body: { site: { id: "s3" } } };
     await click([...host.querySelectorAll("button")].find((b) => /빈 사이트/.test(b.textContent ?? "")));
     expect(replace).toHaveBeenCalledWith("/homepage/s3");
+  });
+
+  it("기본 제공 STK 프리셋은 관리 불가 항목임을 구분하고 같은 인증 API로 만든다", async () => {
+    await render(<ExpoCreateChoices />);
+    await type(host.querySelector<HTMLInputElement>("input")!, "STK 2027");
+    const choice = [...host.querySelectorAll("button")].find((candidate) => /STK 2027 홈페이지/.test(candidate.textContent ?? ""));
+    expect(choice?.textContent).toContain("기본 제공");
+    await click(choice);
+    expect(posts[0]).toMatchObject({
+      url: "/api/expo/templates/stk-home-v1/instantiate",
+      body: { projectId: "p1", name: "STK 2027" },
+    });
   });
 });

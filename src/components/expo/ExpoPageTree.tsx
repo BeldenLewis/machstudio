@@ -49,10 +49,16 @@ export interface ExpoPageTreeProps {
   pages: ExpoPageRow[];
   selectedId: string | null;
   canEdit: boolean;
+  /** 페이지 제목은 공유 초안 훅에서만 고칠 때 false. */
+  canRename?: boolean;
   /** 삭제는 `canManageSite` 다 — 서버도 역할까지 본다. */
   canManageSite: boolean;
-  onSelect: (pageId: string) => void;
-  onAdd: () => void;
+  onSelect: (pageId: string) => void | boolean | Promise<void | boolean>;
+  /** DELETE 뒤 fallback 선택. 편집기는 삭제를 시작한 navigation intent를 여기서 재검사한다. */
+  onSelectAfterRemove?: (pageId: string, removedPageId: string) => void | boolean | Promise<void | boolean>;
+  onAdd: () => void | boolean | Promise<void | boolean>;
+  /** 삭제 유예를 시작하기 전에 현재 페이지 초안을 안전하게 비운다. */
+  onBeforeRemove?: (pageId: string) => boolean | Promise<boolean>;
   /** 목록을 다시 읽는다(생성·삭제·순서 변경 뒤). */
   onReload: () => void;
   /** 유예로 화면에서 사라진 페이지들 — 편집기와 발행 패널이 이걸 보고 잠근다. */
@@ -73,7 +79,8 @@ const STATE_DOT: Record<ExpoPageState, string> = {
 };
 
 export function ExpoPageTree({
-  siteId, pages, selectedId, canEdit, canManageSite, onSelect, onAdd, onReload, onPendingChange,
+  siteId, pages, selectedId, canEdit, canRename = canEdit, canManageSite,
+  onSelect, onSelectAfterRemove, onAdd, onBeforeRemove, onReload, onPendingChange,
 }: ExpoPageTreeProps) {
   const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
@@ -178,7 +185,10 @@ export function ExpoPageTree({
       // 지운 페이지를 보고 있었으면 다른 페이지로 옮긴다 — 없는 페이지를 편집하게 두지 않는다.
       if (page.id === selectedId) {
         const next = rows.find((p) => p.id !== page.id && p.isHome) ?? rows.find((p) => p.id !== page.id);
-        if (next) onSelect(next.id);
+        if (next) {
+          if (onSelectAfterRemove) await onSelectAfterRemove(next.id, page.id);
+          else await onSelect(next.id);
+        }
       }
       setOrder(null);
       onReload();
@@ -187,7 +197,7 @@ export function ExpoPageTree({
     } finally {
       setBusy(false);
     }
-  }, [selectedId, rows, onSelect, onReload]);
+  }, [selectedId, rows, onSelect, onSelectAfterRemove, onReload]);
 
   /**
    * 공개 중인 페이지는 지우는 순간 파트너 사이트에서 사라진다 — 그건 확인받을 일이다.
@@ -204,8 +214,9 @@ export function ExpoPageTree({
       });
       if (!ok) return;
     }
+    if (onBeforeRemove && !(await onBeforeRemove(page.id))) return;
     request();
-  }, [confirm]);
+  }, [confirm, onBeforeRemove]);
 
   return (
     <nav className={`${R.panel} ${FINISH.s1} bg-card p-2`} aria-label="페이지">
@@ -233,7 +244,7 @@ export function ExpoPageTree({
           canEdit ? (
             <button
               type="button"
-              onClick={onAdd}
+              onClick={() => { void onAdd(); }}
               disabled={busy}
               className={`flex w-full items-center gap-2 ${R.control} px-2.5 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-60`}
             >
@@ -261,12 +272,12 @@ export function ExpoPageTree({
                 */}
               {item.isHome ? <span className="block h-9 w-9 shrink-0" aria-hidden /> : handle}
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATE_DOT[state]}`} aria-hidden />
-              {canEdit ? (
+              {canRename ? (
                 /* 0클릭 — 누르고 바로 친다. 포커스가 곧 선택이라 키보드로도 같은 흐름이다. */
                 <input
                   value={drafts[item.id] ?? item.title}
                   onChange={(event) => editTitle(item.id, event.target.value)}
-                  onFocus={() => onSelect(item.id)}
+                  onFocus={() => { void onSelect(item.id); }}
                   onBlur={() => flushTitle(item.id)}
                   onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                   maxLength={120}
@@ -277,7 +288,7 @@ export function ExpoPageTree({
               ) : (
                 <button
                   type="button"
-                  onClick={() => onSelect(item.id)}
+                  onClick={() => { void onSelect(item.id); }}
                   aria-current={active ? "page" : undefined}
                   className="min-w-0 flex-1 truncate py-2 text-left text-sm"
                 >

@@ -27,6 +27,7 @@ interface TemplateRow {
   description: string | null;
   contentMode: "design" | "full";
   pageCount: number;
+  builtIn?: boolean;
 }
 
 export function ExpoCreateChoices() {
@@ -213,7 +214,9 @@ export function ExpoCreateChoices() {
                         안 왔지" 로 헤매지 않게. 이건 선택이 아니라 그 템플릿의 성질이다.
                       */}
                       {template.contentMode === "full"
-                        ? `구조와 문구까지 · 페이지 ${template.pageCount}개`
+                        ? template.builtIn
+                          ? `기본 제공 · 승인된 구조와 문구 · 페이지 ${template.pageCount}개`
+                          : `구조와 문구까지 · 페이지 ${template.pageCount}개`
                         : `구조만(문구·이미지는 새로 씁니다) · 페이지 ${template.pageCount}개`}
                     </span>
                     {template.description ? (

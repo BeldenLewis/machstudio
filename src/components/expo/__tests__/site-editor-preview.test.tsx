@@ -49,6 +49,9 @@ class FakeResizeObserver {
 }
 
 const { ExpoSiteEditor } = await import("@/components/expo/ExpoSiteEditor");
+const { expoSectionTitle } = await import("@/components/expo/ExpoSectionTree");
+const { mergeEditorIssues, resolveExpoFieldFocusTarget } = await import("@/components/expo/PageDraftWorkspace");
+const { instantiateStkHomeV1 } = await import("@/lib/expo/presets/stk-home-v1");
 // 발행 패널이 공용 확인 모달을 쓴다 — 프로바이더 없이 렌더하면 훅이 던진다.
 const { ConfirmProvider } = await import("@/components/ui/confirm-dialog");
 
@@ -76,23 +79,52 @@ let detailCount = 0;
 let sitePatches: unknown[] = [];
 /** 목록이 돌려주는 이름. 트리의 이름 PATCH 가 서버처럼 이걸 바꾼다. */
 let listTitle = "홈";
+let nextExportFailure: { issues: Array<{ path: string; code: string; message: string; severity: "error"; sid?: string }> } | null = null;
+let includeSecondPage = false;
+let conflictNext = false;
+let transportFailureNext = false;
+let draftSaveGate: Promise<void> | null = null;
 
 function stubFetch() {
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
     const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body } as Response);
     if (url.startsWith("/api/expo/pages/")) {
+      if (url.endsWith("/export") && init?.method === "POST" && nextExportFailure) {
+        return { ok: false, status: 422, json: async () => nextExportFailure } as Response;
+      }
       if (init?.method === "PATCH") {
         const body = JSON.parse(String(init.body ?? "{}"));
         // 이름 바꾸기는 자동저장이 아니다 — 트리가 따로 보낸다. 같이 세면 저장 횟수가 거짓말한다.
-        if (typeof body.title === "string") {
+        if (typeof body.title === "string" && body.draft === undefined) {
           listTitle = body.title;
           return ok({ page: { id: PAGE_ID, title: body.title } });
         }
+        if (typeof body.title === "string") listTitle = body.title;
         patchCount += 1;
+        if (draftSaveGate) await draftSaveGate;
+        if (transportFailureNext) {
+          transportFailureNext = false;
+          return { ok: false, status: 503, json: async () => ({ error: "temporarily unavailable" }) } as Response;
+        }
+        if (conflictNext) {
+          conflictNext = false;
+          return {
+            ok: false, status: 409,
+            json: async () => ({ draftRevision: 12, draft: pageBody.draft }),
+          } as Response;
+        }
         if (rejectNext) {
           const payload = rejectNext;
           return { ok: false, status: 422, json: async () => payload } as Response;
         }
+        pageBody = {
+          ...pageBody,
+          title: typeof body.title === "string" ? body.title : pageBody.title,
+          imwebUrl: body.imwebUrl ?? pageBody.imwebUrl,
+          draft: body.draft ?? pageBody.draft,
+          draftRevision: nextSave.draftRevision,
+          codeDigest: nextSave.codeDigest,
+        };
         return ok({ page: { id: PAGE_ID, ...nextSave } });
       }
       // 발행·공개는 상세 조회가 아니다 — 같이 세면 "다시 읽었는가" 를 못 본다.
@@ -120,7 +152,10 @@ function stubFetch() {
         pages: [{
           id: PAGE_ID, slug: "home", title: listTitle, isHome: true, sortOrder: 0,
           imwebUrl: null, hasPublished: Boolean(pageBody.hasPublished), liveAt,
-        }],
+        }, ...(includeSecondPage ? [{
+          id: "pg2", slug: "about", title: "소개", isHome: false, sortOrder: 1,
+          imwebUrl: null, hasPublished: false, liveAt: null,
+        }] : [])],
         sources: [],
       });
     }
@@ -182,6 +217,11 @@ beforeEach(() => {
   sitePatches = [];
   listTitle = "홈";
   rejectNext = null;
+  nextExportFailure = null;
+  includeSecondPage = false;
+  conflictNext = false;
+  transportFailureNext = false;
+  draftSaveGate = null;
   liveAt = null;
   detailCount = 0;
   holdPageDetail = () => {};
@@ -189,15 +229,17 @@ beforeEach(() => {
   permissions = { canEdit: true, canPublish: true, canManageSite: true, canManageTemplates: true };
   nextSave = { draftRevision: 8, codeDigest: "" };
   pageBody = {
-    id: PAGE_ID, slug: "home", title: "홈", imwebUrl: null,
-    draft: { sections: [] }, draftRevision: 7,
-    hasPublished: false, liveAt: null,
+    id: PAGE_ID, siteId: "s1", slug: "home", title: "홈", imwebUrl: null,
+    draft: { schemaVersion: 2, sections: [] }, draftRevision: 7,
+    hasPublished: false, publishedAt: null, liveAt: null,
+    updatedAt: "2026-09-01T00:00:00.000Z",
     codeDigest: "", publishedCodeDigest: "",
     readiness: {
       canPublish: true, canGoLive: false,
       publishIssues: [], liveIssues: [], notes: [],
     },
     snippets: { ok: true, page: { code: "<script></script>", src: "https://x/h/pg1" }, sections: [] },
+    exportSections: [],
   };
   vi.stubGlobal("ResizeObserver", FakeResizeObserver);
   stubFetch();
@@ -242,6 +284,20 @@ describe("미리보기 주소", () => {
     await render();
     await click(buttonByText("발행본"));
     expect(frameSrc()).toContain("published=1");
+  });
+
+  it("캠페인 가정만 주소에 바꾸고 초안과 자동저장은 건드리지 않는다", async () => {
+    await render();
+    const beforeDraft = structuredClone(pageBody.draft);
+    const beforePatches = patchCount;
+    const select = host.querySelector<HTMLSelectElement>('select[aria-label="캠페인 미리보기"]')!;
+    await act(async () => {
+      select.value = "both";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(frameSrc()).toContain("campaignState=both");
+    expect(pageBody.draft).toEqual(beforeDraft);
+    expect(patchCount).toBe(beforePatches);
   });
 });
 
@@ -626,6 +682,323 @@ describe("서버가 값을 거절하면", () => {
   });
 });
 
+describe("발행 준비 문제", () => {
+  it.each([
+    ["self", '<input id="target" data-field-path="field.path">'],
+    ["ancestor", '<div data-field-path="field.path"><input id="target"></div>'],
+    ["sibling", '<div data-field-focus-scope><input id="target"><p data-field-path="field.path">오류</p></div>'],
+    ["explicit", '<input id="target"><p data-field-path="field.path" data-field-focus-target="target">오류</p>'],
+  ])("field focus resolver supports %s markers", (_mode, markup) => {
+    const rootElement = document.createElement("main");
+    rootElement.innerHTML = markup;
+    document.body.appendChild(rootElement);
+    const target = resolveExpoFieldFocusTarget(rootElement, new Set(["field.path"]))?.element;
+    target?.focus();
+    expect(target).toBeInstanceOf(HTMLInputElement);
+    expect(document.activeElement).toBe(target);
+    rootElement.remove();
+  });
+
+  it("경로가 있는 준비 문제를 정확히 보존하고 저장 거절 중복만 제거한다", () => {
+    const readinessIssue = {
+      path: "sections[1].content.items[0].title",
+      code: "required-title",
+      message: "하위 전시 이름이 필요해요",
+      severity: "warning" as const,
+      sid: "section-2",
+    };
+    expect(mergeEditorIssues(
+      [readinessIssue, { code: "not-published", message: "발행 전이에요" }],
+      [
+        { path: readinessIssue.path, message: readinessIssue.message, sid: readinessIssue.sid },
+        { path: "settings.event.startsAt", message: "시작 시각이 필요해요" },
+      ],
+    )).toEqual([
+      readinessIssue,
+      {
+        path: "settings.event.startsAt",
+        code: "rejected",
+        message: "시작 시각이 필요해요",
+        severity: "error",
+      },
+    ]);
+  });
+
+  it("문제가 있는 구획을 고르면 같은 필드의 인라인 오류를 보여 준다", async () => {
+    const draft = instantiateStkHomeV1({
+      randomUUID: (() => {
+        let serial = 0;
+        return () => `00000000-0000-4000-8000-${String(++serial).padStart(12, "0")}`;
+      })(),
+    });
+    const targetIndex = draft.sections.findIndex((section) => section.type === "exhibition-grid");
+    const target = draft.sections[targetIndex];
+    const path = `sections[${targetIndex}].content.items[0].title`;
+    pageBody.draft = draft;
+    pageBody.readiness = {
+      canPublish: false,
+      canGoLive: false,
+      publishIssues: [{
+        path,
+        code: "required-title",
+        message: "하위 전시 이름이 필요해요",
+        severity: "error",
+        sid: target.sid,
+      }],
+      liveIssues: [],
+      notes: [],
+    };
+
+    await render();
+    expect([...host.querySelectorAll("[data-field-path]")]
+      .some((element) => element.textContent === "하위 전시 이름이 필요해요")).toBe(false);
+    await click(host.querySelector(`button[aria-label="${expoSectionTitle(target)} 편집"]`) ?? undefined);
+    const inlineIssue = [...host.querySelectorAll("[data-field-path]")]
+      .find((element) => element.textContent === "하위 전시 이름이 필요해요");
+    expect(inlineIssue).toBeTruthy();
+  });
+
+  it("백업 HTML 오류의 sid와 path로 구획을 고르고 해당 필드 오류에 포커스한다", async () => {
+    const draft = instantiateStkHomeV1({
+      randomUUID: (() => {
+        let serial = 0;
+        return () => `00000000-0000-4000-8000-${String(++serial).padStart(12, "0")}`;
+      })(),
+    });
+    const targetIndex = draft.sections.findIndex((section) => section.type === "exhibition-grid");
+    const target = draft.sections[targetIndex];
+    const path = `sections[${targetIndex}].content.items[0].title`;
+    pageBody.draft = draft;
+    pageBody.hasPublished = true;
+    pageBody.exportSections = [{ sid: target.sid, label: expoSectionTitle(target) }];
+    nextExportFailure = {
+      issues: [{ path, code: "standalone-media-public-https", message: "이 구획의 값을 확인해 주세요.", severity: "error", sid: target.sid }],
+    };
+
+    await render();
+    await click(buttonByText(`${expoSectionTitle(target)} HTML 다운로드`));
+
+    expect(host.querySelector(`[aria-label="${expoSectionTitle(target)} 편집기"]`)).toBeTruthy();
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("1번 하위 전시 이름");
+    expect(document.activeElement?.getAttribute("data-field-path")).toBe("[0].title");
+
+    const pageTitle = host.querySelector<HTMLInputElement>('input[aria-label="페이지 제목"]');
+    await act(async () => { pageTitle?.focus(); });
+    expect(document.activeElement).toBe(pageTitle);
+    await click(buttonByText("이 구획의 값을 확인해 주세요."));
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("1번 하위 전시 이름");
+  });
+
+  it("일반 구획의 백업 미디어 오류는 실제 주소 입력에 포커스한다", async () => {
+    const target = {
+      sid: "33333333-3333-4333-8333-333333333333",
+      type: "kv", variant: "column", enabled: true, embedEnabled: false,
+      design: { bg: "light", align: "left" },
+      content: {
+        title: { ko: "키비주얼" },
+        media: { kind: "image", url: "http://127.0.0.1/private.jpg" },
+      },
+    };
+    pageBody.draft = { schemaVersion: 2, sections: [target] };
+    pageBody.hasPublished = true;
+    pageBody.exportSections = [{ sid: target.sid, label: "키비주얼" }];
+    nextExportFailure = {
+      issues: [{
+        path: "sections[0].content.media.url", code: "standalone-media-public-https",
+        message: "공개 HTTPS 주소가 필요해요.", severity: "error", sid: target.sid,
+      }],
+    };
+
+    await render();
+    await click(buttonByText("키비주얼 HTML 다운로드"));
+
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("배경 이미지 주소");
+    expect(document.activeElement?.getAttribute("data-field-path")).toBe("media.url");
+    expect(host.textContent).toContain("공개 HTTPS 주소가 필요해요.");
+  });
+
+  it("커스텀 표 미디어 오류는 같은 행의 첫 칸이 아니라 해당 주소 입력에 포커스한다", async () => {
+    const draft = instantiateStkHomeV1({
+      randomUUID: (() => {
+        let serial = 0;
+        return () => `00000000-0000-4000-8000-${String(++serial).padStart(12, "0")}`;
+      })(),
+    });
+    const targetIndex = draft.sections.findIndex((section) => section.type === "exhibition-grid");
+    const target = draft.sections[targetIndex];
+    const path = `sections[${targetIndex}].content.items[0].symbol.url`;
+    pageBody.draft = draft;
+    pageBody.hasPublished = true;
+    pageBody.exportSections = [{ sid: target.sid, label: expoSectionTitle(target) }];
+    nextExportFailure = { issues: [{
+      path, code: "standalone-media-public-https", message: "공개 심볼 주소가 필요해요.",
+      severity: "error", sid: target.sid,
+    }] };
+
+    await render();
+    await click(buttonByText(`${expoSectionTitle(target)} HTML 다운로드`));
+
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("1번 하위 전시 심볼 주소");
+    expect(document.activeElement?.getAttribute("data-field-path")).toBe("[0].symbol.url");
+  });
+
+  it("중첩 Audience 그룹 미디어 오류는 다른 그룹이 아니라 정확한 아이콘 입력에 포커스한다", async () => {
+    const target = {
+      sid: "88888888-8888-4888-8888-888888888888",
+      type: "audience-links", variant: "split", enabled: true, embedEnabled: false,
+      design: {}, content: { groups: ["exhibitor", "visitor"].map((audience, groupIndex) => ({
+        audience, title: { ko: audience }, variant: groupIndex === 0 ? "light" : "dark",
+        items: [{
+          id: `${audience}-link`, label: { ko: `${audience} 링크` }, destinationId: "",
+          campaignIds: [], order: 0, enabled: true,
+          icon: { kind: "image", url: `https://cdn.example.com/${audience}.png`, decorative: true },
+        }],
+      })) },
+    };
+    pageBody.draft = { schemaVersion: 2, sections: [target] };
+    pageBody.hasPublished = true;
+    pageBody.exportSections = [{ sid: target.sid, label: "대상 링크" }];
+    nextExportFailure = { issues: [{
+      path: "sections[0].content.groups[1].items[0].icon.url",
+      code: "standalone-media-public-https", message: "참관객 아이콘 주소가 필요해요.",
+      severity: "error", sid: target.sid,
+    }] };
+
+    await render();
+    await click(buttonByText("대상 링크 HTML 다운로드"));
+
+    const visitorIcon = host.querySelector<HTMLInputElement>(
+      'input[data-field-path="groups[1].items[0].icon.url"]',
+    );
+    expect(visitorIcon).toBeTruthy();
+    expect(document.activeElement).toBe(visitorIcon);
+  });
+
+  it("페이지 설정 백업 오류는 오류 문구가 아니라 해당 입력에 포커스한다", async () => {
+    const target = {
+      sid: "44444444-4444-4444-8444-444444444444",
+      type: "textblock", variant: "prose", enabled: true, embedEnabled: false,
+      design: { bg: "light" }, content: { body: { ko: "본문" } },
+    };
+    pageBody.draft = {
+      schemaVersion: 2,
+      settings: { destinations: [{
+        id: "inquiry", label: "문의", enabled: true,
+        action: { type: "imweb-modal", modalId: "mInquiry", fallbackHref: "http://127.0.0.1/private" },
+      }] },
+      sections: [target],
+    };
+    pageBody.hasPublished = true;
+    nextExportFailure = { issues: [{
+      path: "settings.destinations[0].action.fallbackHref", code: "standalone-modal-fallback-required",
+      message: "공개 대체 주소가 필요해요.", severity: "error",
+    }] };
+
+    await render();
+    await click(buttonByText("전체 HTML 다운로드"));
+
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("문의 대체 주소");
+    expect(document.activeElement?.getAttribute("data-field-path")).toBe("settings.destinations[0].action.fallbackHref");
+  });
+
+  it("Hero 영상 백업 오류는 marker가 없어도 영상 주소 입력에 포커스한다", async () => {
+    const target = {
+      sid: "55555555-5555-4555-8555-555555555555",
+      type: "campaign-hero", variant: "default", enabled: true, embedEnabled: false,
+      design: {}, content: {
+        typingLines: [{ ko: "STK 2027" }], accessibleHeadline: { ko: "STK 2027" }, ctas: [],
+        video: {
+          kind: "video", url: "http://127.0.0.1/private.mp4", originalUrl: "http://127.0.0.1/private.mp4",
+          mimeType: "video/mp4", rightsStatus: "confirmed",
+        },
+      },
+    };
+    pageBody.draft = { schemaVersion: 2, sections: [target] };
+    pageBody.hasPublished = true;
+    pageBody.exportSections = [{ sid: target.sid, label: "히어로" }];
+    nextExportFailure = { issues: [{
+      path: "sections[0].content.video.url", code: "standalone-media-public-https",
+      message: "공개 영상 주소가 필요해요.", severity: "error", sid: target.sid,
+    }] };
+
+    await render();
+    await click(buttonByText("히어로 HTML 다운로드"));
+
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("외부 영상 HTTPS 주소");
+    expect(document.activeElement?.getAttribute("data-field-path")).toBe("video.url");
+    expect(host.textContent).toContain("공개 영상 주소가 필요해요.");
+  });
+
+  it("Hero readiness originalUrl이 먼저 있어도 export url은 안정적인 영상 입력에 포커스한다", async () => {
+    const target = {
+      sid: "99999999-9999-4999-8999-999999999999",
+      type: "campaign-hero", variant: "default", enabled: true, embedEnabled: false,
+      design: {}, content: {
+        typingLines: [{ ko: "STK 2027" }], accessibleHeadline: { ko: "STK 2027" }, ctas: [],
+        video: {
+          kind: "video", url: "http://127.0.0.1/private.mp4", originalUrl: "http://127.0.0.1/original.mp4",
+          mimeType: "video/mp4", rightsStatus: "confirmed",
+        },
+      },
+    };
+    pageBody.draft = { schemaVersion: 2, sections: [target] };
+    pageBody.hasPublished = true;
+    pageBody.exportSections = [{ sid: target.sid, label: "Hero divergence" }];
+    pageBody.readiness = {
+      canPublish: false, canGoLive: false,
+      publishIssues: [{
+        path: "sections[0].content.video.originalUrl", code: "unsafe-original",
+        message: "원본 영상 주소를 확인해 주세요.", severity: "error", sid: target.sid,
+      }],
+      liveIssues: [], notes: [],
+    };
+    nextExportFailure = { issues: [{
+      path: "sections[0].content.video.url", code: "standalone-media-public-https",
+      message: "공개 영상 주소가 필요해요.", severity: "error", sid: target.sid,
+    }] };
+
+    await render();
+    await click(buttonByText("Hero divergence HTML 다운로드"));
+
+    const videoUrl = host.querySelector<HTMLInputElement>('input[data-field-path="video.url"]');
+    expect(videoUrl).toBeTruthy();
+    expect(document.activeElement).toBe(videoUrl);
+
+    nextExportFailure = { issues: [{
+      path: "sections[0].content.video.originalUrl", code: "standalone-media-public-https",
+      message: "공개 원본 영상 주소가 필요해요.", severity: "error", sid: target.sid,
+    }] };
+    const pageTitle = host.querySelector<HTMLInputElement>('input[aria-label="페이지 제목"]');
+    await act(async () => { pageTitle?.focus(); });
+    await click(buttonByText("Hero divergence HTML 다운로드"));
+    expect(document.activeElement).toBe(videoUrl);
+  });
+
+  it("초안에 없는 published-only sid 오류가 현재 초안 편집기를 비우지 않는다", async () => {
+    const local = {
+      sid: "66666666-6666-4666-8666-666666666666",
+      type: "textblock", variant: "prose", enabled: true, embedEnabled: false,
+      design: { bg: "light" }, content: { heading: { ko: "현재 초안" }, body: { ko: "본문" } },
+    };
+    const publishedOnlySid = "77777777-7777-4777-8777-777777777777";
+    pageBody.draft = { schemaVersion: 2, sections: [local] };
+    pageBody.hasPublished = true;
+    pageBody.exportSections = [{ sid: publishedOnlySid, label: "발행 전용" }];
+    nextExportFailure = { issues: [{
+      path: "scope.sid", code: "standalone-section-unavailable", message: "발행본 구획을 찾지 못했어요.",
+      severity: "error", sid: publishedOnlySid,
+    }] };
+
+    await render();
+    await click(host.querySelector('button[aria-label="현재 초안 편집"]') ?? undefined);
+    expect(host.querySelector('[aria-label="현재 초안 편집기"]')).toBeTruthy();
+    await click(buttonByText("발행 전용 HTML 다운로드"));
+
+    expect(host.querySelector('[aria-label="현재 초안 편집기"]')).toBeTruthy();
+    expect(host.textContent).not.toContain("왼쪽에서 구획을 골라 주세요.");
+  });
+});
+
 describe("페이지 이름", () => {
   /** 스위치의 읽는 이름 — 여기에 페이지 이름이 실린다. */
   const switchName = () =>
@@ -635,18 +1008,18 @@ describe("페이지 이름", () => {
 
   async function rename(next: string) {
     const input = [...host.querySelectorAll("input")]
-      .find((el) => (el.getAttribute("aria-label") ?? "").endsWith(" 이름"));
+      .find((el) => el.getAttribute("aria-label") === "페이지 제목");
     if (!input) throw new Error("이름 칸이 없다");
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
     await act(async () => {
       setter.call(input, next);
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    // 트리의 이름 디바운스(600ms) + 목록 다시 읽기.
+    // 공유 페이지 초안의 900ms 자동저장 + 목록 다시 읽기.
     await act(async () => { await vi.advanceTimersByTimeAsync(900); });
   }
 
-  it("트리에서 고친 이름이 발행 패널에 바로 따라온다", async () => {
+  it("공유 초안에서 고친 이름이 발행 패널에 바로 따라온다", async () => {
     vi.useFakeTimers();
     await render();
     expect(switchName()).toContain("홈");
@@ -657,11 +1030,94 @@ describe("페이지 이름", () => {
     expect(switchName()).not.toContain("홈 아임웹에");
   });
 
-  /** 이름을 고쳐도 자동저장이 도는 것은 아니다 — 트리가 자기 요청으로 따로 저장한다. */
-  it("이름 바꾸기가 가운데 칸의 자동저장을 돌리지 않는다", async () => {
+  /** 제목도 같은 CAS 초안의 일부라 한 번의 자동저장에 함께 나간다. */
+  it("이름 바꾸기가 공유 초안 자동저장을 한 번만 돌린다", async () => {
     vi.useFakeTimers();
     await render();
     await rename("첫 화면");
-    expect(patchCount).toBe(0);
+    expect(patchCount).toBe(1);
+  });
+});
+
+describe("페이지 전환 전 자동저장", () => {
+  const titleInput = () => host.querySelector<HTMLInputElement>('input[aria-label="페이지 제목"]')!;
+  const pageButton = (title: string) => [...host.querySelectorAll("button")]
+    .find((button) => button.textContent?.trim() === title);
+  const editTitle = async (title: string) => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setter.call(titleInput(), title);
+      titleInput().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    includeSecondPage = true;
+  });
+
+  it("느린 저장이 끝난 뒤에만 다른 페이지로 이동한다", async () => {
+    let release!: () => void;
+    draftSaveGate = new Promise<void>((resolve) => { release = resolve; });
+    await render();
+    await editTitle("이동 전 저장할 제목");
+
+    await click(pageButton("소개"));
+    expect(patchCount).toBe(1);
+    expect(replace).not.toHaveBeenCalled();
+
+    release();
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(replace).toHaveBeenCalledWith("?page=pg2", { scroll: false });
+  });
+
+  it("검증 거절이면 이동하지 않고 보이는 초안을 유지한다", async () => {
+    rejectNext = { errors: [{ path: "title", message: "제목을 확인해 주세요." }] };
+    await render();
+    await editTitle("로컬 검증 초안");
+
+    await click(pageButton("소개"));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(replace).not.toHaveBeenCalled();
+    expect(titleInput().value).toBe("로컬 검증 초안");
+    expect(host.textContent).toContain("제목을 확인해 주세요.");
+  });
+
+  it("409 충돌이면 이동하지 않고 보이는 초안을 유지한다", async () => {
+    conflictNext = true;
+    await render();
+    await editTitle("로컬 충돌 초안");
+
+    await click(pageButton("소개"));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(replace).not.toHaveBeenCalled();
+    expect(titleInput().value).toBe("로컬 충돌 초안");
+    expect(host.textContent).toContain("다른 팀원이 먼저 저장했어요");
+  });
+
+  it("전송 실패면 이동하지 않고 보이는 초안을 유지한다", async () => {
+    transportFailureNext = true;
+    await render();
+    await editTitle("로컬 전송 초안");
+
+    await click(pageButton("소개"));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(replace).not.toHaveBeenCalled();
+    expect(titleInput().value).toBe("로컬 전송 초안");
+  });
+
+  it("저장 거절이면 페이지 삭제를 예약하지 않는다", async () => {
+    rejectNext = { errors: [{ path: "title", message: "제목을 확인해 주세요." }] };
+    await render();
+    await editTitle("삭제 전 로컬 초안");
+
+    await click(host.querySelector('button[aria-label="소개 페이지 삭제"]') ?? undefined);
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_100); });
+
+    expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+    expect(titleInput().value).toBe("삭제 전 로컬 초안");
   });
 });

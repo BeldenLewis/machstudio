@@ -10,9 +10,16 @@
  * 그래서 여기서는 **어느 칸이 왜 안 되는지**를 구조화해서 돌려준다.
  */
 import { EXPO_LIMITS, sectionDef } from "@/lib/expo/registry";
-import { isSid } from "@/lib/expo/config";
+import { isSid, normalizeCampaigns, normalizeDestinations } from "@/lib/expo/config";
+import { isSafePublicUrl } from "@/lib/expo/destination";
 import { topicParticle } from "@/lib/korean";
-import type { SlotDef } from "@/lib/expo/types";
+import {
+  EXPO_V2_RULES,
+  type ExpoPageConfigV2,
+  type ExpoSection,
+  type IssueSeverity,
+  type SlotDef,
+} from "@/lib/expo/types";
 
 export interface FieldError {
   /** `sections[2].content.title` 처럼 어느 칸인지 — 편집기가 그 카드로 데려간다. */
@@ -26,8 +33,11 @@ export interface FieldError {
     /** 한 페이지에 하나만 되는 구획이 두 번 — 정규화가 뒤엣것을 버린다. */
     | "duplicate-singleton"
     /** 릴리스 승인 전이라 밖으로 내보내는 스위치를 켤 수 없다. 끄는 것은 언제나 된다. */
-    | "launch-locked";
+    | "launch-locked" | "invalid-schema" | "duplicate-id" | "invalid-date" | "invalid-action" | "invalid-url"
+    | (string & {});
   message: string;
+  /** plugin issue의 공개/발행 심각도. 기존 write 오류는 이 값을 생략한다. */
+  severity?: IssueSeverity;
   /**
    * 어느 구획인지. 편집기가 `data-expo-sid` 로 카드를 찾아 데려간다 —
    * `path` 의 인덱스로 역산하면 그 사이 배열이 바뀌었을 때 엉뚱한 카드를 가리킨다.
@@ -47,6 +57,118 @@ const obj = (v: unknown): Record<string, unknown> =>
   v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
 const bytes = (v: string) => new TextEncoder().encode(v).length;
+const isIsoTimestamp = (value: unknown): value is string =>
+  typeof value === "string" && EXPO_V2_RULES.timezoneSuffix.test(value) && Number.isFinite(Date.parse(value));
+const isV2Id = (value: unknown): value is string => typeof value === "string" && EXPO_V2_RULES.id.test(value);
+const isAnchorOrModal = (value: unknown): value is string =>
+  typeof value === "string" && EXPO_V2_RULES.anchorOrModal.test(value);
+
+function validateInterval(value: Record<string, unknown>, path: string, errors: FieldError[]): void {
+  const startsAt = value.startsAt;
+  const endsAt = value.endsAt;
+  if (!isIsoTimestamp(startsAt)) errors.push({ path: `${path}.startsAt`, code: "invalid-date", message: "시작 시각은 시간대가 있는 ISO 날짜여야 해요" });
+  if (!isIsoTimestamp(endsAt)) errors.push({ path: `${path}.endsAt`, code: "invalid-date", message: "종료 시각은 시간대가 있는 ISO 날짜여야 해요" });
+  if (isIsoTimestamp(startsAt) && isIsoTimestamp(endsAt) && Date.parse(endsAt) <= Date.parse(startsAt)) {
+    errors.push({ path: `${path}.endsAt`, code: "invalid-date", message: "종료 시각은 시작 시각 뒤여야 해요" });
+  }
+}
+
+function validateDestinationAction(value: unknown, path: string, errors: FieldError[]): void {
+  const action = obj(value);
+  if (action.type === "url" || action.type === "download") {
+    if (!isSafePublicUrl(action.href)) errors.push({ path: `${path}.href`, code: "invalid-url", message: "공개 HTTPS 주소만 사용할 수 있어요" });
+    if (action.type === "url" && action.newTab !== undefined && typeof action.newTab !== "boolean") {
+      errors.push({ path: `${path}.newTab`, code: "invalid-shape", message: "새 탭 설정의 모양이 올바르지 않아요" });
+    }
+    return;
+  }
+  if (action.type === "anchor") {
+    if (!isAnchorOrModal(action.target)) errors.push({ path: `${path}.target`, code: "invalid-action", message: "앵커 이름이 올바르지 않아요" });
+    return;
+  }
+  if (action.type === "imweb-modal") {
+    if (!isAnchorOrModal(action.modalId)) errors.push({ path: `${path}.modalId`, code: "invalid-action", message: "모달 이름이 올바르지 않아요" });
+    if (action.fallbackHref !== undefined && !isSafePublicUrl(action.fallbackHref)) {
+      errors.push({ path: `${path}.fallbackHref`, code: "invalid-url", message: "대체 주소는 공개 HTTPS 주소여야 해요" });
+    }
+    return;
+  }
+  errors.push({ path: `${path}.type`, code: "invalid-action", message: "목적지 동작이 올바르지 않아요" });
+}
+
+function validateV2Settings(src: Record<string, unknown>, errors: FieldError[]): void {
+  if (src.schemaVersion !== 2) {
+    errors.push({ path: "schemaVersion", code: "invalid-schema", message: "지원하지 않는 페이지 설정 버전이에요" });
+  }
+  if (src.preset !== undefined && (typeof src.preset !== "string" || bytes(src.preset) > 128)) {
+    errors.push({ path: "preset", code: typeof src.preset === "string" ? "too-long" : "invalid-shape", message: "프리셋 이름이 올바르지 않아요" });
+  }
+  if (src.settings === undefined) return;
+  if (!src.settings || typeof src.settings !== "object" || Array.isArray(src.settings)) {
+    errors.push({ path: "settings", code: "invalid-shape", message: "설정 모양이 올바르지 않아요" });
+    return;
+  }
+  const settings = obj(src.settings);
+  if (settings.event !== undefined) {
+    const event = obj(settings.event);
+    if (!Number.isInteger(event.edition) || Number(event.edition) < 1) {
+      errors.push({ path: "settings.event.edition", code: "invalid-shape", message: "행사 회차가 올바르지 않아요" });
+    }
+    if (event.facts !== undefined) {
+      if (!event.facts || typeof event.facts !== "object" || Array.isArray(event.facts)) {
+        errors.push({ path: "settings.event.facts", code: "invalid-shape", message: "행사 수치 모양이 올바르지 않아요" });
+      } else {
+        const facts = obj(event.facts);
+        for (const key of ["companies", "sessions", "booths"] as const) {
+          if (facts[key] !== undefined && (!Number.isInteger(facts[key]) || Number(facts[key]) < 0)) {
+            errors.push({ path: `settings.event.facts.${key}`, code: "invalid-shape", message: "행사 수치는 0 이상의 정수여야 해요" });
+          }
+        }
+      }
+    }
+    validateInterval(event, "settings.event", errors);
+    if (settings.event && (typeof settings.event !== "object" || Array.isArray(settings.event))) {
+      errors.push({ path: "settings.event", code: "invalid-shape", message: "행사 설정 모양이 올바르지 않아요" });
+    }
+  }
+  for (const key of ["campaigns", "destinations"] as const) {
+    const list = settings[key];
+    if (list === undefined) continue;
+    if (!Array.isArray(list)) {
+      errors.push({ path: `settings.${key}`, code: "invalid-shape", message: "목록 모양이 올바르지 않아요" });
+      continue;
+    }
+    if (list.length > EXPO_V2_RULES.maxRows) errors.push({ path: `settings.${key}`, code: "too-many", message: `목록은 ${EXPO_V2_RULES.maxRows}개까지 넣을 수 있어요` });
+    const ids = new Set<string>();
+    list.slice(0, EXPO_V2_RULES.maxRows).forEach((raw, index) => {
+      const value = obj(raw);
+      const path = `settings.${key}[${index}]`;
+      if (!isV2Id(value.id)) errors.push({ path: `${path}.id`, code: "invalid-shape", message: "식별자가 올바르지 않아요" });
+      else if (ids.has(value.id)) errors.push({ path: `${path}.id`, code: "duplicate-id", message: "같은 식별자가 두 번 있어요" });
+      else ids.add(value.id);
+      if (typeof value.label !== "string" || !value.label.trim()) errors.push({ path: `${path}.label`, code: "invalid-shape", message: "표시 이름이 필요해요" });
+      else if (value.label.length > EXPO_LIMITS.textChars) errors.push({ path: `${path}.label`, code: "too-long", message: `표시 이름은 ${EXPO_LIMITS.textChars}자까지 넣을 수 있어요` });
+      if (typeof value.enabled !== "boolean") errors.push({ path: `${path}.enabled`, code: "invalid-shape", message: "활성 설정의 모양이 올바르지 않아요" });
+      if (key === "campaigns") {
+        validateInterval(value, path, errors);
+        if (value.override !== "auto" && value.override !== "force-on" && value.override !== "force-off") {
+          errors.push({ path: `${path}.override`, code: "invalid-shape", message: "캠페인 상태가 올바르지 않아요" });
+        }
+      } else {
+        validateDestinationAction(value.action, `${path}.action`, errors);
+        if (value.analytics !== undefined) {
+          const analytics = obj(value.analytics);
+          if (!EXPO_V2_RULES.analyticsEvent.test(String(analytics.eventName ?? ""))) {
+            errors.push({ path: `${path}.analytics.eventName`, code: "invalid-shape", message: "분석 이벤트 이름이 올바르지 않아요" });
+          }
+          if (analytics.contentId !== undefined && (typeof analytics.contentId !== "string" || bytes(analytics.contentId) > 64)) {
+            errors.push({ path: `${path}.analytics.contentId`, code: typeof analytics.contentId === "string" ? "too-long" : "invalid-shape", message: "분석 콘텐츠 식별자가 올바르지 않아요" });
+          }
+        }
+      }
+    });
+  }
+}
 
 /** 로케일 맵이든 문자열이든 가장 긴 값을 본다 — 한 언어만 넘쳐도 거절이다. */
 function longestText(value: unknown): { chars: number; bytes: number } {
@@ -146,6 +268,53 @@ function validateSlot(def: SlotDef, value: unknown, path: string, errors: FieldE
   }
 }
 
+function pluginIssuePath(path: string, sectionIndex: number): string {
+  const at = `sections[${sectionIndex}]`;
+  const clean = path.trim().replace(/^\.+/, "");
+  if (!clean) return `${at}.content`;
+  if (/^sections\[\d+\](?=\.|$)/.test(clean)) {
+    return clean.replace(/^sections\[\d+\]/, at);
+  }
+  if (clean === "content" || clean.startsWith("content.")) return `${at}.${clean}`;
+  return `${at}.content.${clean}`;
+}
+
+function malformedPluginIssue(sectionIndex: number, sid: string | undefined): FieldError {
+  return {
+    path: `sections[${sectionIndex}].content`,
+    code: "invalid-shape",
+    message: "구획 검증 결과의 모양이 올바르지 않아요",
+    severity: "error",
+    sid,
+  };
+}
+
+function normalizePluginIssue(raw: unknown, sectionIndex: number, sid: string | undefined): FieldError {
+  try {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      return malformedPluginIssue(sectionIndex, sid);
+    }
+    const issue = raw as Record<string, unknown>;
+    if (
+      typeof issue.path !== "string"
+      || typeof issue.code !== "string" || !issue.code.trim()
+      || typeof issue.message !== "string" || !issue.message.trim()
+      || (issue.severity !== "error" && issue.severity !== "warning")
+    ) {
+      return malformedPluginIssue(sectionIndex, sid);
+    }
+    return {
+      path: pluginIssuePath(issue.path, sectionIndex),
+      code: issue.code,
+      message: issue.message,
+      severity: issue.severity,
+      sid,
+    };
+  } catch {
+    return malformedPluginIssue(sectionIndex, sid);
+  }
+}
+
 /**
  * 페이지 draft 쓰기를 검증한다. **정규화 전에** 돈다 — 정규화가 자르고 나면
  * 무엇이 넘쳤는지 알 수 없다.
@@ -153,6 +322,7 @@ function validateSlot(def: SlotDef, value: unknown, path: string, errors: FieldE
 export function validatePageDraft(raw: unknown): ValidateResult {
   const errors: FieldError[] = [];
   const src = obj(raw);
+  validateV2Settings(src, errors);
   const sections = Array.isArray(src.sections) ? src.sections : null;
 
   if (sections === null) {
@@ -179,6 +349,10 @@ export function validatePageDraft(raw: unknown): ValidateResult {
    */
   const seenSids = new Set<string>();
   const usedSingletons = new Set<string>();
+  const settings = obj(src.settings);
+  const campaigns = new Map(normalizeCampaigns(settings.campaigns).map((item) => [item.id, item]));
+  const destinations = new Map(normalizeDestinations(settings.destinations).map((item) => [item.id, item]));
+  const config = src as unknown as ExpoPageConfigV2;
 
   sections.slice(0, EXPO_LIMITS.sectionsPerPage).forEach((raw, i) => {
     const s = obj(raw);
@@ -217,8 +391,29 @@ export function validatePageDraft(raw: unknown): ValidateResult {
     }
 
     const content = obj(s.content);
-    for (const slot of def.slots) {
-      validateSlot(slot, content[slot.key], `${at}.content.${slot.key}`, errors);
+    if (def.validate) {
+      let pluginIssues: unknown;
+      try {
+        pluginIssues = def.validate(s as unknown as ExpoSection, {
+          config,
+          sectionIndex: i,
+          campaigns,
+          destinations,
+        });
+      } catch {
+        pluginIssues = [{
+          path: "", code: "invalid-shape", message: "구획 내용의 모양이 올바르지 않아요",
+          severity: "error",
+        }];
+      }
+      const issueRows = Array.isArray(pluginIssues) ? pluginIssues : [pluginIssues];
+      for (const issue of issueRows) {
+        errors.push(normalizePluginIssue(issue, i, sid));
+      }
+    } else {
+      for (const slot of def.slots) {
+        validateSlot(slot, content[slot.key], `${at}.content.${slot.key}`, errors);
+      }
     }
     // 슬롯 오류에도 어느 카드인지 실어 준다 — path 인덱스 역산은 배열이 바뀌면 어긋난다.
     for (const e of errors) if (e.sid === undefined && e.path.startsWith(`${at}.`)) e.sid = sid;

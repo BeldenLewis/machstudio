@@ -16,12 +16,18 @@
  * W1 은 6타입이다. `kv.full`(전폭 히어로)은 **없다** — 아임웹 실측에서 코드블럭 전폭 배치가
  * 불가능한 것으로 나왔다(W0: `allowKvFull=false`, `full-layout-unavailable`).
  */
-import type { SectionDef } from "@/lib/expo/types";
+import type { SectionDef, SectionPlugin } from "@/lib/expo/types";
+import { campaignHeroPlugin } from "@/lib/expo/sections/campaign-hero";
+import { exhibitionGridPlugin } from "@/lib/expo/sections/exhibition-grid";
+import { audienceLinksPlugin } from "@/lib/expo/sections/audience-links";
+import { speakerCarouselPlugin } from "@/lib/expo/sections/speaker-carousel";
+import { sponsorMarqueePlugin } from "@/lib/expo/sections/sponsor-marquee";
+import { ctaBandPlugin } from "@/lib/expo/sections/cta-band";
 
 /** 배경 톤 — 전 타입 공통 디자인 노브. 렌더가 data-bg 로 쓴다. */
 const BG = { bg: ["light", "dark"] };
 
-export const EXPO_SECTIONS: readonly SectionDef[] = [
+export const EXPO_SECTIONS: readonly SectionPlugin[] = [
   {
     type: "kv",
     label: "키비주얼",
@@ -137,11 +143,17 @@ export const EXPO_SECTIONS: readonly SectionDef[] = [
     multi: true,
     design: BG,
   },
+  campaignHeroPlugin,
+  exhibitionGridPlugin,
+  audienceLinksPlugin,
+  speakerCarouselPlugin,
+  sponsorMarqueePlugin,
+  ctaBandPlugin,
 ] as const;
 
 const BY_TYPE = new Map(EXPO_SECTIONS.map((s) => [s.type, s]));
 
-export function sectionDef(type: string): SectionDef | null {
+export function sectionDef(type: string): SectionPlugin | null {
   return BY_TYPE.get(type) ?? null;
 }
 
