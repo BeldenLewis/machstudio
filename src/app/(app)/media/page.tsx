@@ -19,7 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload, ImageIcon, Video, Copy, Trash2, Loader2, X, Check, Minus,
-  FolderPlus, ClipboardCopy, Square as SquareIcon,
+  FolderPlus, FolderInput, ClipboardCopy, Square as SquareIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspace } from "@/contexts/workspace";
@@ -123,6 +123,8 @@ export default function MediaPage() {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [groupPanelOpen, setGroupPanelOpen] = useState(false);
   const [groupInput, setGroupInput] = useState("");
+  const [movePanelOpen, setMovePanelOpen] = useState(false);
+  const [moveTarget, setMoveTarget] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -350,6 +352,40 @@ export default function MediaPage() {
     }
   }, [selected, groupInput]);
 
+  const applyMove = useCallback(async () => {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    const targetId = moveTarget || null;
+
+    setBulkBusy(true);
+    try {
+      const res = await fetch("/api/media/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "move", ids, projectId: targetId }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "프로젝트를 옮기지 못했어요.");
+
+      const targetProject = projects.find((p) => p.id === targetId) ?? null;
+      setAssets((prev) => {
+        // 지금 특정 프로젝트로 좁혀서 보는 중인데 다른 프로젝트로 옮겼으면, 이 목록에는
+        // 더 이상 안 보이는 게 맞다(서버 GET 도 같은 필터를 쓴다) — 그대로 두면 없는 걸 있는 척.
+        if (projectFilter && targetId !== projectFilter) {
+          return prev.filter((a) => !selected.has(a.id));
+        }
+        return prev.map((a) => (selected.has(a.id) ? { ...a, project: targetProject } : a));
+      });
+      setSelected(new Set());
+      toast.success(targetProject ? `${ids.length}개를 "${targetProject.name}" 프로젝트로 옮겼어요.` : `${ids.length}개를 워크스페이스 공용으로 옮겼어요.`);
+      setMovePanelOpen(false);
+      setMoveTarget("");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "프로젝트를 옮기지 못했어요. 연결을 확인해주세요.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }, [selected, moveTarget, projects, projectFilter]);
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -476,10 +512,16 @@ export default function MediaPage() {
                 <Copy className="h-3.5 w-3.5" aria-hidden />
                 링크 복사
               </Btn>
-              <Btn onClick={() => setGroupPanelOpen((v) => !v)} disabled={bulkBusy}>
+              <Btn onClick={() => { setGroupPanelOpen((v) => !v); setMovePanelOpen(false); }} disabled={bulkBusy}>
                 <FolderPlus className="h-3.5 w-3.5" aria-hidden />
                 그룹에 담기
               </Btn>
+              {projects.length > 0 && (
+                <Btn onClick={() => { setMovePanelOpen((v) => !v); setGroupPanelOpen(false); }} disabled={bulkBusy}>
+                  <FolderInput className="h-3.5 w-3.5" aria-hidden />
+                  프로젝트 이동
+                </Btn>
+              )}
               <Btn tone="danger" onClick={() => void handleBulkDelete()} disabled={bulkBusy}>
                 {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Trash2 className="h-3.5 w-3.5" aria-hidden />}
                 선택 삭제
@@ -516,6 +558,32 @@ export default function MediaPage() {
                     </datalist>
                     <Btn tone="key" onClick={() => void applyGroup()} disabled={bulkBusy}>
                       {groupInput.trim() ? `"${groupInput.trim()}" 로 담기` : "미분류로 옮기기"}
+                    </Btn>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence initial={false}>
+              {movePanelOpen && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden border-t border-border/60 p-2.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <FieldSelect
+                      value={moveTarget}
+                      onChange={(e) => setMoveTarget(e.target.value)}
+                      className="max-w-64 flex-1"
+                      autoFocus
+                    >
+                      <option value="">프로젝트 없음(워크스페이스 공용)</option>
+                      {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </FieldSelect>
+                    <Btn tone="key" onClick={() => void applyMove()} disabled={bulkBusy}>
+                      이동
                     </Btn>
                   </div>
                 </motion.div>
@@ -605,6 +673,12 @@ export default function MediaPage() {
                     {formatBytes(asset.size)}
                     {asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ""}
                   </p>
+                  {/* "전체"로 볼 때만 — 이미 특정 프로젝트로 좁혀 보는 중이면 카드마다 반복할 필요가 없다. */}
+                  {!projectFilter && asset.project && (
+                    <p className="mt-1 truncate text-[10px] text-muted-foreground" title={asset.project.name}>
+                      {asset.project.name}
+                    </p>
+                  )}
                   {asset.groupLabel && (
                     <p className="mt-1 truncate text-[10px] font-medium text-violet-600 dark:text-violet-300" title={asset.groupLabel}>
                       {asset.groupLabel}

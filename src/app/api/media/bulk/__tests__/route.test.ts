@@ -2,16 +2,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * 일괄 작업 — 지우기·그룹 담기. 둘 다 "id 목록으로 골라 온다" 는 첫 단계가 같다.
+ * 일괄 작업 — 지우기·그룹 담기·프로젝트 이동. 셋 다 "id 목록으로 골라 온다" 는 첫 단계가 같다.
  *
  * 지키는 것: ① id 를 그대로 안 믿고 이 워크스페이스 것만 걸러 온다 ② 삭제는 올린 사람·
  * 관리자만, 아니면 조용히 빼고 skippedIds 로 알린다(전체 실패로 막지 않는다)
- * ③ 그룹 담기는 멤버 전체가 할 수 있다(파괴적이지 않은 정리 동작).
+ * ③ 그룹 담기·프로젝트 이동은 멤버 전체가 할 수 있다(파괴적이지 않은 정리 동작)
+ * ④ 프로젝트 이동은 groupLabel(자유 문자열)과 달리 실제 FK 라, 남의 워크스페이스
+ * 프로젝트로 보낼 수 없게 이 워크스페이스 소속(+미삭제) 확인을 거친다.
  */
 
 const prismaMock = {
   workspaceMember: { findFirst: vi.fn() },
   mediaAsset: { findMany: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() },
+  project: { findFirst: vi.fn() },
 };
 const getUser = vi.fn();
 const logActivity = vi.fn();
@@ -38,6 +41,7 @@ beforeEach(() => {
   getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
   prismaMock.workspaceMember.findFirst.mockResolvedValue(MEMBERSHIP);
   storageRemove.mockResolvedValue({ error: null });
+  prismaMock.project.findFirst.mockResolvedValue(null);
 });
 
 describe("입력 모양", () => {
@@ -156,6 +160,55 @@ describe("일괄 그룹 담기", () => {
       { id: "theirs", path: "p", createdById: "다른사람", originalName: "x" },
     ]);
     const res = await post({ action: "group", ids: ["theirs"], groupLabel: "행사" });
+    const body = await res.json();
+    expect(body.updated).toBe(1);
+  });
+});
+
+describe("일괄 프로젝트 이동", () => {
+  it("이 워크스페이스 소속 프로젝트로 옮긴다", async () => {
+    prismaMock.mediaAsset.findMany.mockResolvedValue([{ id: "a", path: "p", createdById: "u1", originalName: "a" }]);
+    prismaMock.project.findFirst.mockResolvedValue({ id: "proj-1" });
+    const res = await post({ action: "move", ids: ["a"], projectId: "proj-1" });
+    expect(res.status).toBe(200);
+    expect(prismaMock.mediaAsset.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["a"] } }, data: { projectId: "proj-1" },
+    });
+  });
+
+  it("프로젝트 확인은 이 워크스페이스 소속(+미삭제)으로 좁힌다", async () => {
+    prismaMock.mediaAsset.findMany.mockResolvedValue([{ id: "a", path: "p", createdById: "u1", originalName: "a" }]);
+    prismaMock.project.findFirst.mockResolvedValue({ id: "proj-1" });
+    await post({ action: "move", ids: ["a"], projectId: "proj-1" });
+    expect(prismaMock.project.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "proj-1", workspaceId: "w1", deletedAt: null } }),
+    );
+  });
+
+  it("남의 워크스페이스(또는 삭제된) 프로젝트면 400 — 아무것도 안 옮긴다", async () => {
+    prismaMock.mediaAsset.findMany.mockResolvedValue([{ id: "a", path: "p", createdById: "u1", originalName: "a" }]);
+    prismaMock.project.findFirst.mockResolvedValue(null); // 워크스페이스 스코프에 없다
+    const res = await post({ action: "move", ids: ["a"], projectId: "남의-프로젝트" });
+    expect(res.status).toBe(400);
+    expect(prismaMock.mediaAsset.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("projectId 를 null 로 보내면 워크스페이스 공용(프로젝트 없음)으로 옮긴다 — 프로젝트 조회를 안 한다", async () => {
+    prismaMock.mediaAsset.findMany.mockResolvedValue([{ id: "a", path: "p", createdById: "u1", originalName: "a" }]);
+    const res = await post({ action: "move", ids: ["a"], projectId: null });
+    expect(res.status).toBe(200);
+    expect(prismaMock.project.findFirst).not.toHaveBeenCalled();
+    expect(prismaMock.mediaAsset.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["a"] } }, data: { projectId: null },
+    });
+  });
+
+  it("MEMBER 도 옮길 수 있다 — 파괴적이지 않은 정리 동작이다", async () => {
+    prismaMock.mediaAsset.findMany.mockResolvedValue([
+      { id: "theirs", path: "p", createdById: "다른사람", originalName: "x" },
+    ]);
+    prismaMock.project.findFirst.mockResolvedValue({ id: "proj-1" });
+    const res = await post({ action: "move", ids: ["theirs"], projectId: "proj-1" });
     const body = await res.json();
     expect(body.updated).toBe(1);
   });

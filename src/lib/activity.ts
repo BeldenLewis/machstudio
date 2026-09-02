@@ -124,7 +124,8 @@ export type ActivityAction =
   | "media.uploaded"
   | "media.deleted"
   | "media.bulk_deleted"
-  | "media.bulk_grouped";
+  | "media.bulk_grouped"
+  | "media.bulk_moved";
 
 export async function logActivity(args: {
   workspaceId: string;
