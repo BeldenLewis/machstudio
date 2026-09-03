@@ -17,6 +17,52 @@ type MetaInsight = {
 
 const conversionActions = new Set(["lead", "complete_registration", "purchase", "offsite_conversion.fb_pixel_lead"]);
 
+// DB에는 UTC로 저장되지만 폴더 기간은 KST 달력일 기준 — naive toISOString().slice(0,10)은 자정 부근에 하루 밀려 Meta 조회 구간이 어긋난다.
+function kstDateOnly(date: Date) {
+  const kst = new Date(date.getTime() + 9 * 60 * 60_000);
+  return `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, "0")}-${String(kst.getUTCDate()).padStart(2, "0")}`;
+}
+
+type CreativeInfo = { creativeId: string | null; creativeName: string | null; thumbnailUrl: string | null; creativeType: string | null };
+
+// Insights API는 소재 이미지/영상 정보를 안 주므로, 광고별로 배치 요청해 썸네일·영상 여부를 따로 가져온다.
+async function fetchAdCreatives(token: string, version: string, adIds: string[]) {
+  const map = new Map<string, CreativeInfo>();
+  for (let offset = 0; offset < adIds.length; offset += 50) {
+    const chunk = adIds.slice(offset, offset + 50);
+    const batchPayload = chunk.map(id => ({ method: "GET", relative_url: `${id}?fields=creative{id,name,thumbnail_url,video_id}` }));
+    try {
+      const response = await fetch(`https://graph.facebook.com/${version}/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ access_token: token, batch: JSON.stringify(batchPayload) }),
+        cache: "no-store",
+      });
+      const results = await response.json().catch(() => null) as Array<{ code: number; body: string }> | null;
+      if (!Array.isArray(results)) continue;
+      results.forEach((result, i) => {
+        const adId = chunk[i];
+        if (!result || result.code !== 200) return;
+        try {
+          const parsed = JSON.parse(result.body) as { creative?: { id?: string; name?: string; thumbnail_url?: string; video_id?: string } };
+          if (!parsed.creative) return;
+          map.set(adId, {
+            creativeId: parsed.creative.id ?? null,
+            creativeName: parsed.creative.name ?? null,
+            thumbnailUrl: parsed.creative.thumbnail_url ?? null,
+            creativeType: parsed.creative.video_id ? "VIDEO" : "IMAGE",
+          });
+        } catch {
+          // 개별 소재 파싱 실패는 건너뛰고 나머지는 계속 진행
+        }
+      });
+    } catch {
+      // 소재 조회 실패해도 성과 동기화 자체는 계속 진행 — 썸네일 없이 저장됨
+    }
+  }
+  return map;
+}
+
 export async function POST(_request: Request, context: Context) {
   const { folderId } = await context.params;
   const access = await getAdFolderAccess(folderId, true);
@@ -28,8 +74,8 @@ export async function POST(_request: Request, context: Context) {
   const metaAccounts = accounts.filter(account => account.platform === "META" && account.accountId);
   if (!metaAccounts.length) return NextResponse.json({ error: "먼저 Meta 광고 계정을 연결해주세요." }, { status: 400 });
   const version = process.env.META_GRAPH_VERSION || "v25.0";
-  const since = access.folder.reportStart.toISOString().slice(0, 10);
-  const until = access.folder.reportEnd.toISOString().slice(0, 10);
+  const since = kstDateOnly(access.folder.reportStart);
+  const until = kstDateOnly(access.folder.reportEnd);
   const insights: MetaInsight[] = [];
 
   for (const account of metaAccounts) {
@@ -45,6 +91,9 @@ export async function POST(_request: Request, context: Context) {
     }
   }
 
+  const uniqueAdIds = [...new Set(insights.map(row => row.ad_id).filter((id): id is string => Boolean(id)))];
+  const creativeMap = uniqueAdIds.length ? await fetchAdCreatives(token, version, uniqueAdIds) : new Map<string, CreativeInfo>();
+
   const batch = await prisma.$transaction(async tx => {
     await tx.adPerformanceImportBatch.deleteMany({ where: { folderId, sourceType: "META", fileName: "meta-api-sync" } });
     const created = await tx.adPerformanceImportBatch.create({ data: {
@@ -55,11 +104,14 @@ export async function POST(_request: Request, context: Context) {
     for (let offset = 0; offset < insights.length; offset += 1000) {
       await tx.adPerformanceRecord.createMany({ data: insights.slice(offset, offset + 1000).map(row => {
         const cost = Number(row.spend || 0); const conversions = (row.actions ?? []).filter(action => conversionActions.has(action.action_type)).reduce((sum, action) => sum + Number(action.value || 0), 0);
+        const creative = row.ad_id ? creativeMap.get(row.ad_id) : undefined;
         return {
           id: crypto.randomUUID(), batchId: created.id, workspaceId: access.folder.workspaceId, projectId: access.folder.projectId, folderId,
           sourceType: "META", accountId: row.account_id ?? null, accountName: row.account_name ?? null,
           campaignId: row.campaign_id ?? null, campaignName: row.campaign_name || "이름 없는 캠페인",
           adGroupId: row.adset_id ?? null, adGroupName: row.adset_name ?? null, adId: row.ad_id ?? null, adName: row.ad_name ?? null,
+          creativeId: creative?.creativeId ?? null, creativeName: creative?.creativeName ?? row.ad_name ?? null,
+          thumbnailUrl: creative?.thumbnailUrl ?? null, creativeType: creative?.creativeType ?? null,
           reportDate: new Date(`${row.date_start}T00:00:00+09:00`), reportStart: new Date(`${row.date_start}T00:00:00+09:00`), reportEnd: new Date(`${row.date_stop}T23:59:59+09:00`),
           currency: access.folder.currency, cost, impressions: Number(row.impressions || 0), reach: Number(row.reach || 0), clicks: Number(row.clicks || 0),
           ctr: Number(row.ctr || 0), cpc: Number(row.cpc || 0), cpm: Number(row.cpm || 0), conversions,

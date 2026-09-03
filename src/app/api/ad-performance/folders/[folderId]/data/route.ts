@@ -23,7 +23,7 @@ export async function GET(request: Request, context: Context) {
     },
     select: {
       sourceType: true, campaignId: true, campaignName: true, adGroupId: true, adGroupName: true,
-      adId: true, adName: true, creativeId: true, creativeName: true, thumbnailUrl: true, status: true,
+      adId: true, adName: true, creativeId: true, creativeName: true, thumbnailUrl: true, creativeType: true, status: true,
       cost: true, impressions: true, reach: true, clicks: true, conversions: true,
     },
     take: 50_000,
@@ -31,8 +31,8 @@ export async function GET(request: Request, context: Context) {
 
   const grouped = new Map<string, {
     id: string; sourceType: string; name: string; campaignId: string | null; campaignName: string;
-    adGroupId: string | null; adGroupName: string | null; creativeId: string | null; creativeName: string | null;
-    thumbnailUrl: string | null; status: string | null; cost: number; impressions: number; reach: number; clicks: number; conversions: number;
+    adGroupId: string | null; adGroupName: string | null; adId: string | null; creativeId: string | null; creativeName: string | null;
+    thumbnailUrl: string | null; creativeType: string | null; status: string | null; cost: number; impressions: number; reach: number; clicks: number; conversions: number;
   }>();
   for (const row of records) {
     const id = level === "campaign" ? row.campaignId || row.campaignName : level === "adGroup" ? row.adGroupId || row.adGroupName || "-" : row.adId || row.adName || row.creativeId || "-";
@@ -40,8 +40,8 @@ export async function GET(request: Request, context: Context) {
     const current = grouped.get(key) ?? {
       id, sourceType: row.sourceType,
       name: level === "campaign" ? row.campaignName : level === "adGroup" ? row.adGroupName || "이름 없는 광고 세트" : row.adName || row.creativeName || "이름 없는 광고",
-      campaignId: row.campaignId, campaignName: row.campaignName, adGroupId: row.adGroupId, adGroupName: row.adGroupName,
-      creativeId: row.creativeId, creativeName: row.creativeName, thumbnailUrl: row.thumbnailUrl, status: row.status,
+      campaignId: row.campaignId, campaignName: row.campaignName, adGroupId: row.adGroupId, adGroupName: row.adGroupName, adId: row.adId,
+      creativeId: row.creativeId, creativeName: row.creativeName, thumbnailUrl: row.thumbnailUrl, creativeType: row.creativeType, status: row.status,
       cost: 0, impressions: 0, reach: 0, clicks: 0, conversions: 0,
     };
     current.cost += row.cost ?? 0; current.impressions += row.impressions ?? 0; current.reach += row.reach ?? 0;
