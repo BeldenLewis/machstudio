@@ -11,6 +11,7 @@ import {
   resolveCollectEventPair,
 } from "@/lib/collect-event-comparison";
 import { collectColumnsFor } from "@/lib/collect-columns";
+import { splitCollectValues } from "@/lib/collect-value-split";
 
 // 결과 캐싱 (egress 절감): 동일 조건 조회를 짧게 캐시해 반복 DB 트래픽 제거.
 // 서버리스 인스턴스 단위 캐시 — 같은 인스턴스에 도달하는 반복/동시 조회에 효과.
@@ -312,16 +313,6 @@ function resolveEventTime(record: TimedRecord) {
   return record.createdAt;
 }
 
-function splitValues(value: unknown): string[] {
-  if (value === null || value === undefined) return [];
-  if (Array.isArray(value)) return value.flatMap(splitValues);
-  if (typeof value === "boolean") return value ? ["동의"] : [];
-  return String(value)
-    .split(/[,;/|、，]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 function buildFieldAliasLookup(sources: Array<{ id: string; fieldMappings: Array<{ key: string; label: string }> }>) {
   return new Map(
     sources.map((source) => [
@@ -385,7 +376,7 @@ function pickValue(data: Prisma.JsonValue, candidates: readonly string[], fieldA
       matchesCandidate(normalizedKey, candidate) ||
       (normalizedLabel ? matchesCandidate(normalizedLabel, candidate) : false)
     ));
-    if (matched) return splitValues(matched.value);
+    if (matched) return splitCollectValues(matched.value);
   }
   return [];
 }
@@ -803,11 +794,11 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
    * VISITOR_DIMENSIONS 같은 고정 후보 목록으로는 못 커버한다. 기본값이 true 라(스키마 주석)
    * 새 필드는 자동으로 여기 잡히고, 운영자가 안 쓸 것만 끈다.
    */
-  const dashboardFields = new Map<string, { label: string; type: string }>();
+  const dashboardFields = new Map<string, { label: string; type: string; options: string[] }>();
   for (const src of sourceFields) {
     for (const fm of src.fieldMappings) {
       if (!fm.showInDashboard || dashboardFields.has(fm.key)) continue;
-      dashboardFields.set(fm.key, { label: fm.label || fm.key, type: fm.type });
+      dashboardFields.set(fm.key, { label: fm.label || fm.key, type: fm.type, options: fm.options ?? [] });
     }
   }
   const compositionKeys = Array.from(new Set([...resolveCompositionKeys(sourceFields), ...dashboardFields.keys()]));
@@ -908,7 +899,7 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
       const data = record.data && typeof record.data === "object" && !Array.isArray(record.data)
         ? (record.data as Record<string, unknown>)
         : {};
-      for (const value of splitValues(data[key])) {
+      for (const value of splitCollectValues(data[key], meta.options)) {
         counts.set(value, (counts.get(value) ?? 0) + 1);
       }
     }

@@ -23,6 +23,8 @@ export interface CollectColumn {
   key: string;
   label: string;
   type: string;
+  /** 빌더 선택지 원문. 쉼표가 포함된 선택지를 응답 집계에서 안전하게 복원할 때 쓴다. */
+  options?: string[];
   isRequired: boolean;
   /** 프로젝트 대시보드에 값 분포 카드로 보일지. 빌더형 파생 열은 항상 true(§ 아래 push). */
   showInDashboard: boolean;
@@ -61,7 +63,7 @@ export function collectColumnsFor(source: {
    */
   const seen = new Set<string>();
   const out: CollectColumn[] = [];
-  const push = (key: string, label: string, type: string, required: boolean, showInDashboard = true) => {
+  const push = (key: string, label: string, type: string, required: boolean, showInDashboard = true, options: string[] = []) => {
     if (!key || seen.has(key)) return;
     seen.add(key);
     out.push({
@@ -71,6 +73,7 @@ export function collectColumnsFor(source: {
       key,
       label: label || key,
       type,
+      options,
       isRequired: required,
       showInDashboard,
       sortOrder: out.length,
@@ -79,13 +82,13 @@ export function collectColumnsFor(source: {
 
   for (const f of config.fields) {
     if (!f.enabled) continue;
-    push(f.key, localize(f.label, config.defaultLocale), f.type, f.required, f.showInDashboard !== false);
+    push(f.key, localize(f.label, config.defaultLocale), f.type, f.required, f.showInDashboard !== false, f.options.map((option) => localize(option, config.defaultLocale)).filter(Boolean));
     // 분기 기준 항목 **바로 뒤에** 그 그룹 문항을 넣는다 — 폼에서 보이던 순서 그대로다.
     if (config.branch.enabled && config.branch.fieldKey === f.key) {
       for (const g of config.branch.groups) {
         for (const gf of g.fields) {
           if (!gf.enabled) continue;
-          push(gf.key, localize(gf.label, config.defaultLocale), gf.type, false, gf.showInDashboard !== false);
+          push(gf.key, localize(gf.label, config.defaultLocale), gf.type, false, gf.showInDashboard !== false, gf.options.map((option) => localize(option, config.defaultLocale)).filter(Boolean));
         }
       }
     }

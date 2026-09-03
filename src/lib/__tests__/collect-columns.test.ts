@@ -88,6 +88,17 @@ describe("빌더형", () => {
     expect(columns.find((column) => column.key === "email")?.showInDashboard).toBe(false);
   });
 
+  it("정확한 대시보드 집계를 위해 쉼표가 든 선택지를 보존한다", () => {
+    const columns = collectColumnsFor({
+      mode: "builder",
+      formConfig: {
+        defaultLocale: "en",
+        fields: [{ id: "visit", key: "visit", label: { en: "Visit" }, type: "multiple", enabled: true, options: [{ en: "Oct 24, 2026" }] }],
+      },
+    });
+    expect(columns[0].options).toEqual(["Oct 24, 2026"]);
+  });
+
   /** 동의는 법적 증빙이다 — 목록에서 안 보이면 리타겟 대상에서 동의자를 가려낼 수 없다. */
   it("동의 기록이 열로 나온다", () => {
     const k = keys(src);
