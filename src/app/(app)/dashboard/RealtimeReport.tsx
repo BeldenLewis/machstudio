@@ -572,7 +572,7 @@ function CompositionSection({ section }: { section: RealtimeReportData["composit
             </PieChart>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-lg font-semibold tabular-nums">{formatNumber(section.total)}</span>
-              <span className="text-[10px] text-muted-foreground">전체 응답</span>
+              <span className="text-[10px] text-muted-foreground">집계 합계</span>
             </div>
           </div>
           <ul className="min-w-0 space-y-2">
