@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAdFolderAccess } from "@/lib/ad-folder-access";
+import { normalizeAdDetailColumns, normalizeMetaResultMetric } from "@/lib/meta-result-metrics";
 
 type Context = { params: Promise<{ folderId: string }> };
 
@@ -22,10 +23,12 @@ export async function PATCH(request: Request, context: Context) {
   const access = await getAdFolderAccess(folderId, true);
   if ("error" in access) return NextResponse.json({ error: access.error }, { status: access.status });
   const body = await request.json().catch(() => null);
-  const data: { name?: string; description?: string | null; mediaAccounts?: object[]; reportStart?: Date; reportEnd?: Date } = {};
+  const data: { name?: string; description?: string | null; mediaAccounts?: object[]; reportStart?: Date; reportEnd?: Date; resultMetric?: string; detailColumns?: string[] } = {};
   if (typeof body?.name === "string" && body.name.trim()) data.name = body.name.trim().slice(0, 100);
   if (typeof body?.description === "string") data.description = body.description.trim().slice(0, 500) || null;
   if (Array.isArray(body?.mediaAccounts)) data.mediaAccounts = body.mediaAccounts.slice(0, 20);
+  if (body?.resultMetric !== undefined) data.resultMetric = normalizeMetaResultMetric(body.resultMetric);
+  if (body?.detailColumns !== undefined) data.detailColumns = normalizeAdDetailColumns(body.detailColumns);
   if (body?.reportStart !== undefined || body?.reportEnd !== undefined) {
     const reportStart = dateOnly(body?.reportStart) ?? access.folder.reportStart;
     const reportEnd = dateOnly(body?.reportEnd) ?? access.folder.reportEnd;

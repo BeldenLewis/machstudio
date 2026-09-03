@@ -40,6 +40,7 @@ import {
 } from "recharts";
 import { useChartColors } from "@/components/ui/use-chart-colors";
 import { useWorkspace } from "@/contexts/workspace";
+import { AD_DETAIL_METRIC_COLUMNS, META_RESULT_METRICS, type AdDetailMetricColumn, type MetaResultMetric } from "@/lib/meta-result-metrics";
 import {
   type AdColumnKey,
   AD_COLUMN_FIELDS,
@@ -217,7 +218,7 @@ const CHART_METRICS: Array<{ value: ChartMetric; label: string }> = [
   { value: "cpc", label: "CPC" },
   { value: "ctr", label: "CTR" },
   { value: "cvr", label: "CVR" },
-  { value: "conversions", label: "전환수" },
+  { value: "conversions", label: "결과" },
   { value: "costPerConversion", label: "결과당 비용" },
 ];
 
@@ -346,11 +347,15 @@ export default function AdPerformanceDashboard({
   folderProject,
   reportStart,
   reportEnd,
+  resultMetric,
+  detailColumns,
 }: {
   folderId: string;
   folderProject: { id: string; name: string };
   reportStart?: string;
   reportEnd?: string;
+  resultMetric: MetaResultMetric;
+  detailColumns: AdDetailMetricColumn[];
 }) {
   // 차트 색을 토큰에서 읽는다 — 박아 둔 #8b5cf6 은 리브랜드로 팔레트에서 사라진 보라였고,
   // 그래서 이 페이지의 그래프만 앱의 나머지(네이비)와 다른 색으로 보였다.
@@ -382,6 +387,27 @@ export default function AdPerformanceDashboard({
   const [campaignViewMode, setCampaignViewMode] = useState<"scroll" | "grid">("scroll");
   const [adGroupViewMode, setAdGroupViewMode] = useState<"scroll" | "grid">("scroll");
   const [showCampaigns, setShowCampaigns] = useState(false);
+  const resultMetricLabel = META_RESULT_METRICS.find((metric) => metric.key === resultMetric)?.label ?? "리드";
+  const visibleDetailMetrics = AD_DETAIL_METRIC_COLUMNS.filter((column) => detailColumns.includes(column.key));
+
+  const detailMetricValue = (row: DetailRow, key: AdDetailMetricColumn) => {
+    const cost = row.cost ?? 0;
+    const impressions = row.impressions ?? 0;
+    const clicks = row.clicks ?? 0;
+    const conversions = row.conversions ?? 0;
+    if (key === "cost") return formatKRW(cost);
+    if (key === "impressions") return formatNumber(impressions);
+    if (key === "reach") return formatNumber(row.reach);
+    if (key === "clicks") return formatNumber(clicks);
+    if (key === "ctr") return formatPct(row.ctr ?? calcCtr(clicks, impressions));
+    if (key === "cpm") return formatKRW(row.cpm ?? getChartMetricValue({ cost, impressions, clicks, conversions }, "cpm"));
+    if (key === "cpc") return formatKRW(row.cpc ?? getChartMetricValue({ cost, impressions, clicks, conversions }, "cpc"));
+    if (key === "conversions") return formatNumber(conversions);
+    return formatKRW(row.costPerConversion ?? calcCostPerResult(cost, conversions));
+  };
+
+  const detailMetricCsvValue = (row: DetailRow, key: AdDetailMetricColumn) => detailMetricValue(row, key).replace(/원$/, "").replace(/,/g, "");
+  const csvCell = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
 
   useEffect(() => {
     if (reportStart && reportEnd) return;
@@ -759,7 +785,7 @@ export default function AdPerformanceDashboard({
         <MetricCard label="CTR" value={formatPct(totals?.ctr)} currentRaw={totals?.ctr} previousRaw={previousTotals?.ctr ?? undefined} />
         <MetricCard label="CVR" value={formatPct(totals?.cvr)} sub={`결과 ${formatNumber(totals?.conversions)}`} currentRaw={totals?.cvr} previousRaw={previousTotals?.cvr ?? undefined} />
         <MetricCard label="도달" value={formatNumber(totals?.reach)} sub="누적 도달(중복 포함)" currentRaw={totals?.reach} />
-        <MetricCard label="전환수" value={formatNumber(totals?.conversions)} currentRaw={totals?.conversions} previousRaw={previousTotals?.conversions ?? undefined} />
+        <MetricCard label={`결과 · ${resultMetricLabel}`} value={formatNumber(totals?.conversions)} currentRaw={totals?.conversions} previousRaw={previousTotals?.conversions ?? undefined} />
         <MetricCard label="결과당 비용" value={formatKRW(totals?.costPerConversion)} currentRaw={totals?.costPerConversion} previousRaw={previousTotals?.costPerConversion ?? undefined} lowerIsBetter />
       </div>
 
@@ -1425,34 +1451,24 @@ export default function AdPerformanceDashboard({
                   <div>
                     <h2 className="text-sm font-semibold">결과 상세</h2>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      선택한 일/주/월 안에서 기준별 성과를 20개씩 확인합니다.
+                      선택한 일/주/월 안에서 기준별 성과를 20개씩 확인합니다. 결과는 Meta의 &lsquo;{resultMetricLabel}&rsquo; 기준입니다.
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <motion.button
                       type="button"
                       onClick={() => {
-                        const headers = ["일자", "매체", "캠페인", "광고세트/그룹", "지출", "CPM", "CPC", "CTR", "CVR", "전환수", "결과당 비용"];
+                        const headers = ["일자", "매체", "캠페인", "광고세트/그룹", ...visibleDetailMetrics.map((column) => column.label)];
                         const rows = detailRows.map((row) => {
-                          const cost = row.cost ?? 0;
-                          const impressions = row.impressions ?? 0;
-                          const clicks = row.clicks ?? 0;
-                          const conversions = row.conversions ?? 0;
                           return [
                             formatDetailPeriod(row.periodKey ?? row.reportDate ?? row.reportStart, detailDateGranularity),
                             SOURCE_LABELS[row.sourceType] ?? row.sourceType,
                             row.campaignName,
                             row.adGroupName || "",
-                            Math.round(cost),
-                            Math.round(row.cpm ?? getChartMetricValue({ cost, impressions, clicks, conversions }, "cpm")),
-                            Math.round(row.cpc ?? getChartMetricValue({ cost, impressions, clicks, conversions }, "cpc")),
-                            (row.ctr ?? calcCtr(clicks, impressions)).toFixed(2) + "%",
-                            (row.cvr ?? row.conversionRate ?? calcCvr(conversions, clicks)).toFixed(2) + "%",
-                            Math.round(conversions),
-                            Math.round(row.costPerConversion ?? calcCostPerResult(cost, conversions)),
-                          ].join(",");
+                            ...visibleDetailMetrics.map((column) => detailMetricCsvValue(row, column.key)),
+                          ].map(csvCell).join(",");
                         });
-                        const csvContent = "﻿" + [headers.join(","), ...rows].join("\n");
+                        const csvContent = "﻿" + [headers.map(csvCell).join(","), ...rows].join("\n");
                         const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement("a");
@@ -1560,13 +1576,7 @@ export default function AdPerformanceDashboard({
                           { key: "sourceType", label: "매체", align: "left" },
                           { key: "campaignName", label: "캠페인", align: "left" },
                           { key: "adGroupName", label: "광고세트/그룹", align: "left" },
-                          { key: "cost", label: "지출", align: "right" },
-                          { key: "cpm", label: "CPM", align: "right" },
-                          { key: "cpc", label: "CPC", align: "right" },
-                          { key: "ctr", label: "CTR", align: "right" },
-                          { key: "cvr", label: "CVR", align: "right" },
-                          { key: "conversions", label: "전환수", align: "right" },
-                          { key: "costPerConversion", label: "결과당 비용", align: "right" },
+                          ...visibleDetailMetrics.map((column) => ({ key: column.key, label: column.label, align: "right" as const })),
                         ] as Array<{ key: string; label: string; align: "left" | "right" }>
                       ).map(({ key, label, align }) => (
                         <th
@@ -1593,10 +1603,6 @@ export default function AdPerformanceDashboard({
                   </thead>
                   <tbody>
                     {detailRows.map((row) => {
-                      const cost = row.cost ?? 0;
-                      const impressions = row.impressions ?? 0;
-                      const clicks = row.clicks ?? 0;
-                      const conversions = row.conversions ?? 0;
                       return (
                       <motion.tr
                         key={row.id}
@@ -1611,19 +1617,13 @@ export default function AdPerformanceDashboard({
                         <td className="px-4 py-3 text-muted-foreground">{SOURCE_LABELS[row.sourceType] ?? row.sourceType}</td>
                         <td className="max-w-xs truncate px-4 py-3 font-medium">{row.campaignName}</td>
                         <td className="max-w-xs truncate px-4 py-3 text-muted-foreground">{row.adGroupName || "-"}</td>
-                        <td className="px-4 py-3 text-right font-mono text-xs">{formatKRW(cost)}</td>
-                        <td className="px-4 py-3 text-right font-mono text-xs">{formatKRW(row.cpm ?? getChartMetricValue({ cost, impressions, clicks, conversions }, "cpm"))}</td>
-                        <td className="px-4 py-3 text-right font-mono text-xs">{formatKRW(row.cpc ?? getChartMetricValue({ cost, impressions, clicks, conversions }, "cpc"))}</td>
-                        <td className="px-4 py-3 text-right font-mono text-xs">{formatPct(row.ctr ?? calcCtr(clicks, impressions))}</td>
-                        <td className="px-4 py-3 text-right font-mono text-xs">{formatPct(row.cvr ?? row.conversionRate ?? calcCvr(conversions, clicks))}</td>
-                        <td className="px-4 py-3 text-right font-mono text-xs">{formatNumber(conversions)}</td>
-                        <td className="px-4 py-3 text-right font-mono text-xs">{formatKRW(row.costPerConversion ?? calcCostPerResult(cost, conversions))}</td>
+                        {visibleDetailMetrics.map((column) => <td key={column.key} className="px-4 py-3 text-right font-mono text-xs">{detailMetricValue(row, column.key)}</td>)}
                       </motion.tr>
                       );
                     })}
                     {detailRows.length === 0 && (
                       <tr>
-                        <td colSpan={11} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                        <td colSpan={4 + visibleDetailMetrics.length} className="px-4 py-10 text-center text-sm text-muted-foreground">
                           표시할 성과 데이터가 없습니다.
                         </td>
                       </tr>

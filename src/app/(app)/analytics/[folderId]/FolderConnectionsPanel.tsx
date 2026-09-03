@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, PlugZap, Trash2 } from "lucide-react";
+import { Loader2, PlugZap, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
+import { AD_DETAIL_METRIC_COLUMNS, META_RESULT_METRICS, type AdDetailMetricColumn, type MetaResultMetric } from "@/lib/meta-result-metrics";
 
 type MediaAccount = { platform: string; accountId: string; accountName: string };
 type MetaAccount = { id: string; name: string; currency?: string; timezone_name?: string };
@@ -19,10 +21,13 @@ export function FolderConnectionsPanel({
   folderDescription,
   reportStart,
   reportEnd,
+  resultMetric,
+  detailColumns,
   accounts,
   onFolderNameChange,
   onFolderDescriptionChange,
   onDateRangeChange,
+  onDashboardSettingsChange,
   onChange,
 }: {
   folderId: string;
@@ -30,10 +35,13 @@ export function FolderConnectionsPanel({
   folderDescription: string | null;
   reportStart: string;
   reportEnd: string;
+  resultMetric: MetaResultMetric;
+  detailColumns: AdDetailMetricColumn[];
   accounts: MediaAccount[];
   onFolderNameChange(name: string): void;
   onFolderDescriptionChange(description: string | null): void;
   onDateRangeChange(range: { reportStart: string; reportEnd: string }): void;
+  onDashboardSettingsChange(settings: { resultMetric: MetaResultMetric; detailColumns: AdDetailMetricColumn[] }): void;
   onChange(accounts: MediaAccount[]): void;
 }) {
   const [available, setAvailable] = useState<MetaAccount[]>([]);
@@ -46,6 +54,7 @@ export function FolderConnectionsPanel({
   const [savingName, setSavingName] = useState(false);
   const [range, setRange] = useState({ reportStart: kstDateOnly(reportStart), reportEnd: kstDateOnly(reportEnd) });
   const [savingRange, setSavingRange] = useState(false);
+  const [savingDashboard, setSavingDashboard] = useState(false);
   const [manual, setManual] = useState({ platform: "GOOGLE", accountName: "", accountId: "" });
 
   const load = useCallback(async () => {
@@ -123,9 +132,66 @@ export function FolderConnectionsPanel({
     onDateRangeChange(next); toast.success("조회 기간을 변경했습니다.");
   }
 
+  async function saveDashboardSettings(nextResultMetric: MetaResultMetric, nextDetailColumns: AdDetailMetricColumn[]) {
+    if (savingDashboard) return;
+    setSavingDashboard(true);
+    try {
+      const response = await fetch(`/api/ad-performance/folders/${folderId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resultMetric: nextResultMetric, detailColumns: nextDetailColumns }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "결과 상세 설정을 저장하지 못했습니다.");
+      onDashboardSettingsChange({ resultMetric: nextResultMetric, detailColumns: nextDetailColumns });
+      if (nextResultMetric !== resultMetric && accounts.some((account) => account.platform === "META")) {
+        const syncResponse = await fetch(`/api/ad-performance/folders/${folderId}/sync`, { method: "POST" });
+        const syncData = await syncResponse.json().catch(() => null);
+        if (!syncResponse.ok) throw new Error(syncData?.error || "새 결과 기준으로 Meta 데이터를 동기화하지 못했습니다.");
+        toast.success("결과 기준을 저장하고 Meta 데이터를 다시 계산했습니다.");
+      } else {
+        toast.success("결과 상세 표시 설정을 저장했습니다.");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "결과 상세 설정을 저장하지 못했습니다.");
+    } finally {
+      setSavingDashboard(false);
+    }
+  }
+
+  async function resyncMetaResults() {
+    if (savingDashboard || !accounts.some((account) => account.platform === "META")) return;
+    setSavingDashboard(true);
+    try {
+      const response = await fetch(`/api/ad-performance/folders/${folderId}/sync`, { method: "POST" });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "현재 결과 기준으로 Meta 데이터를 다시 계산하지 못했습니다.");
+      toast.success("현재 결과 기준으로 Meta 데이터를 다시 계산했습니다.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Meta 데이터를 다시 계산하지 못했습니다.");
+    } finally {
+      setSavingDashboard(false);
+    }
+  }
+
   return <div className="space-y-5 p-4 sm:p-6 lg:p-8">
     <section className="max-w-2xl rounded-2xl bg-card p-5 shadow-sm"><h2 className="text-sm font-semibold">폴더 정보</h2><p className="mt-1 text-xs text-muted-foreground">이 광고 성과 공간의 제목과 설명입니다.</p><div className="mt-4 space-y-3"><label className="block text-xs font-medium text-muted-foreground">제목<input value={name} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void saveName(); }} maxLength={100} className="mt-1.5 h-10 w-full rounded-xl bg-secondary/55 px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-violet-400" /></label><label className="block text-xs font-medium text-muted-foreground">설명<textarea value={description} onChange={event => setDescription(event.target.value)} maxLength={500} rows={3} placeholder="이 폴더에서 비교할 캠페인이나 운영 목적을 적어주세요." className="mt-1.5 w-full resize-y rounded-xl bg-secondary/55 px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-violet-400" /></label><div className="flex justify-end"><button type="button" onClick={saveName} disabled={savingName || !name.trim() || (name.trim() === folderName && description.trim() === (folderDescription ?? ""))} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-foreground px-4 text-xs font-medium text-background shadow-sm disabled:opacity-35">{savingName && <Loader2 className="h-3.5 w-3.5 animate-spin" />}정보 저장</button></div></div></section>
     <section className="max-w-2xl rounded-2xl bg-card p-5 shadow-sm"><h2 className="text-sm font-semibold">기본 조회 기간</h2><p className="mt-1 text-xs text-muted-foreground">대시보드와 다음 Meta 동기화에 사용할 기간입니다.</p><div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto]"><label className="text-xs font-medium text-muted-foreground">시작일<input type="date" value={range.reportStart} onChange={event => setRange(current => ({ ...current, reportStart: event.target.value }))} className="mt-1.5 h-10 w-full rounded-xl bg-secondary/55 px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-violet-400" /></label><label className="text-xs font-medium text-muted-foreground">종료일<input type="date" value={range.reportEnd} onChange={event => setRange(current => ({ ...current, reportEnd: event.target.value }))} className="mt-1.5 h-10 w-full rounded-xl bg-secondary/55 px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-violet-400" /></label><button type="button" onClick={saveRange} disabled={savingRange || !range.reportStart || !range.reportEnd || (range.reportStart === kstDateOnly(reportStart) && range.reportEnd === kstDateOnly(reportEnd))} className="mt-auto inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-foreground px-4 text-xs font-medium text-background shadow-sm disabled:opacity-35">{savingRange && <Loader2 className="h-3.5 w-3.5 animate-spin" />}기간 저장</button></div>{range.reportStart > range.reportEnd && <p className="mt-2 text-xs text-red-500">종료일은 시작일보다 빠를 수 없습니다.</p>}</section>
+    <section className="max-w-2xl rounded-2xl bg-card p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold">결과 상세 표시</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">Meta 광고 관리자 용어로 결과 기준과 상세 표 항목을 정합니다. 변경 즉시 저장됩니다.</p></div>{savingDashboard && <Loader2 className="mt-0.5 h-4 w-4 animate-spin text-muted-foreground" />}</div>
+      <label className="mt-4 block text-xs font-medium text-muted-foreground">결과 기준<select value={resultMetric} disabled={savingDashboard} onChange={(event) => void saveDashboardSettings(event.target.value as MetaResultMetric, detailColumns)} className="mt-1.5 h-10 w-full rounded-xl bg-secondary/55 px-3 text-sm text-foreground shadow-sm outline-none focus:ring-2 focus:ring-violet-400">{META_RESULT_METRICS.map((metric) => <option key={metric.key} value={metric.key}>{metric.label}</option>)}</select></label>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] leading-5 text-muted-foreground">결과 기준을 바꾸면 기존 Meta 데이터를 자동으로 다시 동기화합니다. 퍼널 단계들을 서로 더하지 않습니다.</p>
+        <button type="button" onClick={() => void resyncMetaResults()} disabled={savingDashboard || !accounts.some((account) => account.platform === "META")} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-secondary/70 px-3 text-[11px] font-medium text-foreground shadow-sm transition hover:bg-secondary disabled:opacity-40">
+          <RefreshCw className={`h-3.5 w-3.5 ${savingDashboard ? "animate-spin" : ""}`} />현재 기준으로 다시 계산
+        </button>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        {AD_DETAIL_METRIC_COLUMNS.map((column) => {
+          const checked = detailColumns.includes(column.key);
+          return <label key={column.key} className="flex items-center justify-between gap-3 rounded-xl bg-secondary/40 px-3 py-2.5 text-xs font-medium"><span>{column.label}</span><Switch checked={checked} disabled={savingDashboard} onChange={(next) => void saveDashboardSettings(resultMetric, next ? [...detailColumns, column.key] : detailColumns.filter((key) => key !== column.key))} label={`${column.label} 표시`} /></label>;
+        })}
+      </div>
+    </section>
     <div><h2 className="font-semibold">매체 계정 연결</h2><p className="mt-1 text-xs text-muted-foreground">OAuth로 연결된 광고 계정 중 이 폴더에서 비교할 계정을 선택합니다.</p></div>
     <div className="grid gap-3 lg:grid-cols-3">{accounts.map(item => <div key={`${item.platform}-${item.accountId}`} className="relative rounded-2xl bg-card p-4 shadow-sm"><span className="text-[10px] font-semibold text-violet-500">{item.platform}</span><p className="mt-2 pr-8 text-sm font-medium">{item.accountName}</p><p className="mt-1 font-mono text-[11px] text-muted-foreground">{item.accountId}</p><button type="button" aria-label={`${item.accountName} 삭제`} disabled={saving} onClick={() => remove(item)} className="absolute right-3 top-3 rounded-lg p-2 text-muted-foreground transition hover:bg-red-500/10 hover:text-red-500 disabled:opacity-40"><Trash2 className="h-4 w-4" /></button></div>)}</div>
     <section className="max-w-2xl rounded-2xl bg-secondary/35 p-5"><div className="flex items-start gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-600/10 text-blue-600"><PlugZap className="h-4 w-4" /></span><div><h3 className="text-sm font-semibold">Meta 광고 계정 추가</h3><p className="mt-1 text-xs text-muted-foreground">계정 이름과 광고 계정 ID를 함께 확인하고 선택할 수 있습니다.</p></div></div>{loading ? <div className="mt-4 flex h-10 items-center"><Loader2 className="h-4 w-4 animate-spin" /></div> : !connected ? <p className="mt-4 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-700">먼저 프로젝트의 Meta Ads OAuth 연결을 완료해주세요.</p> : <div className="mt-4 flex flex-col gap-2 sm:flex-row"><select value={selectedId} onChange={event => setSelectedId(event.target.value)} className="h-10 min-w-0 flex-1 rounded-xl bg-background px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-violet-400"><option value="">광고 계정을 선택해주세요</option>{selectable.map(item => <option key={item.id} value={item.id}>{item.name} · {item.id}{item.currency ? ` · ${item.currency}` : ""}</option>)}</select><button type="button" disabled={!selectedId || saving} onClick={add} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-violet-500 px-4 text-xs font-medium text-white shadow-sm disabled:opacity-40">{saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}계정 추가</button></div>}</section>

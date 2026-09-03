@@ -218,6 +218,8 @@ model AdPerformanceFolder {
   currency      String    @default("KRW")
   timezone      String    @default("Asia/Seoul")
   mediaAccounts Json      @default("[]")
+  resultMetric  String    @default("lead")
+  detailColumns Json      @default("[\"cost\",\"impressions\",\"reach\",\"clicks\",\"ctr\",\"cpm\",\"cpc\",\"conversions\",\"costPerConversion\"]")
   lastSyncedAt  DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

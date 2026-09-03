@@ -4,6 +4,7 @@ import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getAdFolderAccess } from "@/lib/ad-folder-access";
 import { decryptMetaToken } from "@/lib/meta-ads";
+import { metaResultValue } from "@/lib/meta-result-metrics";
 
 type Context = { params: Promise<{ folderId: string }> };
 type MetaAccount = { platform: string; accountId: string; accountName?: string };
@@ -14,8 +15,6 @@ type MetaInsight = {
   clicks?: string; ctr?: string; cpc?: string; cpm?: string;
   actions?: Array<{ action_type: string; value: string }>;
 };
-
-const conversionActions = new Set(["lead", "complete_registration", "purchase", "offsite_conversion.fb_pixel_lead"]);
 
 // DB에는 UTC로 저장되지만 폴더 기간은 KST 달력일 기준 — naive toISOString().slice(0,10)은 자정 부근에 하루 밀려 Meta 조회 구간이 어긋난다.
 function kstDateOnly(date: Date) {
@@ -103,7 +102,7 @@ export async function POST(_request: Request, context: Context) {
     }});
     for (let offset = 0; offset < insights.length; offset += 1000) {
       await tx.adPerformanceRecord.createMany({ data: insights.slice(offset, offset + 1000).map(row => {
-        const cost = Number(row.spend || 0); const conversions = (row.actions ?? []).filter(action => conversionActions.has(action.action_type)).reduce((sum, action) => sum + Number(action.value || 0), 0);
+        const cost = Number(row.spend || 0); const conversions = metaResultValue(row.actions, access.folder.resultMetric);
         const creative = row.ad_id ? creativeMap.get(row.ad_id) : undefined;
         return {
           id: crypto.randomUUID(), batchId: created.id, workspaceId: access.folder.workspaceId, projectId: access.folder.projectId, folderId,
@@ -116,7 +115,7 @@ export async function POST(_request: Request, context: Context) {
           currency: access.folder.currency, cost, impressions: Number(row.impressions || 0), reach: Number(row.reach || 0), clicks: Number(row.clicks || 0),
           ctr: Number(row.ctr || 0), cpc: Number(row.cpc || 0), cpm: Number(row.cpm || 0), conversions,
           costPerConversion: conversions ? cost / conversions : null, conversionRate: Number(row.clicks || 0) ? conversions / Number(row.clicks) * 100 : null,
-          resultType: "conversion", resultBucket: "conversion", raw: row as unknown as Prisma.InputJsonValue,
+          resultType: access.folder.resultMetric, resultBucket: "conversion", raw: row as unknown as Prisma.InputJsonValue,
         };
       }) });
     }
