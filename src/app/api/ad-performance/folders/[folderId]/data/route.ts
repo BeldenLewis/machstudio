@@ -52,6 +52,7 @@ export async function GET(request: Request, context: Context) {
     ...row,
     ctr: row.impressions ? row.clicks / row.impressions * 100 : 0,
     cpc: row.clicks ? row.cost / row.clicks : 0,
+    cpm: row.impressions ? row.cost / row.impressions * 1000 : 0,
     costPerConversion: row.conversions ? row.cost / row.conversions : 0,
   })).sort((a,b) => b.cost - a.cost);
   return NextResponse.json({ level, rows, truncated: records.length === 50_000 });

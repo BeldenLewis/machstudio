@@ -4,7 +4,7 @@ import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getAdFolderAccess } from "@/lib/ad-folder-access";
 import { decryptMetaToken } from "@/lib/meta-ads";
-import { metaResultValue } from "@/lib/meta-result-metrics";
+import { metaReportedCostPerResult, metaReportedResult } from "@/lib/meta-result-metrics";
 
 type Context = { params: Promise<{ folderId: string }> };
 type MetaAccount = { platform: string; accountId: string; accountName?: string };
@@ -12,7 +12,10 @@ type MetaInsight = {
   date_start: string; date_stop: string; account_id?: string; account_name?: string;
   campaign_id?: string; campaign_name?: string; adset_id?: string; adset_name?: string;
   ad_id?: string; ad_name?: string; spend?: string; impressions?: string; reach?: string;
-  clicks?: string; ctr?: string; cpc?: string; cpm?: string;
+  inline_link_clicks?: string; inline_link_click_ctr?: string; cost_per_inline_link_click?: string; cpm?: string;
+  results?: Array<{ action_type?: string; indicator?: string; name?: string; title?: string; value?: string; values?: Array<{ value?: string }> }>;
+  objective_results?: Array<{ action_type?: string; indicator?: string; name?: string; title?: string; value?: string; values?: Array<{ value?: string }> }>;
+  cost_per_result?: Array<{ value?: string; values?: Array<{ value?: string }> }>;
   actions?: Array<{ action_type: string; value: string }>;
 };
 
@@ -79,8 +82,8 @@ export async function POST(_request: Request, context: Context) {
 
   for (const account of metaAccounts) {
     const act = account.accountId.startsWith("act_") ? account.accountId : `act_${account.accountId}`;
-    const fields = "date_start,date_stop,account_id,account_name,campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,spend,impressions,reach,clicks,ctr,cpc,cpm,actions";
-    let next: string | null = `https://graph.facebook.com/${version}/${act}/insights?level=ad&time_increment=1&limit=500&fields=${fields}&time_range=${encodeURIComponent(JSON.stringify({ since, until }))}&access_token=${encodeURIComponent(token)}`;
+    const fields = "date_start,date_stop,account_id,account_name,campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,spend,impressions,reach,inline_link_clicks,inline_link_click_ctr,cost_per_inline_link_click,cpm,results,objective_results,cost_per_result,actions";
+    let next: string | null = `https://graph.facebook.com/${version}/${act}/insights?level=ad&time_increment=1&limit=500&use_unified_attribution_setting=true&fields=${fields}&time_range=${encodeURIComponent(JSON.stringify({ since, until }))}&access_token=${encodeURIComponent(token)}`;
     while (next) {
       const response: Response = await fetch(next, { cache: "no-store" });
       const data: { data?: MetaInsight[]; paging?: { next?: string }; error?: { message?: string } } = await response.json();
@@ -102,7 +105,10 @@ export async function POST(_request: Request, context: Context) {
     }});
     for (let offset = 0; offset < insights.length; offset += 1000) {
       await tx.adPerformanceRecord.createMany({ data: insights.slice(offset, offset + 1000).map(row => {
-        const cost = Number(row.spend || 0); const conversions = metaResultValue(row.actions, access.folder.resultMetric);
+        const cost = Number(row.spend || 0);
+        const reportedResult = metaReportedResult(row.results, row.objective_results);
+        const conversions = reportedResult.value;
+        const linkClicks = Number(row.inline_link_clicks || 0);
         const creative = row.ad_id ? creativeMap.get(row.ad_id) : undefined;
         return {
           id: crypto.randomUUID(), batchId: created.id, workspaceId: access.folder.workspaceId, projectId: access.folder.projectId, folderId,
@@ -112,10 +118,10 @@ export async function POST(_request: Request, context: Context) {
           creativeId: creative?.creativeId ?? null, creativeName: creative?.creativeName ?? row.ad_name ?? null,
           thumbnailUrl: creative?.thumbnailUrl ?? null, creativeType: creative?.creativeType ?? null,
           reportDate: new Date(`${row.date_start}T00:00:00+09:00`), reportStart: new Date(`${row.date_start}T00:00:00+09:00`), reportEnd: new Date(`${row.date_stop}T23:59:59+09:00`),
-          currency: access.folder.currency, cost, impressions: Number(row.impressions || 0), reach: Number(row.reach || 0), clicks: Number(row.clicks || 0),
-          ctr: Number(row.ctr || 0), cpc: Number(row.cpc || 0), cpm: Number(row.cpm || 0), conversions,
-          costPerConversion: conversions ? cost / conversions : null, conversionRate: Number(row.clicks || 0) ? conversions / Number(row.clicks) * 100 : null,
-          resultType: access.folder.resultMetric, resultBucket: "conversion", raw: row as unknown as Prisma.InputJsonValue,
+          currency: access.folder.currency, cost, impressions: Number(row.impressions || 0), reach: Number(row.reach || 0), clicks: linkClicks,
+          ctr: Number(row.inline_link_click_ctr || 0), cpc: Number(row.cost_per_inline_link_click || 0), cpm: Number(row.cpm || 0), conversions,
+          costPerConversion: metaReportedCostPerResult(row.cost_per_result, cost, conversions), conversionRate: linkClicks ? conversions / linkClicks * 100 : null,
+          resultType: reportedResult.type, resultBucket: "result", raw: row as unknown as Prisma.InputJsonValue,
         };
       }) });
     }

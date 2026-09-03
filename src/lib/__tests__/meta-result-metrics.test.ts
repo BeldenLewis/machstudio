@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { metaResultValue, normalizeAdDetailColumns } from "@/lib/meta-result-metrics";
+import { metaReportedCostPerResult, metaReportedResult, normalizeAdDetailColumns } from "@/lib/meta-result-metrics";
 
-describe("Meta result metrics", () => {
-  it("does not double-count aliases of the same lead result", () => {
-    expect(metaResultValue([
-      { action_type: "lead", value: "12" },
-      { action_type: "offsite_conversion.fb_pixel_lead", value: "12" },
-      { action_type: "purchase", value: "3" },
-    ], "lead")).toBe(12);
+describe("Meta reported result metrics", () => {
+  it("uses Meta's reported result instead of summing actions", () => {
+    expect(metaReportedResult([{ indicator: "actions:lead", values: [{ value: "12" }] }])).toEqual({
+      value: 12,
+      type: "actions:lead",
+    });
   });
 
-  it("uses only the selected Meta result", () => {
-    expect(metaResultValue([{ action_type: "link_click", value: "40" }, { action_type: "lead", value: "4" }], "link_click")).toBe(40);
+  it("falls back to objective results and Meta's reported cost per result", () => {
+    expect(metaReportedResult(undefined, [{ action_type: "complete_registration", value: "4" }]).value).toBe(4);
+    expect(metaReportedCostPerResult([{ value: "1234.5" }], 9999, 4)).toBe(1234.5);
   });
 
   it("drops unknown and duplicate detail columns", () => {
-    expect(normalizeAdDetailColumns(["cost", "cost", "unknown", "conversions"])).toEqual(["cost", "conversions"]);
+    expect(normalizeAdDetailColumns(["cost", "cost", "unknown", "cpm", "conversions"])).toEqual(["cost", "cpm", "conversions"]);
   });
 });

@@ -40,7 +40,7 @@ import {
 } from "recharts";
 import { useChartColors } from "@/components/ui/use-chart-colors";
 import { useWorkspace } from "@/contexts/workspace";
-import { AD_DETAIL_METRIC_COLUMNS, META_RESULT_METRICS, type AdDetailMetricColumn, type MetaResultMetric } from "@/lib/meta-result-metrics";
+import { AD_DETAIL_METRIC_COLUMNS, type AdDetailMetricColumn } from "@/lib/meta-result-metrics";
 import {
   type AdColumnKey,
   AD_COLUMN_FIELDS,
@@ -215,8 +215,8 @@ const MEDIA_FILTERS = [
 const CHART_METRICS: Array<{ value: ChartMetric; label: string }> = [
   { value: "cost", label: "지출" },
   { value: "cpm", label: "CPM" },
-  { value: "cpc", label: "CPC" },
-  { value: "ctr", label: "CTR" },
+  { value: "cpc", label: "링크 CPC" },
+  { value: "ctr", label: "링크 CTR" },
   { value: "cvr", label: "CVR" },
   { value: "conversions", label: "결과" },
   { value: "costPerConversion", label: "결과당 비용" },
@@ -347,14 +347,12 @@ export default function AdPerformanceDashboard({
   folderProject,
   reportStart,
   reportEnd,
-  resultMetric,
   detailColumns,
 }: {
   folderId: string;
   folderProject: { id: string; name: string };
   reportStart?: string;
   reportEnd?: string;
-  resultMetric: MetaResultMetric;
   detailColumns: AdDetailMetricColumn[];
 }) {
   // 차트 색을 토큰에서 읽는다 — 박아 둔 #8b5cf6 은 리브랜드로 팔레트에서 사라진 보라였고,
@@ -387,7 +385,6 @@ export default function AdPerformanceDashboard({
   const [campaignViewMode, setCampaignViewMode] = useState<"scroll" | "grid">("scroll");
   const [adGroupViewMode, setAdGroupViewMode] = useState<"scroll" | "grid">("scroll");
   const [showCampaigns, setShowCampaigns] = useState(false);
-  const resultMetricLabel = META_RESULT_METRICS.find((metric) => metric.key === resultMetric)?.label ?? "리드";
   const visibleDetailMetrics = AD_DETAIL_METRIC_COLUMNS.filter((column) => detailColumns.includes(column.key));
 
   const detailMetricValue = (row: DetailRow, key: AdDetailMetricColumn) => {
@@ -781,11 +778,11 @@ export default function AdPerformanceDashboard({
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-8">
         <MetricCard label="지출" value={formatKRW(totals?.cost)} sub={currentScopeLabel} currentRaw={totals?.cost} previousRaw={previousTotals?.cost ?? undefined} lowerIsBetter />
         <MetricCard label="CPM" value={formatKRW(totals?.cpm)} sub={`노출 ${formatNumber(totals?.impressions)}`} currentRaw={totals?.cpm} previousRaw={previousTotals?.cpm ?? undefined} lowerIsBetter />
-        <MetricCard label="CPC" value={formatKRW(totals?.cpc)} sub={`클릭 ${formatNumber(totals?.clicks)}`} currentRaw={totals?.cpc} previousRaw={previousTotals?.cpc ?? undefined} lowerIsBetter />
-        <MetricCard label="CTR" value={formatPct(totals?.ctr)} currentRaw={totals?.ctr} previousRaw={previousTotals?.ctr ?? undefined} />
+        <MetricCard label="링크 CPC" value={formatKRW(totals?.cpc)} sub={`링크 클릭 ${formatNumber(totals?.clicks)}`} currentRaw={totals?.cpc} previousRaw={previousTotals?.cpc ?? undefined} lowerIsBetter />
+        <MetricCard label="링크 CTR" value={formatPct(totals?.ctr)} currentRaw={totals?.ctr} previousRaw={previousTotals?.ctr ?? undefined} />
         <MetricCard label="CVR" value={formatPct(totals?.cvr)} sub={`결과 ${formatNumber(totals?.conversions)}`} currentRaw={totals?.cvr} previousRaw={previousTotals?.cvr ?? undefined} />
         <MetricCard label="도달" value={formatNumber(totals?.reach)} sub="누적 도달(중복 포함)" currentRaw={totals?.reach} />
-        <MetricCard label={`결과 · ${resultMetricLabel}`} value={formatNumber(totals?.conversions)} currentRaw={totals?.conversions} previousRaw={previousTotals?.conversions ?? undefined} />
+        <MetricCard label="결과" value={formatNumber(totals?.conversions)} currentRaw={totals?.conversions} previousRaw={previousTotals?.conversions ?? undefined} />
         <MetricCard label="결과당 비용" value={formatKRW(totals?.costPerConversion)} currentRaw={totals?.costPerConversion} previousRaw={previousTotals?.costPerConversion ?? undefined} lowerIsBetter />
       </div>
 
@@ -1451,7 +1448,7 @@ export default function AdPerformanceDashboard({
                   <div>
                     <h2 className="text-sm font-semibold">결과 상세</h2>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      선택한 일/주/월 안에서 기준별 성과를 20개씩 확인합니다. 결과는 Meta의 &lsquo;{resultMetricLabel}&rsquo; 기준입니다.
+                      선택한 일/주/월 안에서 기준별 성과를 20개씩 확인합니다. 결과는 Meta 광고 관리자 기준입니다.
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
