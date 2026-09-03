@@ -242,6 +242,12 @@ function todayInputValue(offsetDays = 0) {
   return `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, "0")}-${String(kst.getUTCDate()).padStart(2, "0")}`;
 }
 
+// DB에는 UTC로 저장되지만 이 앱의 날짜는 KST 달력일 기준 — naive slice(0,10)은 자정 부근에 하루 밀린다.
+function kstDateOnly(value: string) {
+  const kst = new Date(new Date(value).getTime() + 9 * 60 * 60_000);
+  return `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, "0")}-${String(kst.getUTCDate()).padStart(2, "0")}`;
+}
+
 function defaultRange(): DateRange {
   const today = new Date(todayInputValue(0) + "T00:00:00+09:00");
   const endOfToday = new Date(today.getTime() + 86_400_000 - 1);
@@ -250,8 +256,8 @@ function defaultRange(): DateRange {
 }
 
 function folderDateRange(reportStart: string, reportEnd: string): DateRange {
-  const from = new Date(`${reportStart.slice(0, 10)}T00:00:00+09:00`);
-  const endDate = new Date(`${reportEnd.slice(0, 10)}T00:00:00+09:00`);
+  const from = new Date(`${kstDateOnly(reportStart)}T00:00:00+09:00`);
+  const endDate = new Date(`${kstDateOnly(reportEnd)}T00:00:00+09:00`);
   const to = new Date(endDate.getTime() + 86_400_000 - 1);
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return defaultRange();
   return { from, to, label: "폴더 기본 기간" };
@@ -2004,7 +2010,7 @@ function ImportHistoryPanel({
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {batch.reportStart && batch.reportEnd
-                          ? `${batch.reportStart.slice(0, 10)} ~ ${batch.reportEnd.slice(0, 10)}`
+                          ? `${kstDateOnly(batch.reportStart)} ~ ${kstDateOnly(batch.reportEnd)}`
                           : "파일 날짜 미인식"}
                       </p>
                     </div>
@@ -2126,7 +2132,7 @@ function UploadModal({
         batch.sourceType === preview.sourceType &&
         hasDateOverlap(
           { start: preview.reportStart ?? null, end: preview.reportEnd ?? null },
-          { start: batch.reportStart ? batch.reportStart.slice(0, 10) : null, end: batch.reportEnd ? batch.reportEnd.slice(0, 10) : null },
+          { start: batch.reportStart ? kstDateOnly(batch.reportStart) : null, end: batch.reportEnd ? kstDateOnly(batch.reportEnd) : null },
         ),
     );
   }, [preview, existingBatches]);
@@ -2547,7 +2553,7 @@ function UploadModal({
                       <li key={b.id}>
                         · {b.fileName}
                         {b.reportStart && b.reportEnd
-                          ? ` (${b.reportStart.slice(0, 10)} ~ ${b.reportEnd.slice(0, 10)})`
+                          ? ` (${kstDateOnly(b.reportStart)} ~ ${kstDateOnly(b.reportEnd)})`
                           : ""}
                       </li>
                     ))}

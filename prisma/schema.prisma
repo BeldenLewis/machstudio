@@ -248,6 +248,7 @@ model AdPerformanceRecord {
   creativeId         String?
   creativeName       String?
   thumbnailUrl       String?
+  creativeType       String?
   reportDate         DateTime?
   reportStart        DateTime?
   reportEnd          DateTime?

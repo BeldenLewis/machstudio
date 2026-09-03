@@ -13,7 +13,13 @@ type Folder = {
   updatedAt: string; _count: { records: number; imports: number };
 };
 
-const today = new Date().toISOString().slice(0, 10);
+// DB에는 UTC로 저장되지만 이 앱의 날짜는 KST 달력일 기준 — naive slice(0,10)은 자정 부근에 하루 밀린다.
+function kstDateOnly(value: string | Date) {
+  const kst = new Date(new Date(value).getTime() + 9 * 60 * 60_000);
+  return `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, "0")}-${String(kst.getUTCDate()).padStart(2, "0")}`;
+}
+
+const today = kstDateOnly(new Date());
 
 export default function AnalyticsFoldersPage() {
   const { workspace, currentProject, isLoading: workspaceLoading } = useWorkspace();
@@ -77,7 +83,7 @@ export default function AnalyticsFoldersPage() {
             <Link href={`/analytics/${folder.id}`} className="group block rounded-2xl bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,.08),0_10px_30px_rgba(15,23,42,.04)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_34px_rgba(91,33,182,.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400">
               <div className="mb-6 flex items-start justify-between"><span className="grid h-10 w-10 place-items-center rounded-xl bg-violet-500/10 text-violet-500"><BarChart3 className="h-5 w-5" /></span><ChevronRight className="h-4 w-4 text-muted-foreground transition group-hover:translate-x-1 group-hover:text-violet-500" /></div>
               <h2 className="font-semibold">{folder.name}</h2><p className="mt-1 min-h-10 text-xs leading-5 text-muted-foreground">{folder.description || "여러 광고 매체의 캠페인 성과를 한곳에서 봅니다."}</p>
-              <div className="mt-5 flex items-center gap-2 border-t border-border/60 pt-4 text-[11px] text-muted-foreground"><CalendarDays className="h-3.5 w-3.5" />{folder.reportStart.slice(0,10)} – {folder.reportEnd.slice(0,10)}<span className="ml-auto flex items-center gap-1"><Radio className="h-3 w-3" />{folder.mediaAccounts?.length || 0}개 매체</span></div>
+              <div className="mt-5 flex items-center gap-2 border-t border-border/60 pt-4 text-[11px] text-muted-foreground"><CalendarDays className="h-3.5 w-3.5" />{kstDateOnly(folder.reportStart)} – {kstDateOnly(folder.reportEnd)}<span className="ml-auto flex items-center gap-1"><Radio className="h-3 w-3" />{folder.mediaAccounts?.length || 0}개 매체</span></div>
             </Link>
           </motion.div>
         ))}</div>
