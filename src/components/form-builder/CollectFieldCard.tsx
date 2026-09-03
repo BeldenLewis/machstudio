@@ -126,6 +126,9 @@ export function CollectFieldCard({
         <label className="flex shrink-0 select-none items-center gap-1 text-[11px] text-muted-foreground">
           표시<Switch checked={field.enabled} onChange={(v) => patch({ enabled: v })} label={`${labelText || "항목"} 표시`} />
         </label>
+        <label className={`flex shrink-0 select-none items-center gap-1 text-[11px] ${field.showInDashboard !== false ? "font-semibold text-violet-600 dark:text-violet-300" : "text-muted-foreground"}`}>
+          통계<Switch checked={field.showInDashboard !== false} onChange={(v) => patch({ showInDashboard: v })} label={`${labelText || "항목"} 대시보드 통계`} />
+        </label>
         {removeButton({ label: `${labelText || "항목"} 삭제` }) ?? <span className="w-8 shrink-0" />}
       </div>
 

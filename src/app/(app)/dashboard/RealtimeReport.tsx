@@ -926,7 +926,7 @@ export default function RealtimeReport({ data, loading, rangeLabel }: Props) {
             <h3 className="text-sm font-semibold">필드별 통계</h3>
           </div>
           <p className="text-xs text-muted-foreground mb-4">
-            수집 소스의 &ldquo;필드&rdquo; 탭에서 &ldquo;통계&rdquo; 토글로 켜고 끌 수 있어요.
+            연동형은 &ldquo;필드&rdquo; 탭에서, 빌더형은 각 등록 항목의 &ldquo;통계&rdquo; 토글로 켜고 끌 수 있어요.
           </p>
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {data.fieldStats.map((section) => <CompositionSection key={section.key} section={section} />)}

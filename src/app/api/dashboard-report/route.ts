@@ -10,6 +10,7 @@ import {
   eventDday,
   resolveCollectEventPair,
 } from "@/lib/collect-event-comparison";
+import { collectColumnsFor } from "@/lib/collect-columns";
 
 // 결과 캐싱 (egress 절감): 동일 조건 조회를 짧게 캐시해 반복 DB 트래픽 제거.
 // 서버리스 인스턴스 단위 캐시 — 같은 인스턴스에 도달하는 반복/동시 조회에 효과.
@@ -778,14 +779,25 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
   const utmMediumCol = utmCols.medium === "firstUtmMedium" ? "firstUtmMedium" : "utmMedium";
 
   // composition/email/dedup 에 필요한 필드만 추출하기 위해 소스 필드 정의를 먼저 조회
-  const sourceFields = await prisma.collectSource.findMany({
+  const sourceRows = await prisma.collectSource.findMany({
     where: {
       workspaceId,
       projectId,
       id: effectiveFilters.sourceId ?? "__no_active_collect_source__",
     },
-    select: { id: true, fieldMappings: { select: { key: true, label: true, type: true, showInDashboard: true } } },
+    select: {
+      id: true,
+      mode: true,
+      formConfig: true,
+      fieldMappings: { select: { id: true, index: true, key: true, label: true, type: true, isRequired: true, showInDashboard: true, sortOrder: true } },
+    },
   });
+  // 연동형은 저장된 매핑을, 빌더형은 폼 정의를 단일 출처로 쓴다. 빌더형에는 FieldMapping 행이
+  // 없으므로 formConfig에서 열을 재생성하지 않으면 항목별 통계 토글과 차트가 모두 사라진다.
+  const sourceFields = sourceRows.map((source) => ({
+    id: source.id,
+    fieldMappings: collectColumnsFor(source),
+  }));
   /**
    * 운영자가 '필드' 탭에서 "통계" 를 켠 필드 — 프로젝트마다 수집 필드가 다 다르므로,
    * VISITOR_DIMENSIONS 같은 고정 후보 목록으로는 못 커버한다. 기본값이 true 라(스키마 주석)

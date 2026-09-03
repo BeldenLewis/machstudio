@@ -17,7 +17,7 @@ const CAPTURE_MAPPINGS = [
 const FORM_CONFIG = {
   fields: [
     { id: "f1", key: "first_name", label: { en: "First name" }, type: "text", required: true, enabled: true },
-    { id: "f2", key: "email", label: { en: "Email" }, type: "email", required: true, enabled: true },
+    { id: "f2", key: "email", label: { en: "Email" }, type: "email", required: true, enabled: true, showInDashboard: false },
     { id: "f3", key: "hidden_one", label: { en: "Hidden" }, type: "text", enabled: false },
     {
       id: "f4", key: "visitor_type", label: { en: "Visitor type" }, type: "select", enabled: true,
@@ -80,6 +80,12 @@ describe("빌더형", () => {
 
   it("표시 끈 항목은 열이 되지 않는다", () => {
     expect(keys(src)).not.toContain("hidden_one");
+  });
+
+  it("빌더 항목별 대시보드 통계 설정을 열 정보에 보존한다", () => {
+    const columns = collectColumnsFor(src);
+    expect(columns.find((column) => column.key === "first_name")?.showInDashboard).toBe(true);
+    expect(columns.find((column) => column.key === "email")?.showInDashboard).toBe(false);
   });
 
   /** 동의는 법적 증빙이다 — 목록에서 안 보이면 리타겟 대상에서 동의자를 가려낼 수 없다. */

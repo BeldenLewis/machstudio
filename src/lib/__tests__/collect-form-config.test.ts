@@ -188,6 +188,19 @@ describe("normalizeCollectForm — 어떤 쓰레기가 와도 던지지 않는�
   });
 });
 
+describe("빌더 항목 대시보드 통계 설정", () => {
+  it("기존 항목은 기본으로 켜고 명시적으로 끈 값은 보존한다", () => {
+    const normalized = normalizeCollectForm({
+      fields: [
+        { key: "company", label: "Company" },
+        { key: "memo", label: "Memo", showInDashboard: false },
+      ],
+    });
+    expect(normalized.fields[0].showInDashboard).toBe(true);
+    expect(normalized.fields[1].showInDashboard).toBe(false);
+  });
+});
+
 /**
  * 아래는 전부 **코드 리뷰가 실행으로 잡아낸 결함**들의 회귀 테스트다.
  * 처음 작성분은 tsc·기존 테스트를 전부 통과했는데도 조용히 틀려 있었다.

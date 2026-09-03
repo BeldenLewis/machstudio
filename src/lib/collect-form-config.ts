@@ -81,6 +81,8 @@ export interface CollectField {
   placeholder: Localized;
   required: boolean;
   enabled: boolean;
+  /** 프로젝트 대시보드에서 이 항목의 응답 분포 차트를 보여줄지. 기본값은 true. */
+  showInDashboard?: boolean;
   /** select·radio·multiple 의 선택지. 빈 문자열은 걸러진다(빈 선택지 방지). */
   options: Localized[];
   /** multiple 전용 — 최대 선택 개수. 옵션 수 이상이면 무제한과 같아 저장하지 않는다. */
@@ -383,6 +385,7 @@ function normalizeField(raw: unknown, index: number, locale: string): CollectFie
     placeholder: toLocalized(r.placeholder, locale),
     required: r.required === true,
     enabled: r.enabled !== false,
+    showInDashboard: r.showInDashboard !== false,
     options,
     ...normalizeChoiceExtras(r, options.length),
     // 기존 QR 표시 토글 값은 더 이상 사용하지 않는다.
