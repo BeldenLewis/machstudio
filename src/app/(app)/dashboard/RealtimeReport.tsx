@@ -4,9 +4,10 @@ import { Activity, BarChart3, CalendarDays, Clock3, Gauge, Mail, TrendingUp, Use
 import type { ElementType } from "react";
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useChartColors, seriesColor } from "@/components/ui/use-chart-colors";
 import { formatKstDateTime } from "@/lib/datetime";
+import { chooseDistributionChart } from "@/lib/distribution-chart";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -547,28 +548,79 @@ function DailyBarChart({ points }: { points: RealtimeReportData["cumulativeTrend
 }
 
 function CompositionSection({ section }: { section: RealtimeReportData["composition"][number] }) {
+  const colors = useChartColors();
+  const chartKind = chooseDistributionChart(section.items);
+  const total = section.total || section.items.reduce((sum, item) => sum + item.count, 0) || 1;
+  const max = Math.max(...section.items.map((item) => item.count), 1);
+  const colorFor = (index: number) => seriesColor(colors, index) ?? colors.chat;
+
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <h4 className="text-sm font-medium">{section.label}</h4>
-        <span className="text-xs text-muted-foreground">{formatNumber(section.total)}건</span>
+    <article className="min-w-0 rounded-2xl bg-secondary/20 p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <h4 className="min-w-0 text-sm font-semibold leading-snug [overflow-wrap:anywhere]">{section.label}</h4>
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{formatNumber(section.total)}건</span>
       </div>
-      <div className="space-y-1.5">
-        {section.items.map((item) => (
-          <div key={item.label} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 items-center">
-            <div className="min-w-0">
-              <div className="flex items-center justify-between gap-3 text-xs">
-                <span className="truncate text-muted-foreground">{item.label}</span>
-                <span className="font-mono text-foreground">{formatNumber(item.count)}</span>
-              </div>
-              <div className="mt-1 h-1.5 rounded-full bg-secondary overflow-hidden">
-                <div className="h-full rounded-full bg-violet-500/70" style={{ width: `${Math.min(item.percent, 100)}%` }} />
-              </div>
+
+      {chartKind === "donut" ? (
+        <div className="mt-4 grid min-w-0 gap-4 sm:grid-cols-[160px_minmax(0,1fr)] sm:items-center">
+          <div className="relative mx-auto h-40 w-40" role="img" aria-label={`${section.label} 응답 구성비`}>
+            <PieChart width={160} height={160}>
+              <Pie data={section.items} dataKey="count" nameKey="label" cx="50%" cy="50%" innerRadius={48} outerRadius={74} paddingAngle={2} stroke="var(--background)" strokeWidth={2}>
+                {section.items.map((item, index) => <Cell key={item.label} fill={colorFor(index)} />)}
+              </Pie>
+              <Tooltip formatter={(value) => [`${formatNumber(Number(value) || 0)}건`, "응답"]} contentStyle={{ borderRadius: 12, border: "0", boxShadow: "0 8px 24px rgba(15,23,42,.14)", fontSize: 12 }} />
+            </PieChart>
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-lg font-semibold tabular-nums">{formatNumber(section.total)}</span>
+              <span className="text-[10px] text-muted-foreground">전체 응답</span>
             </div>
           </div>
-        ))}
-      </div>
-    </div>
+          <ul className="min-w-0 space-y-2">
+            {section.items.map((item, index) => (
+              <li key={item.label} className="grid min-w-0 grid-cols-[10px_minmax(0,1fr)_auto] items-start gap-2 text-xs">
+                <span className="mt-1 h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colorFor(index) }} />
+                <span className="min-w-0 leading-snug text-muted-foreground [overflow-wrap:anywhere]">{item.label}</span>
+                <span className="shrink-0 font-medium tabular-nums">{Math.round((item.count / total) * 100)}%</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : chartKind === "split" ? (
+        <div className="mt-5">
+          <div className="flex h-3 overflow-hidden rounded-full bg-secondary" role="img" aria-label={`${section.label} 응답 비율`}>
+            {section.items.map((item, index) => (
+              <motion.span key={item.label} initial={{ width: 0 }} animate={{ width: `${(item.count / total) * 100}%` }} transition={spring} style={{ backgroundColor: colorFor(index) }} />
+            ))}
+          </div>
+          <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+            {section.items.map((item, index) => (
+              <li key={item.label} className="min-w-0">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: colorFor(index) }} />
+                  <span className="min-w-0 flex-1 leading-snug text-muted-foreground [overflow-wrap:anywhere]">{item.label}</span>
+                </div>
+                <p className="mt-1 pl-[18px] text-sm font-semibold tabular-nums">{formatNumber(item.count)} <span className="text-xs font-normal text-muted-foreground">· {Math.round((item.count / total) * 100)}%</span></p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <ol className="mt-4 space-y-3">
+          {section.items.map((item) => (
+            <li key={item.label} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1">
+              <span className="min-w-0 text-xs leading-snug text-muted-foreground [overflow-wrap:anywhere]">{item.label}</span>
+              <span className="shrink-0 font-mono text-xs font-semibold tabular-nums">{formatNumber(item.count)}</span>
+              <div className="relative col-span-2 h-2" aria-hidden="true">
+                <div className="absolute left-0 right-0 top-1/2 h-px bg-border" />
+                <motion.div initial={{ width: 0 }} animate={{ width: `${(item.count / max) * 100}%` }} transition={spring} className="absolute left-0 top-1/2 h-px -translate-y-1/2" style={{ backgroundColor: colors.viewers }}>
+                  <span className="absolute right-0 top-1/2 h-2.5 w-2.5 translate-x-1/2 -translate-y-1/2 rounded-full bg-background shadow-[0_0_0_3px_var(--chart-viewers)]" />
+                </motion.div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </article>
   );
 }
 
@@ -928,7 +980,7 @@ export default function RealtimeReport({ data, loading, rangeLabel }: Props) {
           <p className="text-xs text-muted-foreground mb-4">
             연동형은 &ldquo;필드&rdquo; 탭에서, 빌더형은 각 등록 항목의 &ldquo;통계&rdquo; 토글로 켜고 끌 수 있어요.
           </p>
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 lg:grid-cols-2">
             {data.fieldStats.map((section) => <CompositionSection key={section.key} section={section} />)}
           </div>
         </section>
