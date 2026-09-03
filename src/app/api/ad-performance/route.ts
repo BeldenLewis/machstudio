@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { logActivity } from "@/lib/activity";
 import { classifyResultBucket } from "@/lib/ad-parse";
+import { fillAdDailySeries } from "@/lib/ad-daily-series";
 
 const MAX_IMPORT_ROWS = 20_000;
 const CREATE_CHUNK_SIZE = 1_000;
@@ -426,6 +427,8 @@ export async function GET(request: Request) {
   const detailStart = (detailPage - 1) * detailPageSize;
   const detailRows = detailRowsAll.slice(detailStart, detailStart + detailPageSize);
 
+  const dailyTrend = fillAdDailySeries(Array.from(dailyMap.values()), from, to);
+
   return NextResponse.json({
     totals: withDerivedMetrics(totals),
     sourceSummary: mediaSummary,
@@ -434,8 +437,8 @@ export async function GET(request: Request) {
     adGroupSummary,
     topCampaigns: campaignSummary.slice(0, 50),
     topAdGroups: adGroupSummary.slice(0, 50),
-    dailyTrend: Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date)),
-    dailyTrendBySource: Array.from(dailyMap.keys()).sort().map((date) => ({
+    dailyTrend,
+    dailyTrendBySource: dailyTrend.map(({ date }) => ({
       date,
       sources: Object.fromEntries(dailyBySourceMap.get(date) ?? []),
     })),

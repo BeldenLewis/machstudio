@@ -582,6 +582,7 @@ export default function AdPerformanceDashboard({
       return { ...row, value: getChartMetricValue(row, chartMetric), prevValue, ...sourceValues };
     });
   }, [data, chartMetric, previousChartRows]);
+  const hasChartData = (data?.dailyTrend ?? []).some((row) => row.cost > 0 || row.impressions > 0 || row.clicks > 0 || row.conversions > 0);
 
   const dualChartRows = useMemo(() => {
     return (data?.dailyTrend ?? []).map((row) => ({
@@ -1048,7 +1049,7 @@ export default function AdPerformanceDashboard({
                 </div>
               </div>
               <div className={`relative ${activeSourceTypes.length > 0 ? "h-72" : "h-64"}`}>
-                {chartRows.length === 0 && (
+                {!hasChartData && (
                   <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-muted-foreground">
                     <BarChart3 className="h-8 w-8 opacity-25" />
                     <p className="text-sm">선택한 기간·매체에 데이터가 없어요</p>
