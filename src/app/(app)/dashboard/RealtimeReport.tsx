@@ -610,10 +610,19 @@ function CompositionSection({ section }: { section: RealtimeReportData["composit
             <li key={item.label} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1">
               <span className="min-w-0 text-xs leading-snug text-muted-foreground [overflow-wrap:anywhere]">{item.label}</span>
               <span className="shrink-0 font-mono text-xs font-semibold tabular-nums">{formatNumber(item.count)}</span>
-              <div className="relative col-span-2 h-2" aria-hidden="true">
-                <div className="absolute left-0 right-0 top-1/2 h-px bg-border" />
-                <motion.div initial={{ width: 0 }} animate={{ width: `${(item.count / max) * 100}%` }} transition={spring} className="absolute left-0 top-1/2 h-px -translate-y-1/2" style={{ backgroundColor: colors.viewers }}>
-                  <span className="absolute right-0 top-1/2 h-2.5 w-2.5 translate-x-1/2 -translate-y-1/2 rounded-full bg-background shadow-[0_0_0_3px_var(--chart-viewers)]" />
+              <div className="relative col-span-2 mx-2 h-3" aria-hidden="true">
+                <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-secondary" />
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(item.count / max) * 100}%` }}
+                  transition={spring}
+                  className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full"
+                  style={{ backgroundColor: colors.viewers }}
+                >
+                  <span
+                    className="absolute right-0 top-1/2 h-3 w-3 translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background shadow-sm"
+                    style={{ backgroundColor: colors.viewers }}
+                  />
                 </motion.div>
               </div>
             </li>
