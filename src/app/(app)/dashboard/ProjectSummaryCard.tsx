@@ -217,11 +217,17 @@ export default function ProjectSummaryCard({ data, title, channelColors, onChann
   );
 }
 
+/**
+ * yearly === null 은 "아직 집계 중"이 아니라 "비교할 전년도 소스 자체가 없다"는 뜻
+ * (RealtimeReportData.performance.previousYear 주석 참고 — 같은 행사명의 직전 연도
+ * 소스가 확인될 때만 값이 내려온다). 1회차 행사는 앞으로도 절대 채워지지 않으므로
+ * "비교 준비 중"을 계속 띄우는 대신 그 줄 자체를 뺀다.
+ */
 function ComparisonRows({ weekly, yearly }: { weekly: number | null; yearly: number | null }) {
   return (
     <dl className="mt-2 grid gap-1 print:mt-0.5 print:gap-0.5">
       <ComparisonRow label="전주 대비" value={weekly} />
-      <ComparisonRow label="전년 동일 D구간" value={yearly} />
+      {yearly !== null && <ComparisonRow label="전년 동일 D구간" value={yearly} />}
     </dl>
   );
 }
