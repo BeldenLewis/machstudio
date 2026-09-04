@@ -85,6 +85,7 @@ model Workspace {
   adPerformanceRecords AdPerformanceRecord[]
   adPerformanceFolders AdPerformanceFolder[]
   metaAdConnections    MetaAdConnection[]
+  googleAdConnections  GoogleAdConnection[]
   competitions         Competition[]
   expoSites            ExpoSite[]
   expoTemplates        ExpoTemplate[]
@@ -175,6 +176,7 @@ model Project {
   adPerformanceFolders AdPerformanceFolder[]
   adPerformanceViews   AdPerformanceView[]
   metaAdConnection     MetaAdConnection?
+  googleAdConnection   GoogleAdConnection?
   competitions         Competition[]
   expoSites            ExpoSite[]
   mediaAssets          MediaAsset[]
@@ -334,6 +336,25 @@ model MetaAdConnection {
 
   @@index([workspaceId])
   @@index([adAccountId])
+}
+
+model GoogleAdConnection {
+  id                    String    @id @default(cuid())
+  workspaceId           String
+  projectId             String    @unique
+  encryptedRefreshToken String
+  googleUserId          String?
+  email                 String?
+  status                String    @default("CONNECTED")
+  lastSyncedAt          DateTime?
+  lastSyncError         String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
 }
 
 model UTMPreset {
