@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { MEDIA_ALLOWED_MIME_TYPES, MEDIA_VIDEO_MAX_BYTES } from "@/lib/media-asset";
+import { MEDIA_VIDEO_MAX_BYTES } from "@/lib/media-asset";
 
 /**
  * 자료실 전용 버킷 — 웨비나·엑스포 자산과 섞지 않는다.
@@ -24,13 +24,19 @@ export const MEDIA_BUCKET = "media-library";
  * 파일은 검증은 통과하고 실제 업로드에서만 "The object exceeded the maximum allowed size"
  * 로 실패했다(2026-09-04 실제 리포트, 재현·격리 버킷으로 확인). webinar-asset-bucket.ts 는
  * 처음부터 숫자를 써서 이 함정이 없었다 — 여기도 같은 방식으로 맞춘다.
+ *
+ * allowedMimeTypes 는 null 이다 — 자료실은 사진·동영상 뿐 아니라 한글·엑셀·CSV 같은
+ * 문서도 그대로 받는다(media-asset.ts 머리말 참고). 형식 제한은 하지 않고 크기만 잰다.
+ * fileSizeLimit 은 여전히 동영상 기준(가장 큰 값)이다 — Storage 는 버킷 하나에 종류별로
+ * 다른 상한을 두지 못한다. 사진·문서의 더 좁은 상한은 media-asset.ts 의
+ * validateMediaUpload 가 앱 레벨에서 먼저 막는다.
  */
 export async function ensureMediaBucket() {
   const admin = createAdminClient();
   const options = {
     public: true,
     fileSizeLimit: MEDIA_VIDEO_MAX_BYTES,
-    allowedMimeTypes: MEDIA_ALLOWED_MIME_TYPES,
+    allowedMimeTypes: null,
   };
 
   const { error: bucketError } = await admin.storage.getBucket(MEDIA_BUCKET);

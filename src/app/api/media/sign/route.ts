@@ -10,7 +10,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
-import { extensionForMimeType, validateMediaUpload } from "@/lib/media-asset";
+import { extensionFromFilename, validateMediaUpload } from "@/lib/media-asset";
 import { ensureMediaBucket, MEDIA_BUCKET } from "@/lib/media-asset-bucket";
 
 export async function POST(request: Request) {
@@ -22,15 +22,16 @@ export async function POST(request: Request) {
   if (!membership) return NextResponse.json({ error: "워크스페이스가 없어요" }, { status: 403 });
 
   const body = await request.json().catch(() => ({}));
-  const { mimeType, size, projectId } = body as {
-    mimeType?: unknown; size?: unknown; projectId?: unknown;
+  const { mimeType, size, projectId, originalName } = body as {
+    mimeType?: unknown; size?: unknown; projectId?: unknown; originalName?: unknown;
   };
 
   const validationError = validateMediaUpload({ mimeType, size });
   if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
-  const extension = extensionForMimeType(String(mimeType));
-  if (!extension) return NextResponse.json({ error: "지원하지 않는 형식이에요." }, { status: 400 });
+  // MIME 이 아니라 원본 파일 이름에서 확장자를 뽑는다 — 문서 파일의 MIME 은 브라우저·OS 마다
+  // 다르게(또는 비워서) 보고돼 못 믿는다(media-asset.ts 머리말 참고). 못 뽑으면 확장자 없이 둔다.
+  const extension = extensionFromFilename(typeof originalName === "string" ? originalName : "");
 
   // 프로젝트를 지정했으면 이 워크스페이스 것인지 확인한다 — 남의 프로젝트에 자산을 걸 수 없다.
   let scopedProjectId: string | null = null;
@@ -45,7 +46,8 @@ export async function POST(request: Request) {
 
   try {
     const admin = await ensureMediaBucket();
-    const path = `${membership.workspaceId}/${scopedProjectId ?? "workspace"}/${randomUUID()}.${extension}`;
+    const filename = extension ? `${randomUUID()}.${extension}` : randomUUID();
+    const path = `${membership.workspaceId}/${scopedProjectId ?? "workspace"}/${filename}`;
 
     const { data, error } = await admin.storage.from(MEDIA_BUCKET).createSignedUploadUrl(path);
     if (error || !data) throw error ?? new Error("no data");

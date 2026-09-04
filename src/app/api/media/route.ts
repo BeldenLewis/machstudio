@@ -58,7 +58,6 @@ export async function POST(request: Request) {
   if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
   const kind = kindForMimeType(String(mimeType));
-  if (!kind) return NextResponse.json({ error: "지원하지 않는 형식이에요." }, { status: 400 });
 
   if (typeof path !== "string" || !path) {
     return NextResponse.json({ error: "업로드 경로가 없어요." }, { status: 400 });

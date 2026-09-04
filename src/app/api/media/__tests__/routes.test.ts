@@ -5,8 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * 미디어(자료실) API — sign(자리 내주기) · POST(등록) · GET(목록) · DELETE.
  *
  * 실제 파일 바이트는 이 라우트들을 거치지 않는다(브라우저가 Storage 로 직접 올린다).
- * 그래서 여기서 지키는 것은 세 가지다: ① 형식·크기 판정이 실제로 라우트에서 도는가
- * ② 경로에서 소속을 읽어 남의 자리에 등록 못 하게 막는가 ③ 삭제는 올린 사람·관리자만.
+ * 그래서 여기서 지키는 것은 세 가지다: ① 크기 판정이 실제로 라우트에서 도는가(형식은
+ * 막지 않는다 — 한글·엑셀·CSV 등 전부 받는다) ② 경로에서 소속을 읽어 남의 자리에
+ * 등록 못 하게 막는가 ③ 삭제는 올린 사람·관리자만.
  */
 
 const prismaMock = {
@@ -66,11 +67,31 @@ describe("로그인 필요", () => {
 });
 
 describe("sign — 자리를 내준다, 바이트는 안 받는다", () => {
-  it("형식이 아니면 거절하고 서명 URL 을 만들지 않는다", async () => {
+  /** 형식은 막지 않는다 — 한글·엑셀·CSV 같은 문서도 그대로 자리를 내준다. */
+  it("허용 목록 밖 MIME(PDF)도 자리를 내준다 — 형식으로 거절하지 않는다", async () => {
+    storageApi.createSignedUploadUrl.mockResolvedValue({ data: { path: "w1/workspace/x", token: "tok" }, error: null });
     const { POST } = await import("@/app/api/media/sign/route");
-    const res = await POST(json({ mimeType: "application/pdf", size: 100 }));
-    expect(res.status).toBe(400);
-    expect(storageApi.createSignedUploadUrl).not.toHaveBeenCalled();
+    const res = await POST(json({ mimeType: "application/pdf", size: 100, originalName: "보고서.pdf" }));
+    expect(res.status).toBe(200);
+    expect(storageApi.createSignedUploadUrl).toHaveBeenCalled();
+  });
+
+  /** 확장자는 MIME 이 아니라 원본 파일 이름에서 뽑는다(문서 MIME 은 못 믿는다). */
+  it("경로의 확장자는 원본 파일 이름에서 뽑는다", async () => {
+    storageApi.createSignedUploadUrl.mockImplementation(async () => ({ data: { path: "ignored", token: "tok" }, error: null }));
+    const { POST } = await import("@/app/api/media/sign/route");
+    await POST(json({ mimeType: "application/x-hwp", size: 100, originalName: "보고서.HWP" }));
+    const calledPath = storageApi.createSignedUploadUrl.mock.calls[0][0] as string;
+    expect(calledPath.endsWith(".hwp")).toBe(true);
+  });
+
+  it("원본 이름에서 확장자를 못 뽑아도 실패하지 않는다 — 확장자 없이 자리를 내준다", async () => {
+    storageApi.createSignedUploadUrl.mockImplementation(async () => ({ data: { path: "ignored", token: "tok" }, error: null }));
+    const { POST } = await import("@/app/api/media/sign/route");
+    const res = await POST(json({ mimeType: "application/octet-stream", size: 100, originalName: "이름만있음" }));
+    expect(res.status).toBe(200);
+    const calledPath = storageApi.createSignedUploadUrl.mock.calls[0][0] as string;
+    expect(calledPath.includes(".")).toBe(false);
   });
 
   it("상한을 넘으면 거절한다", async () => {

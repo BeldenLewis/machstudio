@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * 미디어 — 사진·동영상을 올리고 공개 URL을 받는 워크스페이스 공용 자료실.
+ * 미디어 — 사진·동영상은 물론 한글·엑셀·CSV 같은 문서까지, 형식을 가리지 않고 올려
+ * 공개 URL을 받는 워크스페이스 공용 자료실.
  *
- * 특정 웨비나·대회·홈페이지에 매이지 않는다 — 팀이 여러 화면에 재사용할 로고·클립 같은
- * 자산을 둘 곳이 없어서 만들었다(다른 업로드는 전부 그 소유 엔티티에 종속돼 있다).
+ * 특정 웨비나·대회·홈페이지에 매이지 않는다 — 팀이 여러 화면에 재사용할 로고·클립·문서
+ * 같은 자산을 둘 곳이 없어서 만들었다(다른 업로드는 전부 그 소유 엔티티에 종속돼 있다).
  *
  * 업로드는 이 화면이 직접 처리하지 않는다. Vercel 서버리스 함수의 요청 본문 상한(4.5MB)이
  * 있어 우리 서버를 거치면 큰 사진·동영상이 통과할 수 없다 — 그래서 서명 URL을 받아
@@ -18,7 +19,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Upload, ImageIcon, Video, Copy, Trash2, Loader2, X, Check, Minus,
+  Upload, ImageIcon, Video, FileText, Copy, Trash2, Loader2, X, Check, Minus,
   FolderPlus, FolderInput, ClipboardCopy, Square as SquareIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -27,7 +28,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
 import { FINISH, R, FieldSelect, Field, Btn } from "@/components/ui/primitives";
 import {
-  MEDIA_ACCEPT,
+  extensionFromFilename,
   formatBytes,
   kindForMimeType,
   validateMediaUpload,
@@ -59,13 +60,13 @@ interface MediaAssetRow {
 interface PendingUpload {
   id: string;
   name: string;
-  kind: MediaKind | null;
+  kind: MediaKind;
   status: "reading" | "uploading" | "registering" | "error";
   error?: string;
 }
 
 /** 이미지는 로드해서, 동영상은 메타데이터만 읽어서 가로세로·길이를 잰다. 실패해도 업로드를 막지 않는다. */
-function readMediaDimensions(file: File, kind: MediaKind): Promise<{ width?: number; height?: number; durationSec?: number }> {
+function readMediaDimensions(file: File, kind: "image" | "video"): Promise<{ width?: number; height?: number; durationSec?: number }> {
   return new Promise((resolve) => {
     const objectUrl = URL.createObjectURL(file);
     const cleanup = () => URL.revokeObjectURL(objectUrl);
@@ -199,21 +200,22 @@ export default function MediaPage() {
     };
 
     const clientError = validateMediaUpload({ mimeType: file.type, size: file.size });
-    if (clientError || !kind) {
-      setStatus("error", clientError ?? "지원하지 않는 형식이에요.");
-      toast.error(`${file.name}: ${clientError ?? "지원하지 않는 형식이에요."}`);
+    if (clientError) {
+      setStatus("error", clientError);
+      toast.error(`${file.name}: ${clientError}`);
       removeAfterDelay(4_000);
       return;
     }
 
     try {
-      const dims = await readMediaDimensions(file, kind);
+      // 가로세로·길이는 사진·동영상일 때만 잰다 — 문서는 잴 게 없다.
+      const dims = kind === "file" ? {} : await readMediaDimensions(file, kind);
 
       setStatus("uploading");
       const signRes = await fetch("/api/media/sign", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mimeType: file.type, size: file.size, projectId: projectFilter || null }),
+        body: JSON.stringify({ mimeType: file.type, size: file.size, originalName: file.name, projectId: projectFilter || null }),
       });
       if (!signRes.ok) throw new Error((await signRes.json().catch(() => ({}))).error ?? "업로드 준비에 실패했어요.");
       const { path, token } = await signRes.json();
@@ -391,7 +393,7 @@ export default function MediaPage() {
       <div>
         <h1 className="text-xl font-semibold">미디어</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          사진(WebP 포함)이나 동영상을 올리면 바로 쓸 수 있는 주소가 생겨요.
+          사진·동영상은 물론 한글·엑셀·CSV 같은 파일도 올리면 바로 쓸 수 있는 주소가 생겨요.
         </p>
       </div>
 
@@ -411,13 +413,12 @@ export default function MediaPage() {
         <Upload className={`mb-3 h-7 w-7 ${isDragging ? "text-violet-400" : "text-violet-500"}`} aria-hidden />
         <span className="text-sm font-medium">파일을 끌어다 놓거나 클릭해서 선택</span>
         <span className="mt-1 text-xs text-muted-foreground">
-          JPG·PNG·WebP·GIF 사진, MP4·WebM·MOV 동영상
+          사진·동영상·한글·엑셀·CSV 등 어떤 형식이든 올릴 수 있어요
           {groupFilter && groupFilter !== UNGROUPED ? ` · "${groupFilter}" 그룹으로 들어가요` : ""}
         </span>
         <input
           ref={fileInputRef}
           type="file"
-          accept={MEDIA_ACCEPT}
           multiple
           className="hidden"
           onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }}
@@ -639,11 +640,18 @@ export default function MediaPage() {
                   {asset.kind === "image" ? (
                     // eslint-disable-next-line @next/next/no-img-element -- Supabase 원본을 그대로 보여준다(next/image 최적화 미설정, image-downscale.ts 주석 참고).
                     <img src={asset.url} alt={asset.originalName} className="h-full w-full object-cover" loading="lazy" />
-                  ) : (
+                  ) : asset.kind === "video" ? (
                     <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-muted-foreground">
                       <Video className="h-8 w-8" aria-hidden />
                       {formatDuration(asset.durationSec) && (
                         <span className="text-[11px] font-medium">{formatDuration(asset.durationSec)}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-muted-foreground">
+                      <FileText className="h-8 w-8" aria-hidden />
+                      {extensionFromFilename(asset.originalName) && (
+                        <span className="text-[11px] font-medium uppercase">{extensionFromFilename(asset.originalName)}</span>
                       )}
                     </div>
                   )}
@@ -669,7 +677,7 @@ export default function MediaPage() {
                 <div className="p-2.5">
                   <p className="truncate text-xs font-medium" title={asset.originalName}>{asset.originalName}</p>
                   <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
-                    {asset.kind === "image" ? <ImageIcon className="h-3 w-3" aria-hidden /> : <Video className="h-3 w-3" aria-hidden />}
+                    {asset.kind === "image" ? <ImageIcon className="h-3 w-3" aria-hidden /> : asset.kind === "video" ? <Video className="h-3 w-3" aria-hidden /> : <FileText className="h-3 w-3" aria-hidden />}
                     {formatBytes(asset.size)}
                     {asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ""}
                   </p>
