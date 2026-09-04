@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getAdFolderAccess } from "@/lib/ad-folder-access";
 import { decryptMetaToken } from "@/lib/meta-ads";
 import { metaReportedCostPerResult, metaReportedResult } from "@/lib/meta-result-metrics";
+import { findMetaConnection } from "@/lib/meta-connection";
 
 type Context = { params: Promise<{ folderId: string }> };
 type MetaAccount = { platform: string; accountId: string; accountName?: string };
@@ -69,8 +70,8 @@ export async function POST(_request: Request, context: Context) {
   const { folderId } = await context.params;
   const access = await getAdFolderAccess(folderId, true);
   if ("error" in access) return NextResponse.json({ error: access.error }, { status: access.status });
-  const connection = await prisma.metaAdConnection.findUnique({ where: { projectId: access.folder.projectId } });
-  if (!connection) return NextResponse.json({ error: "이 프로젝트에 연결된 Meta 계정이 없습니다." }, { status: 400 });
+  const connection = await findMetaConnection(access.folder.projectId, access.user.id);
+  if (!connection) return NextResponse.json({ error: "연결된 Meta 계정이 없습니다." }, { status: 400 });
   const token = decryptMetaToken(connection.encryptedAccessToken);
   const accounts = (Array.isArray(access.folder.mediaAccounts) ? access.folder.mediaAccounts : []) as MetaAccount[];
   const metaAccounts = accounts.filter(account => account.platform === "META" && account.accountId);

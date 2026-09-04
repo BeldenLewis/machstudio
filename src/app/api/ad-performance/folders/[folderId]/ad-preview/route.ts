@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAdFolderAccess } from "@/lib/ad-folder-access";
 import { decryptMetaToken, metaGraph } from "@/lib/meta-ads";
+import { findMetaConnection } from "@/lib/meta-connection";
 
 type Context = { params: Promise<{ folderId: string }> };
 
@@ -18,8 +19,8 @@ export async function GET(request: Request, context: Context) {
   const owned = await prisma.adPerformanceRecord.findFirst({ where: { folderId, adId, sourceType: "META" }, select: { id: true } });
   if (!owned) return NextResponse.json({ error: "이 폴더에 속한 광고가 아닙니다." }, { status: 404 });
 
-  const connection = await prisma.metaAdConnection.findUnique({ where: { projectId: access.folder.projectId } });
-  if (!connection) return NextResponse.json({ error: "이 프로젝트에 연결된 Meta 계정이 없습니다." }, { status: 400 });
+  const connection = await findMetaConnection(access.folder.projectId, access.user.id);
+  if (!connection) return NextResponse.json({ error: "연결된 Meta 계정이 없습니다." }, { status: 400 });
 
   try {
     const token = decryptMetaToken(connection.encryptedAccessToken);

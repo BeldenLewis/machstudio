@@ -4,13 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { getPublicAppOrigin } from "@/lib/app-url";
 import { DEFAULT_META_METRICS, encryptMetaToken, metaGraph, verifyMetaState } from "@/lib/meta-ads";
 
-type State = { workspaceId: string; projectId: string; userId: string; issuedAt: number };
+type State = { workspaceId: string; projectId: string; folderId?: string; userId: string; issuedAt: number };
 
 export async function GET(request: Request) {
   const origin = getPublicAppOrigin();
-  const done = (status: string) => NextResponse.redirect(`${origin}/analytics?meta=${status}`);
   const url = new URL(request.url);
   const state = verifyMetaState<State>(url.searchParams.get("state") || "");
+  const destination = state?.folderId ? `${origin}/analytics/${state.folderId}?tab=connections` : `${origin}/analytics`;
+  const done = (status: string) => NextResponse.redirect(`${destination}${destination.includes("?") ? "&" : "?"}meta=${status}`);
   const code = url.searchParams.get("code");
   if (!state || !code || Date.now() - state.issuedAt > 10 * 60_000) return done("error");
   const supabase = await createClient();
@@ -39,8 +40,8 @@ export async function GET(request: Request) {
     const me = await metaGraph<{ id: string }>("me", accessToken, { fields: "id" });
     await prisma.metaAdConnection.upsert({
       where: { projectId: state.projectId },
-      create: { workspaceId: state.workspaceId, projectId: state.projectId, encryptedAccessToken: encryptMetaToken(accessToken), metaUserId: me.id, enabledMetrics: DEFAULT_META_METRICS },
-      update: { encryptedAccessToken: encryptMetaToken(accessToken), metaUserId: me.id, status: "CONNECTED", lastSyncError: null },
+      create: { workspaceId: state.workspaceId, projectId: state.projectId, encryptedAccessToken: encryptMetaToken(accessToken), metaUserId: me.id, connectedById: user.id, enabledMetrics: DEFAULT_META_METRICS },
+      update: { encryptedAccessToken: encryptMetaToken(accessToken), metaUserId: me.id, connectedById: user.id, status: "CONNECTED", lastSyncError: null },
     });
     return done("connected");
   } catch (error) {

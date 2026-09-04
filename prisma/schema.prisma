@@ -320,6 +320,7 @@ model MetaAdConnection {
   projectId            String    @unique
   encryptedAccessToken String
   metaUserId           String?
+  connectedById        String?
   adAccountId          String?
   adAccountName        String?
   currency             String?
@@ -336,6 +337,7 @@ model MetaAdConnection {
 
   @@index([workspaceId])
   @@index([adAccountId])
+  @@index([connectedById])
 }
 
 model GoogleAdConnection {

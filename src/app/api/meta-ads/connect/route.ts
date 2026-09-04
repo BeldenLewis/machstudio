@@ -3,14 +3,22 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { getPublicAppOrigin } from "@/lib/app-url";
 import { signMetaState } from "@/lib/meta-ads";
+import { getAdFolderAccess } from "@/lib/ad-folder-access";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.redirect(new URL("/login", request.url));
   const url = new URL(request.url);
-  const workspaceId = url.searchParams.get("workspaceId") || "";
-  const projectId = url.searchParams.get("projectId") || "";
+  let workspaceId = url.searchParams.get("workspaceId") || "";
+  let projectId = url.searchParams.get("projectId") || "";
+  const folderId = url.searchParams.get("folderId") || "";
+  if (folderId) {
+    const access = await getAdFolderAccess(folderId, true);
+    if ("error" in access) return NextResponse.json({ error: access.error }, { status: access.status });
+    workspaceId = access.folder.workspaceId;
+    projectId = access.folder.projectId;
+  }
   const membership = await prisma.workspaceMember.findUnique({ where: { userId_workspaceId: { userId: user.id, workspaceId } } });
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { workspaceId: true } });
   if (!membership || membership.role === "MEMBER" || project?.workspaceId !== workspaceId) {
@@ -19,7 +27,7 @@ export async function GET(request: Request) {
   const appId = process.env.META_APP_ID?.trim();
   const origin = getPublicAppOrigin();
   if (!appId || !origin) return NextResponse.json({ error: "Meta 앱 설정이 완료되지 않았습니다." }, { status: 503 });
-  const state = signMetaState({ workspaceId, projectId, userId: user.id, issuedAt: Date.now() });
+  const state = signMetaState({ workspaceId, projectId, folderId, userId: user.id, issuedAt: Date.now() });
   const oauth = new URL("https://www.facebook.com/v25.0/dialog/oauth");
   oauth.searchParams.set("client_id", appId);
   oauth.searchParams.set("redirect_uri", `${origin}/api/meta-ads/callback`);
