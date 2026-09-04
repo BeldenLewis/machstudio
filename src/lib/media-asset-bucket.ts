@@ -16,12 +16,20 @@ export const MEDIA_BUCKET = "media-library";
  * 버킷을 만들거나 설정을 맞춘다. 멱등 — 이미 맞춰져 있어도 무해하다.
  * updateBucket 을 계속 호출하는 이유는 webinar-asset-bucket.ts 와 같다: 예전 설정으로 만들어진
  * 배포가 있으면 새 MIME·크기가 영구히 막힌다.
+ *
+ * [주의] fileSizeLimit 은 **바이트 숫자**로 준다. `"50MB"` 같은 문자열도 받아 주지만, Storage
+ * 서버는 그 문자열을 10진 MB(1MB = 1,000,000B)로 해석한다 — 반면 MEDIA_VIDEO_MAX_BYTES 는
+ * 2진 MiB(1024*1024)다. 그래서 예전에 `${...}MB` 문자열을 썼을 때 실제 버킷 한도가
+ * 50,000,000B 로 잡혀, 우리 앱이 통과시키는 최대 52,428,800B(50MiB) 사이 ~2.3MB 구간의
+ * 파일은 검증은 통과하고 실제 업로드에서만 "The object exceeded the maximum allowed size"
+ * 로 실패했다(2026-09-04 실제 리포트, 재현·격리 버킷으로 확인). webinar-asset-bucket.ts 는
+ * 처음부터 숫자를 써서 이 함정이 없었다 — 여기도 같은 방식으로 맞춘다.
  */
 export async function ensureMediaBucket() {
   const admin = createAdminClient();
   const options = {
     public: true,
-    fileSizeLimit: `${Math.ceil(MEDIA_VIDEO_MAX_BYTES / (1024 * 1024))}MB`,
+    fileSizeLimit: MEDIA_VIDEO_MAX_BYTES,
     allowedMimeTypes: MEDIA_ALLOWED_MIME_TYPES,
   };
 
