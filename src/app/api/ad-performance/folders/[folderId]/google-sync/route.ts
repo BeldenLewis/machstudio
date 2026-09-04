@@ -27,7 +27,7 @@ export async function POST(_request: Request, context: Context) {
     for (const account of accounts) {
       let pageToken: string | undefined;
       do {
-        const result = await googleAdsRequest<{ results?: GoogleRow[]; nextPageToken?: string }>(`customers/${googleCustomerId(account.accountId)}/googleAds:search`, token, { method: "POST", body: JSON.stringify({ query, pageSize: 10000, ...(pageToken ? { pageToken } : {}) }) });
+        const result = await googleAdsRequest<{ results?: GoogleRow[]; nextPageToken?: string }>(`customers/${googleCustomerId(account.accountId)}/googleAds:search`, token, { method: "POST", body: JSON.stringify({ query, ...(pageToken ? { pageToken } : {}) }) });
         rows.push(...(result.results ?? [])); pageToken = result.nextPageToken;
       } while (pageToken);
     }

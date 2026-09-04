@@ -31,7 +31,11 @@ export async function googleAccessToken(refreshToken: string) {
 }
 export async function googleAdsRequest<T>(path: string, accessToken: string, init?: RequestInit) {
   const response = await fetch(`https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/${path}`, { ...init, headers: { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_ADS_DEVELOPER_TOKEN || "", "login-customer-id": googleCustomerId(process.env.GOOGLE_ADS_MANAGER_CUSTOMER_ID || ""), "Content-Type": "application/json", ...(init?.headers || {}) }, cache: "no-store" });
-  const data = await response.json().catch(() => null) as (T & { error?: { message?: string } }) | null;
-  if (!response.ok || !data) throw new Error(data?.error?.message || `Google Ads API 요청 실패 (${response.status})`);
+  const data = await response.json().catch(() => null) as (T & { error?: { message?: string; details?: Array<{ errors?: Array<{ message?: string; errorCode?: Record<string, string> }> }> } }) | null;
+  if (!response.ok || !data) {
+    const detail = data?.error?.details?.flatMap((item) => item.errors ?? []).find((item) => item.message);
+    const code = detail?.errorCode ? Object.values(detail.errorCode)[0] : undefined;
+    throw new Error([code, detail?.message || data?.error?.message || `Google Ads API 요청 실패 (${response.status})`].filter(Boolean).join(": "));
+  }
   return data;
 }
