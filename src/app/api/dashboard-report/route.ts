@@ -138,8 +138,8 @@ function getKstDayStart(date: Date) {
 function getUtmColumns(filters?: ReportFilters) {
   const useFirst = filters?.attribution === "first";
   return useFirst
-    ? { source: "firstUtmSource", medium: "firstUtmMedium", campaign: "firstUtmCampaign" }
-    : { source: "utmSource", medium: "utmMedium", campaign: "utmCampaign" };
+    ? { source: "firstUtmSource", medium: "firstUtmMedium", campaign: "firstUtmCampaign", term: "firstUtmTerm", content: "firstUtmContent" }
+    : { source: "utmSource", medium: "utmMedium", campaign: "utmCampaign", term: "utmTerm", content: "utmContent" };
 }
 
 function buildWhere(params: {
@@ -768,6 +768,7 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
   const utmCols = getUtmColumns(filters);
   const utmSourceCol = utmCols.source === "firstUtmSource" ? "firstUtmSource" : "utmSource";
   const utmMediumCol = utmCols.medium === "firstUtmMedium" ? "firstUtmMedium" : "utmMedium";
+  const utmTermCol = utmCols.term === "firstUtmTerm" ? "firstUtmTerm" : "utmTerm";
 
   // composition/email/dedup 에 필요한 필드만 추출하기 위해 소스 필드 정의를 먼저 조회
   const sourceRows = await prisma.collectSource.findMany({
@@ -803,7 +804,7 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
   }
   const compositionKeys = Array.from(new Set([...resolveCompositionKeys(sourceFields), ...dashboardFields.keys()]));
 
-  const [yesterdayCount, todayCount, cumulativeCount, rangeCount, previousRangeCount, cumulativeBeforeRange, previousTotalCount, previousPaceCount, previousRangeMatchedCount, heatmapRecords, utmGroups, heatmapRows, cumulativeDailyRows, utmTrendRows] = await Promise.all([
+  const [yesterdayCount, todayCount, cumulativeCount, rangeCount, previousRangeCount, cumulativeBeforeRange, previousTotalCount, previousPaceCount, previousRangeMatchedCount, heatmapRecords, utmGroups, heatmapRows, cumulativeDailyRows, utmTrendRows, ambassadorRows, ambassadorLinks] = await Promise.all([
     prisma.collectRecord.count({ where: buildWhere({ ...baseParams, from: yesterdayStart, lt: todayStart }) }),
     prisma.collectRecord.count({ where: buildWhere({ ...baseParams, from: todayStart, to: now }) }),
     prisma.collectRecord.count({ where: buildWhere(baseParams) }),
@@ -873,6 +874,18 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
       WHERE ${rangeRawWhere.clause}
       GROUP BY day, source, medium
     `, ...rangeRawWhere.values),
+    prisma.$queryRawUnsafe<Array<{ name: string | null; count: number }>>(`
+      SELECT NULLIF(TRIM("${utmTermCol}"), '') AS name, COUNT(*)::int AS count
+      FROM "CollectRecord"
+      WHERE ${rangeRawWhere.clause}
+        AND LOWER(TRIM(COALESCE("${utmSourceCol}", ''))) = 'ambassador'
+      GROUP BY name
+      ORDER BY count DESC, name ASC
+    `, ...rangeRawWhere.values),
+    prisma.uTMLink.findMany({
+      where: { workspaceId, projectId },
+      select: { utmSource: true, utmTerm: true },
+    }),
   ]);
 
   const fieldAliasesBySource = buildFieldAliasLookup(sourceFields);
@@ -1001,6 +1014,24 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
   const utmBySource = aggregateUtm((row) => row.source);
   const utmByMedium = aggregateUtm((row) => row.medium);
   const utmBySourceMedium = aggregateUtm((row) => [row.source, row.medium].filter(Boolean).join(" / "));
+  const ambassadors = new Map<string, { name: string; count: number }>();
+  for (const link of ambassadorLinks) {
+    if (normalizeUtmKey(link.utmSource) !== "ambassador" || !link.utmTerm?.trim()) continue;
+    const name = link.utmTerm.trim();
+    if (!ambassadors.has(name.toLocaleLowerCase())) ambassadors.set(name.toLocaleLowerCase(), { name, count: 0 });
+  }
+  for (const row of ambassadorRows) {
+    const name = row.name?.trim() || "이름 미지정";
+    const key = name.toLocaleLowerCase();
+    const current = ambassadors.get(key);
+    ambassadors.set(key, { name: current?.name || name, count: (current?.count || 0) + row.count });
+  }
+  const ambassadorTotal = ambassadorRows.reduce((sum, row) => sum + row.count, 0);
+  const ambassadorRanking = Array.from(ambassadors.values()).map((row) => ({
+    name: row.name,
+    count: row.count,
+    percent: ambassadorTotal > 0 ? (row.count / ambassadorTotal) * 100 : 0,
+  })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ko"));
 
   const rangeChange = previousRangeCount > 0 ? ((rangeCount - previousRangeCount) / previousRangeCount) * 100 : null;
   const previousPaceChange = previousPaceCount !== null && previousPaceCount > 0
@@ -1177,6 +1208,8 @@ export async function generateDashboardReport(options: GenerateReportOptions) {
     utmBySource,
     utmByMedium,
     utmBySourceMedium,
+    ambassadorRanking,
+    ambassadorTotal,
     heatmap: buildHeatmapFromRows(heatmapRows),
   };
   REPORT_CACHE.set(cacheKey, { at: Date.now(), data: payload });

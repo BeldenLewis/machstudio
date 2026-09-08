@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, BarChart3, CalendarDays, Clock3, Gauge, Mail, TrendingUp, UserCheck, Users } from "lucide-react";
+import { Activity, BarChart3, CalendarDays, Clock3, Gauge, Mail, Medal, TrendingUp, UserCheck, Users } from "lucide-react";
 import type { ElementType } from "react";
 import { useState } from "react";
 import { motion } from "framer-motion";
@@ -115,6 +115,8 @@ export interface RealtimeReportData {
     count: number;
     percent: number;
   }>;
+  ambassadorRanking?: Array<{ name: string; count: number; percent: number }>;
+  ambassadorTotal?: number;
   utmBySource: Array<{ label: string; count: number; percent: number }>;
   utmByMedium: Array<{ label: string; count: number; percent: number }>;
   utmBySourceMedium: Array<{ label: string; count: number; percent: number }>;
@@ -811,6 +813,40 @@ function UtmBreakdownSection({ data }: { data: RealtimeReportData }) {
   );
 }
 
+function AmbassadorRanking({ items, total }: { items: NonNullable<RealtimeReportData["ambassadorRanking"]>; total: number }) {
+  return (
+    <section className="overflow-hidden rounded-[24px] bg-background shadow-sm">
+      <div className="flex flex-wrap items-end justify-between gap-3 px-5 pb-4 pt-5">
+        <div>
+          <div className="flex items-center gap-2">
+            <Medal className="h-4 w-4 text-amber-500" />
+            <h3 className="text-sm font-semibold">앰배서더 사전등록 순위</h3>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">utm_source=ambassador · 이름은 utm_term 기준</p>
+        </div>
+        <p className="text-xs text-muted-foreground">선택 기간 총 <span className="font-semibold text-foreground">{formatNumber(total)}건</span></p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] text-left text-xs">
+          <thead className="bg-secondary/45 text-[11px] text-muted-foreground">
+            <tr><th className="w-16 px-5 py-3 font-medium">순위</th><th className="px-3 py-3 font-medium">앰배서더</th><th className="w-48 px-3 py-3 font-medium">기여도</th><th className="w-28 px-5 py-3 text-right font-medium">사전등록</th></tr>
+          </thead>
+          <tbody>
+            {items.map((item, index) => (
+              <tr key={item.name} className="border-b border-border/50 last:border-0">
+                <td className="px-5 py-3.5"><span className={`inline-grid h-7 w-7 place-items-center rounded-full font-semibold ${index < 3 ? "bg-amber-500/15 text-amber-700" : "bg-secondary text-muted-foreground"}`}>{index + 1}</span></td>
+                <td className="px-3 py-3.5 font-medium">{item.name}</td>
+                <td className="px-3 py-3.5"><div className="flex items-center gap-2"><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary"><div className="h-full rounded-full bg-violet-500" style={{ width: `${Math.min(item.percent, 100)}%` }} /></div><span className="w-12 text-right text-[11px] tabular-nums text-muted-foreground">{item.percent.toFixed(1)}%</span></div></td>
+                <td className="px-5 py-3.5 text-right text-sm font-semibold tabular-nums">{formatNumber(item.count)}건</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function Heatmap({ heatmap }: { heatmap: RealtimeReportData["heatmap"] }) {
   const hours = Array.from({ length: 24 }, (_, hour) => hour);
   const gridClass = "grid grid-cols-[24px_repeat(24,minmax(20px,1fr))] gap-1 items-center";
@@ -979,6 +1015,10 @@ export default function RealtimeReport({ data, loading, rangeLabel }: Props) {
 
         <UtmBreakdownSection data={data} />
       </div>
+
+      {(data.ambassadorRanking?.length ?? 0) > 0 && (
+        <AmbassadorRanking items={data.ambassadorRanking ?? []} total={data.ambassadorTotal ?? 0} />
+      )}
 
       {data.fieldStats.length > 0 && (
         <section className="rounded-[24px] border border-border bg-background p-5">
