@@ -63,6 +63,8 @@ model Workspace {
   /// 유입경로 도넛 차트 채널별 사용자 지정 색 — { "네이버": "#0a9e6e", ... } (정규화된 라벨 → hex).
   /// null = 아직 커스텀 안 함(내장 브랜드 기본 팔레트 + 해시 폴백을 그대로 씀).
   channelColors         Json?
+  summaryShareToken     String?  @unique
+  summaryShareEnabled   Boolean  @default(false)
 
   members              WorkspaceMember[]
   projects             Project[]

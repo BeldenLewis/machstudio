@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LayoutGrid, Loader2, Printer, RefreshCw } from "lucide-react";
+import { LayoutGrid, Link2, Loader2, Printer, RefreshCw, Share2, Unlink } from "lucide-react";
 import { motion } from "framer-motion";
 import { useWorkspace } from "@/contexts/workspace";
 import { useWorkspaceChannelColors } from "@/components/ui/use-workspace-channel-colors";
 import type { RealtimeReportData } from "../dashboard/RealtimeReport";
 import ProjectSummaryCard from "../dashboard/ProjectSummaryCard";
+import { toast } from "sonner";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -27,6 +28,8 @@ export default function SummaryDashboardClient() {
   const [reports, setReports] = useState<RealtimeReportData[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchedAt, setFetchedAt] = useState<Date | null>(null);
+  const [share, setShare] = useState<{ shareEnabled: boolean; shareUrl: string | null } | null>(null);
+  const [sharing, setSharing] = useState(false);
   const { channelColors, setChannelColorOverride } = useWorkspaceChannelColors(workspace?.id);
 
   const fetchReports = useCallback(async () => {
@@ -50,6 +53,39 @@ export default function SummaryDashboardClient() {
   useEffect(() => {
     void Promise.resolve().then(fetchReports);
   }, [fetchReports]);
+
+  useEffect(() => {
+    if (!workspace) return;
+    void fetch(`/api/workspace/${workspace.id}/summary-share`, { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((value) => { if (value) setShare(value); });
+  }, [workspace]);
+
+  async function copyShareLink() {
+    if (!workspace || sharing) return;
+    setSharing(true);
+    const response = await fetch(`/api/workspace/${workspace.id}/summary-share`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ shareEnabled: true }),
+    });
+    const value = await response.json().catch(() => null);
+    setSharing(false);
+    if (!response.ok || !value?.shareUrl) return toast.error(value?.error || "공유 링크를 만들지 못했습니다.");
+    setShare(value);
+    await navigator.clipboard.writeText(value.shareUrl);
+    toast.success("읽기 전용 공유 링크를 복사했습니다.");
+  }
+
+  async function disableShare() {
+    if (!workspace || sharing) return;
+    setSharing(true);
+    const response = await fetch(`/api/workspace/${workspace.id}/summary-share`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ shareEnabled: false }),
+    });
+    const value = await response.json().catch(() => null);
+    setSharing(false);
+    if (!response.ok) return toast.error(value?.error || "공유를 중지하지 못했습니다.");
+    setShare(value); toast.success("공유 링크를 비활성화했습니다.");
+  }
 
   if (wsLoading) {
     return (
@@ -95,6 +131,15 @@ export default function SummaryDashboardClient() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <motion.button
+            whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }} transition={spring}
+            onClick={() => void copyShareLink()} disabled={sharing}
+            className="flex items-center gap-1.5 rounded-xl bg-violet-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-violet-600 disabled:opacity-40"
+          >
+            {sharing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : share?.shareEnabled ? <Link2 className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
+            {share?.shareEnabled ? "공유 링크 복사" : "공유"}
+          </motion.button>
+          {share?.shareEnabled && <motion.button whileTap={{ scale: 0.96 }} onClick={() => void disableShare()} disabled={sharing} className="flex items-center gap-1.5 rounded-xl bg-secondary px-3 py-1.5 text-xs text-muted-foreground shadow-sm hover:text-foreground disabled:opacity-40"><Unlink className="h-3.5 w-3.5" />공유 중지</motion.button>}
           <motion.button
             whileHover={{ y: -1 }}
             whileTap={{ scale: 0.96 }}
