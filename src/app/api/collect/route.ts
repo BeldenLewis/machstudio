@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/ratelimit";
 import { fireWebhook } from "@/lib/webhook";
+import { captureDedupKey, captureEmailNormalized } from "@/lib/collect-capture-dedup";
 
 // Origin/Host 정규화: 프로토콜 + 호스트만 남김
 function normalizeOrigin(s: string): string {
@@ -198,6 +199,10 @@ export async function POST(request: Request) {
     return out.length > 0 ? out : null;
   };
   const cleanJourney = sanitizeJourney(journey);
+  const dedupKey = captureDedupKey(data, source.dedupKeyFields);
+  const dedupUsesEmail = dedupKey
+    ? /(^|[_-])e?mail($|[_-])/i.test(dedupKey.field) || /^e-?mail$/i.test(dedupKey.field)
+    : false;
 
   const recordData = {
     sourceId: source.id,
@@ -222,23 +227,41 @@ export async function POST(request: Request) {
     referrer: referrer ?? null,
     userAgent: userAgent ?? null,
     ip: ip === "unknown" ? null : ip,
+    // 설정에서 이메일 중복 차단을 켠 연동형만 부분 유니크 인덱스에 참여한다.
+    emailNormalized: dedupUsesEmail ? captureEmailNormalized(data) : null,
   };
 
-  let recordId: string;
+  const stored = await prisma.$transaction(async (tx) => {
+    if (dedupKey) {
+      // 동일 신청이 여러 브라우저 이벤트 경로에서 동시에 도착해도 검사와 생성을 직렬화한다.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`collect:${source.id}:${dedupKey.lockValue}`}, 0))`;
+      const existing = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id
+        FROM "CollectRecord"
+        WHERE "sourceId" = ${source.id}
+          AND (
+            "emailNormalized" = ${dedupKey.value}
+            OR lower(btrim(data ->> ${dedupKey.field})) = ${dedupKey.value}
+          )
+        LIMIT 1
+      `;
+      if (existing[0]) return { id: existing[0].id, deduplicated: true };
+    }
 
-  if (Array.isArray(_fieldMeta) && _fieldMeta.length > 0) {
-    const [record] = await prisma.$transaction([
-      prisma.collectRecord.create({ data: recordData }),
-      prisma.collectSource.update({
+    const record = await tx.collectRecord.create({ data: recordData });
+    if (Array.isArray(_fieldMeta) && _fieldMeta.length > 0) {
+      await tx.collectSource.update({
         where: { id: source.id },
         data: { discoveredFields: _fieldMeta },
-      }),
-    ]);
-    recordId = record.id;
-  } else {
-    const record = await prisma.collectRecord.create({ data: recordData });
-    recordId = record.id;
+      });
+    }
+    return { id: record.id, deduplicated: false };
+  });
+
+  if (stored.deduplicated) {
+    return NextResponse.json({ ok: true, id: stored.id, deduplicated: true }, { status: 200, headers });
   }
+  const recordId = stored.id;
 
   // ── 5. 알림/웹훅 (백그라운드) ──────────────────
   if (source.webhookUrl) {
