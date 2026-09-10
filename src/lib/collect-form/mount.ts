@@ -92,6 +92,8 @@ const COPY = {
   closedNow: "Registration just closed.",
   notOpenYet: "Registration hasn't opened yet.",
   doneTitle: "You're registered",
+  checkinTitle: "Show this QR code at the check-in desk",
+  checkinBodyWithEmail: "You can also find the same QR code in your confirmation email.",
   regNoLabel: "Registration number — show this at the venue",
   previewFlag: "Preview — nothing is saved",
   ticketLink: "Open my ticket page →",
@@ -1208,6 +1210,18 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     };
   }
 
+  /**
+   * QR 을 등록 데스크에서 보여 달라는 요청 — 등록번호 아래 작은 캡션만으로는 놓치기 쉬워
+   * QR 바로 아래 강조 박스로 한 번 더 짚는다(현장 문의를 줄이려는 것, 이메일·티켓 페이지와
+   * 같은 문구·같은 강조 방식).
+   */
+  function checkinCallout(): HTMLElement {
+    return h("div", { class: "msf-callout" },
+      h("div", { class: "msf-callout-title" }, COPY.checkinTitle),
+      config.confirmationEmail.enabled ? h("div", { class: "msf-callout-body" }, COPY.checkinBodyWithEmail) : null,
+    );
+  }
+
   // ── 렌더 ────────────────────────────────────────────────────────────
   const consentHost = h("div", { class: "msf-stack" });
   function renderConsent(): void {
@@ -1257,6 +1271,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
            * 세 자리(완료·티켓·이메일)에서 같다.
            */
           config.completion.showQr ? qrCard(doneRegNo) : null,
+          config.completion.showQr ? checkinCallout() : null,
           identityRows.length > 0 ? h("dl", { class: "msf-idcheck" },
             ...identityRows.flatMap(([label, value]) => [h("dt", null, label), h("dd", null, value)]),
           ) : null,

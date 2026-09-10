@@ -11,6 +11,19 @@ const escapeHtml = (value: string) => value
 
 const lines = (value: string) => escapeHtml(value).replace(/\r?\n/g, "<br>");
 
+/**
+ * accent 를 흰색 쪽으로 옅게 섞는다 — 강조 박스 배경색으로 쓴다.
+ * `color-mix()` 는 아웃룩 데스크톱(워드 렌더러)이 못 읽어 배경이 통째로 안 칠해진다.
+ * 채널별로 직접 섞어 고정 hex 를 내면 이메일 클라이언트 전반에서 안전하다.
+ */
+function tint(hex: string, amount: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return "#fff7ed";
+  const num = parseInt(m[1], 16);
+  const mix = (shift: number) => Math.round(255 * (1 - amount) + ((num >> shift) & 255) * amount);
+  return `#${[mix(16), mix(8), mix(0)].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
 function eventRows(config: CollectFormConfig, locale: string) {
   if (!config.confirmationEmail.includeEventInfo) return [];
   const rows: Array<[string, string]> = [];
@@ -78,6 +91,28 @@ export function buildCollectConfirmationEmail({
       </div>`
     : "";
 
+  // 등록 데스크에서 QR 을 보여 달라는 요청이 문의로 자주 들어와, 본문 안내 문구와 별개로
+  // 눈에 띄는 강조 박스를 하나 더 둔다(완료 화면·티켓 페이지와 같은 문구·같은 강조 방식).
+  const checkinCalloutHtml = email.showQr
+    ? `<div style="margin:20px 0 0;padding:16px 18px;border-radius:14px;border-left:4px solid ${accent};background:${tint(accent, 0.16)};">
+        <div style="font-size:14px;font-weight:800;color:${accent};line-height:1.5;">Show this QR code at the registration desk</div>
+        <div style="margin-top:2px;font-size:13px;color:#555;line-height:1.5;">to check in and enter the event.</div>
+      </div>`
+    : "";
+
+  const socialLinks: Array<[string, string]> = [
+    ...(email.instagramUrl ? [["Instagram", email.instagramUrl] as [string, string]] : []),
+    ...(email.tiktokUrl ? [["TikTok", email.tiktokUrl] as [string, string]] : []),
+  ];
+  const socialHtml = socialLinks.length
+    ? `<div style="margin-top:22px;padding-top:18px;border-top:1px solid #e8e8e8;text-align:center;">
+        <div style="font-size:11px;color:#999;margin-bottom:8px;">Follow us for event updates</div>
+        <div style="font-size:13px;font-weight:700;">
+          ${socialLinks.map(([label, url]) => `<a href="${escapeHtml(url)}" style="color:${accent};text-decoration:none;">${escapeHtml(label)}</a>`).join('<span style="color:#ccc;padding:0 8px;">·</span>')}
+        </div>
+      </div>`
+    : "";
+
   const noticesHtml = emailNotices.map((notice) => {
     const title = localize(notice.title, locale);
     const noticeBody = localize(notice.body, locale);
@@ -96,6 +131,7 @@ export function buildCollectConfirmationEmail({
           <div style="font-size:13px;font-weight:700;color:${accent};letter-spacing:.04em;">${escapeHtml(eventName)}</div>
           <h1 style="margin:10px 0 12px;font-size:26px;line-height:1.25;">${escapeHtml(heading)}</h1>
           <p style="margin:0;color:#555;font-size:14px;line-height:1.75;">${lines(body)}</p>
+          ${checkinCalloutHtml}
           ${detailHtml}
         </td></tr>
         <tr><td style="padding:6px 24px 30px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
@@ -108,6 +144,7 @@ export function buildCollectConfirmationEmail({
             <div style="margin-top:6px;color:#777;font-size:11px;">Show this at the venue</div>
           </div>
           ${noticesHtml}
+          ${socialHtml}
         </td></tr>
       </table>
     </td></tr></table>

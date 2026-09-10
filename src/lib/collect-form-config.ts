@@ -203,6 +203,9 @@ export interface CollectConfirmationEmail {
   replyTo: string;
   showQr: boolean;
   includeEventInfo: boolean;
+  /** 메일 하단 팔로우 링크 — 비우면 그 항목을 아예 그리지 않는다. */
+  instagramUrl: string;
+  tiktokUrl: string;
 }
 
 /**
@@ -305,6 +308,8 @@ export const EMPTY_FORM_CONFIG: CollectFormConfig = {
     replyTo: "",
     showQr: true,
     includeEventInfo: true,
+    instagramUrl: "",
+    tiktokUrl: "",
   },
   /* 등록 확인은 **꺼진 채로 시작한다.** 켜면 이메일 하나만 아는 사람에게 남의 QR 티켓을
      보여 주는 화면이라, 운영자가 의식적으로 켜야 한다. 이 파일의 다른 토글도 전부 닫힘이 기본이다
@@ -583,6 +588,8 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
       replyTo: str(confirmationEmailRaw.replyTo),
       showQr: confirmationEmailRaw.showQr !== false,
       includeEventInfo: confirmationEmailRaw.includeEventInfo !== false,
+      instagramUrl: safeHttpUrl(confirmationEmailRaw.instagramUrl),
+      tiktokUrl: safeHttpUrl(confirmationEmailRaw.tiktokUrl),
     },
     lookup: {
       enabled: lookupRaw.enabled === true,

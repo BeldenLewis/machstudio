@@ -208,6 +208,15 @@ export const COLLECT_FORM_CSS = `
 }
 .msf-regno-label{font-size:11px;color:var(--msf-muted);margin-top:4px;letter-spacing:normal}
 
+/* QR 을 등록 데스크에서 보여 달라는 안내 — QR 카드 바로 아래, accent 로 눈에 띄게. */
+.msf-callout{
+  width:100%;margin-top:14px;padding:12px 14px;border-radius:var(--msf-radius);text-align:left;
+  border-left:3px solid var(--msf-accent);
+  background:color-mix(in srgb, var(--msf-accent) 12%, var(--msf-bg));
+}
+.msf-callout-title{font-size:13px;font-weight:800;color:var(--msf-accent)}
+.msf-callout-body{margin-top:2px;font-size:12px;color:var(--msf-muted);line-height:1.5}
+
 /* ── QR ────────────────────────────────────── */
 /**
  * **강제 라이트.** 페이지 나머지가 테마를 따라도 QR 카드만은 흰 배경·검은 모듈로 못 박는다.
