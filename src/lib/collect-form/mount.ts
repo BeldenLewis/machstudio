@@ -46,7 +46,7 @@ function safeHttpUrl(value: unknown): string {
 }
 // 로더가 심어 둔 first-touch UTM 을 그대로 쓴다 — 파트너 사이트를 먼저 거친 방문자의 정본이다.
 import { buildUtmEnvelope } from "@/lib/attribution-client";
-import { visitorBadgeCssVars } from "@/lib/collect-badge";
+import { resolveVisitorBadgeLabel, visitorBadgeCssVars } from "@/lib/collect-badge";
 import { downloadTicketImage } from "./ticket-image";
 import type { FormOverlayOpener, FormOverlaySlot } from "@/lib/collect-form/target-registry";
 import { deepActiveElement } from "@/lib/dom/focus";
@@ -1203,7 +1203,11 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
     const extras = companionTicketExtras(config, values);
     return {
       name,
-      visitorType: config.branch.enabled ? text(values[config.branch.fieldKey]) : "",
+      visitorType: resolveVisitorBadgeLabel(
+        config,
+        values,
+        config.branch.enabled ? text(values[config.branch.fieldKey]) : "",
+      ),
       maskedEmail: maskedEmail(valueFor("email")),
       maskedPhone: maskedPhone(valueFor("tel")),
       extras,

@@ -1,6 +1,32 @@
+import type { CollectFormConfig } from "@/lib/collect-form-config";
+
 export interface VisitorBadgePalette {
   background: string;
   foreground: string;
+}
+
+function comparableBadgeValue(value: unknown): string {
+  if (Array.isArray(value)) return value.map(comparableBadgeValue).filter(Boolean).join("\n");
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value).trim().toLocaleLowerCase();
+  }
+  return "";
+}
+
+/** 첫 번째 일치 규칙의 문구를 쓰고, 없으면 기존 참가자 유형을 그대로 유지한다. */
+export function resolveVisitorBadgeLabel(
+  config: Pick<CollectFormConfig, "badgeRules">,
+  data: Record<string, unknown>,
+  fallback: string,
+): string {
+  for (const rule of config.badgeRules) {
+    const actual = comparableBadgeValue(data[rule.fieldKey]);
+    const expected = comparableBadgeValue(rule.value);
+    if (!actual || !expected) continue;
+    const matches = rule.operator === "equals" ? actual === expected : actual.includes(expected);
+    if (matches) return rule.label;
+  }
+  return fallback;
 }
 
 const KNOWN_BADGE_PALETTES: Record<string, VisitorBadgePalette> = {

@@ -113,6 +113,18 @@ export interface CollectBranch {
   groups: Array<{ value: string; fields: CollectField[] }>;
 }
 
+/**
+ * 저장된 응답값으로 기본 참가자 유형 배지의 문구를 바꾸는 규칙.
+ * 특정 행사나 "Ambassador" 같은 단어를 코드에 넣지 않고 폼마다 운영자가 정의한다.
+ */
+export interface CollectBadgeRule {
+  id: string;
+  fieldKey: string;
+  operator: "equals" | "contains";
+  value: string;
+  label: string;
+}
+
 // ── 행사 개요 ─────────────────────────────────────────────────────────
 /**
  * 표시용이 아니라 **동작하는 데이터**(설계 §5.1). 개최 기간은 현장 체크인의 일자 판정에 쓰이고,
@@ -253,6 +265,7 @@ export interface CollectTheme {
 export interface CollectFormConfig {
   fields: CollectField[];
   branch: CollectBranch;
+  badgeRules: CollectBadgeRule[];
   eventInfo: CollectEventInfo;
   notices: CollectNotice[];
   validation: CollectValidation;
@@ -282,6 +295,7 @@ export interface CollectFormConfig {
 export const EMPTY_FORM_CONFIG: CollectFormConfig = {
   fields: [],
   branch: { enabled: false, fieldKey: "", groups: [] },
+  badgeRules: [],
   eventInfo: {
     enabled: false,
     eventDates: [],
@@ -496,6 +510,7 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
   const branchGroups = Array.isArray(branchRaw.groups) ? branchRaw.groups : [];
   const fields = normalizeFields(c.fields, locale);
   const fieldKey = str(branchRaw.fieldKey);
+  const badgeRulesRaw = Array.isArray(c.badgeRules) ? c.badgeRules : [];
 
   const eventRaw = obj(c.eventInfo);
   const windowRaw = obj(eventRaw.registrationWindow);
@@ -533,6 +548,16 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
         return { value: str(gr.value), fields: normalizeFields(gr.fields, locale) };
       }).filter((g) => g.value !== ""),
     },
+    badgeRules: badgeRulesRaw.map((rule, index) => {
+      const r = obj(rule);
+      return {
+        id: str(r.id) || `badge-rule-${index + 1}`,
+        fieldKey: str(r.fieldKey),
+        operator: r.operator === "equals" ? "equals" as const : "contains" as const,
+        value: str(r.value).slice(0, 300),
+        label: str(r.label).slice(0, 80),
+      };
+    }).filter((rule) => rule.fieldKey && rule.value && rule.label).slice(0, 30),
     eventInfo: {
       enabled: eventRaw.enabled === true,
       eventDates: Array.isArray(eventRaw.eventDates) ? eventRaw.eventDates.map(safeStr).map((d) => d.trim()).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)) : [],

@@ -10,6 +10,7 @@
 import { toE164, isSupportedCountry } from "@/lib/collect-phone";
 import { isValidCollectEmail, normalizeEmail } from "@/lib/collect-submit";
 import { companionTicketExtras, type CollectFormConfig, type Localized } from "@/lib/collect-form-config";
+import { resolveVisitorBadgeLabel } from "@/lib/collect-badge";
 
 /** 조회 입력 — 설정에 따라 둘 중 하나만 쓰일 수도 있다. */
 export interface LookupInput {
@@ -225,7 +226,8 @@ export function buildTicketView(
     .filter(Boolean)
     .join(" ");
 
-  const visitorType = config.branch.enabled ? str(data[config.branch.fieldKey]) : "";
+  const baseVisitorType = config.branch.enabled ? str(data[config.branch.fieldKey]) : "";
+  const visitorType = resolveVisitorBadgeLabel(config, data, baseVisitorType);
 
   const pick = (type: string) => {
     const field = config.fields.find((f) => f.type === type);

@@ -20,6 +20,7 @@ import {
   localize,
   toLocalized,
   type CollectFormConfig,
+  type CollectBadgeRule,
   type CollectNotice,
   type NoticeMode,
   type NoticePlacement,
@@ -94,6 +95,11 @@ export function CollectFormSections({
     || Boolean(localize(ev.venue, DEFAULT_LOCALE))
     || ev.openingHours.length > 0
     || ev.extraRows.some((row) => Boolean(localize(row.label, DEFAULT_LOCALE) && localize(row.value, DEFAULT_LOCALE)));
+  const badgeFields = useMemo(() => {
+    const seen = new Set<string>();
+    return [...config.fields, ...config.branch.groups.flatMap((group) => group.fields)]
+      .filter((field) => field.key && !seen.has(field.key) && seen.add(field.key));
+  }, [config.branch.groups, config.fields]);
 
   const setEvent = (next: Partial<typeof ev>) => patch({ eventInfo: { ...ev, ...next } });
   const setWindow = (next: Partial<typeof win>) =>
@@ -128,6 +134,80 @@ export function CollectFormSections({
             inheritLabel="기본(흰색)"
           />
         </div>
+      </Block>
+
+      {/* ── 배지 이름 규칙 ───────────────────────────────────────── */}
+      <Block
+        title="배지 이름 규칙"
+        desc="응답값에 따라 Press 같은 기본 배지 이름을 바꿔요. 위에서 먼저 일치한 규칙 하나만 적용됩니다."
+      >
+        <EditableList<CollectBadgeRule & { [ROW_KEY]?: string }>
+          listId="collect-badge-rules"
+          itemNoun="규칙"
+          items={withRowKeys(config.badgeRules)}
+          onChange={(next) => patch({ badgeRules: next })}
+          rowKey={(rule) => rule.id}
+          reorderable
+          addLabel="배지 규칙 추가"
+          makeItem={() => ({
+            id: crypto.randomUUID(),
+            fieldKey: badgeFields[0]?.key ?? "",
+            operator: "contains",
+            value: "",
+            label: "",
+          })}
+          emptyState={(
+            <p className="rounded-xl bg-secondary/40 p-4 text-center text-[11px] text-muted-foreground">
+              규칙이 없으면 기존 참가자 유형(예: Press)이 그대로 표시돼요.
+            </p>
+          )}
+          renderRow={({ item, handle, removeButton, patch: patchRow }) => (
+            <div className={`${R.surface} flex items-start gap-1.5 bg-secondary p-2 ${FINISH.s2}`}>
+              <div className="mt-1">{handle}</div>
+              <div className="grid min-w-0 flex-1 grid-cols-1 gap-1.5 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,.7fr)] sm:items-center">
+                <select
+                  value={item.fieldKey}
+                  onChange={(event) => patchRow({ fieldKey: event.target.value })}
+                  aria-label="기준 항목"
+                  className="min-w-0 rounded-lg bg-background px-2 py-1.5 text-[11px] shadow-sm outline-none"
+                >
+                  <option value="">항목 선택</option>
+                  {badgeFields.map((field) => (
+                    <option key={field.key} value={field.key}>{localize(field.label, DEFAULT_LOCALE) || field.key}</option>
+                  ))}
+                </select>
+                <select
+                  value={item.operator}
+                  onChange={(event) => patchRow({ operator: event.target.value as CollectBadgeRule["operator"] })}
+                  aria-label="비교 방식"
+                  className="rounded-lg bg-background px-2 py-1.5 text-[11px] shadow-sm outline-none"
+                >
+                  <option value="contains">포함</option>
+                  <option value="equals">정확히 일치</option>
+                </select>
+                <input
+                  value={item.value}
+                  onChange={(event) => patchRow({ value: event.target.value })}
+                  placeholder="Korea Expo LA 2026 Ambassador"
+                  aria-label="비교할 값"
+                  className="min-w-0 rounded-lg bg-background px-2 py-1.5 text-[11px] shadow-sm outline-none"
+                />
+                <span className="hidden text-[11px] text-muted-foreground sm:inline">이면</span>
+                <input
+                  value={item.label}
+                  onChange={(event) => patchRow({ label: event.target.value })}
+                  placeholder="표시 이름: Ambassador"
+                  aria-label="표시할 배지 이름"
+                  className="min-w-0 rounded-lg bg-background px-2 py-1.5 text-[11px] shadow-sm outline-none"
+                />
+              </div>
+              <div className="mt-1">{removeButton()}</div>
+            </div>
+          )}
+        />
+        {badgeFields.length === 0 && (
+          <p className="text-[11px] text-amber-700 dark:text-amber-300">먼저 등록 항목을 하나 이상 만들어야 규칙을 연결할 수 있어요.</p>
+        )}
       </Block>
 
       {/* ── 행사 개요 ─────────────────────────────────────────────── */}
