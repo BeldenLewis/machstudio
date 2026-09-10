@@ -156,4 +156,29 @@ describe("buildCollectScripts — 성공 메시지가 alert() 팝업으로 뜨�
     expect(fetchMock).toHaveBeenCalledTimes(1);
     vi.unstubAllGlobals();
   });
+
+  it("전송 실패 payload를 보관하고 온라인 복귀 시 다시 보낸다", async () => {
+    localStorage.clear();
+    document.body.innerHTML = `<div class="field"><input value="홍길동" /></div>`;
+    const { script } = buildCollectScripts({
+      source: { id: "retry_source", apiKey: "key_1", successTrigger: "완료", redirectUrl: null, fieldGroupSelector: ".field" },
+      fieldMappings: [{ index: 0, key: "name", label: "이름" }],
+      baseUrl: "https://machstudio.app",
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("alert", vi.fn());
+
+    new Function(script)();
+    window.alert("완료");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    window.dispatchEvent(new Event("online"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(localStorage.getItem("mach_collect_outbox_retry_source")).toBe("[]");
+    vi.unstubAllGlobals();
+  });
 });
