@@ -31,6 +31,14 @@ import { TicketDownloadButton } from "./TicketDownloadButton";
 
 export const dynamic = "force-dynamic";
 
+/** 강조 박스 배경 — accent 를 옅게 깐다. 잘못된/빈 값은 기본 accent 로 떨어뜨린다. */
+function accentTint(hex: string): { border: string; background: string } {
+  const valid = /^#[0-9a-f]{6}$/i.test(hex) ? hex : "#F28C18";
+  const n = parseInt(valid.slice(1), 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return { border: valid, background: `rgba(${r},${g},${b},0.12)` };
+}
+
 /** 티켓 주소가 검색 결과에 뜨면 남의 티켓이 공개되는 것과 같다. */
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
@@ -125,6 +133,7 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
   if (!view) notFound();
 
   const dates = config.eventInfo.enabled ? config.eventInfo.eventDates : [];
+  const accent = accentTint(config.theme.accentColor);
 
   /**
    * **강제 라이트.** 이 화면은 테마를 따르지 않는다 — QR 카드가 다크 배경 위에 놓이면
@@ -170,6 +179,19 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
               height={200}
               className="block h-[200px] w-[200px]"
             />
+          </div>
+
+          {/* 등록 데스크에서 QR 을 보여 달라는 안내 — 등록번호 아래 캡션만으로는 놓치기 쉬워 강조한다. */}
+          <div
+            className="mx-auto mt-4 w-full max-w-[280px] rounded-xl border-l-4 px-3.5 py-3 text-left"
+            style={{ borderColor: accent.border, backgroundColor: accent.background }}
+          >
+            <p className="text-[13px] font-extrabold" style={{ color: accent.border }}>
+              Show this QR code at the check-in desk
+            </p>
+            <p className="mt-0.5 text-[11px] leading-snug text-neutral-600">
+              Present it to enter the event.
+            </p>
           </div>
 
           {(view.maskedPhone || view.maskedEmail || view.extras.length > 0) && (

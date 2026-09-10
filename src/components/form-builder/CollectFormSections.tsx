@@ -572,6 +572,23 @@ export function CollectFormSections({
                 일정·장소 표시는 켜져 있지만 표시할 값이 없어요. 위의 행사 개요에 개최일, 장소 또는 운영시간을 입력하세요.
               </p>
             )}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <UrlField
+                label="인스타그램 링크"
+                value={confirmationEmail.instagramUrl}
+                onChange={(v) => patch({ confirmationEmail: { ...confirmationEmail, instagramUrl: v } })}
+                placeholder="https://instagram.com/koreaexpo_global"
+              />
+              <UrlField
+                label="틱톡 링크"
+                value={confirmationEmail.tiktokUrl}
+                onChange={(v) => patch({ confirmationEmail: { ...confirmationEmail, tiktokUrl: v } })}
+                placeholder="https://tiktok.com/@koreaexpo_official"
+              />
+            </div>
+            <p className="text-[11px] leading-relaxed text-muted-foreground/70">
+              비워 두면 이메일 하단에 해당 링크를 그리지 않아요. 계정 팔로우를 메일에서만 안내하고 싶을 때 씁니다.
+            </p>
             <p className="text-[11px] leading-relaxed text-muted-foreground/70">
               발신 주소는 서버의 <code className="font-mono">EMAIL_FROM</code>을 사용해요. 이메일에만 넣을 추가 안내는 안내 블록의 위치를 ‘이메일’로 선택하세요.
             </p>
