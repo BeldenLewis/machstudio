@@ -118,7 +118,7 @@ function DonutLegend({ slices, total, onColorChange }: {
             ) : (
               <span className="h-2 w-2 shrink-0 rounded-full print:hidden" style={{ backgroundColor: slice.color }} />
             )}
-            <span className="min-w-0 flex-1 truncate text-muted-foreground print:ml-1 print:flex-none">{slice.label}</span>
+            <span className="min-w-0 flex-1 truncate text-muted-foreground print:ml-1">{slice.label}</span>
             <span className="shrink-0 font-medium tabular-nums print:ml-2">{Math.round((slice.count / total) * 100)}%</span>
           </li>
         );
