@@ -153,6 +153,16 @@ ${fieldMap}
     return false;
   }
 
+  // 운영자가 복사해 넣은 성공 문구의 앞뒤 공백이나, 사이트가 HTML/alert에서
+  // 공백·줄바꿈을 다르게 렌더링하는 차이 때문에 성공 감지가 통째로 멈추지 않게 한다.
+  function normalizeTriggerText(value) {
+    return String(value == null ? "" : value).replace(/\\s+/g, " ").trim();
+  }
+  function hasSuccessTrigger(value) {
+    var trigger = normalizeTriggerText(SUCCESS_TRIGGER);
+    return !!trigger && normalizeTriggerText(value).indexOf(trigger) !== -1;
+  }
+
   // ── UTM 어트리뷰션 (first-touch + last-touch + multi-touch journey) ──
 ${utmCore}
 
@@ -416,6 +426,18 @@ ${utmCore}
     // native form submit 이벤트 → 데이터 캡처 (버튼 텍스트 매칭 실패 대비)
     document.addEventListener("submit", function() { capture(); }, true);
 
+    // 일부 대행 사이트는 form.submit()을 직접 호출해 submit 이벤트 자체가 발생하지 않는다.
+    // 이 경로에서도 이동 전에 값을 확보해 pagehide/성공 문구 감지가 전송할 수 있게 한다.
+    try {
+      var nativeSubmit = window.HTMLFormElement && window.HTMLFormElement.prototype.submit;
+      if (typeof nativeSubmit === "function") {
+        window.HTMLFormElement.prototype.submit = function() {
+          capture();
+          return nativeSubmit.apply(this, arguments);
+        };
+      }
+    } catch (e) {}
+
     // 성공 트리거 텍스트 감지 → 전송 (primary)
     var fire = function() {
       if (triggered) return;
@@ -442,7 +464,7 @@ ${utmCore}
     var observer = new MutationObserver(function() {
       if (triggered) return;
       var bodyText = document.body.innerText || document.body.textContent || "";
-      if (SUCCESS_TRIGGER && bodyText.indexOf(SUCCESS_TRIGGER) !== -1) {
+      if (hasSuccessTrigger(bodyText)) {
         fire();
       }
     });
@@ -474,7 +496,7 @@ ${utmCore}
     if (typeof originalAlert === "function") {
       window.alert = function(message) {
         try {
-          if (!triggered && SUCCESS_TRIGGER && String(message == null ? "" : message).indexOf(SUCCESS_TRIGGER) !== -1) {
+          if (!triggered && hasSuccessTrigger(message)) {
             fire();
           }
         } catch (e) {}

@@ -129,4 +129,31 @@ describe("buildCollectScripts — 성공 메시지가 alert() 팝업으로 뜨�
 
     vi.unstubAllGlobals();
   });
+
+  it("설정 문구 끝의 공백과 화면 문구의 연속 공백 차이를 무시한다", () => {
+    document.body.innerHTML = `
+      <div class="field"><span>이름</span><div class="input-area"><input value="홍길동" /></div></div>
+    `;
+    const { script } = buildCollectScripts({
+      source: {
+        id: "src_1",
+        apiKey: "key_1",
+        successTrigger: "사전등록이 완료되었습니다. ",
+        redirectUrl: null,
+        fieldGroupSelector: ".field",
+      },
+      fieldMappings: [{ index: 0, key: "name", label: "이름" }],
+      baseUrl: "https://machstudio.app",
+    });
+
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("alert", vi.fn());
+
+    new Function(script)();
+    window.alert("사전등록이   완료되었습니다.");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
 });
