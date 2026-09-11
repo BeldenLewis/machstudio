@@ -123,6 +123,8 @@ export interface CollectBadgeRule {
   operator: "equals" | "contains";
   value: string;
   label: string;
+  /** 비우면 배지 이름에서 안정적으로 자동 배정한다. */
+  backgroundColor?: string;
 }
 
 // ── 행사 개요 ─────────────────────────────────────────────────────────
@@ -556,6 +558,7 @@ export function normalizeCollectForm(raw: unknown): CollectFormConfig {
         operator: r.operator === "equals" ? "equals" as const : "contains" as const,
         value: str(r.value).slice(0, 300),
         label: str(r.label).slice(0, 80),
+        backgroundColor: /^#[0-9a-fA-F]{6}$/.test(str(r.backgroundColor)) ? str(r.backgroundColor) : "",
       };
     }).filter((rule) => rule.fieldKey && rule.value && rule.label).slice(0, 30),
     eventInfo: {

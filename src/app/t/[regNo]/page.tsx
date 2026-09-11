@@ -160,8 +160,8 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
             <p
               className="mt-4 inline-flex min-w-28 items-center justify-center rounded-full px-5 py-2 text-sm font-black uppercase tracking-[0.1em] shadow-md"
               style={{
-                backgroundColor: visitorBadgePalette(view.visitorType).background,
-                color: visitorBadgePalette(view.visitorType).foreground,
+                backgroundColor: visitorBadgePalette(view.visitorType, config.badgeRules).background,
+                color: visitorBadgePalette(view.visitorType, config.badgeRules).foreground,
               }}
             >
               {view.visitorType}
@@ -234,6 +234,7 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
             qrUrl: `/api/collect/qr/${encodeURIComponent(view.registrationNo)}`,
             name: view.name,
             visitorType: view.visitorType,
+            badgeBackgroundColor: visitorBadgePalette(view.visitorType, config.badgeRules).background,
             maskedEmail: view.maskedEmail,
             maskedPhone: view.maskedPhone,
             accentColor: config.theme.accentColor,

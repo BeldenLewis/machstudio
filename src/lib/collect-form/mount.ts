@@ -46,7 +46,7 @@ function safeHttpUrl(value: unknown): string {
 }
 // 로더가 심어 둔 first-touch UTM 을 그대로 쓴다 — 파트너 사이트를 먼저 거친 방문자의 정본이다.
 import { buildUtmEnvelope } from "@/lib/attribution-client";
-import { resolveVisitorBadgeLabel, visitorBadgeCssVars } from "@/lib/collect-badge";
+import { resolveVisitorBadgeLabel, visitorBadgeCssVars, visitorBadgePalette } from "@/lib/collect-badge";
 import { downloadTicketImage } from "./ticket-image";
 import type { FormOverlayOpener, FormOverlaySlot } from "@/lib/collect-form/target-registry";
 import { deepActiveElement } from "@/lib/dom/focus";
@@ -1177,6 +1177,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
         registrationNo: regNo,
         qrUrl: `${opts.origin}/api/collect/qr/${encodeURIComponent(regNo)}`,
         ...identity,
+        badgeBackgroundColor: visitorBadgePalette(identity.visitorType, config.badgeRules).background,
         accentColor: config.theme.accentColor,
       }).catch(() => window.alert("We couldn't save the ticket image. Please take a screenshot instead.")); },
     }, COPY.saveImage);
@@ -1267,7 +1268,7 @@ export function mountCollectForm(opts: MountCollectFormOptions): CollectFormHand
       stack.appendChild(
         h("div", { class: "msf-done" },
           h("div", { class: "msf-done-title" }, COPY.doneTitle),
-          identity.visitorType ? h("div", { class: "msf-badge", style: visitorBadgeCssVars(identity.visitorType) }, identity.visitorType) : null,
+          identity.visitorType ? h("div", { class: "msf-badge", style: visitorBadgeCssVars(identity.visitorType, config.badgeRules) }, identity.visitorType) : null,
           identity.name ? h("div", { class: "msf-found-name" }, identity.name) : null,
           /**
            * QR 을 여기서 보여 준다 — 이메일 연동 전에는 등록자가 QR 을 받는 **첫 경로**다

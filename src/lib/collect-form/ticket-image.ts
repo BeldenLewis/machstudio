@@ -6,6 +6,7 @@ export interface TicketImageInput {
   qrUrl: string;
   name: string;
   visitorType: string;
+  badgeBackgroundColor?: string;
   maskedEmail: string;
   maskedPhone: string;
   accentColor?: string;
@@ -89,7 +90,11 @@ export async function downloadTicketImage(input: TicketImageInput): Promise<void
 
   const eventName = input.eventName.trim() || "Event Registration";
   const accent = /^#[0-9a-f]{6}$/i.test(input.accentColor || "") ? input.accentColor! : "#F28C18";
-  const badge = input.visitorType ? visitorBadgePalette(input.visitorType) : { background: accent, foreground: "#FFFFFF" };
+  const badge = input.visitorType
+    ? visitorBadgePalette(input.visitorType, input.badgeBackgroundColor
+      ? [{ label: input.visitorType, backgroundColor: input.badgeBackgroundColor }]
+      : [])
+    : { background: accent, foreground: "#FFFFFF" };
 
   ctx.fillStyle = "#FFFFFF";
   ctx.fillRect(0, 0, canvas.width, canvas.height);

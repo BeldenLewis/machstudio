@@ -13,7 +13,7 @@ import { ensureFormStyles } from "./css";
 import { onAccentColor } from "@/lib/competition-render";
 import { COUNTRY_DIALS, flagEmoji, isKnownCountry } from "@/lib/collect-country";
 import type { CollectFormConfig } from "@/lib/collect-form-config";
-import { visitorBadgeCssVars } from "@/lib/collect-badge";
+import { visitorBadgeCssVars, visitorBadgePalette } from "@/lib/collect-badge";
 import { downloadTicketImage } from "./ticket-image";
 
 
@@ -198,7 +198,7 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
     */
     if (view.visitorType) card.appendChild(h("div", {
       class: "msf-badge",
-      style: visitorBadgeCssVars(view.visitorType),
+      style: visitorBadgeCssVars(view.visitorType, config.badgeRules),
     }, view.visitorType));
     if (view.name) card.appendChild(h("div", { class: "msf-found-name" }, view.name));
 
@@ -249,6 +249,7 @@ export function mountCollectLookup(opts: MountLookupOptions): LookupHandle {
             qrUrl: `${opts.origin}/api/collect/qr/${encodeURIComponent(view.registrationNo)}`,
             name: view.name,
             visitorType: view.visitorType,
+            badgeBackgroundColor: visitorBadgePalette(view.visitorType, config.badgeRules).background,
             maskedEmail: view.maskedEmail,
             maskedPhone: view.maskedPhone,
             extras: view.extras,

@@ -28,6 +28,7 @@ import {
 import { CollectLegalGenerator } from "@/components/form-builder/CollectLegalGenerator";
 import { ConsentBodyField, useWorkspaceLegalProfile } from "@/components/legal/legal-generator-shared";
 import { resolveOrgProfile } from "@/lib/legal-templates";
+import { visitorBadgePalette } from "@/lib/collect-badge";
 
 const CONSENT_KIND_META = {
   privacy: { label: "개인정보 (필수)", noun: "개인정보", placeholder: "개인정보 수집·이용에 동의합니다" },
@@ -155,6 +156,7 @@ export function CollectFormSections({
             operator: "contains",
             value: "",
             label: "",
+            backgroundColor: "",
           })}
           emptyState={(
             <p className="rounded-xl bg-secondary/40 p-4 text-center text-[11px] text-muted-foreground">
@@ -200,6 +202,25 @@ export function CollectFormSections({
                   aria-label="표시할 배지 이름"
                   className="min-w-0 rounded-lg bg-background px-2 py-1.5 text-[11px] shadow-sm outline-none"
                 />
+                <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground sm:col-span-5">
+                  <input
+                    type="color"
+                    value={item.backgroundColor || visitorBadgePalette(item.label || "Badge").background}
+                    onChange={(event) => patchRow({ backgroundColor: event.target.value.toUpperCase() })}
+                    aria-label="배지 배경색"
+                    className="h-7 w-9 cursor-pointer rounded-md bg-transparent p-0 shadow-sm"
+                  />
+                  <span>배지 색상</span>
+                  <span
+                    className="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide shadow-sm"
+                    style={{
+                      backgroundColor: visitorBadgePalette(item.label || "Badge", [item]).background,
+                      color: visitorBadgePalette(item.label || "Badge", [item]).foreground,
+                    }}
+                  >
+                    {item.label || "Badge"}
+                  </span>
+                </label>
               </div>
               <div className="mt-1">{removeButton()}</div>
             </div>

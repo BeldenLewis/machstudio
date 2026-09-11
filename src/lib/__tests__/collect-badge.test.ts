@@ -21,6 +21,7 @@ describe("응답값 기반 배지 이름", () => {
       operator: "contains" as const,
       value: "Korea Expo LA 2026 Ambassador",
       label: "Ambassador",
+      backgroundColor: "#7C3AED",
     }],
   };
 
@@ -36,5 +37,12 @@ describe("응답값 기반 배지 이름", () => {
 
   it("일치하지 않으면 기존 참가자 유형을 유지한다", () => {
     expect(resolveVisitorBadgeLabel(config, { media_type: "Broadcast" }, "Press")).toBe("Press");
+  });
+
+  it("규칙에서 지정한 색과 읽기 쉬운 글자색을 사용한다", () => {
+    expect(visitorBadgePalette("Ambassador", config.badgeRules)).toEqual({
+      background: "#7C3AED",
+      foreground: "#FFFFFF",
+    });
   });
 });

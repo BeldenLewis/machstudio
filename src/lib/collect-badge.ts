@@ -5,6 +5,14 @@ export interface VisitorBadgePalette {
   foreground: string;
 }
 
+type BadgeColorRule = { label: string; backgroundColor?: string };
+
+function foregroundFor(background: string): string {
+  const hex = background.slice(1);
+  const [r, g, b] = [0, 2, 4].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
+  return ((r * 299 + g * 587 + b * 114) / 1000) >= 160 ? "#171717" : "#FFFFFF";
+}
+
 function comparableBadgeValue(value: unknown): string {
   if (Array.isArray(value)) return value.map(comparableBadgeValue).filter(Boolean).join("\n");
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
@@ -43,8 +51,12 @@ const FALLBACK_PALETTES: VisitorBadgePalette[] = [
 ];
 
 /** 분기 기능과 무관한 표시 전용 색상이다. 새 유형도 이름을 기준으로 항상 같은 색을 받는다. */
-export function visitorBadgePalette(value: string): VisitorBadgePalette {
+export function visitorBadgePalette(value: string, rules: BadgeColorRule[] = []): VisitorBadgePalette {
   const normalized = value.trim().toLowerCase();
+  const custom = rules.find((rule) => rule.label.trim().toLowerCase() === normalized)?.backgroundColor;
+  if (custom && /^#[0-9a-f]{6}$/i.test(custom)) {
+    return { background: custom, foreground: foregroundFor(custom) };
+  }
   const known = KNOWN_BADGE_PALETTES[normalized];
   if (known) return known;
   let hash = 0;
@@ -52,7 +64,7 @@ export function visitorBadgePalette(value: string): VisitorBadgePalette {
   return FALLBACK_PALETTES[hash % FALLBACK_PALETTES.length];
 }
 
-export function visitorBadgeCssVars(value: string): Record<string, string> {
-  const palette = visitorBadgePalette(value);
+export function visitorBadgeCssVars(value: string, rules: BadgeColorRule[] = []): Record<string, string> {
+  const palette = visitorBadgePalette(value, rules);
   return { "--msf-badge-bg": palette.background, "--msf-badge-fg": palette.foreground };
 }
