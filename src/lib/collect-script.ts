@@ -388,6 +388,10 @@ ${utmCore}
       writeOutbox(readOutbox().filter(function(item) { return item.id !== id; }));
     }).catch(function() {});
   }
+  function retryPayloadIfQueued(id, payload) {
+    var queued = readOutbox().some(function(item) { return item.id === id; });
+    if (queued) postPayload(id, payload);
+  }
   function retryOutbox() {
     readOutbox().forEach(function(item) { postPayload(item.id, item.payload); });
   }
@@ -395,6 +399,10 @@ ${utmCore}
     var payload = buildPayload(formData);
     var id = queuePayload(payload);
     postPayload(id, payload);
+    // 등록 후 같은 폼으로 돌아오지 않는 사용자가 대부분이다. 다음 방문만 기다리지 말고,
+    // 아직 outbox 에 남아 있는 실패 건만 현재 페이지가 살아 있는 동안 두 번 더 보낸다.
+    setTimeout(function() { retryPayloadIfQueued(id, payload); }, 1200);
+    setTimeout(function() { retryPayloadIfQueued(id, payload); }, 3500);
   }
 
   // ── 폼 감지 — 패턴에 매칭된 페이지에서만 활성화. UTM 캡처는 위에서 이미 모든 페이지에 대해 실행됨.
@@ -566,7 +574,11 @@ ${utmCore}
         var blob = new Blob([payload], { type: "application/json" });
         if (navigator.sendBeacon) {
           navigator.sendBeacon(beaconUrl, blob);
-        } else {
+        }
+        // sendBeacon()의 true는 큐 적재 성공일 뿐 서버 저장 성공이 아니다. 실제 누락이 난
+        // 앵커형 대행 사이트는 keepalive fetch도 함께 보낸다. 서버가 이메일 기준으로 직렬
+        // 중복 제거하므로 둘 다 도착해도 레코드는 하나이고, 한 경로가 막혀도 다른 경로가 남는다.
+        if (!navigator.sendBeacon || HAS_ANCHORS) {
           fetch(beaconUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, keepalive: true }).catch(function(){});
         }
       } catch (e) {}
