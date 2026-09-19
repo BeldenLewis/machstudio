@@ -37,6 +37,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/show/") ||
     pathname.startsWith("/api/show/") ||
     pathname.startsWith("/api/public") ||
+    pathname.startsWith("/api/v1/") || // PAT Bearer 인증을 라우트 자체에서 검증하는 외부 API
+    pathname === "/mcp" || // PAT Bearer 인증을 사용하는 원격 MCP 서버
     pathname.startsWith("/api/shorten-url") ||
     pathname.startsWith("/api/health") ||
     pathname.startsWith("/share") ||

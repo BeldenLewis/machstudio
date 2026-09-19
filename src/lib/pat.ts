@@ -39,4 +39,5 @@ export const SCOPES = [
   { id: "sources:read",    label: "수집 소스 조회" },
   { id: "sources:write",   label: "수집 소스 관리" },
   { id: "dashboards:read", label: "대시보드 조회" },
+  { id: "ads:read",        label: "광고 성과 조회" },
 ] as const;
