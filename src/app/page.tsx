@@ -32,6 +32,10 @@ export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
   const [isLoading, setIsLoading] = useState(false);
+  const nextPath = () => {
+    const value = new URLSearchParams(window.location.search).get("next");
+    return value?.startsWith("/") && !value.startsWith("//") ? value : "/dashboard";
+  };
 
   const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -48,13 +52,15 @@ export default function LoginPage() {
     }
     // Full page reload — 쿠키를 서버 컴포넌트와 동기화하기 위해 필요.
     // router.push로 soft navigation 하면 RSC가 새 쿠키를 못 읽고 / 로 다시 리다이렉트할 수 있음.
-    window.location.href = "/dashboard";
+    window.location.href = nextPath();
   };
 
   const handleGoogleSignIn = async () => {
+    const callback = new URL(getAuthCallbackUrl(), window.location.origin);
+    callback.searchParams.set("next", nextPath());
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: getAuthCallbackUrl() },
+      options: { redirectTo: callback.toString() },
     });
   };
 

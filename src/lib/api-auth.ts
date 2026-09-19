@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyPat } from "@/lib/pat";
 import { rateLimit } from "@/lib/ratelimit";
+import { oauthOrigin } from "@/lib/oauth";
 
 export type ApiPrincipal = NonNullable<Awaited<ReturnType<typeof verifyPat>>>;
 
@@ -32,7 +33,7 @@ export async function authenticateApiRequest(
     return {
       response: NextResponse.json(
         { error: { code: "unauthorized", message: "유효한 Bearer API 토큰이 필요합니다." } },
-        { status: 401, headers: { "WWW-Authenticate": "Bearer realm=\"Machstudio API\"" } },
+        { status: 401, headers: { "WWW-Authenticate": `Bearer realm="Machstudio API", resource_metadata="${oauthOrigin(request)}/.well-known/oauth-protected-resource/mcp"` } },
       ),
     };
   }

@@ -41,6 +41,8 @@ model User {
   projectMemberships   ProjectMember[]
   adPerformanceImports AdPerformanceImportBatch[] @relation("AdPerformanceUploader")
   mediaAssets          MediaAsset[]
+  oauthAuthorizationCodes OAuthAuthorizationCode[]
+  oauthRefreshTokens      OAuthRefreshToken[]
 }
 
 model Workspace {
@@ -636,6 +638,57 @@ model ApiToken {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
+}
+
+model OAuthClient {
+  id            String   @id @default(cuid())
+  clientId      String   @unique
+  clientName    String
+  redirectUris  String[]
+  createdAt     DateTime @default(now())
+
+  authorizationCodes OAuthAuthorizationCode[]
+  refreshTokens      OAuthRefreshToken[]
+}
+
+model OAuthAuthorizationCode {
+  id            String   @id @default(cuid())
+  codeHash      String   @unique
+  clientId      String
+  userId        String
+  workspaceId   String
+  redirectUri   String
+  scopes        String[]
+  codeChallenge String
+  resource      String?
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime @default(now())
+
+  client OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([userId])
+}
+
+model OAuthRefreshToken {
+  id          String   @id @default(cuid())
+  tokenHash   String   @unique
+  clientId    String
+  userId      String
+  workspaceId String
+  scopes      String[]
+  resource    String?
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  client OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([userId])
 }
 
 // 사용자 알림 환경설정 (어떤 이벤트의 인앱 알림을 받을지)

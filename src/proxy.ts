@@ -8,6 +8,10 @@ export async function proxy(request: NextRequest) {
   // 공개 경로에서 Supabase Auth 호출을 먼저 하면 헬스체크와 수집 스크립트도 인증 상태에 영향받을 수 있다.
   if (
     pathname.startsWith("/auth/callback") ||
+    pathname.startsWith("/.well-known/") ||
+    pathname.startsWith("/oauth/register") ||
+    pathname.startsWith("/oauth/token") ||
+    pathname.startsWith("/oauth/revoke") ||
     pathname.startsWith("/api/collect") ||
     pathname.startsWith("/api/webinar/") ||
     pathname.startsWith("/api/webinar-embed/") || // 임베드 공개 설정/비콘 (webinar-embed-sites 어드민 CRUD는 제외)
@@ -89,7 +93,7 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const publicPages = ["/", "/signup", "/reset-password"];
+  const publicPages = ["/", "/signup", "/reset-password", "/oauth/authorize"];
   const isPublicPage = publicPages.includes(pathname);
 
   // 비로그인 상태에서 보호된 페이지 접근 → 로그인으로
