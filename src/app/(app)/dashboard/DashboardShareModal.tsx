@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Copy, Loader2, Lock, RefreshCw, Share2, X } from "lucide-react";
 import { toast } from "sonner";
+import { getPublicAppOrigin } from "@/lib/app-url";
 
 interface ShareState {
   shareToken: string | null;
@@ -27,9 +28,8 @@ export function DashboardShareModal({ open, onClose, projectId, projectName }: P
   const [passwordInput, setPasswordInput] = useState("");
 
   const shareUrl = state?.shareToken
-    // 이번 승인 범위 밖인 대시보드 공유 링크는 현재 열어 둔 host 동작을 유지한다.
-    // eslint-disable-next-line no-restricted-syntax
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/share/dashboard/${state.shareToken}`
+    // 외부로 복사되는 주소는 미리보기·로컬 host가 아닌 정식 공개 origin만 사용한다.
+    ? `${getPublicAppOrigin()}/share/dashboard/${state.shareToken}`
     : "";
 
   const load = useCallback(async () => {
@@ -50,10 +50,9 @@ export function DashboardShareModal({ open, onClose, projectId, projectName }: P
   }, [projectId]);
 
   useEffect(() => {
-    if (open) {
-      setPasswordInput("");
-      load();
-    }
+    if (!open) return;
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
   }, [open, load]);
 
   const patch = useCallback(async (body: Record<string, unknown>, successMsg?: string) => {
