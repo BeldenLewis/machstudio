@@ -184,6 +184,7 @@ model Project {
   competitions         Competition[]
   expoSites            ExpoSite[]
   mediaAssets          MediaAsset[]
+  briefs               Brief[]
 }
 
 model AdPerformanceImportBatch {
@@ -753,9 +754,104 @@ model ShortLink {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdBy User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  clicks    ShortLinkClick[]
+  briefItem BriefItem?
 
   @@index([workspaceId, createdAt(sort: Desc)])
   @@index([createdById, createdAt(sort: Desc)])
+}
+
+/// 단축링크 클릭 — 원본 IP 는 저장하지 않는다. visitorKey 는 (IP·UA·날짜) 해시라 하루 단위 순방문만 셀 수 있다.
+/// 링크 미리보기 봇(카톡 스크랩 등)은 /r/[code] 에서 걸러 여기 쌓이지 않는다.
+model ShortLinkClick {
+  id          String   @id @default(cuid())
+  shortLinkId String
+  /// direct = 단축링크 그대로(카톡 등) · web = 브리프 공개 페이지에서 누름
+  channel     String   @default("direct")
+  visitorKey  String   @default("")
+  createdAt   DateTime @default(now())
+
+  shortLink ShortLink @relation(fields: [shortLinkId], references: [id], onDelete: Cascade)
+
+  @@index([shortLinkId, createdAt])
+}
+
+/// 브리프 — 프로젝트별로 운영하는 큐레이션 시리즈(예: Korea Expo 의 "The Action").
+/// 링크를 모아 **채택**한 것만 카톡 텍스트·공개 페이지로 내보낸다.
+model Brief {
+  id               String    @id @default(cuid())
+  workspaceId      String
+  projectId        String
+  name             String
+  /// 공개 주소 /b/{slug} — 로그인 없이 누구나 본다
+  slug             String    @unique
+  /// 카톡 텍스트 둘째 줄 — "이번주 바로 확인해야 할 실용 정보를 보내드립니다!"
+  intro            String    @default("")
+  /// 카톡 텍스트 끝에 공개 페이지 링크를 붙일지
+  appendPublicLink Boolean   @default(true)
+  isPublic         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  items   BriefItem[]
+  issues  BriefIssue[]
+
+  @@index([projectId])
+  @@index([workspaceId])
+}
+
+/// 브리프에 모인 링크 하나. adopted 가 켜진 것만 밖으로 나간다.
+model BriefItem {
+  id          String    @id @default(cuid())
+  briefId     String
+  /// support(지원사업) · event(웨비나·리포트) · news(산업 뉴스)
+  category    String
+  /// 기관·주최·언론사 — 카톡의 [대괄호] 줄
+  org         String    @default("")
+  title       String
+  url         String
+  /// 중복 판정용 정규화 URL — 같은 공고가 여러 소스에서 들어와도 한 줄로 합친다
+  urlKey      String
+  /// 지원사업 = 마감일, 행사 = 행사일. 공개 페이지의 D-day 와 만료 숨김에 쓴다
+  dueDate     DateTime?
+  /// "예산소진시까지" 같은 자유 표기. 비면 dueDate 로 만든다
+  dateLabel   String    @default("")
+  /// manual · bizinfo · googlenews · claude — 어디서 들어왔는지
+  source      String    @default("manual")
+  /// AI 추천 이유 같은 내부 메모 — 밖으로 안 나간다
+  note        String    @default("")
+  adopted     Boolean   @default(false)
+  /// 카톡으로 나간 회차. null 이면 아직 안 나감 — 다음 카톡 텍스트에 들어간다
+  issueId     String?
+  shortLinkId String?   @unique
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  brief     Brief       @relation(fields: [briefId], references: [id], onDelete: Cascade)
+  issue     BriefIssue? @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  shortLink ShortLink?  @relation(fields: [shortLinkId], references: [id], onDelete: SetNull)
+
+  @@unique([briefId, urlKey])
+  @@index([briefId, category])
+  @@index([issueId])
+}
+
+/// 카톡으로 내보낸 회차. 그때 복사한 텍스트를 그대로 남긴다(나중에 링크를 고쳐도 기록은 안 바뀐다).
+model BriefIssue {
+  id          String   @id @default(cuid())
+  briefId     String
+  title       String
+  text        String
+  createdById String?
+  publishedAt DateTime @default(now())
+
+  brief Brief       @relation(fields: [briefId], references: [id], onDelete: Cascade)
+  items BriefItem[]
+
+  @@index([briefId, publishedAt(sort: Desc)])
 }
 
 /// 마하스튜디오 업로드 — 사진(webp 포함)·동영상을 올려 공개 URL 을 받는다.
