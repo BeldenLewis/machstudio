@@ -145,8 +145,9 @@ function clean(s: string): string {
 
 /** "2026-09-21 ~ 2026-10-09" → 마감일 / "예산 소진시까지" → 자유 표기 */
 export function parseBizinfoPeriod(text: string): { dueDate: string | null; dateLabel: string } {
-  const dates = text.match(/\d{4}-\d{2}-\d{2}/g);
-  if (dates && dates.length > 0) return { dueDate: dates[dates.length - 1], dateLabel: "" };
+  // 목록 페이지는 2026-09-21, API 는 20260921 로 준다 — 둘 다 받는다.
+  const dates = [...text.matchAll(/(\d{4})-?(\d{2})-?(\d{2})/g)].map((m) => `${m[1]}-${m[2]}-${m[3]}`);
+  if (dates.length > 0) return { dueDate: dates[dates.length - 1], dateLabel: "" };
   const t = text.replace(/\s+/g, "");
   if (!t) return { dueDate: null, dateLabel: "" };
   if (t.includes("소진")) return { dueDate: null, dateLabel: "예산소진시까지" };
@@ -180,6 +181,69 @@ export function parseBizinfoList(html: string, category: SourceCategory): Candid
       dueDate,
       dateLabel,
       publishedAt: registered ? new Date(`${registered}T00:00:00+09:00`) : null,
+    });
+  }
+  return out;
+}
+
+// ─── 기업마당 공식 API ───────────────────────────────────────────────────
+/*
+  인증키(BIZINFO_API_KEY)가 있으면 목록 페이지 대신 공식 API 를 쓴다 — 화면 구조가 바뀌어도 안 깨지고,
+  한 번에 100건을 받는다. 키가 없거나 API 가 실패하면 목록 읽기로 돌아간다(collect.ts).
+
+  응답 필드 이름은 기업마당 API 안내서 기준이다. 키를 받기 전이라 실응답으로 확인하지 못했으므로
+  이름이 조금 달라도 읽히게 후보 이름을 여러 개 본다.
+*/
+
+export function bizinfoApiUrl(key: string, count = 100): string {
+  const q = new URLSearchParams({ crtfcKey: key, dataType: "json", searchCnt: String(count) });
+  return `https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do?${q}`;
+}
+
+type Row = Record<string, unknown>;
+const str = (row: Row, ...keys: string[]): string => {
+  for (const k of keys) {
+    const v = row[k];
+    if (typeof v === "string" && v.trim()) return clean(v);
+    if (typeof v === "number") return String(v);
+  }
+  return "";
+};
+
+/** API 가 오류를 문자열로 준다: {"reqErr":"인증키를 입력해주세요."} */
+export function bizinfoApiError(json: unknown): string {
+  const o = (json && typeof json === "object" ? json : {}) as Row;
+  return typeof o.reqErr === "string" ? o.reqErr : "";
+}
+
+/**
+ * API 응답 → 후보. 분야는 분야 **이름**(수출·내수…)으로 거른다 — API 의 분야 코드 체계가
+ * 목록 페이지의 hashCode 와 달라 이름이 더 안전하다.
+ */
+export function parseBizinfoApi(json: unknown, fieldLabel: string, category: SourceCategory): Candidate[] {
+  const o = (json && typeof json === "object" ? json : {}) as Row;
+  const arr = (Array.isArray(o.jsonArray) ? o.jsonArray : Array.isArray(o.items) ? o.items : Array.isArray(json) ? json : []) as Row[];
+  const out: Candidate[] = [];
+  for (const row of arr) {
+    if (!row || typeof row !== "object") continue;
+    const field = str(row, "pldirSportRealmLclasCodeNm", "lclasCodeNm", "realmNm");
+    if (fieldLabel && field && !field.includes(fieldLabel)) continue;
+    const title = str(row, "pblancNm", "title");
+    // 공고 id 가 있으면 목록 읽기와 **같은 주소**를 만든다 — 방식이 바뀌어도 이미 들어온 공고가 중복으로 안 잡힌다.
+    const id = str(row, "pblancId");
+    let url = id ? bizinfoDetailUrl(id) : str(row, "pblancUrl", "link");
+    if (url.startsWith("/")) url = `https://www.bizinfo.go.kr${url}`;
+    if (!title || !/^https?:\/\//.test(url)) continue;
+    const { dueDate, dateLabel } = parseBizinfoPeriod(str(row, "reqstBeginEndDe", "reqstDt"));
+    const created = str(row, "creatPnttm", "pubDate").match(/(\d{4})-?(\d{2})-?(\d{2})/);
+    out.push({
+      title: title.slice(0, 300),
+      url,
+      org: str(row, "excInsttNm", "jrsdInsttNm", "author"),
+      category: resolveCategory(category, title),
+      dueDate,
+      dateLabel,
+      publishedAt: created ? new Date(`${created[1]}-${created[2]}-${created[3]}T00:00:00+09:00`) : null,
     });
   }
   return out;

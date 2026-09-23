@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  bizinfoApiError,
   classifyTitle,
+  parseBizinfoApi,
   googleNewsUrl,
   normalizeSourceConfig,
   parseBizinfoList,
@@ -66,9 +68,48 @@ describe("기업마당 목록", () => {
   });
 });
 
+describe("기업마당 공식 API", () => {
+  const json = {
+    jsonArray: [
+      {
+        pblancId: "PBLN_000000000126706",
+        pblancNm: "2026년 글로벌 인플루언서 엑스포 참여기업 모집 공고",
+        pblancUrl: "https://www.bizinfo.go.kr/web/lay1/bbs/S1T122C128/AS/74/view.do?pblancId=PBLN_000000000126706",
+        pldirSportRealmLclasCodeNm: "수출",
+        excInsttNm: "장애인기업종합지원센터",
+        jrsdInsttNm: "중소벤처기업부",
+        reqstBeginEndDe: "20260921 ~ 20260928",
+        creatPnttm: "2026-09-22 10:00:00",
+      },
+      { pblancId: "PBLN_2", pblancNm: "내수 판로 지원", pldirSportRealmLclasCodeNm: "내수", reqstBeginEndDe: "20260921 ~ 20261028" },
+      { pblancId: "PBLN_3", pblancNm: "해외 바이어 상담회 참가 모집", pldirSportRealmLclasCodeNm: "수출", jrsdInsttNm: "KOTRA", reqstBeginEndDe: "예산 소진시까지" },
+    ],
+  };
+
+  it("고른 분야만, 목록 읽기와 같은 상세 주소로", () => {
+    const rows = parseBizinfoApi(json, "수출", "auto");
+    expect(rows.map((r) => r.title)).toEqual(["2026년 글로벌 인플루언서 엑스포 참여기업 모집 공고", "해외 바이어 상담회 참가 모집"]);
+    // 방식을 바꿔도 이미 수집한 공고와 같은 주소여야 중복으로 걸러진다
+    expect(rows[0].url).toBe("https://www.bizinfo.go.kr/sii/siia/selectSIIA200Detail.do?pblancId=PBLN_000000000126706");
+  });
+
+  it("마감일(8자리)·기관·분류", () => {
+    const [a, b] = parseBizinfoApi(json, "수출", "auto");
+    expect(a).toMatchObject({ dueDate: "2026-09-28", org: "장애인기업종합지원센터", category: "support" });
+    expect(b).toMatchObject({ dueDate: null, dateLabel: "예산소진시까지", org: "KOTRA", category: "event" });
+  });
+
+  it("오류 응답을 알아본다", () => {
+    expect(bizinfoApiError({ reqErr: "인증키를 입력해주세요." })).toBe("인증키를 입력해주세요.");
+    expect(bizinfoApiError(json)).toBe("");
+    expect(parseBizinfoApi({ reqErr: "x" }, "수출", "auto")).toEqual([]);
+  });
+});
+
 describe("신청기간 표기", () => {
   it.each([
     ["2026-09-01 ~ 2026-10-02", { dueDate: "2026-10-02", dateLabel: "" }],
+    ["20260901 ~ 20261002", { dueDate: "2026-10-02", dateLabel: "" }],
     ["선착순 접수", { dueDate: null, dateLabel: "선착순" }],
     ["상시 모집", { dueDate: null, dateLabel: "상시" }],
     ["", { dueDate: null, dateLabel: "" }],

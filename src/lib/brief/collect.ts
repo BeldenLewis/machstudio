@@ -18,8 +18,12 @@ import { safeFetchText } from "./link-preview";
 import { daysUntil, urlKey } from "./model";
 import { parseDueDate } from "./input";
 import {
+  BIZINFO_FIELDS,
+  bizinfoApiError,
+  bizinfoApiUrl,
   bizinfoListUrl,
   googleNewsUrl,
+  parseBizinfoApi,
   isSourceKind,
   normalizeSourceCategory,
   normalizeSourceConfig,
@@ -40,6 +44,29 @@ async function fetchCandidates(kind: SourceKind, rawConfig: unknown, rawCategory
   const category = normalizeSourceCategory(rawCategory);
 
   if (kind === "bizinfo") {
+    // 공식 API 키가 있으면 API 먼저. 실패하면(키 오류·점검) 목록 읽기로 내려간다 — 수집이 멈추지 않게.
+    // 키가 든 주소는 오류 메시지·로그에 남기지 않는다.
+    const key = process.env.BIZINFO_API_KEY?.trim();
+    if (key) {
+      const label = BIZINFO_FIELDS.find((f) => f.code === cfg.hashCode)?.label ?? "";
+      const res = await safeFetchText(bizinfoApiUrl(key, 300), {
+        accept: "application/json",
+        maxBytes: 3_000_000,
+        timeoutMs: 15_000,
+        allow: (ct) => ct.includes("json") || ct.includes("text"),
+      });
+      try {
+        const json = res ? JSON.parse(res.text) : null;
+        if (json && !bizinfoApiError(json)) {
+          const rows = parseBizinfoApi(json, label, category);
+          if (rows.length > 0) return rows;
+        } else if (json) {
+          console.warn("[brief] 기업마당 API 오류, 목록 읽기로 대체:", bizinfoApiError(json));
+        }
+      } catch {
+        console.warn("[brief] 기업마당 API 응답을 읽지 못해 목록 읽기로 대체");
+      }
+    }
     const pages = await Promise.all(
       Array.from({ length: cfg.pages ?? 3 }, (_, i) => safeFetchText(bizinfoListUrl(cfg, i + 1), { maxBytes: 1_500_000, timeoutMs: 12_000 })),
     );

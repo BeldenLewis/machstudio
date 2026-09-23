@@ -18,6 +18,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   return NextResponse.json({
     canWrite: g.canWrite,
     sources,
+    // 키 값은 내보내지 않는다 — 있는지만.
+    bizinfoApi: Boolean(process.env.BIZINFO_API_KEY?.trim()),
     presets: BRIEF_PRESETS.map((p) => ({ key: p.key, label: p.label, description: p.description })),
   });
 }

@@ -72,8 +72,12 @@ export function SourcesTab({ brief, canWrite, onCollected }: { brief: BriefRow; 
   const [sources, setSources] = useState<SourceRow[] | null>(null);
   const [presets, setPresets] = useState<{ key: string; label: string; description: string }[]>([]);
   const [running, setRunning] = useState<string | null>(null);
+  const [bizinfoApi, setBizinfoApi] = useState(false);
 
-  const load = useCallback(() => api<{ sources: SourceRow[]; presets: typeof presets }>(`/api/briefs/${brief.id}/sources`), [brief.id]);
+  const load = useCallback(
+    () => api<{ sources: SourceRow[]; presets: typeof presets; bizinfoApi: boolean }>(`/api/briefs/${brief.id}/sources`),
+    [brief.id],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +86,7 @@ export function SourcesTab({ brief, canWrite, onCollected }: { brief: BriefRow; 
         if (cancelled) return;
         setSources(r.sources);
         setPresets(r.presets);
+        setBizinfoApi(r.bizinfoApi);
       })
       .catch((e) => toast.error((e as Error).message));
     return () => { cancelled = true; };
@@ -269,6 +274,11 @@ export function SourcesTab({ brief, canWrite, onCollected }: { brief: BriefRow; 
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    {s.kind === "bizinfo" && (
+                      <Chip tone={bizinfoApi ? "ok" : "neutral"} className="py-0">
+                        {bizinfoApi ? "공식 API" : "목록 읽기 · API 키 없음"}
+                      </Chip>
+                    )}
                     <span>마지막 수집 {when(s.lastRunAt)}</span>
                     {s.lastRunAt && !s.lastError && <Chip tone={s.lastAdded ? "ok" : "neutral"}>새 후보 {s.lastAdded}개</Chip>}
                     {s.lastError && (

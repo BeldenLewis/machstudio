@@ -610,19 +610,32 @@ function KakaoPanel({
     };
   }, [brief.id, signature]);
 
+  /*
+    복사한 김에 발행까지 묻는다 — 발행을 깜빡하면 지난주 링크가 이번 주 글에 그대로 또 들어간다.
+    "나중에" 를 눌러도 복사는 이미 됐다. 발행 버튼은 따로 남겨 둔다(복사 없이 발행만 할 때).
+  */
   const copy = async () => {
-    if (await copyText(text)) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    }
+    if (!(await copyText(text))) return;
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+    if (!canWrite || count === 0) return;
+    const ok = await confirm({
+      title: "카톡에 올리셨나요?",
+      description: `올렸다면 지금 발행해 두세요. 채택한 ${count}개가 이번 호로 묶여 다음 주 글에서 빠지고, 대시보드에서 호별로 집계돼요.`,
+      confirmLabel: "발행",
+      cancelLabel: "나중에",
+    });
+    if (ok) await publish({ confirmed: true });
   };
 
-  const publish = async () => {
-    const ok = await confirm({
-      title: `채택한 ${count}개를 이번 호로 묶을까요?`,
-      description: "카톡에 올린 뒤 누르세요. 묶인 링크는 다음 카톡 글에서 빠지고, 대시보드에서 호별로 집계돼요.",
-      confirmLabel: "발행",
-    });
+  const publish = async ({ confirmed = false }: { confirmed?: boolean } = {}) => {
+    const ok =
+      confirmed ||
+      (await confirm({
+        title: `채택한 ${count}개를 이번 호로 묶을까요?`,
+        description: "카톡에 올린 뒤 누르세요. 묶인 링크는 다음 카톡 글에서 빠지고, 대시보드에서 호별로 집계돼요.",
+        confirmLabel: "발행",
+      }));
     if (!ok) return;
     setPublishing(true);
     try {
@@ -656,13 +669,13 @@ function KakaoPanel({
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} 복사
           </Btn>
           {canWrite && (
-            <Btn tone="quiet" onClick={publish} disabled={count === 0 || publishing}>
+            <Btn tone="quiet" onClick={() => publish()} disabled={count === 0 || publishing}>
               {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} 발행
             </Btn>
           )}
         </div>
         <p className="text-[11px] leading-relaxed text-muted-foreground">
-          링크는 단축 주소라 누가 몇 번 눌렀는지 대시보드에서 볼 수 있어요. 올린 뒤 <b>발행</b>을 눌러야 다음 주 글에서 빠져요.
+          링크는 단축 주소라 누가 몇 번 눌렀는지 대시보드에서 볼 수 있어요. 복사하면 발행할지 물어봐요 — 발행해야 다음 주 글에서 빠져요.
         </p>
       </div>
     </aside>
