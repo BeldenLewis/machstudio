@@ -8,18 +8,18 @@
  * 들어온 건 전부 채택 전 후보라 링크 고르기 탭에서 사람이 고른다.
  */
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, Loader2, Newspaper, Plus, Rss, Building2, RefreshCw, Sparkles, Trash2 } from "lucide-react";
+import { AlertCircle, Loader2, Newspaper, Plus, Rss, Building2, Landmark, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Btn, Chip, Field, FINISH, R } from "@/components/ui/primitives";
-import { BIZINFO_FIELDS, type SourceKind } from "@/lib/brief/sources";
+import { BIZINFO_FIELDS, KITA_DIVISIONS, type SourceKind } from "@/lib/brief/sources";
 import { api, type BriefRow } from "./types";
 
 interface SourceRow {
   id: string;
   kind: SourceKind;
   name: string;
-  config: { hashCode?: string; pages?: number; query?: string; days?: number; url?: string; include?: string[]; exclude?: string[] };
+  config: { hashCode?: string; pages?: number; query?: string; days?: number; url?: string; division?: string; include?: string[]; exclude?: string[] };
   category: string;
   enabled: boolean;
   lastRunAt: string | null;
@@ -38,6 +38,7 @@ const KIND_META: Record<SourceKind, { label: string; icon: typeof Rss }> = {
   bizinfo: { label: "기업마당", icon: Building2 },
   googlenews: { label: "Google 뉴스", icon: Newspaper },
   rss: { label: "RSS", icon: Rss },
+  kita: { label: "무역협회", icon: Landmark },
 };
 
 const SELECT_CLS = `min-h-9 w-full bg-background px-2 text-sm ${R.control} ${FINISH.s2}`;
@@ -72,8 +73,12 @@ export function SourcesTab({ brief, canWrite, onCollected }: { brief: BriefRow; 
   const [sources, setSources] = useState<SourceRow[] | null>(null);
   const [presets, setPresets] = useState<{ key: string; label: string; description: string }[]>([]);
   const [running, setRunning] = useState<string | null>(null);
+  const [bizinfoApi, setBizinfoApi] = useState(false);
 
-  const load = useCallback(() => api<{ sources: SourceRow[]; presets: typeof presets }>(`/api/briefs/${brief.id}/sources`), [brief.id]);
+  const load = useCallback(
+    () => api<{ sources: SourceRow[]; presets: typeof presets; bizinfoApi: boolean }>(`/api/briefs/${brief.id}/sources`),
+    [brief.id],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +87,7 @@ export function SourcesTab({ brief, canWrite, onCollected }: { brief: BriefRow; 
         if (cancelled) return;
         setSources(r.sources);
         setPresets(r.presets);
+        setBizinfoApi(r.bizinfoApi);
       })
       .catch((e) => toast.error((e as Error).message));
     return () => { cancelled = true; };
@@ -107,7 +113,9 @@ export function SourcesTab({ brief, canWrite, onCollected }: { brief: BriefRow; 
           ? { kind, name: "기업마당", config: { hashCode: "07", pages: 3 }, category: "auto" }
           : kind === "googlenews"
             ? { kind, name: "", config: { query: "", days: 3 }, category: "news" }
-            : { kind, name: "", config: { url: "" }, category: "news" };
+            : kind === "kita"
+              ? { kind, name: "무역협회", config: { division: "01", pages: 1 }, category: "event" }
+              : { kind, name: "", config: { url: "" }, category: "news" };
       await api(`/api/briefs/${brief.id}/sources`, { method: "POST", body: JSON.stringify(body) });
       await refresh();
     } catch (e) {
@@ -238,6 +246,16 @@ export function SourcesTab({ brief, canWrite, onCollected }: { brief: BriefRow; 
                         </select>
                       </div>
                     )}
+                    {s.kind === "kita" && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <select value={s.config.division ?? "01"} disabled={!canWrite} onChange={(e) => patch(s.id, { config: { division: e.target.value } })} className={SELECT_CLS} aria-label="무역협회 공지 분류">
+                          {KITA_DIVISIONS.map((d) => <option key={d.code} value={d.code}>{d.label}</option>)}
+                        </select>
+                        <select value={s.config.pages ?? 1} disabled={!canWrite} onChange={(e) => patch(s.id, { config: { pages: Number(e.target.value) } })} className={SELECT_CLS} aria-label="읽을 양">
+                          {[1, 2, 3].map((n) => <option key={n} value={n}>최근 {n * 20}건</option>)}
+                        </select>
+                      </div>
+                    )}
                     {s.kind === "rss" && (
                       <BlurField value={s.config.url ?? ""} onSave={(url) => patch(s.id, { config: { url } })} disabled={!canWrite} placeholder="https://…/rss.xml" aria-label="피드 주소" className="font-mono text-xs" />
                     )}
@@ -269,6 +287,11 @@ export function SourcesTab({ brief, canWrite, onCollected }: { brief: BriefRow; 
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    {s.kind === "bizinfo" && (
+                      <Chip tone={bizinfoApi ? "ok" : "neutral"} className="py-0">
+                        {bizinfoApi ? "공식 API" : "목록 읽기 · API 키 없음"}
+                      </Chip>
+                    )}
                     <span>마지막 수집 {when(s.lastRunAt)}</span>
                     {s.lastRunAt && !s.lastError && <Chip tone={s.lastAdded ? "ok" : "neutral"}>새 후보 {s.lastAdded}개</Chip>}
                     {s.lastError && (
@@ -294,6 +317,7 @@ export function SourcesTab({ brief, canWrite, onCollected }: { brief: BriefRow; 
         <div className="flex flex-wrap gap-2">
           <Btn tone="quiet" onClick={() => add("googlenews")}><Plus className="h-4 w-4" /> 뉴스 검색어</Btn>
           <Btn tone="quiet" onClick={() => add("bizinfo")}><Plus className="h-4 w-4" /> 기업마당 분야</Btn>
+          <Btn tone="quiet" onClick={() => add("kita")}><Plus className="h-4 w-4" /> 무역협회 공지</Btn>
           <Btn tone="quiet" onClick={() => add("rss")}><Plus className="h-4 w-4" /> RSS 피드</Btn>
           {sources.length > 0 && presets.map((p) => (
             <Btn key={p.key} tone="ghost" onClick={() => applyPreset(p.key)}><Sparkles className="h-4 w-4" /> {p.label} 세트에서 빠진 것 채우기</Btn>

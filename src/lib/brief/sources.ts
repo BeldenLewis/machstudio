@@ -8,6 +8,10 @@
  *   bizinfo    기업마당 지원사업 공고 목록(분야별). 키 없이 공개 목록을 읽는다 — 마감일·수행기관이 같이 나온다.
  *   googlenews Google 뉴스 검색 RSS. 검색어 하나 = 소스 하나. 뉴스·행사 소식에 쓴다.
  *   rss        아무 RSS/Atom 피드. 기관 보도자료 피드 같은 걸 붙일 때.
+ *   kita       한국무역협회 공지(설명회/상담회·전시회/사절단·교육·협회 지원사업). 분류별 목록을 읽는다.
+ *
+ * 이벤터스·온오프믹스는 넣지 않았다 — 온오프믹스는 robots.txt 로 자동 수집을 막고(RSS 도 최신 10건뿐),
+ * 이벤터스는 검색 결과를 화면에서 따로 불러와 공개 목록이 없다. 그 두 곳은 링크를 붙여넣는다.
  *
  * 들어온 건 전부 **채택 전 후보**다(adopted=false). 무엇을 내보낼지는 사람이 고른다.
  */
@@ -17,6 +21,7 @@ export const SOURCE_KINDS = [
   { key: "bizinfo", label: "기업마당 지원사업" },
   { key: "googlenews", label: "Google 뉴스 검색" },
   { key: "rss", label: "RSS 피드" },
+  { key: "kita", label: "한국무역협회 공지" },
 ] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number]["key"];
 
@@ -36,6 +41,17 @@ export const BIZINFO_FIELDS = [
   { code: "12", label: "기타" },
 ] as const;
 
+/** 한국무역협회 공지 분류 — 공지 목록의 분류 선택(searchNoticeDivision)에서 옮겼다. */
+export const KITA_DIVISIONS = [
+  { code: "01", label: "설명회/상담회" },
+  { code: "02", label: "전시회/사절단" },
+  { code: "03", label: "교육/취업" },
+  { code: "04", label: "협회 지원사업" },
+  { code: "07", label: "스타트업" },
+  { code: "05", label: "이벤트" },
+  { code: "06", label: "기타" },
+] as const;
+
 /** 소스의 분류 — auto 면 제목으로 지원사업·행사를 가른다. */
 export type SourceCategory = BriefCategory | "auto";
 
@@ -50,6 +66,8 @@ export interface SourceConfig {
   days?: number;
   /** rss: 피드 주소 */
   url?: string;
+  /** kita: 공지 분류 코드 */
+  division?: string;
   /** 제목에 이 말이 들어 있어야만 들인다(하나라도). 비면 다 들인다 */
   include?: string[];
   /** 제목에 이 말이 있으면 뺀다 */
@@ -72,6 +90,11 @@ export function normalizeSourceConfig(kind: SourceKind, raw: unknown): SourceCon
     const query = typeof o.query === "string" ? o.query.trim().slice(0, 120) : "";
     const days = Math.min(30, Math.max(1, Math.round(Number(o.days) || 7)));
     return { ...base, query, days };
+  }
+  if (kind === "kita") {
+    const division = typeof o.division === "string" && KITA_DIVISIONS.some((d) => d.code === o.division) ? o.division : "01";
+    const pages = Math.min(3, Math.max(1, Math.round(Number(o.pages) || 1)));
+    return { ...base, division, pages };
   }
   const url = typeof o.url === "string" ? o.url.trim().slice(0, 500) : "";
   return { ...base, url };
@@ -145,14 +168,30 @@ function clean(s: string): string {
 
 /** "2026-09-21 ~ 2026-10-09" → 마감일 / "예산 소진시까지" → 자유 표기 */
 export function parseBizinfoPeriod(text: string): { dueDate: string | null; dateLabel: string } {
-  const dates = text.match(/\d{4}-\d{2}-\d{2}/g);
-  if (dates && dates.length > 0) return { dueDate: dates[dates.length - 1], dateLabel: "" };
+  // 목록 페이지는 2026-09-21, API 는 20260921 로 준다 — 둘 다 받는다.
+  const dates = [...text.matchAll(/(\d{4})-?(\d{2})-?(\d{2})/g)].map((m) => `${m[1]}-${m[2]}-${m[3]}`);
+  if (dates.length > 0) return { dueDate: dates[dates.length - 1], dateLabel: "" };
   const t = text.replace(/\s+/g, "");
   if (!t) return { dueDate: null, dateLabel: "" };
   if (t.includes("소진")) return { dueDate: null, dateLabel: "예산소진시까지" };
   if (t.includes("선착순")) return { dueDate: null, dateLabel: "선착순" };
   if (t.includes("상시")) return { dueDate: null, dateLabel: "상시" };
   return { dueDate: null, dateLabel: text.trim().slice(0, 20) };
+}
+
+/**
+ * 기관 칸 — 수행기관이 "기초자치단체" 처럼 **종류 이름**이면 실제 지자체 이름을 쓴다.
+ * 카톡의 [대괄호]에 "[기초자치단체]" 가 찍히면 어디 공고인지 알 수 없다.
+ * 소관부처 칸은 도(경기도)까지만 주는 일이 많아, 제목 앞머리의 시·군("[경기] 화성시 …")을 먼저 본다.
+ */
+const GENERIC_ORG = /^(기초|광역)?자치단체$|^지자체$|^기타$/;
+
+export function pickBizinfoOrg(agency: string, ministry: string, title = ""): string {
+  const a = agency.trim();
+  const m = ministry.trim();
+  if (a && !GENERIC_ORG.test(a)) return a;
+  const city = title.match(/^\s*\[[^\]]{1,10}\]\s*([가-힣]{1,6}(?:시|군|구))\s/)?.[1];
+  return city || m || a;
 }
 
 /**
@@ -175,11 +214,135 @@ export function parseBizinfoList(html: string, category: SourceCategory): Candid
     out.push({
       title,
       url: bizinfoDetailUrl(id),
-      org: cells[5] || cells[4] || "",
+      org: pickBizinfoOrg(cells[5], cells[4], title),
       category: resolveCategory(category, title),
       dueDate,
       dateLabel,
       publishedAt: registered ? new Date(`${registered}T00:00:00+09:00`) : null,
+    });
+  }
+  return out;
+}
+
+// ─── 기업마당 공식 API ───────────────────────────────────────────────────
+/*
+  인증키(BIZINFO_API_KEY)가 있으면 목록 페이지 대신 공식 API 를 쓴다 — 화면 구조가 바뀌어도 안 깨지고,
+  한 번에 100건을 받는다. 키가 없거나 API 가 실패하면 목록 읽기로 돌아간다(collect.ts).
+
+  응답 필드 이름은 기업마당 API 안내서 기준이다. 키를 받기 전이라 실응답으로 확인하지 못했으므로
+  이름이 조금 달라도 읽히게 후보 이름을 여러 개 본다.
+*/
+
+export function bizinfoApiUrl(key: string, count = 100): string {
+  const q = new URLSearchParams({ crtfcKey: key, dataType: "json", searchCnt: String(count) });
+  return `https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do?${q}`;
+}
+
+type Row = Record<string, unknown>;
+const str = (row: Row, ...keys: string[]): string => {
+  for (const k of keys) {
+    const v = row[k];
+    if (typeof v === "string" && v.trim()) return clean(v);
+    if (typeof v === "number") return String(v);
+  }
+  return "";
+};
+
+/** API 가 오류를 문자열로 준다: {"reqErr":"인증키를 입력해주세요."} */
+export function bizinfoApiError(json: unknown): string {
+  const o = (json && typeof json === "object" ? json : {}) as Row;
+  return typeof o.reqErr === "string" ? o.reqErr : "";
+}
+
+/**
+ * API 응답 → 후보. 분야는 분야 **이름**(수출·내수…)으로 거른다 — API 의 분야 코드 체계가
+ * 목록 페이지의 hashCode 와 달라 이름이 더 안전하다.
+ */
+export function parseBizinfoApi(json: unknown, fieldLabel: string, category: SourceCategory): Candidate[] {
+  const o = (json && typeof json === "object" ? json : {}) as Row;
+  const arr = (Array.isArray(o.jsonArray) ? o.jsonArray : Array.isArray(o.items) ? o.items : Array.isArray(json) ? json : []) as Row[];
+  const out: Candidate[] = [];
+  for (const row of arr) {
+    if (!row || typeof row !== "object") continue;
+    const field = str(row, "pldirSportRealmLclasCodeNm", "lclasCodeNm", "realmNm");
+    if (fieldLabel && field && !field.includes(fieldLabel)) continue;
+    const title = str(row, "pblancNm", "title");
+    // 공고 id 가 있으면 목록 읽기와 **같은 주소**를 만든다 — 방식이 바뀌어도 이미 들어온 공고가 중복으로 안 잡힌다.
+    const id = str(row, "pblancId");
+    let url = id ? bizinfoDetailUrl(id) : str(row, "pblancUrl", "link");
+    if (url.startsWith("/")) url = `https://www.bizinfo.go.kr${url}`;
+    if (!title || !/^https?:\/\//.test(url)) continue;
+    const { dueDate, dateLabel } = parseBizinfoPeriod(str(row, "reqstBeginEndDe", "reqstDt"));
+    const created = str(row, "creatPnttm", "pubDate").match(/(\d{4})-?(\d{2})-?(\d{2})/);
+    out.push({
+      title: title.slice(0, 300),
+      url,
+      org: pickBizinfoOrg(str(row, "excInsttNm"), str(row, "jrsdInsttNm", "author"), title),
+      category: resolveCategory(category, title),
+      dueDate,
+      dateLabel,
+      publishedAt: created ? new Date(`${created[1]}-${created[2]}-${created[3]}T00:00:00+09:00`) : null,
+    });
+  }
+  return out;
+}
+
+// ─── 한국무역협회 공지 ───────────────────────────────────────────────────
+
+export function kitaListUrl(cfg: SourceConfig, page: number): string {
+  const q = new URLSearchParams({ searchNoticeDivision: cfg.division ?? "01", pageIndex: String(page), pageUnit: "20" });
+  return `https://www.kita.net/board/notice/noticeList.do?${q}`;
+}
+
+export function kitaDetailUrl(postIndex: string): string {
+  return `https://www.kita.net/board/notice/noticeDetail.do?postIndex=${encodeURIComponent(postIndex)}`;
+}
+
+/** 이미 끝난 모집 — 목록에는 남아 있지만 보낼 이유가 없다 */
+const CLOSED_RE = /모집\s*마감|신청\s*마감|접수\s*마감|\[마감\]|\(마감\)|종료\]/;
+
+/**
+ * 제목 속 날짜 → YYYY-MM-DD. 무역협회 공지는 날짜를 제목에 적는다:
+ *   "세미나(10/28)"  "(★~9/18)"  "(10/23(금) 14:00…"  "[10.1(목)~10.8(목)]"  "(~2026.09.10)"
+ * 물결(~) 뒤 날짜가 있으면 그게 마감(끝)이라 그걸 쓰고, 없으면 첫 날짜(행사일).
+ * 연도가 없으면 등록일 기준 — 등록일보다 석 달 넘게 앞선 달이면 다음 해로 본다(12월 공지의 "1/15").
+ */
+export function dateFromTitle(title: string, registered: Date): string | null {
+  const reg = new Date(registered.getTime() + 9 * 3600_000); // KST 달력
+  const fmt = (y: number, m: number, d: number) =>
+    m >= 1 && m <= 12 && d >= 1 && d <= 31 ? `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}` : null;
+  const guessYear = (m: number) => reg.getUTCFullYear() + (m < reg.getUTCMonth() + 1 - 3 ? 1 : 0);
+
+  const fullTilde = title.match(/~\s*(20\d{2})\s*[./-]\s*(\d{1,2})\s*[./-]\s*(\d{1,2})/);
+  if (fullTilde) return fmt(Number(fullTilde[1]), Number(fullTilde[2]), Number(fullTilde[3]));
+  const tilde = title.match(/~\s*(\d{1,2})\s*[/.]\s*(\d{1,2})(?!\d)/);
+  if (tilde) return fmt(guessYear(Number(tilde[1])), Number(tilde[1]), Number(tilde[2]));
+  const first = title.match(/[(\[]\s*[★☆※]?\s*(\d{1,2})\s*[/.]\s*(\d{1,2})(?!\d)/);
+  if (first) return fmt(guessYear(Number(first[1])), Number(first[1]), Number(first[2]));
+  const fullAny = title.match(/(20\d{2})\s*[./-]\s*(\d{1,2})\s*[./-]\s*(\d{1,2})/);
+  if (fullAny) return fmt(Number(fullAny[1]), Number(fullAny[2]), Number(fullAny[3]));
+  return null;
+}
+
+/** 무역협회 공지 목록 → 후보. 기관은 모두 한국무역협회. */
+export function parseKitaList(html: string, category: SourceCategory): Candidate[] {
+  const list = html.slice(Math.max(0, html.indexOf("board-list")));
+  const out: Candidate[] = [];
+  for (const li of list.match(/<li[\s>][\s\S]*?<\/li>/g) ?? []) {
+    const id = li.match(/goDetailPage\('(\d+)'\)/)?.[1];
+    if (!id) continue;
+    const title = clean(li.match(/<a[^>]*title="([^"]+)"/)?.[1] ?? li.match(/<a[^>]*>([\s\S]*?)<\/a>/)?.[1] ?? "");
+    if (!title || CLOSED_RE.test(title)) continue;
+    const reg = li.match(/(\d{4})\.(\d{2})\.(\d{2})/);
+    const registered = reg ? new Date(`${reg[1]}-${reg[2]}-${reg[3]}T00:00:00+09:00`) : null;
+    out.push({
+      title: title.slice(0, 300),
+      url: kitaDetailUrl(id),
+      org: "한국무역협회",
+      category: resolveCategory(category, title),
+      dueDate: registered ? dateFromTitle(title, registered) : null,
+      dateLabel: "",
+      publishedAt: registered,
     });
   }
   return out;
@@ -249,7 +412,7 @@ export interface BriefPreset {
 export const EXPORT_PRESET: BriefPreset = {
   key: "export",
   label: "해외진출·수출",
-  description: "기업마당 수출 분야 공고 + 수출·K-소비재 뉴스와 설명회 소식",
+  description: "기업마당 수출 분야 공고 + 무역협회 설명회·교육·전시회 + 수출·K-소비재 뉴스",
   brief: { name: "The Action", slug: "the-action", intro: "이번주 바로 확인해야 할 실용 정보를 보내드립니다!" },
   sources: [
     { kind: "bizinfo", name: "기업마당 · 수출", category: "auto", config: { hashCode: "07", pages: 3 } },
@@ -259,6 +422,10 @@ export const EXPORT_PRESET: BriefPreset = {
     { kind: "googlenews", name: "K-푸드 수출", category: "news", config: { query: "K-푸드 수출", days: 3 } },
     { kind: "googlenews", name: "관세·통상 이슈", category: "news", config: { query: "관세 중소기업 수출", days: 3 } },
     { kind: "googlenews", name: "해외 박람회 한국관", category: "news", config: { query: "박람회 한국관 참가", days: 7 } },
+    { kind: "kita", name: "무역협회 · 설명회/상담회", category: "event", config: { division: "01" } },
+    { kind: "kita", name: "무역협회 · 교육", category: "event", config: { division: "03" } },
+    { kind: "kita", name: "무역협회 · 전시회/사절단", category: "support", config: { division: "02" } },
+    { kind: "kita", name: "무역협회 · 협회 지원사업", category: "support", config: { division: "04" } },
   ],
 };
 
