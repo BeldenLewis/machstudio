@@ -562,7 +562,7 @@ function WhenBadge({ item }: { item: BriefItem }) {
   );
 }
 
-const SOURCE_NAMES: Record<string, string> = { bizinfo: "기업마당", googlenews: "Google 뉴스", rss: "RSS" };
+const SOURCE_NAMES: Record<string, string> = { bizinfo: "기업마당", googlenews: "Google 뉴스", rss: "RSS", kita: "무역협회" };
 
 function SourceBadge({ item }: { item: BriefItem }) {
   if (item.source === "manual") return null;

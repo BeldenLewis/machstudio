@@ -23,6 +23,8 @@ import {
   bizinfoApiUrl,
   bizinfoListUrl,
   googleNewsUrl,
+  kitaListUrl,
+  parseKitaList,
   parseBizinfoApi,
   isSourceKind,
   normalizeSourceCategory,
@@ -74,6 +76,14 @@ async function fetchCandidates(kind: SourceKind, rawConfig: unknown, rawCategory
     return pages.flatMap((p) => (p ? parseBizinfoList(p.text, category) : []));
   }
 
+  if (kind === "kita") {
+    const pages = await Promise.all(
+      Array.from({ length: cfg.pages ?? 1 }, (_, i) => safeFetchText(kitaListUrl(cfg, i + 1), { maxBytes: 1_500_000, timeoutMs: 12_000 })),
+    );
+    if (pages.every((p) => !p)) throw new Error("무역협회 공지를 열지 못했어요");
+    return pages.flatMap((p) => (p ? parseKitaList(p.text, category) : []));
+  }
+
   const url = kind === "googlenews" ? googleNewsUrl(cfg) : cfg.url ?? "";
   if (kind === "googlenews" && !cfg.query) throw new Error("검색어가 비어 있어요");
   if (kind === "rss" && !/^https?:\/\//i.test(url)) throw new Error("피드 주소가 비어 있어요");
@@ -92,6 +102,8 @@ async function fetchCandidates(kind: SourceKind, rawConfig: unknown, rawCategory
 function keep(c: Candidate, cfg: ReturnType<typeof normalizeSourceConfig>, now: Date): boolean {
   if (!passesWordFilter(c.title, cfg)) return false;
   if (c.dueDate && daysUntil(new Date(`${c.dueDate}T00:00:00+09:00`), now) < 0) return false;
+  // 날짜 없는 공지는 한 달 안에 올라온 것만 — 무역협회처럼 오래된 글이 목록에 남는 곳이 있다
+  if (!c.dueDate && c.category !== "news" && c.publishedAt && now.getTime() - c.publishedAt.getTime() > 30 * 86400_000) return false;
   if (c.category === "news" && c.publishedAt) {
     const limitDays = (cfg.days ?? 7) + 1;
     if (now.getTime() - c.publishedAt.getTime() > limitDays * 86400_000) return false;
