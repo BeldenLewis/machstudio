@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { getPublicAppOrigin } from "@/lib/app-url";
+import type { BriefPreset } from "./sources";
 
 type WorkspaceRole = "OWNER" | "ADMIN" | "MEMBER";
 type ProjectRole = "VIEWER" | "EDITOR" | "ADMIN";
@@ -125,4 +126,16 @@ export async function ensureShortLink(
     }
   }
   throw new Error("SHORT_CODE_COLLISION");
+}
+
+/** 프리셋의 수집 소스를 브리프에 붙인다. 같은 이름이 이미 있으면 건너뛴다(두 번 눌러도 두 벌 안 생기게). */
+export async function applyPreset(briefId: string, preset: BriefPreset): Promise<number> {
+  const existing = await prisma.briefSource.findMany({ where: { briefId }, select: { name: true, sortOrder: true } });
+  const names = new Set(existing.map((e) => e.name));
+  let order = existing.reduce((m, e) => Math.max(m, e.sortOrder), -1) + 1;
+  const data = preset.sources
+    .filter((s) => !names.has(s.name))
+    .map((s) => ({ briefId, kind: s.kind, name: s.name, category: s.category, config: s.config as object, sortOrder: order++ }));
+  if (data.length) await prisma.briefSource.createMany({ data });
+  return data.length;
 }

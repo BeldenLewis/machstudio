@@ -9,14 +9,18 @@
  *   ④ 카톡에 올렸으면 "발행" — 이번 호로 묶여 다음 주 글에서 빠진다
  *
  * 편집 값은 전부 보이는 칸이다(접기·모달 없음). 삭제만 작게, 확인 뒤에.
+ *
+ * 자동 수집 후보(채택 전)는 **읽는 줄**로 보여 준다 — 매일 수십 건이 들어와서, 편집 칸을 다 펼치면
+ * 훑을 수가 없다. 토글을 켜는 순간 편집 줄로 바뀐다(고칠 일은 내보낼 때만 생긴다).
+ * 후보 숨기기는 위험하지 않아 확인 없이 바로.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, ChevronDown, Copy, ExternalLink, Loader2, Plus, Send, Trash2 } from "lucide-react";
+import { Check, ChevronDown, Copy, ExternalLink, EyeOff, Loader2, Plus, Send, Settings2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Btn, Chip, Field, FieldArea, FINISH, R, Segmented } from "@/components/ui/primitives";
-import { BRIEF_CATEGORIES, type BriefCategory } from "@/lib/brief/model";
+import { BRIEF_CATEGORIES, daysUntil, formatMonthDay, type BriefCategory } from "@/lib/brief/model";
 import { api, type BriefIssueRow, type BriefItem, type BriefRow } from "./types";
 
 /** 추가 폼의 분류 버튼 — 휴대폰 한 줄에 셋이 들어가게 짧게. */
@@ -54,11 +58,33 @@ interface Props {
   canWrite: boolean;
   setItems: React.Dispatch<React.SetStateAction<BriefItem[]>>;
   reload: () => Promise<void>;
+  onOpenSources?: () => void;
 }
 
-export function PickTab({ brief, items, issues, canWrite, setItems, reload }: Props) {
+type Filter = "all" | "adopted" | "candidates";
+/** 카테고리마다 처음에 보여 줄 후보 수 — 채택한 건 항상 다 보인다 */
+const CANDIDATES_SHOWN = 6;
+
+const isCandidate = (i: BriefItem) => !i.adopted && i.source !== "manual";
+
+export function PickTab({ brief, items, issues, canWrite, setItems, reload, onOpenSources }: Props) {
   const current = items.filter((i) => !i.issueId);
   const adoptedCount = current.filter((i) => i.adopted).length;
+  const candidateCount = current.filter(isCandidate).length;
+  const [filter, setFilter] = useState<Filter>("all");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const visible = current.filter((i) => (filter === "adopted" ? i.adopted : filter === "candidates" ? isCandidate(i) : true));
+
+  const hide = async (id: string) => {
+    const prev = items;
+    setItems((list) => list.filter((i) => i.id !== id));
+    try {
+      await api(`/api/briefs/${brief.id}/items/${id}`, { method: "DELETE" });
+    } catch (e) {
+      setItems(prev);
+      toast.error((e as Error).message);
+    }
+  };
 
   const patch = async (id: string, data: Record<string, unknown>) => {
     const prev = items;
@@ -83,22 +109,52 @@ export function PickTab({ brief, items, issues, canWrite, setItems, reload }: Pr
         )}
 
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold">
-            이번 호 후보 <span className="font-normal text-muted-foreground">{current.length}개 중 {adoptedCount}개 채택</span>
-          </h2>
-          {current.length === 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">
+              이번 호 <span className="font-normal text-muted-foreground">채택 {adoptedCount}개</span>
+            </h2>
+            <div className="flex items-center gap-1">
+              <Segmented<Filter>
+                label="보기"
+                value={filter}
+                onChange={setFilter}
+                options={[
+                  { value: "all", label: `전체 ${current.length}` },
+                  { value: "adopted", label: `채택 ${adoptedCount}` },
+                  { value: "candidates", label: `새 후보 ${candidateCount}` },
+                ]}
+              />
+              {onOpenSources && (
+                <Btn tone="ghost" className="px-2" onClick={onOpenSources} aria-label="자동 수집 설정" title="자동 수집 설정">
+                  <Settings2 className="h-4 w-4" />
+                </Btn>
+              )}
+            </div>
+          </div>
+          {visible.length === 0 ? (
             <p className={`${R.surface} bg-secondary/50 p-6 text-center text-sm text-muted-foreground`}>
-              위에 링크를 붙여넣으면 여기에 쌓여요.
+              {current.length === 0
+                ? "위에 링크를 붙여넣거나, 자동 수집이 매일 아침 후보를 채워 줘요."
+                : filter === "adopted"
+                  ? "아직 채택한 링크가 없어요. 후보의 토글을 켜 보세요."
+                  : "보여 줄 후보가 없어요."}
             </p>
           ) : (
             BRIEF_CATEGORIES.map((c) => {
-              const rows = current.filter((i) => i.category === c.key);
-              if (rows.length === 0) return null;
+              const inCat = visible.filter((i) => i.category === c.key);
+              if (inCat.length === 0) return null;
+              // 채택한 것·손으로 넣은 것이 위, 후보는 그 아래(서버 정렬 순서 유지)
+              const fixed = inCat.filter((i) => !isCandidate(i));
+              const cands = inCat.filter(isCandidate);
+              const open = expanded[c.key] || filter === "candidates";
+              const shownCands = open ? cands : cands.slice(0, CANDIDATES_SHOWN);
               return (
                 <div key={c.key} className="space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground">{c.emoji} {c.label}</p>
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    {c.emoji} {c.label} <span className="font-normal">{inCat.length}</span>
+                  </p>
                   <AnimatePresence initial={false}>
-                    {rows.map((item) => (
+                    {fixed.map((item) => (
                       <ItemRow
                         key={item.id}
                         item={item}
@@ -108,7 +164,25 @@ export function PickTab({ brief, items, issues, canWrite, setItems, reload }: Pr
                         onDeleted={() => setItems((l) => l.filter((i) => i.id !== item.id))}
                       />
                     ))}
+                    {shownCands.map((item) => (
+                      <CandidateRow
+                        key={item.id}
+                        item={item}
+                        canWrite={canWrite}
+                        onAdopt={() => patch(item.id, { adopted: true })}
+                        onHide={() => hide(item.id)}
+                      />
+                    ))}
                   </AnimatePresence>
+                  {cands.length > shownCands.length && (
+                    <button
+                      type="button"
+                      onClick={() => setExpanded((e) => ({ ...e, [c.key]: true }))}
+                      className={`w-full ${R.control} bg-secondary/50 py-2 text-xs font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground`}
+                    >
+                      후보 {cands.length - shownCands.length}개 더 보기
+                    </button>
+                  )}
                 </div>
               );
             })
@@ -326,8 +400,10 @@ function ItemRow({
   const confirm = useConfirm();
   const isNews = item.category === "news";
 
+  // 자동 수집분은 지우지 않고 숨긴다(서버가 행을 남겨 다시 수집되지 않게) — 되돌릴 부담이 없어 확인 없이.
+  const isAuto = item.source !== "manual";
   const remove = async () => {
-    const ok = await confirm({
+    const ok = isAuto || await confirm({
       title: "이 링크를 지울까요?",
       description: "이미 카톡에 나간 단축 주소는 계속 열려요.",
       confirmLabel: "지우기",
@@ -360,6 +436,11 @@ function ItemRow({
             <InlineField value={item.org} onSave={(org) => onPatch({ org })} disabled={!canWrite} placeholder={isNews ? "언론사" : "기관"} aria-label="기관" className="text-xs" />
             <InlineField value={item.title} onSave={(title) => title.trim() && onPatch({ title })} disabled={!canWrite} aria-label="제목" className="font-medium" />
           </div>
+          {isAuto && (
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+              <SourceBadge item={item} />
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             {!isNews && (
               <>
@@ -413,8 +494,14 @@ function ItemRow({
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
               {canWrite && (
-                <Btn tone="dangerQuiet" className="px-2" onClick={remove} aria-label="지우기">
-                  <Trash2 className="h-3.5 w-3.5" />
+                <Btn
+                  tone="dangerQuiet"
+                  className="px-2"
+                  onClick={remove}
+                  aria-label={isAuto ? "숨기기" : "지우기"}
+                  title={isAuto ? "숨기기 — 다시 수집되지 않아요" : "지우기"}
+                >
+                  {isAuto ? <EyeOff className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
                 </Btn>
               )}
             </div>
@@ -423,6 +510,63 @@ function ItemRow({
       </div>
     </motion.div>
   );
+}
+
+/** 자동 수집 후보 — 읽는 줄. 토글을 켜면 채택되고 편집 줄로 바뀐다. */
+function CandidateRow({ item, canWrite, onAdopt, onHide }: { item: BriefItem; canWrite: boolean; onAdopt: () => void; onHide: () => void }) {
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: 0.14 }}
+      className={`${R.surface} bg-secondary/40 px-3 py-2.5`}
+    >
+      <div className="flex items-start gap-3">
+        <div className="pt-0.5">
+          <Toggle on={false} onChange={onAdopt} disabled={!canWrite} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <a href={item.url} target="_blank" rel="noopener noreferrer" className="line-clamp-2 text-sm font-medium leading-snug hover:underline">
+            {item.title}
+          </a>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+            {item.org && <span className="max-w-[16rem] truncate">{item.org}</span>}
+            <WhenBadge item={item} />
+            <SourceBadge item={item} />
+          </div>
+        </div>
+        {canWrite && (
+          <Btn tone="ghost" className="shrink-0 px-2" onClick={onHide} aria-label="숨기기" title="숨기기 — 다시 수집되지 않아요">
+            <EyeOff className="h-3.5 w-3.5" />
+          </Btn>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+function WhenBadge({ item }: { item: BriefItem }) {
+  if (item.category === "news") {
+    const ago = -daysUntil(item.publishedAt ?? item.createdAt);
+    return <span>{ago <= 0 ? "오늘" : `${ago}일 전`}</span>;
+  }
+  if (item.dateLabel) return <span>{item.dateLabel}</span>;
+  if (!item.dueDate) return null;
+  const d = daysUntil(item.dueDate);
+  return (
+    <span className={d <= 3 ? "font-semibold text-amber-700 dark:text-amber-400" : ""}>
+      {d === 0 ? "오늘 마감" : `D-${d}`} · ~{formatMonthDay(item.dueDate)}
+    </span>
+  );
+}
+
+const SOURCE_NAMES: Record<string, string> = { bizinfo: "기업마당", googlenews: "Google 뉴스", rss: "RSS" };
+
+function SourceBadge({ item }: { item: BriefItem }) {
+  if (item.source === "manual") return null;
+  return <Chip className="py-0">자동 · {item.sourceName || SOURCE_NAMES[item.source] || item.source}</Chip>;
 }
 
 // ─── 카톡 ──────────────────────────────────────────────────────────────────

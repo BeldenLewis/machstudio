@@ -15,6 +15,7 @@ import { Segmented } from "@/components/ui/primitives";
 import { PickTab } from "@/components/brief/PickTab";
 import { DashboardTab } from "@/components/brief/DashboardTab";
 import { PublicTab } from "@/components/brief/PublicTab";
+import { SourcesTab } from "@/components/brief/SourcesTab";
 import { buildKakaoText } from "@/lib/brief/model";
 import type { BriefItem, BriefRow } from "@/components/brief/types";
 
@@ -22,13 +23,27 @@ if (process.env.NODE_ENV === "production") notFound();
 
 const kst = (d: string) => new Date(`${d}T00:00:00+09:00`).toISOString();
 const now = new Date().toISOString();
-const base = { url: "https://example.com", source: "manual", note: "", issueId: null, createdAt: now };
+const base = { url: "https://example.com", source: "manual", sourceName: "", publishedAt: null, note: "", issueId: null, createdAt: now };
 
 const SEED: BriefItem[] = [
   { ...base, id: "a", category: "support", org: "중소벤처기업부", title: "2026년 온라인수출 물류 지원사업 2차 참여기업 모집", dueDate: kst("2026-09-24"), dateLabel: "", adopted: true, shortUrl: "http://localhost:3000/r/aB3xQ9z" },
   { ...base, id: "b", category: "support", org: "울산경제일자리진흥원", title: "국제특송 해외물류비 지원사업", dueDate: null, dateLabel: "예산소진시까지", adopted: false, shortUrl: null },
   { ...base, id: "c", category: "event", org: "이벤터스", title: "AI와 함께하는 무역서류 기초 클래스", dueDate: kst("2026-10-08"), dateLabel: "", adopted: true, shortUrl: "http://localhost:3000/r/Kp9qW2e" },
   { ...base, id: "d", category: "news", org: "서울경제", title: "K게임 상반기 해외매출 6조…반년 만에 작년의 80% 채웠다", dueDate: null, dateLabel: "", adopted: true, shortUrl: "http://localhost:3000/r/N3wsR7t" },
+  // 자동 수집 후보 — 읽는 줄로 보여야 한다
+  ...Array.from({ length: 9 }, (_, n): BriefItem => ({
+    ...base, id: `s${n}`, category: "support", org: ["한국무역협회", "인천테크노파크", "엑스코"][n % 3],
+    title: `[자동] 2026년 해외 전시회 참가 지원사업 ${n + 1}차 모집 공고`, dueDate: kst(`2026-10-${String(n + 1).padStart(2, "0")}`),
+    dateLabel: "", adopted: false, shortUrl: null, source: "bizinfo", sourceName: "기업마당 · 수출",
+  })),
+  { ...base, id: "e1", category: "event", org: "헤드라인제주", title: "제주FTA통상진흥센터, 찾아가는 수출·통상 실무 설명회 개최", dueDate: null, dateLabel: "", adopted: false, shortUrl: null, source: "googlenews", sourceName: "수출 설명회·웨비나", publishedAt: now },
+  { ...base, id: "n1", category: "news", org: "뷰티경제", title: "8월 K-뷰티 수출 빅데이터 리포트", dueDate: null, dateLabel: "", adopted: false, shortUrl: null, source: "googlenews", sourceName: "K-뷰티 수출", publishedAt: now },
+];
+
+let memSources = [
+  { id: "src1", kind: "bizinfo", name: "기업마당 · 수출", config: { hashCode: "07", pages: 3, include: [], exclude: [] }, category: "auto", enabled: true, lastRunAt: now, lastAdded: 12, lastError: "" },
+  { id: "src2", kind: "googlenews", name: "K-뷰티 수출", config: { query: "K-뷰티 수출", days: 3, include: [], exclude: [] }, category: "news", enabled: true, lastRunAt: now, lastAdded: 0, lastError: "" },
+  { id: "src3", kind: "rss", name: "", config: { url: "", include: [], exclude: [] }, category: "news", enabled: false, lastRunAt: now, lastAdded: 0, lastError: "피드 주소가 비어 있어요" },
 ];
 
 const BRIEF: BriefRow = {
@@ -76,6 +91,19 @@ if (typeof window !== "undefined" && !(window as unknown as { __briefStub?: bool
       return json({ text: buildKakaoText(adopted, { name: memBrief.name, intro: memBrief.intro, publicUrl: memBrief.appendPublicLink ? memBrief.publicUrl : null }), count: adopted.length });
     }
     if (path.endsWith("/stats")) return json(STATS);
+    if (path.endsWith("/sources") && method === "GET") {
+      return json({ canWrite: true, sources: memSources, presets: [{ key: "export", label: "해외진출·수출", description: "기업마당 수출 분야 공고 + 뉴스" }] });
+    }
+    const srcMatch = path.match(/\/sources\/([^/]+)$/);
+    if (srcMatch && method === "PATCH") {
+      memSources = memSources.map((s) => (s.id === srcMatch[1] ? { ...s, ...body, config: { ...s.config, ...(body.config ?? {}) } } : s));
+      return json({ source: memSources.find((s) => s.id === srcMatch[1]) });
+    }
+    if (srcMatch && method === "DELETE") {
+      memSources = memSources.filter((s) => s.id !== srcMatch[1]);
+      return json({ ok: true });
+    }
+    if (path.endsWith("/collect")) return json({ added: 3, results: [{ error: "" }] });
     if (path.endsWith("/preview")) return json({ preview: { title: "2026 해외규격인증 획득지원사업 공고", siteName: "기업마당" } });
     const itemMatch = path.match(/\/items\/([^/]+)$/);
     if (itemMatch && method === "PATCH") {
@@ -104,7 +132,7 @@ if (typeof window !== "undefined" && !(window as unknown as { __briefStub?: bool
 }
 
 export default function BriefHarness() {
-  const [tab, setTab] = useState<"pick" | "dashboard" | "public">("pick");
+  const [tab, setTab] = useState<"pick" | "dashboard" | "public" | "sources">("pick");
   const [items, setItems] = useState<BriefItem[]>(SEED);
   const [brief, setBrief] = useState<BriefRow>(BRIEF);
   const reload = async () => setItems([...memItems]);
@@ -115,9 +143,15 @@ export default function BriefHarness() {
           label="탭"
           value={tab}
           onChange={setTab}
-          options={[{ value: "pick", label: "링크 고르기" }, { value: "dashboard", label: "대시보드" }, { value: "public", label: "공개 화면" }]}
+          options={[
+            { value: "pick", label: "링크 고르기" },
+            { value: "dashboard", label: "대시보드" },
+            { value: "public", label: "공개 화면" },
+            { value: "sources", label: "자동 수집" },
+          ]}
         />
-        {tab === "pick" && <PickTab brief={brief} items={items} issues={[]} canWrite setItems={setItems} reload={reload} />}
+        {tab === "pick" && <PickTab brief={brief} items={items} issues={[]} canWrite setItems={setItems} reload={reload} onOpenSources={() => setTab("sources")} />}
+        {tab === "sources" && <SourcesTab brief={brief} canWrite onCollected={reload} />}
         {tab === "dashboard" && <DashboardTab brief={brief} />}
         {tab === "public" && <PublicTab brief={brief} canWrite onChange={setBrief} items={items} />}
       </div>

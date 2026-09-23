@@ -794,12 +794,38 @@ model Brief {
   updatedAt        DateTime  @updatedAt
   deletedAt        DateTime?
 
-  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   items   BriefItem[]
   issues  BriefIssue[]
+  sources BriefSource[]
 
   @@index([projectId])
   @@index([workspaceId])
+}
+
+/// 자동 수집 소스 — 브리프마다 "어디서 긁어올지". 매일 아침 크론이 돌고, 들어온 링크는 채택 전 후보다.
+model BriefSource {
+  id        String    @id @default(cuid())
+  briefId   String
+  /// bizinfo(기업마당 분야 목록) · googlenews(검색어) · rss(임의 피드)
+  kind      String
+  name      String    @default("")
+  /// 종류별 설정 — {hashCode, pages} / {query} / {url}
+  config    Json      @default("{}")
+  /// 들어온 링크의 분류. auto 면 제목으로 지원사업·행사를 가른다
+  category  String    @default("auto")
+  enabled   Boolean   @default(true)
+  sortOrder Int       @default(0)
+  lastRunAt DateTime?
+  lastAdded Int       @default(0)
+  lastError String    @default("")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  brief Brief       @relation(fields: [briefId], references: [id], onDelete: Cascade)
+  items BriefItem[]
+
+  @@index([briefId])
 }
 
 /// 브리프에 모인 링크 하나. adopted 가 켜진 것만 밖으로 나간다.
@@ -827,12 +853,19 @@ model BriefItem {
   issueId     String?
   shortLinkId String?   @unique
   createdById String?
+  /// 자동 수집 소스 — 사람이 넣은 링크는 null
+  sourceId    String?
+  /// 원문 게시 시각(뉴스). 후보 정렬·오래된 뉴스 숨김
+  publishedAt DateTime?
+  /// 자동 수집 후보를 숨긴 시각. 지우면 다음 수집에 또 들어오므로 행은 남긴다
+  dismissedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  brief     Brief       @relation(fields: [briefId], references: [id], onDelete: Cascade)
-  issue     BriefIssue? @relation(fields: [issueId], references: [id], onDelete: SetNull)
-  shortLink ShortLink?  @relation(fields: [shortLinkId], references: [id], onDelete: SetNull)
+  brief     Brief        @relation(fields: [briefId], references: [id], onDelete: Cascade)
+  issue     BriefIssue?  @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  shortLink ShortLink?   @relation(fields: [shortLinkId], references: [id], onDelete: SetNull)
+  sourceRef BriefSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
 
   @@unique([briefId, urlKey])
   @@index([briefId, category])

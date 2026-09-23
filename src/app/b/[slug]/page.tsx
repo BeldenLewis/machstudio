@@ -78,7 +78,7 @@ export default async function PublicBriefPage({ params }: { params: Promise<{ sl
 
   const now = new Date();
   const rows = await prisma.briefItem.findMany({
-    where: { briefId: brief.id, adopted: true },
+    where: { briefId: brief.id, adopted: true, dismissedAt: null },
     include: briefItemInclude,
   });
   const items = sortBriefItems(rows.filter((i) => isStillVisible(i, now)));
@@ -133,7 +133,6 @@ export default async function PublicBriefPage({ params }: { params: Promise<{ sl
                       <DueBadge category={item.category} dueDate={item.dueDate} dateLabel={item.dateLabel} />
                     </div>
                     <p className="mt-1.5 text-[15px] font-semibold leading-snug">{item.title}</p>
-                    {item.note && <p className="mt-1.5 whitespace-pre-line text-xs leading-relaxed text-neutral-600">{item.note}</p>}
                   </a>
                 </li>
               ))}

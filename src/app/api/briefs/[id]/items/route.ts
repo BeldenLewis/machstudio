@@ -44,6 +44,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     where: { briefId_urlKey: { briefId: id, urlKey: key } },
     include: briefItemInclude,
   });
+  if (dup?.dismissedAt) {
+    // 숨겼던 후보를 사람이 다시 넣었다 — 되살리고 채택한다.
+    await prisma.briefItem.update({ where: { id: dup.id }, data: { dismissedAt: null, adopted: true } });
+    await ensureShortLink(dup, { workspaceId: g.workspaceId, userId: g.userId });
+    const revived = await prisma.briefItem.findUniqueOrThrow({ where: { id: dup.id }, include: briefItemInclude });
+    return NextResponse.json({ item: toClientItem(revived, shortBase(request)) }, { status: 201 });
+  }
   if (dup) {
     return NextResponse.json({ error: "이미 들어 있는 링크예요", item: toClientItem(dup, shortBase(request)) }, { status: 409 });
   }

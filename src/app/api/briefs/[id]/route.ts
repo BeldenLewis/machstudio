@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { guardBrief, publicBriefUrl, shortBase } from "@/lib/brief/server";
-import { loadBriefItems, sortBriefItems, toClientItem } from "@/lib/brief/queries";
+import { loadPickItems, sortBriefItems, toClientItem } from "@/lib/brief/queries";
 import { toSlug } from "@/lib/brief/model";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -10,7 +10,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!g.ok) return g.response;
 
   const [items, issues] = await Promise.all([
-    loadBriefItems(id),
+    loadPickItems(id),
     prisma.briefIssue.findMany({
       where: { briefId: id },
       orderBy: { publishedAt: "desc" },

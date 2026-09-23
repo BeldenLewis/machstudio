@@ -48,6 +48,11 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     단축링크는 지우지 않는다. 이미 카톡에 나간 주소일 수 있다 — 지우면 참가사가 누른 링크가
     "찾을 수 없음" 이 된다. 링크 목록에서만 빠진다.
   */
-  await prisma.briefItem.delete({ where: { id: itemId } });
+  if (current.sourceId || current.source !== "manual") {
+    // 자동 수집분은 행을 남기고 숨긴다 — 지우면 내일 수집에 같은 공고가 또 들어온다.
+    await prisma.briefItem.update({ where: { id: itemId }, data: { dismissedAt: new Date(), adopted: false } });
+  } else {
+    await prisma.briefItem.delete({ where: { id: itemId } });
+  }
   return NextResponse.json({ ok: true });
 }

@@ -114,7 +114,21 @@ export function parsePreview(html: string, url: string): Omit<LinkPreview, "fina
   return { title: title.slice(0, 300), siteName: siteName.slice(0, 80) };
 }
 
-export async function fetchLinkPreview(rawUrl: string): Promise<LinkPreview | null> {
+export interface SafeFetchResult {
+  text: string;
+  finalUrl: string;
+  contentType: string;
+}
+
+/**
+ * 공개 주소만, 리다이렉트는 한 단계씩 다시 검사하며, 시간·크기 상한 안에서 본문을 텍스트로 읽는다.
+ * 링크 미리보기와 자동 수집(피드·목록 페이지)이 같은 관문을 쓴다 — 수집 소스 주소도 사람이 넣는다.
+ * 실패하면 null. 던지지 않는다.
+ */
+export async function safeFetchText(
+  rawUrl: string,
+  { accept = "text/html,application/xhtml+xml", maxBytes = MAX_BYTES, timeoutMs = TIMEOUT_MS, allow = (ct: string) => ct.includes("html") } = {},
+): Promise<SafeFetchResult | null> {
   let current: URL;
   try {
     current = new URL(rawUrl);
@@ -123,7 +137,7 @@ export async function fetchLinkPreview(rawUrl: string): Promise<LinkPreview | nu
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       if (current.protocol !== "http:" && current.protocol !== "https:") return null;
@@ -133,9 +147,9 @@ export async function fetchLinkPreview(rawUrl: string): Promise<LinkPreview | nu
         redirect: "manual",
         signal: controller.signal,
         headers: {
-          // 봇 차단이 심한 사이트가 있어 평범한 브라우저처럼 보인다. 목적은 제목 한 줄뿐이다.
+          // 봇 차단이 심한 사이트가 있어 평범한 브라우저처럼 보인다.
           "User-Agent": "Mozilla/5.0 (compatible; machstudio-brief/1.0; +link-preview)",
-          Accept: "text/html,application/xhtml+xml",
+          Accept: accept,
           "Accept-Language": "ko,en;q=0.8",
         },
       });
@@ -146,13 +160,14 @@ export async function fetchLinkPreview(rawUrl: string): Promise<LinkPreview | nu
         current = new URL(next, current); // 다음 바퀴에서 다시 검사한다
         continue;
       }
+      const contentType = res.headers.get("content-type") ?? "";
       if (!res.ok || !res.body) return null;
-      if (!(res.headers.get("content-type") ?? "").includes("html")) return null;
+      if (!allow(contentType)) return null;
 
       const reader = res.body.getReader();
       const chunks: Uint8Array[] = [];
       let total = 0;
-      while (total < MAX_BYTES) {
+      while (total < maxBytes) {
         const { done, value } = await reader.read();
         if (done) break;
         chunks.push(value);
@@ -160,16 +175,17 @@ export async function fetchLinkPreview(rawUrl: string): Promise<LinkPreview | nu
       }
       void reader.cancel().catch(() => {});
 
-      const bytes = new Uint8Array(total);
+      const size = Math.min(total, maxBytes);
+      const bytes = new Uint8Array(size);
       let offset = 0;
       for (const c of chunks) {
-        bytes.set(c.subarray(0, Math.min(c.byteLength, total - offset)), offset);
-        offset += c.byteLength;
-        if (offset >= total) break;
+        if (offset >= size) break;
+        const take = c.subarray(0, Math.min(c.byteLength, size - offset));
+        bytes.set(take, offset);
+        offset += take.byteLength;
       }
       const head = new TextDecoder("latin1").decode(bytes.subarray(0, 4096));
-      const html = decode(bytes, pickCharset(res.headers.get("content-type"), head));
-      return { ...parsePreview(html, current.toString()), finalUrl: current.toString() };
+      return { text: decode(bytes, pickCharset(contentType, head)), finalUrl: current.toString(), contentType };
     }
     return null;
   } catch {
@@ -177,4 +193,10 @@ export async function fetchLinkPreview(rawUrl: string): Promise<LinkPreview | nu
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function fetchLinkPreview(rawUrl: string): Promise<LinkPreview | null> {
+  const res = await safeFetchText(rawUrl);
+  if (!res) return null;
+  return { ...parsePreview(res.text, res.finalUrl), finalUrl: res.finalUrl };
 }

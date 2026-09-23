@@ -158,6 +158,24 @@ export function isStillVisible(
   return daysUntil(item.dueDate, now) >= 0;
 }
 
+/** 자동 수집 후보가 고르기 목록에 남는 기간 — 뉴스는 짧게, 날짜 없는 공고는 한 달. */
+export const CANDIDATE_NEWS_DAYS = 14;
+export const CANDIDATE_UNDATED_DAYS = 30;
+
+/**
+ * 채택 안 한 자동 수집 후보를 고르기 목록에 계속 보여 줄지.
+ * 매일 수십 건씩 들어오므로 지난 것은 스스로 사라져야 목록이 쓸 만하다(행은 중복 판정용으로 남는다).
+ */
+export function isFreshCandidate(
+  item: { category: string; dueDate: Date | string | null; createdAt: Date | string; publishedAt?: Date | string | null },
+  now = new Date(),
+): boolean {
+  const age = -daysUntil(item.publishedAt ?? item.createdAt, now);
+  if (item.category === "news") return age <= CANDIDATE_NEWS_DAYS;
+  if (item.dueDate) return daysUntil(item.dueDate, now) >= 0;
+  return -daysUntil(item.createdAt, now) <= CANDIDATE_UNDATED_DAYS;
+}
+
 /** 공개 주소용 슬러그 — 영문 소문자·숫자·하이픈. 비면 무작위로. */
 export function toSlug(input: string): string {
   const s = input

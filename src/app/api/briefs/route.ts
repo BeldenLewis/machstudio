@@ -4,7 +4,9 @@
  */
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { guardProject, publicBriefUrl } from "@/lib/brief/server";
+import { applyPreset, guardProject, publicBriefUrl } from "@/lib/brief/server";
+import { BRIEF_PRESETS, presetForProject } from "@/lib/brief/sources";
+import { collectBrief } from "@/lib/brief/collect";
 import { toSlug } from "@/lib/brief/model";
 
 export async function GET(request: Request) {
@@ -13,12 +15,15 @@ export async function GET(request: Request) {
   const g = await guardProject(projectId, { write: false });
   if (!g.ok) return g.response;
 
-  const briefs = await prisma.brief.findMany({
-    where: { projectId, deletedAt: null },
-    orderBy: { createdAt: "asc" },
-  });
+  const [briefs, project] = await Promise.all([
+    prisma.brief.findMany({ where: { projectId, deletedAt: null }, orderBy: { createdAt: "asc" } }),
+    prisma.project.findUnique({ where: { id: projectId }, select: { name: true } }),
+  ]);
   return NextResponse.json({
     canWrite: g.canWrite,
+    // 코리아 엑스포 프로젝트는 고르지 않고 바로 해외진출 세트로 시작한다 — 화면이 이 값을 보고 자동 생성한다.
+    suggestedPreset: presetForProject(project?.name ?? "")?.key ?? null,
+    presets: BRIEF_PRESETS.map((p) => ({ key: p.key, label: p.label, description: p.description, name: p.brief.name })),
     briefs: briefs.map((b) => ({ ...b, publicUrl: publicBriefUrl(request, b.slug) })),
   });
 }
@@ -44,6 +49,7 @@ export async function POST(request: Request) {
   if (!g.ok) return g.response;
 
   const requested = typeof body?.slug === "string" ? toSlug(body.slug) : "";
+  const preset = BRIEF_PRESETS.find((p) => p.key === body?.preset) ?? null;
   const brief = await prisma.brief.create({
     data: {
       workspaceId: g.workspaceId,
@@ -53,5 +59,10 @@ export async function POST(request: Request) {
       intro: typeof body?.intro === "string" ? body.intro.slice(0, 200) : "",
     },
   });
+  if (preset) {
+    await applyPreset(brief.id, preset);
+    // 첫 수집을 바로 돌린다 — 만들자마자 빈 목록을 보여 주지 않게. 실패해도 생성은 성공이다.
+    await collectBrief(brief.id).catch(() => null);
+  }
   return NextResponse.json({ brief: { ...brief, publicUrl: publicBriefUrl(request, brief.slug) } }, { status: 201 });
 }
