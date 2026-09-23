@@ -157,16 +157,18 @@ export function parseBizinfoPeriod(text: string): { dueDate: string | null; date
 }
 
 /**
- * 기관 칸 — 수행기관이 "기초자치단체" 처럼 **종류 이름**이면 소관부처(○○시·○○도)를 쓴다.
+ * 기관 칸 — 수행기관이 "기초자치단체" 처럼 **종류 이름**이면 실제 지자체 이름을 쓴다.
  * 카톡의 [대괄호]에 "[기초자치단체]" 가 찍히면 어디 공고인지 알 수 없다.
+ * 소관부처 칸은 도(경기도)까지만 주는 일이 많아, 제목 앞머리의 시·군("[경기] 화성시 …")을 먼저 본다.
  */
 const GENERIC_ORG = /^(기초|광역)?자치단체$|^지자체$|^기타$/;
 
-export function pickBizinfoOrg(agency: string, ministry: string): string {
+export function pickBizinfoOrg(agency: string, ministry: string, title = ""): string {
   const a = agency.trim();
   const m = ministry.trim();
-  if (!a || GENERIC_ORG.test(a)) return m || a;
-  return a;
+  if (a && !GENERIC_ORG.test(a)) return a;
+  const city = title.match(/^\s*\[[^\]]{1,10}\]\s*([가-힣]{1,6}(?:시|군|구))\s/)?.[1];
+  return city || m || a;
 }
 
 /**
@@ -189,7 +191,7 @@ export function parseBizinfoList(html: string, category: SourceCategory): Candid
     out.push({
       title,
       url: bizinfoDetailUrl(id),
-      org: pickBizinfoOrg(cells[5], cells[4]),
+      org: pickBizinfoOrg(cells[5], cells[4], title),
       category: resolveCategory(category, title),
       dueDate,
       dateLabel,
@@ -252,7 +254,7 @@ export function parseBizinfoApi(json: unknown, fieldLabel: string, category: Sou
     out.push({
       title: title.slice(0, 300),
       url,
-      org: pickBizinfoOrg(str(row, "excInsttNm"), str(row, "jrsdInsttNm", "author")),
+      org: pickBizinfoOrg(str(row, "excInsttNm"), str(row, "jrsdInsttNm", "author"), title),
       category: resolveCategory(category, title),
       dueDate,
       dateLabel,
