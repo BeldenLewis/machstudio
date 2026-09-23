@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { collectAllBriefs } from "@/lib/brief/collect";
+
+// 브리프 수집이 바깥 사이트 여러 곳을 읽으므로 기본 시간 제한보다 넉넉히.
+export const maxDuration = 60;
 
 // 매일 한 번 호출 — 모든 유지보수 작업을 묶음.
 // Vercel Hobby cron 2개 한도 회피.
@@ -50,6 +54,18 @@ export async function GET(request: Request) {
     result.expiredTokens = expired.count;
   } catch (e) {
     result.expiredTokens = { error: e instanceof Error ? e.message : String(e) };
+  }
+
+  // 4) 브리프 자동 수집 — 기업마당·뉴스에서 새 후보를 긁어 온다(KST 09:00). 채택은 사람이 한다.
+  try {
+    const runs = await collectAllBriefs();
+    result.briefCollect = runs.map((r) => ({
+      briefId: r.briefId,
+      added: r.added,
+      errors: r.results.filter((x) => x.error).length,
+    }));
+  } catch (e) {
+    result.briefCollect = { error: e instanceof Error ? e.message : String(e) };
   }
 
   return NextResponse.json({ ok: true, ...result });
