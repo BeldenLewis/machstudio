@@ -66,3 +66,23 @@ export function stripPhoneInput(value: string): string {
   const plus = value.trimStart().startsWith("+") ? "+" : "";
   return plus + value.replace(/[^0-9]/g, "");
 }
+
+/**
+ * 이미 저장된 E.164 번호가 어느 나라 것인지.
+ *
+ * 왜 필요한가: 제출은 **방문자가 고른 국가**로 파싱하는데(`collect-submit.ts`),
+ * 그 선택값은 저장되지 않는다. 그래서 나중에 레코드를 고칠 때 소스의 기본 국가밖에
+ * 쓸 수가 없고, 기본이 US 인 전시에 한국 번호로 등록한 사람은 **이름 오타 하나를
+ * 고쳐 주는 순간 전화가 통째로 날아간다**(`toE164("01012345678","US")` → null).
+ *
+ * 저장된 번호 자체가 국가를 알고 있으므로, 그걸 되읽어 기준으로 쓴다.
+ */
+export function countryOfE164(e164: unknown): string | null {
+  try {
+    const raw = typeof e164 === "string" ? e164.trim() : "";
+    if (!raw.startsWith("+")) return null;
+    return parsePhoneNumberFromString(raw)?.country ?? null;
+  } catch {
+    return null;
+  }
+}

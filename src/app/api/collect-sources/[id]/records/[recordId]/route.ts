@@ -5,7 +5,7 @@ import { logActivity } from "@/lib/activity";
 import { normalizeCollectForm } from "@/lib/collect-form-config";
 import { isBuilderSource } from "@/lib/collect-columns";
 import { normalizeEmail, primaryFieldKey } from "@/lib/collect-submit";
-import { toE164 } from "@/lib/collect-phone";
+import { countryOfE164, toE164 } from "@/lib/collect-phone";
 
 async function authorize(id: string, requireAdmin = false) {
   const supabase = await createClient();
@@ -56,6 +56,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   };
 
   const updateData: Record<string, unknown> = {};
+  /** 전화 재파싱은 **저장된 번호를 읽은 뒤**에 한다(아래 target 조회). 그 이유는 그 자리에 적었다. */
+  let pendingPhone: { raw: string; fallback: string } | null = null;
   if (data !== undefined && typeof data === "object" && data !== null) {
     updateData.data = data;
     /**
@@ -77,7 +79,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const phoneKey = primaryFieldKey(config, data, "tel");
       const phoneRaw = phoneKey ? String(data[phoneKey] ?? "").trim() : "";
       updateData.emailNormalized = emailKey ? normalizeEmail(data[emailKey]) : null;
-      updateData.phoneE164 = phoneRaw ? toE164(phoneRaw, config.validation.defaultCountry) : null;
+
+      // 전화는 저장된 번호의 국가를 알아야 옳게 다시 읽는다 — 아래 target 조회 뒤에 넣는다.
+      pendingPhone = { raw: phoneRaw, fallback: config.validation.defaultCountry };
     }
   }
   if (utmSource !== undefined) updateData.utmSource = utmSource || null;
@@ -97,9 +101,29 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // GET 은 이미 findFirst({ id, sourceId }) 로 걸러 왔는데 PATCH/DELETE 만 빠져 있었다.
   const target = await prisma.collectRecord.findFirst({
     where: { id: recordId, sourceId: id },
-    select: { id: true },
+    select: { id: true, phoneE164: true },
   });
   if (!target) return NextResponse.json({ error: "레코드를 찾을 수 없어요" }, { status: 404 });
+
+  if (pendingPhone) {
+    /**
+     * **전화는 기준 국가를 잘못 잡으면 조용히 날아간다.**
+     *
+     * 제출은 **방문자가 고른 국가**로 파싱하는데(`collect-submit.ts`) 그 선택값은 어디에도
+     * 저장되지 않는다. 그래서 여기서는 소스의 기본 국가밖에 쓸 수가 없고, 기본이 US 인
+     * 전시에 한국 번호(`01012345678`)로 등록한 사람은 **이름 오타 하나를 고쳐 주는 순간**
+     * `toE164(..., "US")` 가 null 을 내어 전화가 사라진다. 오류도 경고도 로그도 없고,
+     * 그 사람은 나중에 전화로 자기 등록을 못 찾는다(QR 을 잃었다면 현장 줄뿐이다).
+     *
+     * 그래서 **이미 저장된 번호가 아는 국가**를 폴백으로 쓴다. 기본 국가로 안 읽히면
+     * 옛 번호의 국가로 한 번 더 시도하고, 둘 다 실패해야 null 이다.
+     */
+    const priorCountry = countryOfE164(target.phoneE164);
+    updateData.phoneE164 = pendingPhone.raw
+      ? toE164(pendingPhone.raw, pendingPhone.fallback)
+        ?? (priorCountry ? toE164(pendingPhone.raw, priorCountry) : null)
+      : null;
+  }
 
   /**
    * 이메일을 **이미 등록된 주소로** 고치면 부분 유니크 인덱스에 부딪힌다(§6.2).
