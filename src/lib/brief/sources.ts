@@ -157,6 +157,19 @@ export function parseBizinfoPeriod(text: string): { dueDate: string | null; date
 }
 
 /**
+ * 기관 칸 — 수행기관이 "기초자치단체" 처럼 **종류 이름**이면 소관부처(○○시·○○도)를 쓴다.
+ * 카톡의 [대괄호]에 "[기초자치단체]" 가 찍히면 어디 공고인지 알 수 없다.
+ */
+const GENERIC_ORG = /^(기초|광역)?자치단체$|^지자체$|^기타$/;
+
+export function pickBizinfoOrg(agency: string, ministry: string): string {
+  const a = agency.trim();
+  const m = ministry.trim();
+  if (!a || GENERIC_ORG.test(a)) return m || a;
+  return a;
+}
+
+/**
  * 기업마당 공고 목록 페이지 → 후보.
  * 열 순서: 번호 · 분야 · 제목 · 신청기간 · 소관부처 · 수행기관 · 등록일 · 조회수
  * 기관은 **수행기관**(실제로 접수받는 곳)을 쓴다 — 원본 게시물의 [대괄호]가 그랬다.
@@ -176,7 +189,7 @@ export function parseBizinfoList(html: string, category: SourceCategory): Candid
     out.push({
       title,
       url: bizinfoDetailUrl(id),
-      org: cells[5] || cells[4] || "",
+      org: pickBizinfoOrg(cells[5], cells[4]),
       category: resolveCategory(category, title),
       dueDate,
       dateLabel,
@@ -239,7 +252,7 @@ export function parseBizinfoApi(json: unknown, fieldLabel: string, category: Sou
     out.push({
       title: title.slice(0, 300),
       url,
-      org: str(row, "excInsttNm", "jrsdInsttNm", "author"),
+      org: pickBizinfoOrg(str(row, "excInsttNm"), str(row, "jrsdInsttNm", "author")),
       category: resolveCategory(category, title),
       dueDate,
       dateLabel,

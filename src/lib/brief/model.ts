@@ -82,12 +82,15 @@ export function buildKakaoText(items: BriefItemLike[], opts: KakaoTextOptions): 
   for (const cat of BRIEF_CATEGORIES) {
     const group = items.filter((i) => i.category === cat.key);
     if (group.length === 0) continue;
+    // 카테고리 머리줄 앞, 공고와 공고 사이에 빈 줄 — 카톡에서 붙어 있으면 어디서 끊기는지 안 보인다.
+    lines.push("");
     lines.push(`${cat.emoji} ${cat.label}`);
-    for (const item of group) {
+    group.forEach((item, n) => {
+      if (n > 0) lines.push("");
       if (cat.key !== "news" && item.org.trim()) lines.push(`[${item.org.trim()}]`);
       lines.push(`${item.title.trim()}${dateSuffix(item)}`);
       lines.push(item.shortUrl || item.url);
-    }
+    });
   }
 
   if (opts.publicUrl) {

@@ -3,6 +3,7 @@ import {
   bizinfoApiError,
   classifyTitle,
   parseBizinfoApi,
+  pickBizinfoOrg,
   googleNewsUrl,
   normalizeSourceConfig,
   parseBizinfoList,
@@ -210,5 +211,15 @@ describe("고르기 목록에 남는 후보", () => {
     expect(isFreshCandidate({ category: "support", dueDate: kst("2026-09-22"), createdAt: now }, now)).toBe(false);
     expect(isFreshCandidate({ category: "support", dueDate: null, createdAt: kst("2026-08-01") }, now)).toBe(false);
     expect(isFreshCandidate({ category: "support", dueDate: null, createdAt: kst("2026-09-10") }, now)).toBe(true);
+  });
+});
+
+describe("기관 칸", () => {
+  /** "[기초자치단체]" 로는 어느 시·군 공고인지 알 수 없다 — 소관부처(○○시)를 쓴다. */
+  it("수행기관이 종류 이름이면 소관부처", () => {
+    expect(pickBizinfoOrg("기초자치단체", "전북특별자치도 남원시")).toBe("전북특별자치도 남원시");
+    expect(pickBizinfoOrg("광역자치단체", "부산광역시")).toBe("부산광역시");
+    expect(pickBizinfoOrg("김해의생명산업진흥원", "경상남도")).toBe("김해의생명산업진흥원");
+    expect(pickBizinfoOrg("", "중소벤처기업부")).toBe("중소벤처기업부");
   });
 });
