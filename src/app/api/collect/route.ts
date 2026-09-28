@@ -234,7 +234,10 @@ export async function POST(request: Request) {
   const stored = await prisma.$transaction(async (tx) => {
     if (dedupKey) {
       // 동일 신청이 여러 브라우저 이벤트 경로에서 동시에 도착해도 검사와 생성을 직렬화한다.
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`collect:${source.id}:${dedupKey.lockValue}`}, 0))`;
+      // pg_advisory_xact_lock()의 반환형은 PostgreSQL void다. Prisma 7 + pg adapter는
+      // void 컬럼 역직렬화를 지원하지 않아 쿼리는 잠금을 잡고도 요청 전체를 500으로 끝낸다.
+      // boolean 식으로 감싸 잠금의 트랜잭션 의미는 유지하고 지원 타입만 반환한다.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`collect:${source.id}:${dedupKey.lockValue}`}, 0)) IS NULL AS "locked"`;
       const existing = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id
         FROM "CollectRecord"

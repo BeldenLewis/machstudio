@@ -342,40 +342,73 @@ ${utmCore}
     return data;
   }
 
-  function sendData(formData) {
+  var OUTBOX_KEY = "mach_collect_outbox_${source.id}";
+  function readOutbox() {
+    try {
+      var value = JSON.parse(localStorage.getItem(OUTBOX_KEY) || "[]");
+      return Array.isArray(value) ? value.filter(function(item) {
+        return item && item.payload && Date.now() - Number(item.createdAt || 0) < 86400000;
+      }) : [];
+    } catch (e) { return []; }
+  }
+  function writeOutbox(items) {
+    try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(items.slice(-10))); } catch (e) {}
+  }
+  function buildPayload(formData) {
     var ctx = getUtmContext();
     var last = ctx.last;
     var first = ctx.first;
-    fetch(COLLECT_URL, {
+    return {
+      data: formData,
+      _fieldMeta: getFieldMeta(),
+      utmSource: last.utmSource, utmMedium: last.utmMedium, utmCampaign: last.utmCampaign,
+      utmTerm: last.utmTerm, utmContent: last.utmContent, utmId: last.utmId || "",
+      firstUtmSource: first.utmSource, firstUtmMedium: first.utmMedium, firstUtmCampaign: first.utmCampaign,
+      firstUtmTerm: first.utmTerm, firstUtmContent: first.utmContent, firstUtmId: first.utmId || "",
+      firstReferrer: first.referrer || "", firstSeenAt: first.seenAt || "",
+      journey: ctx.journey, referrer: document.referrer, userAgent: navigator.userAgent
+    };
+  }
+  function queuePayload(payload) {
+    var id;
+    try { id = JSON.stringify(payload.data); } catch (e) { id = String(Date.now()); }
+    var items = readOutbox().filter(function(item) { return item.id !== id; });
+    items.push({ id: id, createdAt: Date.now(), payload: payload });
+    writeOutbox(items);
+    return id;
+  }
+  function postPayload(id, payload) {
+    return fetch(COLLECT_URL, {
       method: "POST",
       keepalive: true,
       headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
-      body: JSON.stringify({
-        data: formData,
-        _fieldMeta: getFieldMeta(),
-        utmSource:   last.utmSource,
-        utmMedium:   last.utmMedium,
-        utmCampaign: last.utmCampaign,
-        utmTerm:     last.utmTerm,
-        utmContent:  last.utmContent,
-        utmId:       last.utmId || "",
-        firstUtmSource:   first.utmSource,
-        firstUtmMedium:   first.utmMedium,
-        firstUtmCampaign: first.utmCampaign,
-        firstUtmTerm:     first.utmTerm,
-        firstUtmContent:  first.utmContent,
-        firstUtmId:       first.utmId || "",
-        firstReferrer:    first.referrer || "",
-        firstSeenAt:      first.seenAt   || "",
-        journey:   ctx.journey,
-        referrer:  document.referrer,
-        userAgent: navigator.userAgent
-      })
+      body: JSON.stringify(payload)
+    }).then(function(response) {
+      if (!response || !response.ok) throw new Error("collect failed");
+      writeOutbox(readOutbox().filter(function(item) { return item.id !== id; }));
     }).catch(function() {});
+  }
+  function retryPayloadIfQueued(id, payload) {
+    var queued = readOutbox().some(function(item) { return item.id === id; });
+    if (queued) postPayload(id, payload);
+  }
+  function retryOutbox() {
+    readOutbox().forEach(function(item) { postPayload(item.id, item.payload); });
+  }
+  function sendData(formData) {
+    var payload = buildPayload(formData);
+    var id = queuePayload(payload);
+    postPayload(id, payload);
+    // 등록 후 같은 폼으로 돌아오지 않는 사용자가 대부분이다. 다음 방문만 기다리지 말고,
+    // 아직 outbox 에 남아 있는 실패 건만 현재 페이지가 살아 있는 동안 두 번 더 보낸다.
+    setTimeout(function() { retryPayloadIfQueued(id, payload); }, 1200);
+    setTimeout(function() { retryPayloadIfQueued(id, payload); }, 3500);
   }
 
   // ── 폼 감지 — 패턴에 매칭된 페이지에서만 활성화. UTM 캡처는 위에서 이미 모든 페이지에 대해 실행됨.
   if (isFormPage()) {
+    retryOutbox();
+    window.addEventListener("online", retryOutbox);
     // 이 소스가 앵커 방식인가 — 생성 시점에 정해지므로 한 번만 본다.
     var HAS_ANCHORS = FIELD_MAP.some(function(f) { return !!f.mb; });
     var triggered = false;
@@ -533,24 +566,19 @@ ${utmCore}
       if (sentFingerprints[fp] && (Date.now() - sentFingerprints[fp]) < 5000) return;
       sentFingerprints[fp] = Date.now();
       try {
-        var ctx = getUtmContext();
-        var last = ctx.last, first = ctx.first;
-        var payload = JSON.stringify({
-          data: pendingData,
-          _fieldMeta: getFieldMeta(),
-          utmSource: last.utmSource, utmMedium: last.utmMedium, utmCampaign: last.utmCampaign,
-          utmTerm: last.utmTerm, utmContent: last.utmContent, utmId: last.utmId || "",
-          firstUtmSource: first.utmSource, firstUtmMedium: first.utmMedium, firstUtmCampaign: first.utmCampaign,
-          firstUtmTerm: first.utmTerm, firstUtmContent: first.utmContent, firstUtmId: first.utmId || "",
-          firstReferrer: first.referrer || "", firstSeenAt: first.seenAt || "",
-          journey: ctx.journey, referrer: document.referrer, userAgent: navigator.userAgent
-        });
+        var payloadObject = buildPayload(pendingData);
+        queuePayload(payloadObject);
+        var payload = JSON.stringify(payloadObject);
         // sendBeacon은 헤더 커스텀 불가 → x-api-key 못 보냄. URL 쿼리로 키 전달.
         var beaconUrl = COLLECT_URL + (COLLECT_URL.indexOf("?") === -1 ? "?" : "&") + "k=" + encodeURIComponent(API_KEY);
         var blob = new Blob([payload], { type: "application/json" });
         if (navigator.sendBeacon) {
           navigator.sendBeacon(beaconUrl, blob);
-        } else {
+        }
+        // sendBeacon()의 true는 큐 적재 성공일 뿐 서버 저장 성공이 아니다. 실제 누락이 난
+        // 앵커형 대행 사이트는 keepalive fetch도 함께 보낸다. 서버가 이메일 기준으로 직렬
+        // 중복 제거하므로 둘 다 도착해도 레코드는 하나이고, 한 경로가 막혀도 다른 경로가 남는다.
+        if (!navigator.sendBeacon || HAS_ANCHORS) {
           fetch(beaconUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, keepalive: true }).catch(function(){});
         }
       } catch (e) {}

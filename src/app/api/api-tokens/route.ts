@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
-import { generateToken } from "@/lib/pat";
+import { generateToken, SCOPES } from "@/lib/pat";
 import { logActivity } from "@/lib/activity";
 
 export async function GET(request: Request) {
@@ -42,6 +42,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "ADMIN 이상 필요" }, { status: 403 });
   }
 
+  const allowedScopes = new Set<string>(SCOPES.map((scope) => scope.id));
+  const normalizedScopes = Array.isArray(scopes)
+    ? Array.from(new Set(scopes.filter((scope): scope is string => typeof scope === "string" && allowedScopes.has(scope))))
+    : [];
   const { token, tokenHash, prefix } = generateToken();
   const expiresAt = expiresInDays ? new Date(Date.now() + expiresInDays * 86400_000) : null;
 
@@ -52,7 +56,7 @@ export async function POST(request: Request) {
       name: name.trim(),
       tokenHash,
       prefix,
-      scopes: Array.isArray(scopes) ? scopes : [],
+      scopes: normalizedScopes,
       expiresAt,
     },
   });

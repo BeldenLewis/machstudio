@@ -7,6 +7,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
 import { formatKstDateTime } from "@/lib/datetime";
 import { ApiTokenIcon } from "@/components/settings/settings-icons";
+import { getPublicAppOrigin } from "@/lib/app-url";
 
 const spring = { type: "spring", stiffness: 420, damping: 30 } as const;
 
@@ -31,14 +32,16 @@ const SCOPES = [
   { id: "sources:read",    label: "수집 소스 조회" },
   { id: "sources:write",   label: "수집 소스 관리" },
   { id: "dashboards:read", label: "대시보드 조회" },
+  { id: "ads:read",        label: "광고 성과 조회" },
 ];
 
 export default function ApiTokensModal({ workspaceId, onClose }: Props) {
+  const publicOrigin = getPublicAppOrigin();
   const confirm = useConfirm();
   const [tokens, setTokens] = useState<Token[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: "", scopes: ["records:read"] as string[], expiresInDays: 0 });
+  const [form, setForm] = useState({ name: "", scopes: ["dashboards:read", "ads:read"] as string[], expiresInDays: 90 });
   const [newToken, setNewToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -69,7 +72,7 @@ export default function ApiTokensModal({ workspaceId, onClose }: Props) {
       const data = await res.json();
       if (!res.ok) { toast.error(data.error ?? "생성 실패"); return; }
       setNewToken(data.accessToken);
-      setForm({ name: "", scopes: ["records:read"], expiresInDays: 0 });
+      setForm({ name: "", scopes: ["dashboards:read", "ads:read"], expiresInDays: 90 });
       fetchTokens();
     } finally {
       setCreating(false);
@@ -127,8 +130,13 @@ export default function ApiTokensModal({ workspaceId, onClose }: Props) {
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <p className="text-xs text-muted-foreground">
-            외부 도구(Zapier, n8n, Postman 등)에서 mach API 를 호출할 때 사용합니다. 토큰은 발급 직후 한 번만 표시되니 안전한 곳에 저장하세요.
+            외부 도구와 AI가 Machstudio API·MCP를 읽을 때 사용합니다. 토큰은 발급 직후 한 번만 표시되니 안전한 곳에 저장하세요.
           </p>
+          <div className="rounded-xl bg-secondary/40 p-3 text-[11px] leading-5 text-muted-foreground">
+            <p><span className="font-medium text-foreground">REST API</span> · <code className="font-mono break-all">{publicOrigin}/api/v1/openapi.json</code></p>
+            <p><span className="font-medium text-foreground">원격 MCP</span> · <code className="font-mono break-all">{publicOrigin}/mcp</code></p>
+            <p>연결할 때 Authorization 헤더에 <code className="font-mono">Bearer xfp_...</code> 형식으로 토큰을 넣으세요.</p>
+          </div>
 
           <AnimatePresence>
           {newToken && (

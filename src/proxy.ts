@@ -8,6 +8,10 @@ export async function proxy(request: NextRequest) {
   // 공개 경로에서 Supabase Auth 호출을 먼저 하면 헬스체크와 수집 스크립트도 인증 상태에 영향받을 수 있다.
   if (
     pathname.startsWith("/auth/callback") ||
+    pathname.startsWith("/.well-known/") ||
+    pathname.startsWith("/oauth/register") ||
+    pathname.startsWith("/oauth/token") ||
+    pathname.startsWith("/oauth/revoke") ||
     pathname.startsWith("/api/collect") ||
     pathname.startsWith("/api/webinar/") ||
     pathname.startsWith("/api/webinar-embed/") || // 임베드 공개 설정/비콘 (webinar-embed-sites 어드민 CRUD는 제외)
@@ -37,11 +41,15 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/show/") ||
     pathname.startsWith("/api/show/") ||
     pathname.startsWith("/api/public") ||
+    pathname.startsWith("/api/v1/") || // PAT Bearer 인증을 라우트 자체에서 검증하는 외부 API
+    pathname === "/mcp" || // PAT Bearer 인증을 사용하는 원격 MCP 서버
     pathname.startsWith("/api/shorten-url") ||
     pathname.startsWith("/api/health") ||
     pathname.startsWith("/share") ||
     pathname.startsWith("/s/") ||
     pathname.startsWith("/r/") ||
+    // 브리프 공개 화면 — 카톡으로 받은 참가사가 로그인 없이 연다. 채택된 링크만, 조회 외 부작용 없음.
+    pathname.startsWith("/b/") ||
     // 빌더형 등록 폼 미리보기(/p/{previewToken}) — 검토자는 워크스페이스 멤버가 아니다.
     // 권한은 추측 불가능한 토큰이 대신하고, 페이지 자체가 조회 외의 부작용을 갖지 않는다.
     pathname.startsWith("/p/") ||
@@ -87,7 +95,7 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const publicPages = ["/", "/signup", "/reset-password"];
+  const publicPages = ["/", "/signup", "/reset-password", "/oauth/authorize"];
   const isPublicPage = publicPages.includes(pathname);
 
   // 비로그인 상태에서 보호된 페이지 접근 → 로그인으로
