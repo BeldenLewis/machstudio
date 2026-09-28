@@ -233,8 +233,10 @@ export function parseBizinfoList(html: string, category: SourceCategory): Candid
   이름이 조금 달라도 읽히게 후보 이름을 여러 개 본다.
 */
 
-export function bizinfoApiUrl(key: string, count = 100): string {
+/** hashtags 에 분야 이름(수출 등)을 주면 API 가 그 분야만 돌려준다(안내서: 다중입력 가능). */
+export function bizinfoApiUrl(key: string, count = 100, hashtags = ""): string {
   const q = new URLSearchParams({ crtfcKey: key, dataType: "json", searchCnt: String(count) });
+  if (hashtags) q.set("hashtags", hashtags);
   return `https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do?${q}`;
 }
 

@@ -41,7 +41,19 @@ const MAX_PER_RUN = 30;
 
 const isFeed = (ct: string) => /xml|rss|atom/i.test(ct);
 
-async function fetchCandidates(kind: SourceKind, rawConfig: unknown, rawCategory: string): Promise<Candidate[]> {
+/**
+ * 소스에서 후보를 가져온다. note 는 실패는 아니지만 사람이 알아야 할 일(예: 공식 API 가 거절해 목록 읽기로 대체)
+ * — 소스 줄에 그대로 보여 준다.
+ */
+async function fetchCandidates(kind: SourceKind, rawConfig: unknown, rawCategory: string): Promise<{ rows: Candidate[]; note: string }> {
+  let note = "";
+  const rows = await fetchRows(kind, rawConfig, rawCategory, (n) => {
+    note = n;
+  });
+  return { rows, note };
+}
+
+async function fetchRows(kind: SourceKind, rawConfig: unknown, rawCategory: string, setNote: (n: string) => void): Promise<Candidate[]> {
   const cfg = normalizeSourceConfig(kind, rawConfig);
   const category = normalizeSourceCategory(rawCategory);
 
@@ -51,7 +63,7 @@ async function fetchCandidates(kind: SourceKind, rawConfig: unknown, rawCategory
     const key = process.env.BIZINFO_API_KEY?.trim();
     if (key) {
       const label = BIZINFO_FIELDS.find((f) => f.code === cfg.hashCode)?.label ?? "";
-      const res = await safeFetchText(bizinfoApiUrl(key, 300), {
+      const res = await safeFetchText(bizinfoApiUrl(key, 200, label), {
         accept: "application/json",
         maxBytes: 3_000_000,
         timeoutMs: 15_000,
@@ -62,11 +74,16 @@ async function fetchCandidates(kind: SourceKind, rawConfig: unknown, rawCategory
         if (json && !bizinfoApiError(json)) {
           const rows = parseBizinfoApi(json, label, category);
           if (rows.length > 0) return rows;
+          setNote("공식 API 결과가 비어 목록 읽기로 대체했어요");
         } else if (json) {
           console.warn("[brief] 기업마당 API 오류, 목록 읽기로 대체:", bizinfoApiError(json));
+          setNote(`공식 API 거절(${bizinfoApiError(json).slice(0, 60)}) — 목록 읽기로 대체했어요`);
+        } else {
+          setNote("공식 API 응답이 없어 목록 읽기로 대체했어요");
         }
       } catch {
         console.warn("[brief] 기업마당 API 응답을 읽지 못해 목록 읽기로 대체");
+        setNote("공식 API 응답을 읽지 못해 목록 읽기로 대체했어요");
       }
     }
     const pages = await Promise.all(
@@ -127,7 +144,9 @@ export async function runSource(sourceId: string, now = new Date()): Promise<Sou
   let error = "";
   try {
     const cfg = normalizeSourceConfig(source.kind, source.config);
-    const candidates = (await fetchCandidates(source.kind, source.config, source.category))
+    const fetched = await fetchCandidates(source.kind, source.config, source.category);
+    error = fetched.note;
+    const candidates = fetched.rows
       .filter((c) => keep(c, cfg, now))
       .slice(0, MAX_PER_RUN);
     seen = candidates.length;
