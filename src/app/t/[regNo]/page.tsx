@@ -169,8 +169,13 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
           )}
           {view.name && <p className="mt-2 text-xl font-bold text-neutral-900">{view.name}</p>}
 
-          {/* 흰 배경·검은 모듈·200px 이상 — 세 조건 모두 §9.2 의 스캔 요건이다. */}
-          <div className="mx-auto mt-5 w-[220px] rounded-2xl bg-white p-2.5">
+          {/*
+            흰 배경·검은 모듈·200px 이상 — 세 조건 모두 §9.2 의 스캔 요건이다.
+            패딩 20px(p-5)은 collect-qr.ts 의 QR_WHITE_PAD_PX — 이미지 안의 4모듈 위에
+            흰색을 한 겹 더 깔아 다크 배경·축소 상태에서도 3mm 밑으로 떨어지지 않게 한다.
+            폭 240px = 이미지 200px + 좌우 패딩 20px. 패딩을 고치면 폭도 같이 고칠 것.
+          */}
+          <div className="mx-auto mt-5 w-[240px] rounded-2xl bg-white p-5">
             {/* eslint-disable-next-line @next/next/no-img-element -- QR 은 서버가 그린 PNG 를 그대로 쓴다(최적화 리사이즈가 모듈을 뭉갠다) */}
             <img
               src={`/api/collect/qr/${encodeURIComponent(view.registrationNo)}`}

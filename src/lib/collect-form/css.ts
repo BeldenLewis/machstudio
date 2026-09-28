@@ -223,16 +223,21 @@ export const COLLECT_FORM_CSS = `
  * AGENTS.md "색 하드코딩 금지" 의 의도적 예외다 — 이 흰색은 디자인 토큰이 아니라
  * **스캔 가능성 요건**이라(설계 §9.2) 테마를 따라가면 안 된다. 다크 UI 위에서 대비가
  * 사라진 QR 은 현장에서 줄을 만든다.
+ *
+ * 패딩 20px 은 collect-qr.ts 의 QR_WHITE_PAD_PX 다. 이미지 안의 여백(4모듈, 200px 표시에서
+ * 약 27.6px) 위에 흰색을 한 겹 더 까는 것으로, 다크 배경이라 그 27.6px 이 흰색의 전부일 때나
+ * 호스트가 카드를 줄여 놓았을 때도 3mm 밑으로 떨어지지 않게 한다.
+ * 폭 240px = 이미지 200px + 좌우 패딩 20px(border-box).
  */
 .msf-qr{
-  display:block !important;width:220px !important;min-width:220px !important;
+  display:block !important;width:240px !important;min-width:240px !important;
   margin:14px auto 0 !important;
-  background:#ffffff !important;padding:10px !important;border-radius:12px !important;
+  background:#ffffff !important;padding:20px !important;border-radius:16px !important;
 }
 /**
- * **이미지가 200px 이어야 한다**(§9.2 화면 최소치). 카드에 200px 을 주면
- * box-sizing:border-box 때문에 패딩이 그 안을 먹어 실제 QR 은 180px 로 그려진다(실측).
- * 카드는 내용에 맞추고 이미지에 크기를 준다.
+ * **이미지가 200px 이어야 한다**(§9.2 화면 최소치). box-sizing:border-box 라 카드 폭은
+ * 언제나 200 + 패딩×2 여야 한다 — 예전에 카드에 200px 을 줬더니 패딩이 그 안을 먹어
+ * 실제 QR 이 180px 로 그려졌다(실측). 패딩을 고칠 땐 폭도 같이 고칠 것.
  */
 /* 호스트의 img{max-width:100%} 는 경쟁 선언이 없으면 그대로 먹는다 — 좁은 칸(사이드바
    위젯)에서 폭만 줄고 높이는 200px 로 남아 QR 이 찌그러진다. filter 를 거는 테마도 있다
@@ -312,6 +317,13 @@ export const COLLECT_FORM_CSS = `
 
 @media (prefers-reduced-motion:reduce){
   .msf *{transition:none !important;animation:none !important}
+}
+
+/* QR 카드가 240px 이라, 완료·조회 카드의 좌우 패딩(20px)까지 얹으면 아주 좁은 호스트 칸에서
+   넘칠 수 있다. 흰 여백은 스캔 요건이라 그쪽을 줄이지 않고 **카드 바깥 패딩이 자리를 내준다**.
+   두 규칙(.msf-done/.msf-found)보다 뒤에 와야 특이도가 같아도 이긴다 — 그래서 여기다. */
+@media (max-width:359px){
+  .msf-done,.msf-found{padding-left:10px;padding-right:10px}
 }
 
 /* ── 동의 전문 팝업 ────────────────────────── */

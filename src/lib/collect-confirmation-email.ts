@@ -91,6 +91,24 @@ export function buildCollectConfirmationEmail({
       </div>`
     : "";
 
+  /**
+   * QR 블록 — 이미지를 **흰 칸에 넣어서** 보낸다.
+   *
+   * QR 이 얹히는 패널은 #f4f5f7 인데, 다크모드를 적용하는 메일 클라이언트(아웃룩닷컴 등)는
+   * 밝은 배경을 뒤집는다. 그러면 이미지 안의 4모듈이 흰색의 **전부**가 되고, 220px 표시에서
+   * 그건 약 30px 이다 — 클라이언트가 이미지를 줄이기라도 하면 3mm 밑으로 떨어진다.
+   * td 에 흰색을 못 박아 여백을 한 겹 더 깐다(패딩 20px = collect-qr.ts 의 QR_WHITE_PAD_PX).
+   *
+   * div 가 아니라 table 인 이유: 아웃룩 데스크톱(워드 렌더러)은 div 의 padding·background 를
+   * 무시하지만 td 의 bgcolor·padding 은 지킨다. line-height:0/font-size:0 은 이미지 아래
+   * 생기는 인라인 여백(그만큼 흰 칸이 비뚤어진다)을 없앤다.
+   */
+  const qrBlockHtml = `<table role="presentation" align="center" cellspacing="0" cellpadding="0" style="margin:18px auto 12px;border-collapse:collapse;">
+        <tr><td bgcolor="#ffffff" style="padding:20px;background:#ffffff;border-radius:16px;line-height:0;font-size:0;">
+          <img src="cid:${qrContentId}" width="220" height="220" alt="Registration QR code" style="display:block;width:220px;height:220px;background:#ffffff;" />
+        </td></tr>
+      </table>`;
+
   // 등록 데스크에서 QR 을 보여 달라는 요청이 문의로 자주 들어와, 본문 안내 문구와 별개로
   // 눈에 띄는 강조 박스를 하나 더 둔다(완료 화면·티켓 페이지와 같은 문구·같은 강조 방식).
   const checkinCalloutHtml = email.showQr
@@ -138,7 +156,7 @@ export function buildCollectConfirmationEmail({
           <div style="padding:26px 18px;border-radius:16px;background:#f4f5f7;text-align:center;">
             ${ticket?.visitorType ? `<span style="display:inline-block;padding:7px 14px;border-radius:999px;background:${visitorBadgePalette(ticket.visitorType).background};color:${visitorBadgePalette(ticket.visitorType).foreground};font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;">${escapeHtml(ticket.visitorType)}</span>` : ""}
             ${ticket?.name ? `<div style="margin-top:12px;font-size:18px;font-weight:800;color:#171717;">${escapeHtml(ticket.name)}</div>` : ""}
-            ${email.showQr ? `<img src="cid:${qrContentId}" width="220" height="220" alt="Registration QR code" style="display:block;width:220px;height:220px;margin:18px auto 12px;border-radius:14px;background:#fff;" />` : ""}
+            ${email.showQr ? qrBlockHtml : ""}
             ${contactHtml}
             <div style="margin-top:18px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:17px;font-weight:800;letter-spacing:.18em;color:#171717;">${escapeHtml(registrationNo)}</div>
             <div style="margin-top:6px;color:#777;font-size:11px;">Show this at the venue</div>

@@ -72,9 +72,10 @@ export async function downloadTicketImage(input: TicketImageInput): Promise<void
   ];
 
   // 정보 박스 높이·그 아래 등록번호·안내 문구 위치는 줄 수에 맞춰 늘어난다 — 2줄일 때
-  // 아래 상수들이 기존 고정 레이아웃(박스 126px, 등록번호 y=1201, 안내문 y=1244)과 같다.
+  // 박스 126px, 등록번호 y=1241, 안내문 y=1284 (QR 흰 칸을 키우며 전부 40px 내려갔다).
   const ROW_GAP = 44;
-  const infoBoxTop = 1010;
+  // QR 흰 칸이 560 → 600 으로 커진 만큼(아래 주석) 정보 박스도 40px 내려 간격을 지킨다.
+  const infoBoxTop = 1050;
   const infoBoxHeight = 82 + (infoRows.length - 1) * ROW_GAP;
   const infoBoxBottom = infoBoxTop + infoBoxHeight;
   const regNoY = infoBoxBottom + 65;
@@ -116,9 +117,15 @@ export async function downloadTicketImage(input: TicketImageInput): Promise<void
   fitText(ctx, input.name || "Registered guest", 820, 42, 28, 800);
   ctx.fillText(input.name || "Registered guest", 540, 353);
 
-  fillRoundedRect(ctx, 260, 410, 560, 560, 32, "#FFFFFF");
+  /**
+   * QR 은 **흰 칸 가운데**에 놓는다. 칸 600 − QR 480 = 사방 60px 로, 이미지 안의 4모듈
+   * (480px 에 약 66px) 위에 흰색을 한 겹 더 까는 셈이다 — 화면 카드의 QR_WHITE_PAD_PX
+   * (collect-qr.ts)와 같은 취지다. 이 사진은 현장에서 폰 화면째 스캐너에 들이미는 물건이라
+   * 상대가 얼마나 축소해 보여 줄지 우리가 모른다. 칸 크기를 고치면 draw 좌표도 같이 고칠 것.
+   */
+  fillRoundedRect(ctx, 240, 400, 600, 600, 36, "#FFFFFF");
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(qr, 300, 450, 480, 480);
+  ctx.drawImage(qr, 300, 460, 480, 480);
   ctx.imageSmoothingEnabled = true;
 
   fillRoundedRect(ctx, 170, infoBoxTop, 740, infoBoxHeight, 26, "#FFFFFF");
