@@ -293,9 +293,14 @@ export function SourcesTab({ brief, canWrite, onCollected }: { brief: BriefRow; 
                       </Chip>
                     )}
                     <span>마지막 수집 {when(s.lastRunAt)}</span>
-                    {s.lastRunAt && !s.lastError && <Chip tone={s.lastAdded ? "ok" : "neutral"}>새 후보 {s.lastAdded}개</Chip>}
+                    {/* "…대체했어요" 는 실패가 아니라 알림(수집은 됐다) — 개수와 함께 주황으로 */}
+                    {s.lastRunAt && (!s.lastError || s.lastError.includes("대체했어요")) && (
+                      <Chip tone={s.lastAdded ? "ok" : "neutral"}>새 후보 {s.lastAdded}개</Chip>
+                    )}
                     {s.lastError && (
-                      <span className="inline-flex items-center gap-1 text-destructive"><AlertCircle className="h-3.5 w-3.5" /> {s.lastError}</span>
+                      <span className={`inline-flex items-center gap-1 ${s.lastError.includes("대체했어요") ? "text-amber-700 dark:text-amber-400" : "text-destructive"}`}>
+                        <AlertCircle className="h-3.5 w-3.5" /> {s.lastError}
+                      </span>
                     )}
                     {canWrite && (
                       <div className="ml-auto flex items-center gap-1">
