@@ -232,6 +232,7 @@ export const COLLECT_FORM_CSS = `
 .msf-qr{
   display:block !important;width:240px !important;min-width:240px !important;
   margin:14px auto 0 !important;
+  color-scheme:only light !important;
   background:#ffffff !important;padding:20px !important;border-radius:16px !important;
 }
 /**
@@ -244,6 +245,7 @@ export const COLLECT_FORM_CSS = `
    (스캔 대비가 무너진다). 스캔 요건이라 !important 로 못 박는다. */
 .msf-qr img{
   display:block;image-rendering:pixelated;
+  color-scheme:only light !important;
   width:200px !important;height:200px !important;
   max-width:none !important;min-width:200px !important;
   filter:none !important;opacity:1 !important;

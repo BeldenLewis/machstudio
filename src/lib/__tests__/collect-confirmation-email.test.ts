@@ -38,6 +38,8 @@ describe("buildCollectConfirmationEmail", () => {
     expect(result.html).toContain("Line one<br>Line two");
     expect(result.html).not.toContain("alex@example.com");
     expect(result.html).toContain('src="cid:registration-qr"');
+    expect(result.html).toContain('bgcolor="#ffffff"');
+    expect(result.html).toContain('background:#ffffff');
     expect(result.html).not.toContain("Save the attached");
     expect(result.html).not.toContain("href=");
     expect(result.html).not.toContain("app.example.com");

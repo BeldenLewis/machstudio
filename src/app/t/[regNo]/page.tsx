@@ -175,7 +175,10 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
             흰색을 한 겹 더 깔아 다크 배경·축소 상태에서도 3mm 밑으로 떨어지지 않게 한다.
             폭 240px = 이미지 200px + 좌우 패딩 20px. 패딩을 고치면 폭도 같이 고칠 것.
           */}
-          <div className="mx-auto mt-5 w-[240px] rounded-2xl bg-white p-5">
+          <div
+            className="mx-auto mt-5 w-[240px] rounded-2xl bg-white p-5"
+            style={{ colorScheme: "only light" }}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element -- QR 은 서버가 그린 PNG 를 그대로 쓴다(최적화 리사이즈가 모듈을 뭉갠다) */}
             <img
               src={`/api/collect/qr/${encodeURIComponent(view.registrationNo)}`}
@@ -183,6 +186,7 @@ export default async function TicketPage({ params }: { params: Promise<{ regNo: 
               width={200}
               height={200}
               className="block h-[200px] w-[200px]"
+              style={{ colorScheme: "only light" }}
             />
           </div>
 

@@ -237,6 +237,7 @@ describe("문자열로 들고 있는 CSS 는 템플릿 리터럴을 깨지 않�
   it("백틱과 달러+중괄호가 없다", () => {
     expect(COLLECT_FORM_CSS).not.toContain("`");
     expect(COLLECT_FORM_CSS).not.toContain("${");
+    expect(COLLECT_FORM_CSS).toContain("color-scheme:only light !important");
   });
 });
 
